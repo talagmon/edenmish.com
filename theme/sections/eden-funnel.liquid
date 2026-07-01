@@ -221,19 +221,26 @@
           <input type="text" name="dropoff_detail" placeholder="לדוגמה: קומה 2, דירה 7 — דנה">
         </label>
 
-        <div class="ef-form__row">
-          <label class="ef-field">
-            <span>מתי צריך את השליחות</span>
-            <input type="text" name="when" required placeholder="לדוגמה: היום עד הצהריים / מחר 10:00">
+        <fieldset class="ef-sched">
+          <legend class="ef-sched__title">סוג השליחות</legend>
+          <div class="ef-sched__cards">
+            <button type="button" class="ef-sched__card" data-service="regular">רגיל<span class="ef-sched__card-sub">איסוף החל מעוד 3 שעות · מסירה באותו יום</span></button>
+            <button type="button" class="ef-sched__card" data-service="urgent">דחוף<span class="ef-sched__card-sub">השליחות תושלם בתוך עד 3 שעות</span></button>
+          </div>
+        </fieldset>
+        <fieldset class="ef-sched">
+          <legend class="ef-sched__title">בחרו תאריך</legend>
+          <div class="ef-sched__dates"></div>
+          <label class="ef-sched__other">
+            <span>תאריך אחר</span>
+            <input type="date" name="custom_date">
           </label>
-          <label class="ef-field">
-            <span>האם זה דחוף?</span>
-            <select name="urgent">
-              <option value="לא דחוף">לא</option>
-              <option value="דחוף">כן, דחוף</option>
-            </select>
-          </label>
-        </div>
+        </fieldset>
+        <fieldset class="ef-sched ef-sched--windows" hidden>
+          <legend class="ef-sched__title">בחרו חלון זמן</legend>
+          <div class="ef-sched__windows"></div>
+          <p class="ef-sched__hint muted"></p>
+        </fieldset>
 
         <label class="ef-field">
           <span>הערות נוספות</span>
@@ -250,6 +257,24 @@
   </section>
 </section>
 
+{% stylesheet %}
+  .ef-sched { border: 0; padding: 0; margin: 0 0 16px; }
+  .ef-sched__title { font-weight: 700; font-size: 1rem; margin-bottom: 8px; color: #3E1D5E; }
+  .ef-sched__cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ef-sched__card { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 8px; border: 2px solid rgba(91,42,134,.2); border-radius: 12px; background: #fff; cursor: pointer; font-size: 1rem; font-weight: 700; color: #3E1D5E; transition: border-color .15s, background .15s; }
+  .ef-sched__card[aria-pressed="true"] { border-color: #5B2A86; background: #F5F2FB; }
+  .ef-sched__card-sub { font-size: .72rem; font-weight: 400; color: #9a93a8; text-align: center; }
+  .ef-sched__dates { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .ef-sched__date { padding: 8px 14px; border: 2px solid rgba(91,42,134,.2); border-radius: 999px; background: #fff; cursor: pointer; font-size: .85rem; font-weight: 600; color: #3E1D5E; transition: border-color .15s, background .15s; }
+  .ef-sched__date[aria-pressed="true"] { border-color: #5B2A86; background: #F5F2FB; }
+  .ef-sched__other { display: flex; align-items: center; gap: 8px; font-size: .85rem; color: #9a93a8; }
+  .ef-sched__other input { width: auto; padding: 6px; border: 1px solid rgba(91,42,134,.2); border-radius: 8px; }
+  .ef-sched__windows { display: flex; flex-wrap: wrap; gap: 8px; }
+  .ef-sched__window { padding: 10px 16px; border: 2px solid rgba(91,42,134,.2); border-radius: 10px; background: #fff; cursor: pointer; font-size: .9rem; font-weight: 600; color: #3E1D5E; transition: border-color .15s, background .15s; }
+  .ef-sched__window[aria-pressed="true"] { border-color: #2E8B57; background: #E8F5E9; }
+  .ef-sched__hint { margin-top: 6px; }
+{% endstylesheet %}
+
 <script>
   var EDEN_ZONES = ['תל אביב','תל אביב-יפו','תל אביב יפו','רמת גן','גבעתיים','בני ברק','הרצליה','רמת השרון','הוד השרון','קריית אונו','קרית אונו','גבעת שמואל','אור יהודה','בת ים','חולון','ראשון לציון','כפר סבא','רעננה','פתח תקווה','אזור','גני תקווה','סביון','רמלה','לוד'];
   var EDEN_ZONE_ERR = function(el, msg) {
@@ -258,6 +283,27 @@
     if (!err) { err = document.createElement('div'); err.className = 'ef-zone-err'; err.style.cssText = 'color:#C0392B;font-size:.85rem;margin-top:4px'; el.parentNode.appendChild(err); }
     err.textContent = msg; el.style.borderColor = '#C0392B';
   };
+  // ---- scheduling helpers (PR12) ----
+  function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+  function fmtDate(d) { return pad2(d.getDate()) + '/' + pad2(d.getMonth() + 1); }
+  function genWindows(service, dateType) {
+    var now = new Date(), curH = now.getHours(), startH, endH, WIN = 3;
+    if (dateType === 'today') { startH = service === 'urgent' ? curH : curH + 3; endH = 21; }
+    else if (dateType === 'friday') { startH = 8; endH = 13; }
+    else { startH = 9; endH = 20; }
+    var wins = [];
+    for (var h = startH; h + WIN <= endH; h++) wins.push(pad2(h) + ':00–' + pad2(h + WIN) + ':00');
+    return wins;
+  }
+  function renderSched(section, form) {
+    var service = section.dataset.schedService || '', dateType = section.dataset.schedDateType || '';
+    var wins = (service && dateType) ? genWindows(service, dateType) : [];
+    var wf = form.querySelector('.ef-sched--windows'), wg = form.querySelector('.ef-sched__windows'), hint = form.querySelector('.ef-sched__hint');
+    if (!service || !dateType || !wins.length) { if (wf) wf.hidden = true; section.dataset.schedWindow = ''; section.dataset.schedText = ''; return; }
+    if (wf) wf.hidden = false;
+    if (wg) wg.innerHTML = wins.map(function (w) { return '<button type="button" class="ef-sched__window"' + (section.dataset.schedWindow === w ? ' aria-pressed="true"' : '') + '>' + w + '</button>'; }).join('');
+    if (hint) hint.textContent = service === 'urgent' ? 'שליחות דחופה — השליחות תושלם בתוך עד 3 שעות' : 'שליחות רגילה — איסוף החל מעוד 3 שעות, מסירה באותו יום';
+  }
   (function () {
     var root = document.currentScript.previousElementSibling;
     document.querySelectorAll('[data-edon-funnel]').forEach(function (section) {
@@ -268,6 +314,7 @@
       form.addEventListener('submit', function (e) {
         e.preventDefault();
         if (!form.reportValidity()) return;
+        if (!section.dataset.schedText) { alert('נא לבחור מועד לשליחות'); return; }
         var pickupIn = form.querySelector('[name="pickup"]');
         var dropoffIn = form.querySelector('[name="dropoff"]');
         if (pickupIn && pickupIn.dataset.city && EDEN_ZONES.indexOf(pickupIn.dataset.city) < 0) { EDEN_ZONE_ERR(pickupIn, 'אזור מחוץ לטווח השירות.'); pickupIn.focus(); return; }
@@ -290,9 +337,8 @@
           'סוג לקוח: ' + v('customer_type') + '\n' +
           'איסוף: ' + addrLine('pickup', 'pickup_detail') + '\n' +
           'מסירה: ' + addrLine('dropoff', 'dropoff_detail') + '\n' +
-          'מועד: ' + v('when') + '\n' +
+          'מועד: ' + (section.dataset.schedText || '') + '\n' +
           'חבילה: ' + v('package') + '\n' +
-          'דחוף: ' + v('urgent') + '\n' +
           (estimate ? 'הערכה: ' + estimate + '\n' : '') +
           'הערות: ' + v('notes');
         var pickupEl2 = form.querySelector('[name="pickup"]');
@@ -303,7 +349,7 @@
           pickup_city: (pickupEl2 && pickupEl2.dataset.city) || '', pickup_lat: num2('pickup', 'lat'), pickup_lng: num2('pickup', 'lng'),
           dropoff: addrLine('dropoff', ''), dropoff_detail: v('dropoff_detail'),
           dropoff_city: (dropoffEl2 && dropoffEl2.dataset.city) || '', dropoff_lat: num2('dropoff', 'lat'), dropoff_lng: num2('dropoff', 'lng'),
-          when_text: v('when'), package: v('package'), urgent: v('urgent') === 'דחוף', notes: v('notes'),
+          when_text: section.dataset.schedText || '', package: v('package'), urgent: section.dataset.schedService === 'urgent', notes: v('notes'),
           distance_km: section.dataset.distance ? Number(section.dataset.distance) : null
         };
         var btn = form.querySelector('[type="submit"]');
@@ -327,6 +373,68 @@
           else { alert('שגיאה. נסו שוב או כתבו לנו בוואטסאפ.'); }
         });
       });
+      // ---- PR12 scheduling init ----
+      form.querySelectorAll('[data-service]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          form.querySelectorAll('[data-service]').forEach(function (b) { b.removeAttribute('aria-pressed'); });
+          btn.setAttribute('aria-pressed', 'true');
+          section.dataset.schedService = btn.dataset.service;
+          section.dataset.schedWindow = ''; section.dataset.schedText = '';
+          renderSched(section, form);
+          var est = section.querySelector('[data-ef-estimate]');
+          if (est && !est.hidden && section.dataset.distance) {
+            var price = estimatePrice(section, form, parseFloat(section.dataset.distance));
+            if (price) { est.innerHTML = est.innerHTML.replace(/₪\d+/, '₪' + price); section.dataset.estimate = 'מחיר מוערך ₪' + price; }
+          }
+        });
+      });
+      var dg = form.querySelector('.ef-sched__dates');
+      if (dg) {
+        var today = new Date(), tom = new Date(today); tom.setDate(tom.getDate() + 1);
+        var dates = [
+          { type: 'today', label: 'היום · ' + fmtDate(today) },
+          { type: 'tomorrow', label: 'מחר · ' + fmtDate(tom) }
+        ];
+        dg.innerHTML = dates.map(function (d) {
+          return '<button type="button" class="ef-sched__date" data-date-type="' + d.type + '" data-date-label="' + d.label + '">' + d.label + '</button>';
+        }).join('');
+        dg.querySelectorAll('[data-date-type]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            dg.querySelectorAll('[data-date-type]').forEach(function (b) { b.removeAttribute('aria-pressed'); });
+            btn.setAttribute('aria-pressed', 'true');
+            section.dataset.schedDateType = btn.dataset.dateType;
+            section.dataset.schedDateLabel = btn.dataset.dateLabel;
+            section.dataset.schedWindow = ''; section.dataset.schedText = '';
+            renderSched(section, form);
+          });
+        });
+      }
+      var cd = form.querySelector('[name="custom_date"]');
+      if (cd) {
+        cd.addEventListener('change', function () {
+          if (!cd.value) return;
+          var d = new Date(cd.value + 'T00:00:00');
+          var dayNames = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
+          var type = d.getDay() === 5 ? 'friday' : 'custom';
+          var dl = 'יום ' + dayNames[d.getDay()] + ' · ' + fmtDate(d);
+          if (dg) dg.querySelectorAll('[data-date-type]').forEach(function (b) { b.removeAttribute('aria-pressed'); });
+          section.dataset.schedDateType = type;
+          section.dataset.schedDateLabel = dl;
+          section.dataset.schedWindow = ''; section.dataset.schedText = '';
+          renderSched(section, form);
+        });
+      }
+      var wgrid = form.querySelector('.ef-sched__windows');
+      if (wgrid) {
+        wgrid.addEventListener('click', function (e) {
+          var w = e.target.closest('.ef-sched__window'); if (!w) return;
+          wgrid.querySelectorAll('.ef-sched__window').forEach(function (b) { b.removeAttribute('aria-pressed'); });
+          w.setAttribute('aria-pressed', 'true');
+          section.dataset.schedWindow = w.textContent.trim();
+          var svc = section.dataset.schedService === 'urgent' ? 'דחוף' : 'רגיל';
+          section.dataset.schedText = svc + ' · ' + (section.dataset.schedDateLabel || '') + ' · ' + section.dataset.schedWindow;
+        });
+      }
     });
   })();
 
@@ -431,7 +539,6 @@
         if (est && price) { est.hidden = false; est.innerHTML = est.innerHTML.replace(/₪\d+/, '₪' + price); sec.dataset.estimate = 'מחיר מוערך ₪' + price; }
       }
       form.querySelector('[name="package"]').addEventListener('change', function () { recalcEstimate(section, form); });
-      form.querySelector('[name="urgent"]').addEventListener('change', function () { recalcEstimate(section, form); });
       google.maps.event.addListener(a, 'place_changed', calc);
       google.maps.event.addListener(b, 'place_changed', calc);
     });
@@ -442,7 +549,7 @@
     var base = (pkgSel && pkgBases[pkgSel.value]) || parseFloat(section.dataset.priceBase || 59);
     var perKm = parseFloat(section.dataset.pricePerKm || 4);
     var includedKm = 3;
-    var isUrgent = ((form.querySelector('[name="urgent"]') || {}).value === 'דחוף');
+    var isUrgent = section.dataset.schedService === 'urgent';
     return Math.round((base + Math.max(0, km - includedKm) * perKm) * (isUrgent ? 1.25 : 1));
   }
 </script>
