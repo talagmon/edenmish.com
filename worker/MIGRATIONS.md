@@ -125,3 +125,16 @@ ORDER BY name;
 
 A future migration system may add an `applied_migrations` tracking table. Do not implement
 it in this PR.
+
+---
+
+## Planned future migrations
+
+The following are **planned** but not yet implemented. See `docs/DATA_MODEL_V2.md` for
+the full design.
+
+- `006_data_model_v2_tables.sql` — adds `customers`, `stops`, `route_plans`,
+  `route_stops`, `status_events`, `applied_migrations` (additive, no destructive changes).
+- Backfill + read/write-path migration will follow in separate PRs (PR13–PR15 per the plan).
+
+Do not run these until they exist and have been validated on a dev DB.
