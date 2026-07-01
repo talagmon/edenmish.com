@@ -50,6 +50,7 @@ These are safe to keep in the repo (non-secret configuration):
 | `OPS_EMAIL` | Eden's ops alert address |
 | `SHOPIFY_SHOP` | Shopify shop domain, e.g. `edenmish.myshopify.com` |
 | `SHOPIFY_API_VERSION` | Shopify Admin API version, e.g. `2026-04` |
+| `ALLOWED_ORIGINS` | **(Recommended in production.)** Comma-separated CORS allowlist, e.g. `https://edenmish.com,https://www.edenmish.com`. When set, only these origins may call the public Worker API. When unset, CORS falls back to `*` (backward-compatible but open) — see `docs/ARCHITECTURE.md` / PR5. Local dev may add `http://127.0.0.1:PORT`. |
 
 > Optional future var: `PAYMENT_MODE` (`immediate` today, `preauth` for Mesh later).
 

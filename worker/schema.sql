@@ -59,6 +59,16 @@ CREATE TABLE IF NOT EXISTS pricing_rules (
   value TEXT
 );
 
+-- Generic rate-limit / abuse counters (OTP attempts, OTP resend, order creation per IP).
+-- Keyed by a composite key, e.g. 'otpv:<token>', 'otps:<token>', 'ord:<ip>', 'ordd:<ip>'.
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key TEXT PRIMARY KEY,
+  count INTEGER DEFAULT 0,
+  window_start INTEGER,   -- epoch ms, start of the current counting window
+  last_at INTEGER,        -- epoch ms, last event timestamp
+  locked_until INTEGER    -- epoch ms, optional lockout expiry
+);
+
 INSERT OR IGNORE INTO pricing_rules (name, value) VALUES
   ('base_envelope','59'),
   ('base_item','69'),
