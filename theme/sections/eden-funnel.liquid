@@ -315,55 +315,11 @@
           orderData = d;
           if (!d || !d.token) throw new Error('no order');
           if (d.review) { window.location.href = d.tracking_url; return; }
-          var pkgVariants = { 'מעטפה/מסמך': 51876992909629, 'פריט קטן': 51876992942397, 'קופסה (עד גודל נעל)': 51876993007933 };
-          var pkgBases = { 'מעטפה/מסמך': 59, 'פריט קטן': 69, 'קופסה (עד גודל נעל)': 89 };
-          var surchargeVariant = 51897756975421;
-          var pkgKey = v('package');
-          var baseVariant = pkgVariants[pkgKey] || pkgVariants['מעטפה/מסמך'];
-          var base = pkgBases[pkgKey] || 59;
-          var surcharge = Math.max(0, (d.price || base) - base);
-          var lineProps = {
-            '_tracking_token': d.token,
-            'איסוף': addrLine('pickup', 'pickup_detail'),
-            'מסירה': addrLine('dropoff', 'dropoff_detail'),
-            'מועד': v('when'),
-            'דחיפות': v('urgent'),
-            'טלפון': v('phone')
-          };
-          if (v('notes')) lineProps['הערות'] = v('notes');
-          var items = [{ id: baseVariant, quantity: 1, properties: lineProps }];
-          if (surcharge > 0) { items.push({ id: surchargeVariant, quantity: surcharge, properties: { '_tracking_token': d.token } }); }
-          var sfToken = section.dataset.storefrontToken;
-          if (sfToken) {
-            // Storefront API: creates cart with pre-filled email/name/phone → checkout URL preserves them
-            var gid = function(id) { return 'gid://shopify/ProductVariant/' + id; };
-            var sfLines = [{ merchandiseId: gid(baseVariant), quantity: 1, attributes: Object.keys(lineProps).map(function(k) { return { key: k, value: String(lineProps[k]) }; }) }];
-            if (surcharge > 0) sfLines.push({ merchandiseId: gid(surchargeVariant), quantity: surcharge, attributes: [{ key: '_tracking_token', value: d.token }] });
-            var bi = {};
-            if (v('email')) bi.email = v('email');
-            if (v('phone')) bi.phone = '+972' + v('phone').replace(/^0/, '').replace(/\D/g, '');
-            return fetch('https://edenmish.myshopify.com/api/2024-10/graphql.json', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-Shopify-Storefront-Access-Token': sfToken },
-              body: JSON.stringify({ query: 'mutation c($i:CartInput!){cartCreate(input:$i){cart{checkoutUrl}userErrors{field message}}}', variables: { i: { lines: sfLines, buyerIdentity: bi, note: 'EdenMish ' + d.token } } })
-            }).then(function(r) { return r.json(); }).then(function(res) {
-              var url = res && res.data && res.data.cartCreate && res.data.cartCreate.cart && res.data.cartCreate.cart.checkoutUrl;
-              if (url) window.location.href = url; else throw new Error('storefront');
-            });
-          }
-          // Fallback: AJAX cart (no pre-fill) + URL params (best-effort)
-          return fetch('/cart/clear.js', { method: 'POST' }).then(function () {
-            return fetch('/cart/add.js', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: items }) });
-          }).then(function (r) {
-            if (!r.ok) throw new Error('cart');
-            var p = [];
-            var np = (v('name') || '').split(/\s+/);
-            if (v('email')) p.push('checkout[email]=' + encodeURIComponent(v('email')));
-            if (np[0]) p.push('checkout[shipping_address][first_name]=' + encodeURIComponent(np[0]));
-            if (np.length > 1) p.push('checkout[shipping_address][last_name]=' + encodeURIComponent(np.slice(1).join(' ')));
-            if (v('phone')) p.push('checkout[shipping_address][phone]=' + encodeURIComponent(v('phone')));
-            window.location.href = '/checkout?' + p.join('&');
-          });
+          // PR4 — Draft Order payment path: the Worker created a Shopify Draft Order and
+          // returned its invoice URL (d.payment_url). Redirect there to pay via Shopify +
+          // PayPlus. If no payment_url (Shopify not configured / charge failed), fall back
+          // to the tracking page, which shows a pay button or manual-coordination option.
+          window.location.href = d.payment_url || d.tracking_url;
         }).catch(function () {
           if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || 'המשך לתשלום מאובטח'; }
           if (orderData && orderData.tracking_url) { window.location.href = orderData.tracking_url; }

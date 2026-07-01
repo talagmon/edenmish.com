@@ -45,8 +45,9 @@ export default {
       const pr = priceOrder(b, rules);
       const isReview = pr.review;
 
-      // 1. Create the D1 order. The funnel adds the product to the Shopify cart and sends
-      //    the customer to /checkout. The Shopify webhook links the order back via _tracking_token.
+      // 1. Create the D1 order. For exact-price orders a Shopify Draft Order is created
+      //    below (PR4); the customer pays its invoice URL through Shopify + PayPlus. The
+      //    Shopify webhook links the order back via _tracking_token (line property) / note.
       const created = await createOrder(env.DB, {
         ...b,
         status: isReview ? 'review' : 'priced',
@@ -71,9 +72,32 @@ export default {
         await sendEmail(env, { to: env.OPS_EMAIL, subject: `הזמנה חדשה #${created.id}${isReview ? ' — לבדיקה' : ' — ממתינה לתשלום'}`, html: `${b.name} · ${b.pickup} → ${b.dropoff} · ₪${pr.price}${isReview ? '<br>חריג: ' + pr.reasons : ''}<br><a href="${finalUrl}">${finalUrl}</a>` });
       } catch {}
 
+      // 2. PR4 — exact-price path: Worker creates a Shopify Draft Order and returns its
+      //    invoice URL. The customer pays it through Shopify checkout (PayPlus app). The
+      //    Shopify orders/paid webhook reconciles it back to this order. Review/manual-quote
+      //    orders skip this (Eden approves the price in ops first). If Shopify isn't
+      //    configured (createCharge returns null) or it throws, paymentUrl stays null and
+      //    the customer lands on the tracking page (pay-from-tracking / manual coordination).
+      let paymentUrl = null;
+      if (!isReview) {
+        try {
+          const charge = await createCharge(env, { ...b, id: created.id, token, price: pr.price }, pr.price);
+          if (charge && charge.checkoutUrl) {
+            paymentUrl = charge.checkoutUrl;
+            await setOrderStatus(env.DB, created.id, 'payment_sent', {
+              payment_url: paymentUrl,
+              shopify_draft_order_id: charge.draftOrderId,
+              payment_status: 'link_sent',
+              payment_mode: charge.mode
+            });
+          }
+        } catch {}
+      }
+
       return json({
         token, tracking_url: finalUrl,
-        status: isReview ? 'review' : 'priced',
+        payment_url: paymentUrl,
+        status: isReview ? 'review' : (paymentUrl ? 'payment_sent' : 'priced'),
         price: pr.price,
         review: isReview, reasons: pr.reasons
       }, 200, cors);
