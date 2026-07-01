@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env / secrets — NEVER commit
+.env
+.env.*
+!.env.example
+
+# Shopify CLI local identity / caches
+.shopify/
+.shopifyignore~
+
+# Editor
+.vscode/
+.idea/
+
+# Local dev artifacts (contain session snapshots, typed secrets, caches)
+.playwright-mcp/
+.wrangler/
+

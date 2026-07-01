@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+  <!-- Background -->
+  <rect width="800" height="500" fill="#F5F5F5"/>
+  
+  <!-- Left Side (Front of flyer) -->
+  <g transform="translate(50, 50)">
+    <!-- Flyer background -->
+    <rect width="320" height="400" fill="#FFFFFF" rx="10"/>
+    <rect width="320" height="400" fill="#1B365D" rx="10" opacity="0.1"/>
+    
+    <!-- Header -->
+    <text x="20" y="40" font-family="Arial" font-size="24" font-weight="bold" fill="#1B365D">עדן שליחויות אקספרס</text>
+    <text x="20" y="70" font-family="Arial" font-size="16" fill="#7FB5FF">מהיר • אמין • עד אליך</text>
+    
+    <!-- Tel Aviv Skyline -->
+    <path d="M20 200 L60 150 L100 180 L140 130 L180 170 L220 120 L260 160 L300 140" 
+          stroke="#1B365D" fill="none" stroke-width="2"/>
+    
+    <!-- Features -->
+    <g transform="translate(20, 220)">
+      <rect width="280" height="120" fill="#7FB5FF" rx="5" opacity="0.1"/>
+      <text x="10" y="30" font-family="Arial" font-size="14" fill="#1B365D">✓ משלוח תוך שעתיים</text>
+      <text x="10" y="60" font-family="Arial" font-size="14" fill="#1B365D">✓ מעקב בזמן אמת</text>
+      <text x="10" y="90" font-family="Arial" font-size="14" fill="#1B365D">✓ שירות 24/6</text>
+    </g>
+    
+    <!-- QR Code placeholder -->
+    <rect x="220" y="300" width="80" height="80" fill="#1B365D"/>
+  </g>
+  
+  <!-- Right Side (Back of flyer) -->
+  <g transform="translate(430, 50)">
+    <!-- Flyer background -->
+    <rect width="320" height="400" fill="#FFFFFF" rx="10"/>
+    
+    <!-- Price Table -->
+    <g transform="translate(20, 100)">
+      <rect width="280" height="160" fill="#F5F5F5" rx="5"/>
+      <text x="10" y="30" font-family="Arial" font-size="16" font-weight="bold" fill="#1B365D">מחירון</text>
+      <text x="10" y="60" font-family="Arial" font-size="14" fill="#1B365D">משלוח רגיל בת"א: 35-45 ₪</text>
+      <text x="10" y="90" font-family="Arial" font-size="14" fill="#1B365D">משלוח דחוף: 55-65 ₪</text>
+      <text x="10" y="120" font-family="Arial" font-size="14" fill="#1B365D">משלוח לערי הסביבה: 45-60 ₪</text>
+    </g>
+    
+    <!-- Service Areas -->
+    <g transform="translate(20, 280)">
+      <text x="0" y="0" font-family="Arial" font-size="16" font-weight="bold" fill="#1B365D">אזורי חלוקה</text>
+      <text x="0" y="30" font-family="Arial" font-size="14" fill="#1B365D">תל אביב • רמת גן • גבעתיים</text>
+      <text x="0" y="50" font-family="Arial" font-size="14" fill="#1B365D">הרצליה • רמת השרון • פתח תקווה</text>
+    </g>
+    
+    <!-- Contact -->
+    <text x="20" y="350" font-family="Arial" font-size="14" fill="#1B365D">טלפון: 053-590-9043</text>
+  </g>
+
+  <!-- Flyer Dimensions -->
+  <text x="50" y="480" font-family="Arial" font-size="12" fill="#666">A5 (148x210mm)</text>
+</svg>

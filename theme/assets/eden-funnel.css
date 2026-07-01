@@ -1,0 +1,492 @@
+.eden-funnel {
+  font-family: var(--font-body--family);
+  color: var(--color-foreground);
+  background-color: var(--color-background);
+}
+
+.eden-funnel .section-padding {
+  padding-block: clamp(40px, 7vw, 84px);
+}
+
+.eden-funnel .page-width {
+  max-width: var(--page-width, 1200px);
+  margin-inline: auto;
+  padding-inline: clamp(16px, 4vw, 32px);
+}
+
+.eden-funnel .ef-center {
+  text-align: center;
+}
+
+.eden-funnel .ef-muted {
+  background: rgb(var(--color-foreground-rgb) / 0.035);
+}
+
+.eden-funnel .ef-accent {
+  background: rgb(var(--color-foreground-rgb) / 0.06);
+  border-block-start: 1px solid rgb(var(--color-foreground-rgb) / 0.12);
+  border-block-end: 1px solid rgb(var(--color-foreground-rgb) / 0.12);
+}
+
+/* Titles & text */
+.eden-funnel .ef-hero__title {
+  font-family: var(--font-heading--family);
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  line-height: 1.1;
+  margin-block-end: 0.5em;
+  margin-block-start: 0;
+}
+.eden-funnel .ef-hero__sub {
+  font-size: clamp(1.1rem, 2.2vw, 1.5rem);
+  color: var(--color-foreground);
+  margin-block-end: 1rem;
+}
+.eden-funnel .ef-hero__body {
+  max-width: 60ch;
+  color: var(--color-foreground-muted);
+  font-size: clamp(1rem, 1.6vw, 1.125rem);
+  line-height: 1.7;
+  margin-block-end: 1.75rem;
+}
+
+.eden-funnel .ef-block__title {
+  font-family: var(--font-heading--family);
+  font-size: clamp(1.6rem, 3.5vw, 2.25rem);
+  line-height: 1.2;
+  margin-block-end: 0.75rem;
+}
+.eden-funnel .ef-block__intro {
+  font-size: 1.125rem;
+  color: var(--color-foreground-muted);
+  margin-block-end: 1.5rem;
+}
+.eden-funnel .ef-block__text {
+  max-width: 70ch;
+  font-size: clamp(1rem, 1.6vw, 1.125rem);
+  line-height: 1.8;
+  color: var(--color-foreground-muted);
+}
+.eden-funnel .ef-block__text p {
+  margin-block: 0.5rem;
+}
+
+/* Buttons */
+.eden-funnel .ef-btn {
+  --_pad-y: 0.85em;
+  --_pad-x: 1.5em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
+  padding: var(--_pad-y) var(--_pad-x);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease;
+}
+.eden-funnel .ef-btn:hover {
+  transform: translateY(-1px);
+}
+.eden-funnel .ef-btn--primary {
+  background-color: var(--color-foreground);
+  color: var(--color-background);
+  border-color: var(--color-foreground);
+}
+.eden-funnel .ef-btn--primary:hover {
+  opacity: 0.88;
+}
+.eden-funnel .ef-btn--secondary {
+  background-color: transparent;
+  color: var(--color-foreground);
+  border-color: rgb(var(--color-foreground-rgb) / 0.25);
+}
+.eden-funnel .ef-btn--secondary:hover {
+  background-color: rgb(var(--color-foreground-rgb) / 0.06);
+}
+.eden-funnel .ef-btn--soon {
+  background: transparent;
+  color: var(--color-foreground-muted);
+  border: 1px dashed rgb(var(--color-foreground-rgb) / 0.35);
+  cursor: not-allowed;
+  opacity: 0.9;
+}
+.eden-funnel .ef-btn--block {
+  width: 100%;
+}
+.eden-funnel .ef-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* Steps */
+.eden-funnel .ef-steps__grid {
+  list-style: none;
+  margin: 1.5rem 0 1rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(16px, 3vw, 32px);
+}
+.eden-funnel .ef-steps__grid li {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  font-size: 1.05rem;
+}
+.eden-funnel .ef-steps__num {
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-foreground);
+  color: var(--color-background);
+  font-weight: 700;
+  font-family: var(--font-heading--family);
+}
+.eden-funnel .ef-steps__note {
+  margin-block-start: 0.5rem;
+  color: var(--color-foreground-muted);
+  max-width: 60ch;
+  margin-inline: auto;
+}
+
+/* Services + Why grids */
+.eden-funnel .ef-services__grid,
+.eden-funnel .ef-why__grid {
+  list-style: none;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.eden-funnel .ef-services__grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+.eden-funnel .ef-services__grid li {
+  padding: 1rem 1.25rem;
+  border: 1px solid rgb(var(--color-foreground-rgb) / 0.12);
+  border-radius: 12px;
+  background: var(--color-background);
+  font-weight: 500;
+}
+.eden-funnel .ef-why__grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+.eden-funnel .ef-why__grid li {
+  position: relative;
+  padding-inline-start: 1.75rem;
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+.eden-funnel .ef-why__grid li::before {
+  content: "✓";
+  position: absolute;
+  inset-inline-start: 0;
+  color: var(--color-foreground);
+  font-weight: 700;
+}
+
+/* Pricing */
+.eden-funnel .ef-pricing__price {
+  font-family: var(--font-heading--family);
+  font-size: clamp(1.4rem, 3vw, 1.9rem);
+  margin-block: 0.5rem 0.75rem;
+}
+.eden-funnel .ef-pricing__text {
+  max-width: 60ch;
+  margin-inline: auto;
+  color: var(--color-foreground-muted);
+  line-height: 1.7;
+  margin-block-end: 1.5rem;
+}
+
+.eden-funnel .ef-tiers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(12px, 2vw, 20px);
+  max-width: 820px;
+  margin: 0 auto 1.25rem;
+  text-align: center;
+}
+.eden-funnel .ef-tier {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: clamp(20px, 2.5vw, 32px) clamp(14px, 2vw, 24px);
+  border: 1px solid rgb(var(--color-foreground-rgb) / 0.14);
+  border-radius: 16px;
+  background: var(--color-background);
+}
+.eden-funnel .ef-tier__name {
+  font-family: var(--font-heading--family);
+  font-size: 1.15rem;
+  margin: 0;
+}
+.eden-funnel .ef-tier__price {
+  font-family: var(--font-heading--family);
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  margin: 0.1rem 0;
+}
+.eden-funnel .ef-tier__desc {
+  font-size: 0.92rem;
+  color: var(--color-foreground-muted);
+  margin: 0 0 0.75rem;
+  min-height: 2.4em;
+}
+.eden-funnel .ef-pricing__note {
+  max-width: 64ch;
+  margin: 0 auto 1.25rem;
+  font-size: 0.9rem;
+  color: var(--color-foreground-muted);
+  line-height: 1.6;
+}
+
+/* Form */
+.eden-funnel .ef-form {
+  max-width: 720px;
+  margin-inline: auto;
+  margin-block-start: 1.5rem;
+  display: grid;
+  gap: 1rem;
+}
+.eden-funnel .ef-form__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.eden-funnel .ef-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+.eden-funnel .ef-field span {
+  color: var(--color-foreground);
+}
+.eden-funnel .ef-field input,
+.eden-funnel .ef-field select,
+.eden-funnel .ef-field textarea {
+  font-family: inherit;
+  font-size: 1rem;
+  color: var(--color-foreground);
+  background: var(--color-background);
+  border: 1px solid rgb(var(--color-foreground-rgb) / 0.25);
+  border-radius: 10px;
+  padding: 0.75rem 0.9rem;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease;
+}
+.eden-funnel .ef-field input:focus,
+.eden-funnel .ef-field select:focus,
+.eden-funnel .ef-field textarea:focus {
+  outline: none;
+  border-color: var(--color-foreground);
+}
+.eden-funnel .ef-form__note {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--color-foreground-muted);
+  margin-block-start: 0.25rem;
+}
+.eden-funnel .ef-contact {
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--color-foreground-muted);
+  margin-block-start: 0.5rem;
+}
+.eden-funnel .ef-contact a {
+  color: var(--eden-primary, #5B2A86);
+  font-weight: 600;
+  text-decoration: none;
+}
+.eden-funnel .ef-contact a:hover {
+  text-decoration: underline;
+}
+.eden-funnel .ef-reassure {
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--color-foreground-muted);
+  margin-block-start: 0.4rem;
+}
+.eden-funnel .ef-estimate {
+  text-align: center;
+  font-size: 0.95rem;
+  color: var(--color-foreground);
+  background: var(--eden-surface, #f5f2fb);
+  border: 1px solid rgba(91, 42, 134, 0.2);
+  border-radius: 10px;
+  padding: 0.7rem 1rem;
+  margin-block-end: 0.5rem;
+}
+.eden-funnel .ef-estimate strong {
+  color: var(--eden-primary, #5b2a86);
+}
+.eden-funnel .ef-estimate span {
+  color: var(--color-foreground-muted);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 600px) {
+  .eden-funnel .ef-steps__grid {
+    grid-template-columns: 1fr;
+  }
+  .eden-funnel .ef-form__row {
+    grid-template-columns: 1fr;
+  }
+  .eden-funnel .ef-tiers {
+    grid-template-columns: 1fr;
+  }
+  .eden-funnel .ef-trust__grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ===== EdenMish brand palette ===== */
+.eden-funnel {
+  --eden-primary: #5B2A86;
+  --eden-primary-dark: #4A216F;
+  --eden-lavender: #B8A8C9;
+  --eden-gold: #C9A96B;
+}
+.eden-funnel .ef-muted {
+  background: rgba(184, 168, 201, 0.16);
+}
+.eden-funnel .ef-accent {
+  background: rgba(201, 169, 107, 0.12);
+  border-block-color: rgba(201, 169, 107, 0.4);
+}
+.eden-funnel .ef-btn--primary {
+  background-color: var(--eden-primary);
+  color: #ffffff;
+  border-color: var(--eden-primary);
+}
+.eden-funnel .ef-btn--primary:hover {
+  background-color: var(--eden-primary-dark);
+  border-color: var(--eden-primary-dark);
+  opacity: 1;
+}
+.eden-funnel .ef-btn--secondary {
+  color: var(--eden-primary);
+  border-color: rgba(91, 42, 134, 0.35);
+}
+.eden-funnel .ef-btn--secondary:hover {
+  background-color: rgba(91, 42, 134, 0.08);
+}
+.eden-funnel .ef-steps__num {
+  background-color: var(--eden-primary);
+  color: #ffffff;
+}
+.eden-funnel .ef-why__grid li::before {
+  color: var(--eden-primary);
+}
+.eden-funnel .ef-services__grid li {
+  border-color: rgba(91, 42, 134, 0.16);
+}
+.eden-funnel .ef-tier {
+  border-color: rgba(91, 42, 134, 0.2);
+}
+.eden-funnel .ef-tier__price {
+  color: var(--eden-gold);
+}
+
+/* ===== EdenMish palette v2: white base + bold purple hero ===== */
+.eden-funnel {
+  --eden-surface: #f5f2fb;
+  --eden-surface-2: #efebf7;
+  --eden-hero-from: #3e1d5e;
+  --eden-hero-to: #5b2a86;
+}
+.eden-funnel .ef-muted {
+  background: var(--eden-surface);
+}
+.eden-funnel .ef-accent {
+  background: var(--eden-surface-2);
+  border-block-color: rgba(91, 42, 134, 0.18);
+}
+.eden-funnel .ef-hero {
+  background: linear-gradient(135deg, var(--eden-hero-from) 0%, var(--eden-hero-to) 100%);
+  color: #ffffff;
+}
+.eden-funnel .ef-hero__title,
+.eden-funnel .ef-hero__sub {
+  color: #ffffff;
+}
+.eden-funnel .ef-hero__body {
+  color: rgba(255, 255, 255, 0.85);
+}
+.eden-funnel .ef-hero .ef-btn--primary {
+  background-color: var(--eden-gold);
+  color: #1a1a22;
+  border-color: var(--eden-gold);
+}
+.eden-funnel .ef-hero .ef-btn--primary:hover {
+  background-color: #b8965b;
+  border-color: #b8965b;
+  opacity: 1;
+}
+.eden-funnel .ef-hero .ef-btn--secondary {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.6);
+}
+.eden-funnel .ef-hero .ef-btn--secondary:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+/* ===== Trust bar (CRO) ===== */
+.eden-funnel .ef-trust {
+  background: var(--color-background);
+  border-block-end: 1px solid rgba(91, 42, 134, 0.1);
+  padding-block: clamp(22px, 3vw, 36px);
+}
+.eden-funnel .ef-trust__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: clamp(16px, 2.5vw, 32px);
+}
+.eden-funnel .ef-trust__item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.eden-funnel .ef-trust__icon {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--eden-surface, #f5f2fb);
+  color: var(--eden-primary, #5b2a86);
+}
+.eden-funnel .ef-trust__icon svg {
+  width: 22px;
+  height: 22px;
+}
+.eden-funnel .ef-trust__item strong {
+  display: block;
+  font-size: 0.98rem;
+  color: var(--color-foreground);
+}
+.eden-funnel .ef-trust__item span {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--color-foreground-muted);
+}
+.eden-funnel .ef-reassure {
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--color-foreground-muted);
+  margin-block-start: 0.6rem;
+}

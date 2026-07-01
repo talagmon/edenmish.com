@@ -1,0 +1,31 @@
+name = "edenmish-ops"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# account_id is read from CLOUDFLARE_ACCOUNT_ID env (do not hardcode here)
+
+# Branded subdomains (custom domains — bare hostnames, Cloudflare manages DNS)
+routes = [
+  { pattern = "find.edenmish.com", custom_domain = true },
+  { pattern = "ops.edenmish.com", custom_domain = true }
+]
+
+[vars]
+BRAND = "EdenMish"
+BOOKING_URL = "https://edenmish.com"
+# MAPS_KEY is a Worker secret (set via `wrangler secret put MAPS_KEY`) — injected into the tracking page.
+WHATSAPP_NUMBER = "972534058498"
+OPS_EMAIL = "eden@edenmish.com"
+SHOPIFY_SHOP = "edenmish.myshopify.com"
+SHOPIFY_API_VERSION = "2026-04"
+
+# D1 database
+[[d1_databases]]
+binding = "DB"
+database_name = "edenmish"
+database_id = "f2f51b54-0170-4594-a41c-7a6037c902aa"
+
+# Secrets (set with `wrangler secret put`): OPS_PIN, SESSION_SECRET, MAPS_KEY,
+#   SHOPIFY_ADMIN_TOKEN (shpat_...), SHOPIFY_WEBHOOK_SECRET,
+#   RESEND_API_KEY (or SENDGRID_API_KEY).
+# Optional for future Mesh/J5 pre-auth: PAYMENT_MODE=preauth, MESH_API_KEY.

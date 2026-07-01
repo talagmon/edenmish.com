@@ -1,0 +1,16 @@
+{
+  "name": "edenmish-ops",
+  "version": "0.1.0",
+  "private": true,
+  "description": "EdenMish delivery order + tracking backend (Cloudflare Worker + D1)",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute edenmish --file=./schema.sql",
+    "db:query": "wrangler d1 execute edenmish --command"
+  },
+  "devDependencies": {
+    "wrangler": "^4.105.0"
+  }
+}

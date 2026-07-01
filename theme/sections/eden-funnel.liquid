@@ -1,0 +1,583 @@
+{{ 'eden-funnel.css' | asset_url | stylesheet_tag }}
+
+<section
+  class="eden-funnel"
+  dir="rtl"
+  data-edon-funnel
+  data-whatsapp="{{ section.settings.whatsapp_number | default: '972534058498' | remove: '+' | remove: ' ' | remove: '-' }}"
+  data-price-base="{{ section.settings.price_base | default: 59 }}"
+  data-price-per-km="{{ section.settings.price_per_km | default: 4 }}"
+  data-storefront-token="{{ section.settings.storefront_token | default: '' }}"
+>
+  {%- comment -%} ---------------- HERO ---------------- {%- endcomment -%}
+  <header class="ef-hero section-padding"
+    {%- if section.settings.hero_image != blank -%}
+      style="background: linear-gradient(135deg, rgba(62, 29, 94, 0.88), rgba(91, 42, 134, 0.82)), url('{{ section.settings.hero_image | image_url: width: 2000 }}') center/cover no-repeat;"
+    {%- endif -%}
+  >
+    <div class="page-width">
+      <h1 class="ef-hero__title">{{ section.settings.hero_title }}</h1>
+      <p class="ef-hero__sub">{{ section.settings.hero_subtitle }}</p>
+      <p class="ef-hero__body">
+        EdenMish מציע שירות שליחויות אישי, מהיר ופשוט לעסקים ופרטיים באזור תל אביב, רמת החייל, גוש דן והסביבה.<br>
+        בלי מוקדים. בלי סיבוך. עם תקשורת ישירה ועדכון ברור.
+      </p>
+      <div class="ef-hero__actions">
+        <a href="#eden-quote" class="ef-btn ef-btn--primary">הזמנת שליחות</a>
+        <a href="https://wa.me/972534058498" target="_blank" rel="noopener" class="ef-btn ef-btn--secondary">שאלה בוואטסאפ</a>
+      </div>
+    </div>
+  </header>
+
+  <section class="ef-trust" aria-label="יתרונות EdenMish">
+    <div class="page-width ef-trust__grid">
+      <div class="ef-trust__item">
+        <span class="ef-trust__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <div><strong>משלוח באותו היום</strong><span>איסוף ומסירה מהירים</span></div>
+      </div>
+      <div class="ef-trust__item">
+        <span class="ef-trust__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.8A8 8 0 1 1 21 12z" stroke-linejoin="round"/></svg></span>
+        <div><strong>וואטסאפ ישיר לעדן</strong><span>בלי מוקד, בני אדם</span></div>
+      </div>
+      <div class="ef-trust__item">
+        <span class="ef-trust__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><text x="12" y="16" text-anchor="middle" font-size="11" fill="currentColor" stroke="none" font-family="sans-serif">₪</text></svg></span>
+        <div><strong>מחיר ברור מראש</strong><span>לפני כל תשלום</span></div>
+      </div>
+      <div class="ef-trust__item">
+        <span class="ef-trust__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 21s-6-5.3-6-10a6 6 0 1 1 12 0c0 4.7-6 10-6 10z" stroke-linejoin="round"/><circle cx="12" cy="11" r="2"/></svg></span>
+        <div><strong>כל גוש דן</strong><span>תל אביב והסביבה</span></div>
+      </div>
+    </div>
+  </section>
+
+  {%- comment -%} ---------------- PROBLEM ---------------- {%- endcomment -%}
+  <section class="ef-block ef-problem section-padding">
+    <div class="page-width">
+      <h2 class="ef-block__title">כשצריך שליחות עכשיו, אין זמן להסתבך</h2>
+      <div class="ef-block__text">
+        <p>לפעמים צריך להעביר משהו קטן — אבל חשוב. מסמך למשרד. חבילה ללקוח. מפתח שנשכח. פריט שצריך להגיע עוד היום.</p>
+        <p>הבעיה היא שחברות שליחויות גדולות לא תמיד מתאימות לשליחות קטנות, מהירות ואישיות. לפעמים אין עם מי לדבר, המחיר לא ברור, והזמן לא מדויק.</p>
+      </div>
+    </div>
+  </section>
+
+  {%- comment -%} ---------------- SOLUTION ---------------- {%- endcomment -%}
+  <section class="ef-block ef-solution section-padding ef-muted">
+    <div class="page-width">
+      <h2 class="ef-block__title">כאן EdenMish נכנס לתמונה</h2>
+      <div class="ef-block__text">
+        <p>EdenMish הוא שירות שליחויות אישי שמנוהל על ידי עדן אריאלי. המשמעות פשוטה: אתם לא עובדים מול מוקד. אתם עובדים מול אדם שמכיר את האזור, מבין את הדחיפות, וזמין לתת מענה ישיר.</p>
+        <p>השירות מתאים ללקוחות פרטיים, משרדים, עסקים קטנים, קליניקות, עורכי דין, רואי חשבון וכל מי שצריך שליחות מהירה בתל אביב והמרכז.</p>
+      </div>
+    </div>
+  </section>
+
+  {%- comment -%} ---------------- HOW IT WORKS ---------------- {%- endcomment -%}
+  <section class="ef-block ef-steps section-padding">
+    <div class="page-width">
+      <h2 class="ef-block__title ef-center">איך זה עובד?</h2>
+      <ol class="ef-steps__grid">
+        <li><span class="ef-steps__num">1</span><span>מזינים איסוף, מסירה וסוג חבילה</span></li>
+        <li><span class="ef-steps__num">2</span><span>מקבלים הערכת מחיר מיידית</span></li>
+        <li><span class="ef-steps__num">3</span><span>משלמים מראש באשראי / ביט / Apple Pay</span></li>
+        <li><span class="ef-steps__num">4</span><span>עוקבים אחרי השליח בזמן אמת</span></li>
+      </ol>
+      <p class="ef-steps__note">אחרי התשלום, עדן מקבל/ת את ההזמנה ויוצא/ת לדרך. קישור המעקב מציג מיקום חי ועדכוני סטטוס עד למסירה.</p>
+    </div>
+  </section>
+
+  {%- comment -%} ---------------- SERVICES ---------------- {%- endcomment -%}
+  <section class="ef-block ef-services section-padding ef-muted">
+    <div class="page-width">
+      <h2 class="ef-block__title ef-center">סוגי שליחויות</h2>
+      <ul class="ef-services__grid">
+        <li>שליחויות פרטיות</li>
+        <li>שליחויות לעסקים</li>
+        <li>מסמכים ומעטפות</li>
+        <li>חבילות קטנות</li>
+        <li>שליחויות דחופות</li>
+        <li>איסוף והחזרה</li>
+        <li>שליחויות קבועות למשרדים</li>
+      </ul>
+    </div>
+  </section>
+
+  {%- comment -%} ---------------- WHY ---------------- {%- endcomment -%}
+  <section class="ef-block ef-why section-padding">
+    <div class="page-width">
+      <h2 class="ef-block__title">למה לבחור ב-EdenMish?</h2>
+      <p class="ef-block__intro">כי שליחות קטנה לא צריכה להיות סיפור גדול.</p>
+      <ul class="ef-why__grid">
+        <li>שירות אישי וישיר</li>
+        <li>מענה מהיר בוואטסאפ</li>
+        <li>היכרות עם תל אביב וגוש דן</li>
+        <li>פתרון גמיש לעסקים ופרטיים</li>
+        <li>מחיר ברור לפני ביצוע השליחות</li>
+        <li>אפשרות לשירות קבוע לעסקים</li>
+      </ul>
+    </div>
+  </section>
+
+  {%- comment -%} ---------------- PRICING ---------------- {%- endcomment -%}
+  <section class="ef-block ef-pricing section-padding ef-accent">
+    <div class="page-width ef-center">
+      <h2 class="ef-block__title">כמה זה עולה?</h2>
+      <p class="ef-pricing__text">
+        שליחויות בתל אביב וגוש דן החל מ־₪{{ section.settings.starting_price | default: '59' }}.<br>
+        בחרו סוג חבילה לתשלום מהיר, או קבלו הצעת מחיר מדויקת בוואטסאפ לפי מרחק ודחיפות.
+      </p>
+      <div class="ef-tiers">
+        <div class="ef-tier">
+          <h3 class="ef-tier__name">מעטפה / מסמך</h3>
+          <p class="ef-tier__price">₪59</p>
+          <p class="ef-tier__desc">מסמכים ומעטפות, עד 1 ק"ג</p>
+          <a href="#eden-quote" class="ef-btn ef-btn--secondary">הזמנת שליחות</a>
+        </div>
+        <div class="ef-tier">
+          <h3 class="ef-tier__name">פריט קטן</h3>
+          <p class="ef-tier__price">₪69</p>
+          <p class="ef-tier__desc">פריטים קטנים</p>
+          <a href="#eden-quote" class="ef-btn ef-btn--secondary">הזמנת שליחות</a>
+        </div>
+        <div class="ef-tier">
+          <h3 class="ef-tier__name">קופסה (עד גודל נעל)</h3>
+          <p class="ef-tier__price">₪89</p>
+          <p class="ef-tier__desc">קופסאות קטנות</p>
+          <a href="#eden-quote" class="ef-btn ef-btn--secondary">הזמנת שליחות</a>
+        </div>
+      </div>
+      <p class="ef-pricing__note">המחירים הינם מחיר התחלתי בתוך תל אביב. המחיר הסופי מחושב לפי מרחק, דחיפות ושעה — ומאושר בדף המעקב לפני התשלום.</p>
+      <a href="#eden-quote" class="ef-btn ef-btn--secondary">הזמנת שליחות</a>
+    </div>
+  </section>
+
+  {%- comment -%} ---------------- BUSINESS ---------------- {%- endcomment -%}
+  <section class="ef-block ef-business section-padding">
+    <div class="page-width">
+      <h2 class="ef-block__title">שירות שליחויות לעסקים קטנים ומשרדים</h2>
+      <div class="ef-block__text">
+        <p>משרד עורכי דין, רואה חשבון, קליניקה או עסק קטן? EdenMish יכול לספק לכם שירות שליחויות קבוע או מזדמן באזור תל אביב והמרכז, עם תקשורת ישירה, זמינות גבוהה ומחיר ברור.</p>
+        <p>מתאים לעסקים שצריכים 5, 10, 30 או יותר שליחויות בחודש.</p>
+      </div>
+      <a href="#eden-quote" class="ef-btn ef-btn--secondary">דברו איתנו על מסלול עסקי</a>
+    </div>
+  </section>
+
+  {%- comment -%} ---------------- CTA + WHATSAPP QUOTE FORM ---------------- {%- endcomment -%}
+  <section id="eden-quote" class="ef-block ef-quote section-padding ef-muted">
+    <div class="page-width">
+      <h2 class="ef-block__title ef-center">צריכים שליחות?</h2>
+      <p class="ef-block__intro ef-center">השאירו פרטים ועדן יחזור אליכם עם מחיר וזמן איסוף.</p>
+
+      <form class="ef-form" data-ef-form>
+        <div class="ef-form__row">
+          <label class="ef-field">
+            <span>שם מלא</span>
+            <input type="text" name="name" required autocomplete="name">
+          </label>
+          <label class="ef-field">
+            <span>טלפון</span>
+      <input type="tel" name="phone" required autocomplete="tel" inputmode="tel">
+    </label>
+  </div>
+
+        <label class="ef-field">
+          <span>דוא״ל (לחשבונית ואישור מסירה — אופציונלי, ניתן גם בקופה)</span>
+          <input type="email" name="email" autocomplete="email" placeholder="you@example.com">
+        </label>
+
+  <div class="ef-form__row">
+    <label class="ef-field">
+      <span>סוג לקוח</span>
+            <select name="customer_type">
+              <option value="פרטי">פרטי</option>
+              <option value="עסקי">עסקי</option>
+            </select>
+          </label>
+          <label class="ef-field">
+            <span>סוג חבילה</span>
+            <select name="package">
+              <option value="מעטפה/מסמך">מעטפה / מסמך</option>
+              <option value="פריט קטן">פריט קטן</option>
+              <option value="קופסה (עד גודל נעל)">קופסה (עד גודל נעל)</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="ef-field">
+          <span>מאיפה אוספים</span>
+          <input type="text" name="pickup" required autocomplete="off" data-ef-addr="pickup" placeholder="התחילו להקליד כתובת…">
+        </label>
+        <label class="ef-field">
+          <span>קומה / דירה / הערה לאיסוף (אופציונלי)</span>
+          <input type="text" name="pickup_detail" placeholder="לדוגמה: קומה 3, דירה 12">
+        </label>
+        <label class="ef-field">
+          <span>לאן שולחים</span>
+          <input type="text" name="dropoff" required autocomplete="off" data-ef-addr="dropoff" placeholder="התחילו להקליד כתובת…">
+        </label>
+        <label class="ef-field">
+          <span>קומה / דירה / שם המקבל (אופציונלי)</span>
+          <input type="text" name="dropoff_detail" placeholder="לדוגמה: קומה 2, דירה 7 — דנה">
+        </label>
+
+        <div class="ef-form__row">
+          <label class="ef-field">
+            <span>מתי צריך את השליחות</span>
+            <input type="text" name="when" required placeholder="לדוגמה: היום עד הצהריים / מחר 10:00">
+          </label>
+          <label class="ef-field">
+            <span>האם זה דחוף?</span>
+            <select name="urgent">
+              <option value="לא דחוף">לא</option>
+              <option value="דחוף">כן, דחוף</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="ef-field">
+          <span>הערות נוספות</span>
+          <textarea name="notes" rows="3"></textarea>
+        </label>
+
+        <p class="ef-estimate" data-ef-estimate hidden></p>
+        <button type="submit" class="ef-btn ef-btn--primary ef-btn--block">המשך לתשלום מאובטח</button>
+        <p class="ef-reassure">מחיר וזמן איסוף מאושרים מראש • תשלום דרך Shopify + PayPlus • חשבונית על כל משלוח</p>
+        <p class="ef-form__note">לאחר התשלום תקבלו בדוא״ל קישור למעקב חי של השליח. מעדיפים לתאם בוואטסאפ? <a href="https://wa.me/972534058498" target="_blank" rel="noopener">כתבו לעדן ישירות ←</a></p>
+        <p class="ef-contact">או כתבו לנו: <a href="mailto:eden@edenmish.com">eden@edenmish.com</a></p>
+      </form>
+    </div>
+  </section>
+</section>
+
+<script>
+  var EDEN_ZONES = ['תל אביב','תל אביב-יפו','תל אביב יפו','רמת גן','גבעתיים','בני ברק','הרצליה','רמת השרון','הוד השרון','קריית אונו','קרית אונו','גבעת שמואל','אור יהודה','בת ים','חולון','ראשון לציון','כפר סבא','רעננה','פתח תקווה','אזור','גני תקווה','סביון','רמלה','לוד'];
+  var EDEN_ZONE_ERR = function(el, msg) {
+    el.value = ''; delete el.dataset.parsed; delete el.dataset.city; delete el.dataset.lat; delete el.dataset.lng;
+    var err = el.parentNode.querySelector('.ef-zone-err');
+    if (!err) { err = document.createElement('div'); err.className = 'ef-zone-err'; err.style.cssText = 'color:#C0392B;font-size:.85rem;margin-top:4px'; el.parentNode.appendChild(err); }
+    err.textContent = msg; el.style.borderColor = '#C0392B';
+  };
+  (function () {
+    var root = document.currentScript.previousElementSibling;
+    document.querySelectorAll('[data-edon-funnel]').forEach(function (section) {
+      if (section.dataset.efBound) return;
+      section.dataset.efBound = '1';
+      var form = section.querySelector('[data-ef-form]');
+      if (!form) return;
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (!form.reportValidity()) return;
+        var pickupIn = form.querySelector('[name="pickup"]');
+        var dropoffIn = form.querySelector('[name="dropoff"]');
+        if (pickupIn && pickupIn.dataset.city && EDEN_ZONES.indexOf(pickupIn.dataset.city) < 0) { EDEN_ZONE_ERR(pickupIn, 'אזור מחוץ לטווח השירות.'); pickupIn.focus(); return; }
+        if (dropoffIn && dropoffIn.dataset.city && EDEN_ZONES.indexOf(dropoffIn.dataset.city) < 0) { EDEN_ZONE_ERR(dropoffIn, 'אזור מחוץ לטווח השירות.'); dropoffIn.focus(); return; }
+        var num = (section.dataset.whatsapp || '').replace(/\D/g, '');
+        var v = function (n) { return (form.querySelector('[name="' + n + '"]') || {}).value || ''; };
+        function addrLine(addr, det) {
+          var el = form.querySelector('[name="' + addr + '"]');
+          var base = (el && el.dataset.parsed) || (el && el.value) || '';
+          var d = v(det);
+          return base + (d ? ' | ' + d : '');
+        }
+        function num2(addr, k) { var el = form.querySelector('[name="' + addr + '"]'); return el && el.dataset[k] ? Number(el.dataset[k]) : null; }
+        var estimate = section.dataset.estimate || '';
+        var msg =
+          'שלום עדן, התקבלה בקשה חדשה:\n' +
+          'שם: ' + v('name') + '\n' +
+          'דוא״ל: ' + v('email') + '\n' +
+          'טלפון: ' + v('phone') + '\n' +
+          'סוג לקוח: ' + v('customer_type') + '\n' +
+          'איסוף: ' + addrLine('pickup', 'pickup_detail') + '\n' +
+          'מסירה: ' + addrLine('dropoff', 'dropoff_detail') + '\n' +
+          'מועד: ' + v('when') + '\n' +
+          'חבילה: ' + v('package') + '\n' +
+          'דחוף: ' + v('urgent') + '\n' +
+          (estimate ? 'הערכה: ' + estimate + '\n' : '') +
+          'הערות: ' + v('notes');
+        var pickupEl2 = form.querySelector('[name="pickup"]');
+        var dropoffEl2 = form.querySelector('[name="dropoff"]');
+        var payload = {
+          name: v('name'), email: v('email'), phone: v('phone'), customer_type: v('customer_type'),
+          pickup: addrLine('pickup', ''), pickup_detail: v('pickup_detail'),
+          pickup_city: (pickupEl2 && pickupEl2.dataset.city) || '', pickup_lat: num2('pickup', 'lat'), pickup_lng: num2('pickup', 'lng'),
+          dropoff: addrLine('dropoff', ''), dropoff_detail: v('dropoff_detail'),
+          dropoff_city: (dropoffEl2 && dropoffEl2.dataset.city) || '', dropoff_lat: num2('dropoff', 'lat'), dropoff_lng: num2('dropoff', 'lng'),
+          when_text: v('when'), package: v('package'), urgent: v('urgent') === 'דחוף', notes: v('notes'),
+          distance_km: section.dataset.distance ? Number(section.dataset.distance) : null
+        };
+        var btn = form.querySelector('[type="submit"]');
+        if (btn) { btn.disabled = true; btn.dataset.label = btn.textContent; btn.textContent = 'טוען…'; }
+        var orderData = null;
+        fetch('https://find.edenmish.com/api/orders', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        }).then(function (r) { return r.json(); }).then(function (d) {
+          orderData = d;
+          if (!d || !d.token) throw new Error('no order');
+          if (d.review) { window.location.href = d.tracking_url; return; }
+          var pkgVariants = { 'מעטפה/מסמך': 51876992909629, 'פריט קטן': 51876992942397, 'קופסה (עד גודל נעל)': 51876993007933 };
+          var pkgBases = { 'מעטפה/מסמך': 59, 'פריט קטן': 69, 'קופסה (עד גודל נעל)': 89 };
+          var surchargeVariant = 51897756975421;
+          var pkgKey = v('package');
+          var baseVariant = pkgVariants[pkgKey] || pkgVariants['מעטפה/מסמך'];
+          var base = pkgBases[pkgKey] || 59;
+          var surcharge = Math.max(0, (d.price || base) - base);
+          var lineProps = {
+            '_tracking_token': d.token,
+            'איסוף': addrLine('pickup', 'pickup_detail'),
+            'מסירה': addrLine('dropoff', 'dropoff_detail'),
+            'מועד': v('when'),
+            'דחיפות': v('urgent'),
+            'טלפון': v('phone')
+          };
+          if (v('notes')) lineProps['הערות'] = v('notes');
+          var items = [{ id: baseVariant, quantity: 1, properties: lineProps }];
+          if (surcharge > 0) { items.push({ id: surchargeVariant, quantity: surcharge, properties: { '_tracking_token': d.token } }); }
+          var sfToken = section.dataset.storefrontToken;
+          if (sfToken) {
+            // Storefront API: creates cart with pre-filled email/name/phone → checkout URL preserves them
+            var gid = function(id) { return 'gid://shopify/ProductVariant/' + id; };
+            var sfLines = [{ merchandiseId: gid(baseVariant), quantity: 1, attributes: Object.keys(lineProps).map(function(k) { return { key: k, value: String(lineProps[k]) }; }) }];
+            if (surcharge > 0) sfLines.push({ merchandiseId: gid(surchargeVariant), quantity: surcharge, attributes: [{ key: '_tracking_token', value: d.token }] });
+            var bi = {};
+            if (v('email')) bi.email = v('email');
+            if (v('phone')) bi.phone = '+972' + v('phone').replace(/^0/, '').replace(/\D/g, '');
+            return fetch('https://edenmish.myshopify.com/api/2024-10/graphql.json', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Shopify-Storefront-Access-Token': sfToken },
+              body: JSON.stringify({ query: 'mutation c($i:CartInput!){cartCreate(input:$i){cart{checkoutUrl}userErrors{field message}}}', variables: { i: { lines: sfLines, buyerIdentity: bi, note: 'EdenMish ' + d.token } } })
+            }).then(function(r) { return r.json(); }).then(function(res) {
+              var url = res && res.data && res.data.cartCreate && res.data.cartCreate.cart && res.data.cartCreate.cart.checkoutUrl;
+              if (url) window.location.href = url; else throw new Error('storefront');
+            });
+          }
+          // Fallback: AJAX cart (no pre-fill) + URL params (best-effort)
+          return fetch('/cart/clear.js', { method: 'POST' }).then(function () {
+            return fetch('/cart/add.js', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: items }) });
+          }).then(function (r) {
+            if (!r.ok) throw new Error('cart');
+            var p = [];
+            var np = (v('name') || '').split(/\s+/);
+            if (v('email')) p.push('checkout[email]=' + encodeURIComponent(v('email')));
+            if (np[0]) p.push('checkout[shipping_address][first_name]=' + encodeURIComponent(np[0]));
+            if (np.length > 1) p.push('checkout[shipping_address][last_name]=' + encodeURIComponent(np.slice(1).join(' ')));
+            if (v('phone')) p.push('checkout[shipping_address][phone]=' + encodeURIComponent(v('phone')));
+            window.location.href = '/checkout?' + p.join('&');
+          });
+        }).catch(function () {
+          if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || 'המשך לתשלום מאובטח'; }
+          if (orderData && orderData.tracking_url) { window.location.href = orderData.tracking_url; }
+          else if (num) { window.open('https://wa.me/' + num + '?text=' + encodeURIComponent(msg), '_blank'); }
+          else { alert('שגיאה. נסו שוב או כתבו לנו בוואטסאפ.'); }
+        });
+      });
+    });
+  })();
+
+  function initEdenAutocomplete() {
+    document.querySelectorAll('[data-edon-funnel]').forEach(function (section) {
+      if (section.dataset.acBound) return;
+      section.dataset.acBound = '1';
+      var pickupEl = section.querySelector('[data-ef-addr="pickup"]');
+      var dropoffEl = section.querySelector('[data-ef-addr="dropoff"]');
+      if (!pickupEl || !dropoffEl || !window.google || !google.maps || !google.maps.places) return;
+      var opt = {
+        componentRestrictions: { country: 'il' },
+        fields: ['formatted_address', 'geometry', 'name', 'address_components'],
+        types: ['geocode'],
+        bounds: { north: 32.20, south: 31.90, east: 34.95, west: 34.70 },
+        strictBounds: true
+      };
+      var ZONES = EDEN_ZONES;
+      function zoneError(el, msg) { EDEN_ZONE_ERR(el, msg); }
+      function zoneOk(el) {
+        var err = el.parentNode.querySelector('.ef-zone-err'); if (err) err.remove();
+        el.style.borderColor = '';
+      }
+      function checkZone(p, el) {
+        if (!p || !p.address_components) return true;
+        var city = '';
+        (p.address_components || []).forEach(function (c) {
+          var t = c.types || [];
+          if (t.indexOf('locality') >= 0 || t.indexOf('administrative_area_level_2') >= 0) city = city || c.long_name;
+        });
+        if (city && ZONES.indexOf(city) < 0) { zoneError(el, 'מצטערים, איננו משרתים את האזור ' + city + '. אזורי השירות: תל אביב, גוש דן והסביבה.'); return false; }
+        zoneOk(el); return true;
+      }
+      var a = new google.maps.places.Autocomplete(pickupEl, opt);
+      var b = new google.maps.places.Autocomplete(dropoffEl, opt);
+      var est = section.querySelector('[data-ef-estimate]');
+      var form = section.querySelector('[data-ef-form]');
+      if (!form) return;
+      function parsePlace(p) {
+        if (!p || !p.address_components) return (p && p.formatted_address) || '';
+        var street = '', num = '', city = '';
+        (p.address_components || []).forEach(function (c) {
+          var t = c.types || [];
+          if (t.indexOf('route') >= 0) street = c.long_name;
+          if (t.indexOf('street_number') >= 0) num = c.long_name;
+          if (t.indexOf('locality') >= 0 || t.indexOf('administrative_area_level_2') >= 0) city = city || c.long_name;
+        });
+        var base = (street ? street : '') + (num ? ' ' + num : '');
+        var full = base + (city ? ', ' + city : '');
+        return full || p.formatted_address || '';
+      }
+      function placeCity(p) {
+        if (!p || !p.address_components) return '';
+        var city = '';
+        (p.address_components || []).forEach(function (c) {
+          var t = c.types || [];
+          if (t.indexOf('locality') >= 0 || t.indexOf('administrative_area_level_2') >= 0) city = city || c.long_name;
+        });
+        return city;
+      }
+      function storePlace(el, p) {
+        if (!checkZone(p, el)) return false;
+        el.dataset.parsed = parsePlace(p);
+        el.dataset.city = placeCity(p);
+        if (p && p.geometry && p.geometry.location) {
+          el.dataset.lat = p.geometry.location.lat();
+          el.dataset.lng = p.geometry.location.lng();
+        }
+        return true;
+      }
+      function calc() {
+        var p1 = a.getPlace(), p2 = b.getPlace();
+        var ok1 = true, ok2 = true;
+        if (p1) ok1 = storePlace(pickupEl, p1);
+        if (p2) ok2 = storePlace(dropoffEl, p2);
+        if (!ok1 || !ok2) { delete section.dataset.distance; if (est) est.hidden = true; return; }
+        if (p1 && p1.geometry && p2 && p2.geometry) {
+          new google.maps.DistanceMatrixService().getDistanceMatrix({
+            origins: [p1.geometry.location], destinations: [p2.geometry.location],
+            travelMode: 'DRIVING', unitSystem: google.maps.UnitSystem.METRIC
+          }, function (res, status) {
+            if (status === 'OK' && res && res.rows[0] && res.rows[0].elements[0] && res.rows[0].elements[0].status === 'OK') {
+              var e = res.rows[0].elements[0];
+              var km = e.distance.value / 1000;
+              section.dataset.distance = km.toFixed(2);
+              var price = estimatePrice(section, form, km);
+              if (est) {
+                est.hidden = false;
+                est.innerHTML = 'מרחק נסיעה ~' + e.distance.text + ' • <strong>הערכת מחיר: ₪' + price + '</strong> <span>(המחיר הסופי מאושר בדף המעקב)</span>';
+                section.dataset.estimate = 'מרחק ~' + e.distance.text + ', מחיר מוערך ₪' + price;
+              }
+            }
+          });
+        } else {
+          recalcEstimate(section, form);
+        }
+      }
+      function recalcEstimate(sec, frm) {
+        var km = sec.dataset.distance ? parseFloat(sec.dataset.distance) : null;
+        if (km == null) return;
+        var price = estimatePrice(sec, frm, km);
+        if (est && price) { est.hidden = false; est.innerHTML = est.innerHTML.replace(/₪\d+/, '₪' + price); sec.dataset.estimate = 'מחיר מוערך ₪' + price; }
+      }
+      form.querySelector('[name="package"]').addEventListener('change', function () { recalcEstimate(section, form); });
+      form.querySelector('[name="urgent"]').addEventListener('change', function () { recalcEstimate(section, form); });
+      google.maps.event.addListener(a, 'place_changed', calc);
+      google.maps.event.addListener(b, 'place_changed', calc);
+    });
+  }
+  function estimatePrice(section, form, km) {
+    var pkgBases = { 'מעטפה/מסמך': 59, 'פריט קטן': 69, 'קופסה (עד גודל נעל)': 89 };
+    var pkgSel = form.querySelector('[name="package"]');
+    var base = (pkgSel && pkgBases[pkgSel.value]) || parseFloat(section.dataset.priceBase || 59);
+    var perKm = parseFloat(section.dataset.pricePerKm || 4);
+    var includedKm = 3;
+    var isUrgent = ((form.querySelector('[name="urgent"]') || {}).value === 'דחוף');
+    return Math.round((base + Math.max(0, km - includedKm) * perKm) * (isUrgent ? 1.25 : 1));
+  }
+</script>
+{% if section.settings.google_maps_key != blank %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ section.settings.google_maps_key }}&libraries=places&language=iw&region=il&callback=initEdenAutocomplete" async defer></script>
+{% endif %}
+
+{% schema %}
+{
+  "name": "EdenMish Funnel",
+  "tag": "section",
+  "class": "eden-funnel-wrapper",
+  "settings": [
+    {
+      "type": "header",
+      "content": "הגדרות כלליות"
+    },
+    {
+      "type": "text",
+      "id": "whatsapp_number",
+      "label": "מספר וואטסאפ של עדן (פורמט בינלאומי, ללא +)",
+      "default": "972534058498",
+      "info": "לדוגמה: 972501234567"
+    },
+    {
+      "type": "text",
+      "id": "starting_price",
+      "label": "מחיר התחלתי (₪)",
+      "default": "59"
+    },
+    {
+      "type": "header",
+      "content": "כתובות ותמחור (Google Maps)"
+    },
+    {
+      "type": "text",
+      "id": "google_maps_key",
+      "label": "Google Maps API Key",
+      "info": "ללא מפתח - שדה כתובת רגיל. עם מפתח - השלמה אוטומטית של כתובת + הערכת מחיר לפי מרחז."
+    },
+    {
+      "type": "number",
+      "id": "price_base",
+      "label": "מחיר בסיס להערכה (₪)",
+      "default": 59
+    },
+    {
+      "type": "number",
+      "id": "price_per_km",
+      "label": "תוספת לק\"מ להערכה (₪)",
+      "default": 4
+    },
+    {
+      "type": "header",
+      "content": "מילוי אוטומטי בקופה (Storefront API)"
+    },
+    {
+      "type": "text",
+      "id": "storefront_token",
+      "label": "Storefront API Access Token",
+      "info": "כשמולא — פרטי הלקוח (דוא״ל, שם, טלפון) מולאו אוטומטית בקופה. ריק — הלקוח מזין ידנית."
+    },
+    {
+      "type": "header",
+      "content": "Hero"
+    },
+    {
+      "type": "text",
+      "id": "hero_title",
+      "label": "כותרת ראשית",
+      "default": "שליחויות מהירות בתל אביב והמרכז"
+    },
+    {
+      "type": "text",
+      "id": "hero_subtitle",
+      "label": "תת כותרת",
+      "default": "צריך להעביר חבילה קטנה, מסמך חשוב או פריט דחוף?"
+    },
+    {
+      "type": "image_picker",
+      "id": "hero_image",
+      "label": "תמונת רקע ל־Hero (אופציונלי)"
+    }
+  ],
+  "presets": [
+    {
+      "name": "EdenMish Funnel"
+    }
+  ],
+  "enabled_on": {
+    "templates": ["index"]
+  }
+}
+{% endschema %}
