@@ -55,7 +55,7 @@ jobs:
           fi
 
           echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
-          echo "Preview URL: $PREVIEW_URL
+          echo "Preview URL: $PREVIEW_URL"
       - name: Comment preview URL on PR
         if: steps.push.outputs.preview_url
         uses: actions/github-script@v7
