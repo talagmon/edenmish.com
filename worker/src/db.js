@@ -84,3 +84,43 @@ export async function setEmailAndOtp(DB, id, email, otpHash, otpExpires) {
 export async function verifyOtp(DB, id) {
   await DB.prepare(`UPDATE orders SET email_verified = 1, otp_hash = NULL, otp_expires = NULL WHERE id = ?`).bind(id).run();
 }
+
+// ---- generic rate limiting (rate_limits table) ----
+// Used for OTP attempt lockout, OTP resend throttle, and per-IP order-creation limits.
+// Each "key" is a composite string scoped to its purpose, e.g. 'otpv:<token>'.
+
+export async function getRateLimit(DB, key) {
+  return DB.prepare('SELECT count, window_start, last_at, locked_until FROM rate_limits WHERE key = ?').bind(key).first();
+}
+
+// Increment the counter for a window. If the window has elapsed (windowMs), the
+// counter resets to 1. Returns the post-increment state (lastAt = now).
+export async function incrRateLimit(DB, key, windowMs) {
+  const now = Date.now();
+  const r = await DB.prepare('SELECT count, window_start, last_at, locked_until FROM rate_limits WHERE key = ?').bind(key).first();
+  let count, windowStart;
+  if (!r || !r.window_start || now - r.window_start > windowMs) {
+    count = 1; windowStart = now;
+  } else {
+    count = (r.count || 0) + 1; windowStart = r.window_start;
+  }
+  const lockedUntil = r ? r.locked_until : null;
+  await DB.prepare(
+    `INSERT INTO rate_limits (key, count, window_start, last_at, locked_until) VALUES (?,?,?,?,?)
+     ON CONFLICT(key) DO UPDATE SET count = excluded.count, window_start = excluded.window_start, last_at = excluded.last_at, locked_until = excluded.locked_until`
+  ).bind(key, count, windowStart, now, lockedUntil).run();
+  return { count, windowStart, lastAt: now, lockedUntil };
+}
+
+// Set / extend a lockout on a key without resetting the counter.
+export async function setRateLock(DB, key, lockedUntil) {
+  const now = Date.now();
+  await DB.prepare(
+    `INSERT INTO rate_limits (key, count, window_start, last_at, locked_until) VALUES (?,?,?,?,?)
+     ON CONFLICT(key) DO UPDATE SET locked_until = excluded.locked_until, last_at = excluded.last_at`
+  ).bind(key, 0, now, now, lockedUntil).run();
+}
+
+export async function resetRateLimit(DB, key) {
+  await DB.prepare('DELETE FROM rate_limits WHERE key = ?').bind(key).run();
+}

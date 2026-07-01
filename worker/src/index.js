@@ -1,16 +1,12 @@
-import { createOrder, getOrderByToken, getOrderById, listOrders, setOrderStatus, getStatusHistory, addGps, latestGps, getRules, recordPayment, setEmailAndOtp, verifyOtp } from './db.js';
+import { createOrder, getOrderByToken, getOrderById, listOrders, setOrderStatus, getStatusHistory, addGps, latestGps, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit } from './db.js';
 import { priceOrder } from './pricing.js';
 import { sendEmail, makeSession, checkSession, getCookie, genOtp, hashOtp } from './integrations.js';
 import { createCharge, settleOrder, verifyShopifyWebhook, parseShopifyOrderWebhook } from './payment.js';
 import { trackingHtml, opsHtml } from './pages.js';
+import { corsFor, maskEmail, publicOrderSummary, clientIp, anonKey } from './security.js';
 
 const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra } });
 const html = (s) => new Response(s, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
-const cors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, X-Ops'
-};
 const trackingUrl = (env, token) => `https://find.edenmish.com/t/${token}`;
 const otpEmailHtml = (otp, url) => `<div dir="rtl" style="font-family:sans-serif;font-size:16px;line-height:1.6">הקוד שלך לאימות הכתובת ב-EdenMish:<div style="font-size:34px;font-weight:800;letter-spacing:6px;color:#5B2A86">${otp}</div>הקוד תקף 10 דקות.${url ? '<div style="margin-top:16px;padding-top:12px;border-top:1px solid #eee"><a href="' + url + '" style="display:inline-block;background:#5B2A86;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:700">מעקב המשלוח שלך ←</a></div>' : ''}</div>`;
 const deliverySummaryHtml = (o) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px"><h2 style="color:#5B2A86;margin:0 0 8px">המשלוח נמסר ✓</h2><p>תודה שבחרתם ב-EdenMish!</p><table style="border-collapse:collapse;font-size:15px"><tr><td style="padding:5px 14px;color:#777">איסוף</td><td style="padding:5px 0">${o.pickup || ''}</td></tr><tr><td style="padding:5px 14px;color:#777">מסירה</td><td style="padding:5px 0">${o.dropoff || ''}</td></tr><tr><td style="padding:5px 14px;color:#777">מחיר</td><td style="padding:5px 0;font-weight:700;color:#C9A96B;font-size:18px">₪${o.price || ''}</td></tr></table><p style="color:#777;font-size:13px;margin-top:14px">לשאלות: eden@edenmish.com · 053-405-8498</p></div>`;
@@ -32,14 +28,26 @@ export default {
     const path = url.pathname;
     const onFind = host.startsWith('find.');
     const onOps = host.startsWith('ops.');
+    const cors = corsFor(req, env);
 
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
 
     // ---- public API (CORS) ----
     if (path === '/api/orders' && req.method === 'POST') {
+      // Part E — IP-based abuse protection. Counts every attempt (incl. invalid bodies)
+      // so spam can't bypass via malformed payloads. 5 / 10min and 20 / day per IP.
+      // The IP is HMAC-hashed (anonKey) — the raw IP is never stored in D1 or logged.
+      const k = await anonKey(env, clientIp(req));
+      const r10 = await incrRateLimit(env.DB, 'ord:' + k, 10 * 60 * 1000);
+      if (r10.count > 5) { console.log('order_rate_limited', { window: '10m' }); return json({ error: 'rate_limited' }, 429, { ...cors, 'Retry-After': '600' }); }
+      const rd = await incrRateLimit(env.DB, 'ordd:' + k, 24 * 60 * 60 * 1000);
+      if (rd.count > 20) { console.log('order_rate_limited', { window: 'day' }); return json({ error: 'rate_limited' }, 429, { ...cors, 'Retry-After': '86400' }); }
+
       let b; try { b = await req.json(); } catch { return json({ error: 'invalid body' }, 400, cors); }
-      const required = ['name', 'phone', 'pickup', 'dropoff', 'package'];
+      // Part A — email is required for new public orders (tracking link + OTP go by email).
+      const required = ['name', 'phone', 'email', 'pickup', 'dropoff', 'package'];
       for (const f of required) if (!b[f]) return json({ error: 'missing ' + f }, 400, cors);
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(b.email))) return json({ error: 'invalid email' }, 400, cors);
 
       const rules = await getRules(env.DB);
       const pr = priceOrder(b, rules);
@@ -107,12 +115,13 @@ export default {
       const token = path.split('/')[3];
       const o = await getOrderByToken(env.DB, token);
       if (!o) return json({ error: 'not found' }, 404, cors);
+      // Part B — full PII only after email verification. Unverified access (including
+      // legacy no-email orders) gets the sanitized summary only.
+      if (!o.email_verified) {
+        return json({ order: publicOrderSummary(o), history: [], gps: null, otp_pending: true }, 200, cors);
+      }
       const [history, gps] = await Promise.all([getStatusHistory(env.DB, o.id), latestGps(env.DB, o.id)]);
       delete o.otp_hash;
-      const otpPending = !!(o.otp_expires) && !o.email_verified;
-      if (otpPending) {
-        return json({ order: { id: o.id, token: o.token, email: o.email, status: o.status }, history: [], gps: null, otp_pending: true }, 200, cors);
-      }
       return json({ order: o, history: history.results, gps, otp_pending: false }, 200, cors);
     }
 
@@ -120,19 +129,58 @@ export default {
     if (path.includes('/verify-otp') && req.method === 'POST') {
       const token = path.split('/')[3];
       const o = await getOrderByToken(env.DB, token);
-      if (!o) return json({ error: 'not found' }, 404, cors);
       let b; try { b = await req.json(); } catch { b = {}; }
-      if (!o.otp_expires || o.otp_expires < Date.now()) return json({ verified: false, error: 'expired' }, 200, cors);
+      const RL = 'otpv:' + token;
+      const now = Date.now();
+      // Lockout takes precedence (don't reveal the order exists while locked).
+      const rl = await getRateLimit(env.DB, RL);
+      if (rl && rl.locked_until && rl.locked_until > now) {
+        return json({ verified: false, error: 'locked' }, 200, cors);
+      }
+      // Don't reveal whether the token exists: a missing order looks like a wrong code.
+      if (!o) return json({ verified: false }, 200, cors);
+      if (!o.otp_expires || o.otp_expires < now) return json({ verified: false, error: 'expired' }, 200, cors);
       const expect = await hashOtp(env, String(b.code || ''));
-      if (expect === o.otp_hash) { await verifyOtp(env.DB, o.id); return json({ verified: true }, 200, cors); }
+      if (expect === o.otp_hash) {
+        await verifyOtp(env.DB, o.id);
+        await resetRateLimit(env.DB, RL);
+        return json({ verified: true }, 200, cors);
+      }
+      // Part C — max 5 failed attempts within 10 min, then lock for 15 min.
+      const after = await incrRateLimit(env.DB, RL, 10 * 60 * 1000);
+      if (after.count >= 5) {
+        await setRateLock(env.DB, RL, now + 15 * 60 * 1000);
+        console.log('otp_locked', { order: o.id });
+        return json({ verified: false, error: 'locked' }, 200, cors);
+      }
+      console.log('otp_fail', { order: o.id, attempts: after.count });
       return json({ verified: false }, 200, cors);
     }
     if (path.includes('/resend-otp') && req.method === 'POST') {
       const token = path.split('/')[3];
       const o = await getOrderByToken(env.DB, token);
-      if (!o || !o.email) return json({ ok: false }, 404, cors);
+      const RL = 'otps:' + token;
+      const now = Date.now();
+      const rl = await getRateLimit(env.DB, RL);
+      // Part D — min 60s between sends; honor any active lockout.
+      if (rl && rl.locked_until && rl.locked_until > now) {
+        console.log('resend_throttled', { reason: 'locked' });
+        return json({ ok: false, error: 'throttled' }, 200, cors);
+      }
+      if (rl && rl.last_at && now - rl.last_at < 60 * 1000) {
+        return json({ ok: false, error: 'throttled' }, 200, cors);
+      }
+      // Don't reveal existence: a missing token / no-email order returns the same
+      // shape as a successful send (and sends nothing).
+      if (!o || !o.email) return json({ ok: true }, 200, cors);
+      const after = await incrRateLimit(env.DB, RL, 15 * 60 * 1000);
+      if (after.count > 3) {
+        await setRateLock(env.DB, RL, now + 15 * 60 * 1000);
+        console.log('resend_throttled', { reason: 'over_limit', order: o.id });
+        return json({ ok: false, error: 'throttled' }, 200, cors);
+      }
       const otp = genOtp();
-      await setEmailAndOtp(env.DB, o.id, o.email, await hashOtp(env, otp), Date.now() + 10 * 60 * 1000);
+      await setEmailAndOtp(env.DB, o.id, o.email, await hashOtp(env, otp), now + 10 * 60 * 1000);
       try { await sendEmail(env, { to: o.email, subject: 'קוד האימות שלך ב-EdenMish', html: otpEmailHtml(otp, trackingUrl(env, token)) }); } catch {}
       return json({ ok: true }, 200, cors);
     }

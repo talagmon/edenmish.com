@@ -78,7 +78,9 @@ function render(d){
   if(!isLive && !isDone) mapBlock='';
   document.getElementById('app').innerHTML=
     (d.otp_pending
-      ? '<div class="card" id="verifyCard"><div style="text-align:center;margin-bottom:12px"><div class="badge">מס׳ '+o.id+'</div></div><h2>אימות כתובת הדוא״ל</h2><div class="muted" style="margin-bottom:16px">לצפייה בפרטי השליחות ובמעקב החי, הזינו את הקוד בן 6 הספרות שנשלח ל-<b>'+(o.email||'')+'</b>.</div><div style="display:flex;gap:8px;align-items:center"><input id="otpInput" inputmode="numeric" maxlength="6" placeholder="••••••" style="flex:1;text-align:center;letter-spacing:8px;font-size:1.4rem;padding:12px;border:2px solid #B8A8C9;border-radius:10px"><button class="btn" onclick="verifyOtpNow()" style="width:auto;flex:none">אימות</button></div><div class="muted" style="text-align:center;margin-top:8px"><a href="#" onclick="resendOtp();return false" style="color:#5B2A86;font-weight:700">שלח קוד מחדש</a></div></div>'
+      ? (o.otp_enabled === false
+          ? '<div class="card" style="text-align:center"><div class="badge">מס׳ '+o.id+'</div><h2 style="margin-top:10px">מעקב מוגבל</h2><p class="muted" style="margin:8px 0 16px">לצפייה בפרטי השליחות נדרש אימות דוא״ל, אך לא צורפה כתובת דוא״ל להזמנה זו. לקבלת פרטים:</p><a class="btn" href="https://wa.me/972534058498" target="_blank" rel="noopener" style="width:auto;display:inline-block">צרו קשר בוואטסאפ ←</a></div>'
+          : '<div class="card" id="verifyCard"><div style="text-align:center;margin-bottom:12px"><div class="badge">מס׳ '+o.id+'</div></div><h2>אימות כתובת הדוא״ל</h2><div class="muted" style="margin-bottom:16px">לצפייה בפרטי השליחות ובמעקב החי, הזינו את הקוד בן 6 הספרות שנשלח ל-<b>'+(o.email_masked||'')+'</b>.</div><div style="display:flex;gap:8px;align-items:center"><input id="otpInput" inputmode="numeric" maxlength="6" placeholder="••••••" style="flex:1;text-align:center;letter-spacing:8px;font-size:1.4rem;padding:12px;border:2px solid #B8A8C9;border-radius:10px"><button class="btn" onclick="verifyOtpNow()" style="width:auto;flex:none">אימות</button></div><div class="muted" style="text-align:center;margin-top:8px"><a href="#" onclick="resendOtp();return false" style="color:#5B2A86;font-weight:700">שלח קוד מחדש</a></div></div>')
       : '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2>סטטוס הזמנה</h2><span class="badge">מס׳ '+o.id+'</span></div><ul class="tl">'+tl+'</ul></div>'+
         '<div class="card"><h2>פרטי השליחות</h2>'+
           '<div class="kv"><span>איסוף</span><b>'+(o.pickup||'—')+(o.pickup_detail?' · '+o.pickup_detail:'')+'</b></div>'+
@@ -109,9 +111,9 @@ async function verifyOtpNow(){
     document.getElementById('app').innerHTML='<div class="card" style="text-align:center"><div class="badge ok" style="font-size:1rem;padding:10px">הדוא״ל אומת ✓ טוען פרטים…</div></div>';
     setTimeout(load,500);
   }
-  else{btn.disabled=false; btn.textContent='אימות'; alert(d.error==='expired'?'פג תוקף הקוד — בקשו קוד חדש.':'קוד שגוי, נסו שוב.');}
+  else{btn.disabled=false; btn.textContent='אימות'; alert(d.error==='locked'?'יותר מדי ניסיונות שגויים — נסו שוב מאוחר יותר.':(d.error==='expired'?'פג תוקף הקוד — בקשו קוד חדש.':'קוד שגוי, נסו שוב.'));}
 }
-async function resendOtp(){await fetch('/api/orders/'+TOKEN+'/resend-otp',{method:'POST'});alert('נשלח קוד חדש לדוא״ל');}
+async function resendOtp(){var r=await fetch('/api/orders/'+TOKEN+'/resend-otp',{method:'POST'});var d=await r.json().catch(function(){return{};});alert(d&&d.error==='throttled'?'נשלחו יותר מדי קודים — נסו שוב מאוחר יותר.':'נשלח קוד חדש לדוא״ל');}
 load();
 setInterval(()=>{ if(true) load(); },7000);
 </script></body></html>`;
