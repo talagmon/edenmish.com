@@ -1,6 +1,6 @@
 // HTML pages: customer tracking (find.) + ops/driver dashboard (ops.)
 
-import { customerFlow, liveGpsStatuses, opsLabelMap } from './status.js';
+import { customerFlow, liveGpsStatuses, opsLabelMap, QUEUE_LAYOUT, queueStatusMap } from './status.js';
 
 const CSS = `
 *{box-sizing:border-box;margin:0;padding:0}
@@ -121,81 +121,135 @@ setInterval(()=>{ if(true) load(); },7000);
 
 export function opsHtml(env) {
   return `<!doctype html><html lang="he" dir="rtl"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>EdenMish · ניהול שליחויות</title>
 <style>${CSS}
-.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
-.row .btn{width:auto;flex:1;min-width:120px;font-size:.9rem;padding:10px}
-.row .btn.alt{background:transparent;color:#5B2A86;border:1px solid rgba(91,42,134,.3)}
-.sel{background:#fff;border:1px solid rgba(91,42,134,.2);border-radius:10px;padding:10px;margin:6px 0;cursor:pointer}
-.sel.active{border-color:#5B2A86;background:#F5F2FB}
-input,select{width:100%;padding:10px;border:1px solid rgba(91,42,134,.25);border-radius:8px;font-size:1rem;margin:4px 0}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.pill{font-size:.72rem;padding:2px 8px;border-radius:999px;background:#eee;margin-inline-start:6px}
-.pill.rev{background:#FCE7CA;color:#7a4a00}.pill.std{background:#D8F0E0;color:#1c5e36}
-.steps{display:flex;flex-direction:column;gap:4px;margin:10px 0}
-.step{display:flex;align-items:center;gap:10px;padding:10px 8px;border-radius:10px}
-.step-done{background:#E8F5E9}
-.step-active{background:#E8F5E9;border:2px solid #2E8B57}
-.step-todo{opacity:.45}
-.step-err{background:#FDECEA;border:2px solid #C0392B}
-.step-num{flex:none;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px}
-.step-done .step-num{background:#2E8B57;color:#fff}
-.step-active .step-num{background:#2E8B57;color:#fff}
-.step-todo .step-num{background:#ddd;color:#999}
-.step-err .step-num{background:#C0392B;color:#fff}
-.step-label{flex:1;font-size:.95rem;font-weight:600}
-.step-active .step-label{color:#1c5e36}
-.step-done .step-label{color:#1c5e36}
-.step-todo .step-label{color:#aaa}
-.step-btn{background:#2E8B57;color:#fff;border:0;padding:8px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:.85rem;white-space:nowrap}
+.qbucket{margin:14px 0}
+.qhead{display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:2px solid rgba(91,42,134,.18);margin-bottom:8px;flex-wrap:wrap}
+.qhead-label{font-weight:800;color:#3E1D5E;font-size:1.02rem}
+.qhead-count{background:#5B2A86;color:#fff;border-radius:999px;padding:2px 10px;font-size:.78rem;font-weight:700}
+.qhead-hint{color:#9a93a8;font-size:.72rem;font-weight:400}
+.qhead-toggle{margin-inline-start:auto;color:#5B2A86;font-size:.82rem;font-weight:700;cursor:pointer;background:none;border:0;padding:4px}
+.qcards{display:flex;flex-direction:column;gap:8px}
+.ocard{background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:12px}
+.ocard-active{border-color:#2E8B57;background:#F4FBF6}
+.ocard-live{box-shadow:inset 0 0 0 2px rgba(192,57,43,.35)}
+.ocard-top{display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap}
+.ocard-top .price{margin-inline-start:auto;font-weight:800;color:#C9A96B}
+.ocard-name{font-weight:700;font-size:.95rem}
+.ocard-route{color:#5A5566;font-size:.92rem;margin:2px 0}
+.ocard-meta{margin-top:6px;font-size:.72rem;color:#9a93a8}
+.chip{display:inline-block;font-size:.68rem;padding:2px 8px;border-radius:999px;background:#eee;margin-inline-end:4px;margin-top:5px}
+.chip-urg{background:#FDECEA;color:#C0392B;font-weight:700}
+.chip-pay{background:#D8F0E0;color:#1c5e36}
+.ocard-actions{margin-top:10px;border-top:1px dashed rgba(0,0,0,.08);padding-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.inline-price{display:flex;gap:6px;align-items:stretch;width:100%}
+.inline-price input{flex:1;margin:0;padding:12px;border:2px solid rgba(91,42,134,.3);border-radius:10px;font-size:1.1rem;text-align:center;min-width:80px}
+.btn.sm{width:auto;flex:none;padding:12px 16px;font-size:.9rem;min-height:44px}
+.btn.go{background:#2E8B57}
+.btn.go:hover{background:#267a49}
+.btn.alt{background:transparent;color:#5B2A86;border:1px solid rgba(91,42,134,.3)}
+.btn.danger{background:transparent;color:#C0392B;border:1px solid rgba(192,57,43,.3)}
+.otoolbar{display:flex;align-items:center;gap:8px;justify-content:space-between;position:sticky;top:0;z-index:5}
+.otoolbar .otitle{font-weight:800;color:#5B2A86;font-size:1rem}
+.live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#C0392B;animation:pulse 1.4s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 </style></head><body><div class="wrap">
-<div class="brand">EdenMish · Ops</div><div class="sub">ניהול ומעקב שליחויות</div>
 <div id="app"></div>
 </div>
 <script>
 const HE=${JSON.stringify(opsLabelMap())};
-let sess=null, orders=[], activeId=null, watchId=null;
-const STEPS=[{s:'priced',l:'התקבלה ותומחרה'},{s:'paid',l:'שולם'},{s:'to_pickup',l:'בדרך לאיסוף'},{s:'picked_up',l:'נאסף'},{s:'to_dropoff',l:'בדרך למסירה'},{s:'delivered',l:'נמסר'}];
-function stepIdx(s){var m={received:0,priced:0,payment_sent:0,review:0,paid:1,to_pickup:2,picked_up:3,to_dropoff:4,delivered:5};return m[s]!==undefined?m[s]:0;}
-async function advance(id,cur){var nx=STEPS[cur+1];if(nx){await setStatus(id,nx.s);}}
-const LS=()=>sess;
-async function api(path,opts){opts=opts||{};opts.headers=opts.headers||{};if(sess)opts.headers['X-Ops']=sess;const r=await fetch(path,opts);return r;}
-function loginHtml(){document.getElementById('app').innerHTML='<div class="card"><h2>כניסת אופס</h2><input id="pin" type="password" placeholder="PIN"><button class="btn" onclick="doLogin()">התחבר</button></div>';}
-async function doLogin(){const pin=document.getElementById('pin').value;const r=await fetch('/api/ops/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});if(r.ok){sess=(await r.json()).session;main();}else{alert('PIN שגוי');}}
+const QL=${JSON.stringify(QUEUE_LAYOUT)};
+const QOF=${JSON.stringify(queueStatusMap())};
+const NEXT={paid:'to_pickup',to_pickup:'picked_up',picked_up:'to_dropoff',to_dropoff:'delivered'};
+const NEXTLBL={paid:'יציאה לאיסוף →',to_pickup:'נאסף ✓',picked_up:'יציאה למסירה →',to_dropoff:'נמסר ✓'};
+const LIVE=['to_pickup','to_dropoff'];
+let sess=null, orders=[], activeId=null, watchId=null, doneOpen=false;
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function bucketOf(s){return QOF[s]||'inbox';}
 function fmt(t){return t?new Date(t).toLocaleString('he-IL'):'—';}
-async function refresh(){const r=await api('/api/ops/orders');if(!r.ok){sess=null;return loginHtml();}orders=(await r.json()).orders||[];render();}
+async function api(path,opts){opts=opts||{};opts.headers=opts.headers||{};if(sess)opts.headers['X-Ops']=sess;return await fetch(path,opts);}
+function loginHtml(){document.getElementById('app').innerHTML='<div class="card"><h2>כניסת אופס</h2><input id="pin" type="password" placeholder="PIN"><button class="btn" onclick="doLogin()">התחבר</button></div>';}
+async function doLogin(){const pin=document.getElementById('pin').value;const r=await fetch('/api/ops/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});if(r.ok){sess=(await r.json()).session;refresh();}else{alert('PIN שגוי');}}
+function logout(){sess=null;stopWatch();loginHtml();}
+async function refresh(){const r=await api('/api/ops/orders');if(!r.ok){sess=null;stopWatch();return loginHtml();}orders=(await r.json()).orders||[];render();}
 function render(){
-  const list=orders.map(o=>'<div class="sel'+(o.id===activeId?' active':'')+'" onclick="selectOrder('+o.id+')"><b>#'+o.id+'</b> · '+(o.name||'')+' <span class="pill '+(o.review_flag?'rev':'std')+'">'+HE[o.status]+'</span>'+(o.review_flag?'<span class="pill rev">'+o.review_reason+'</span>':'')+'<div class="muted">'+(o.pickup||'')+' → '+(o.dropoff||'')+' · ₪'+(o.price||'?')+'</div></div>').join('')||'<div class="muted">אין הזמנות עדיין</div>';
-  const o=orders.find(x=>x.id===activeId);
-  let detail='';
-  if(o){
-    detail='<div class="card"><h2>#'+o.id+' · '+(o.name||'')+'</h2>'+
-      '<div class="kv"><span>סטטוס</span><b>'+HE[o.status]+'</b></div>'+
-      '<div class="kv"><span>טלפון</span><b>'+(o.phone||'')+'</b></div>'+
-      '<div class="kv"><span>איסוף</span><b>'+(o.pickup||'')+(o.pickup_detail?' · '+o.pickup_detail:'')+'</b></div>'+
-      '<div class="kv"><span>מסירה</span><b>'+(o.dropoff||'')+(o.dropoff_detail?' · '+o.dropoff_detail:'')+'</b></div>'+
-      '<div class="kv"><span>חבילה</span><b>'+(o.package||'')+'</b></div>'+
-      '<div class="kv"><span>מרחק</span><b>'+(o.distance_km?Number(o.distance_km).toFixed(1)+' ק"מ':'—')+'</b></div>'+
-      '<div class="kv"><span>מחיר</span><b class="price">₪'+(o.price||'?')+'</b></div>'+
-      '<div class="kv"><span>תשלום</span><b>'+o.payment_status+'</b></div>'+
-      (o.review_flag?'<div class="stale">חריג: '+o.review_reason+' — נא לאשר מחיר</div>':'')+
-      buildStepper(o)+
-      '<div class="muted" style="margin-top:8px">נוצר: '+fmt(o.created_at)+'</div>'+
-    '</div>';
-  }
-  document.getElementById('app').innerHTML='<div class="card"><div class="row"><button class="btn alt" onclick="refresh()">רענן</button> <button class="btn alt" onclick="sess=null;loginHtml()">התנתק</button></div></div><div class="card">'+list+'</div>'+detail;
+  var byB={};QL.forEach(function(q){byB[q.bucket]=[];});
+  orders.forEach(function(o){var b=bucketOf(o.status);(byB[b]=byB[b]||[]).push(o);});
+  var sections='';
+  QL.forEach(function(q){
+    var all=(byB[q.bucket]||[]);if(all.length===0)return;
+    var showing=(q.bucket==='done'&&!doneOpen)?[]:all.slice().sort(function(a,b){return b.id-a.id;}).slice(0,10);
+    var toggle=q.bucket==='done'?'<button class="qhead-toggle" data-act="toggledone">'+(doneOpen?'▲ הצג פחות':'▼ הצג '+all.length)+'</button>':'<span class="qhead-hint">'+esc(q.hint||'')+'</span>';
+    sections+='<div class="qbucket"><div class="qhead"><span class="qhead-label">'+esc(q.hebrewLabel)+'</span><span class="qhead-count">'+all.length+'</span>'+toggle+'</div><div class="qcards">'+showing.map(card).join('')+'</div></div>';
+  });
+  if(!sections)sections='<div class="card"><div class="muted">אין הזמנות כרגע.</div></div>';
+  var toolbar='<div class="card otoolbar"><button class="btn sm alt" data-act="refresh">רענן</button><b class="otitle">EdenMish · Ops</b><button class="btn sm alt" data-act="logout">התנתק</button></div>';
+  document.getElementById('app').innerHTML=toolbar+sections;
   startGpsForActive();
 }
-function selectOrder(id){activeId=id;render();}
-async function setStatus(id,st){await api('/api/ops/orders/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:st})});if(st==='to_pickup'||st==='to_dropoff')startWatch(id);if(st==='picked_up'||st==='delivered'||st==='failed')stopWatch();refresh();}
-async function approve(id){const p=prompt('מחיר מאושר (₪):');if(!p)return;await api('/api/ops/orders/'+id+'/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({price:Number(p)})});refresh();}
-async function markPaid(id){await api('/api/ops/orders/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'paid'})});await api('/api/ops/orders/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'paid',payment_status:'paid_manual'})});refresh();}
-function buildStepper(o){var cur=stepIdx(o.status);var isFail=(o.status==='failed'||o.status==='cancelled');var h='<div class="steps">';STEPS.forEach(function(st,i){var cls,icon,btn='';if(isFail&&i===cur){cls='step-err';icon='!';}else if(i<cur){cls='step-done';icon='\\u2713';}else if(i===cur){cls='step-active';icon=(i+1);if(o.review_flag&&i===0){btn='<button class="step-btn" onclick="approve('+o.id+')">אשר מחיר →</button>';}else if(i===0){btn='<span class="step-label" style="font-size:.78rem;color:#999">ממתין לתשלום…</span>';}else if(i<5){btn='<button class="step-btn" onclick="advance('+o.id+','+cur+')">הבא →</button>';}}else{cls='step-todo';icon=(i+1);}h+='<div class="step '+cls+'"><span class="step-num">'+icon+'</span><span class="step-label">'+st.l+'</span>'+btn+'</div>';});h+='</div><div style="margin-top:6px"><button class="btn alt" style="font-size:.8rem;padding:6px 12px;width:auto" onclick="setStatus('+o.id+',\\'failed\\')">סמן כנכשל</button>'+(o.status==='priced'&&!o.review_flag?' <button class="btn alt" style="font-size:.8rem;padding:6px 12px;width:auto" onclick="markPaid('+o.id+')">סמן כשולם ידנית</button>':'')+'</div>';return h;}
-function startGpsForActive(){const o=orders.find(x=>x.id===activeId);if(o&&(o.status==='to_pickup'||o.status==='to_dropoff'))startWatch(o.id);}
-function startWatch(id){if(watchId!==null)return;if(!navigator.geolocation)return;watchId=navigator.geolocation.watchPosition(p=>{const{latitude,longitude}=p.coords;fetch('/api/ops/orders/'+id+'/gps',{method:'POST',headers:{'Content-Type':'application/json','X-Ops':sess},body:JSON.stringify({lat:latitude,lng:longitude})});},()=>{},{enableHighAccuracy:true,maximumAge:5000});}
+function card(o){
+  var s=o.status,id=o.id,isLive=LIVE.indexOf(s)>=0,isActive=o.id===activeId;
+  var h='<div class="ocard'+(isActive?' ocard-active':'')+(isLive?' ocard-live':'')+'">';
+  h+='<div class="ocard-top">'+(isLive?'<span class="live-dot"></span>':'')+'<span class="badge">'+esc(HE[s]||s)+'</span><b>#'+id+'</b><span class="price">₪'+(o.price||'?')+'</span></div>';
+  if(o.name)h+='<div class="ocard-name">'+esc(o.name)+'</div>';
+  h+='<div class="ocard-route">'+esc(o.pickup||'—')+' ← '+esc(o.dropoff||'—')+'</div><div>';
+  if(o.package)h+='<span class="chip">'+esc(o.package)+'</span>';
+  if(o.urgent)h+='<span class="chip chip-urg">דחוף</span>';
+  if(o.when_text)h+='<span class="chip">⏰ '+esc(o.when_text)+'</span>';
+  if(o.payment_status&&o.payment_status!=='none')h+='<span class="chip chip-pay">'+esc(o.payment_status)+'</span>';
+  h+='</div><div class="ocard-meta">נוצר: '+fmt(o.created_at)+(o.distance_km?' · '+Number(o.distance_km).toFixed(1)+' ק"מ':'')+'</div>';
+  h+=actions(o)+'</div>';
+  return h;
+}
+function actions(o){
+  var s=o.status,id=o.id,h='<div class="ocard-actions">';
+  if(s==='review'||s==='priced'||s==='received'){
+    h+='<div class="inline-price"><input type="number" inputmode="numeric" min="1" id="price-'+id+'" value="'+(o.price||'')+'" placeholder="מחיר ₪"><button class="btn sm go" data-act="approve" data-id="'+id+'">אישור מחיר ושליחת קישור תשלום</button></div>';
+    if(o.review_flag)h+='<div class="stale" style="width:100%">חריג: '+esc(o.review_reason||'')+'</div>';
+  }else if(s==='payment_sent'){
+    if(o.payment_url)h+='<button class="btn sm" data-act="copy" data-pay="'+esc(o.payment_url)+'">העתק קישור תשלום</button><a class="btn sm alt" href="'+esc(o.payment_url)+'" target="_blank" rel="noopener">פתח קישור</a>';
+    h+='<button class="btn sm alt" data-act="markpaid" data-id="'+id+'">סמן כשולם ידנית</button>';
+  }else if(s==='paid'){
+    h+='<button class="btn sm go" data-act="topickup" data-id="'+id+'">'+NEXTLBL['paid']+'</button>';
+  }else if(NEXT[s]){
+    h+='<button class="btn sm go" data-act="advance" data-id="'+id+'" data-next="'+NEXT[s]+'">'+NEXTLBL[s]+'</button><button class="btn sm danger" data-act="fail" data-id="'+id+'">סמן כנכשל</button>';
+  }
+  return h+'</div>';
+}
+async function approveInline(id){
+  var inp=document.getElementById('price-'+id),price=Number(inp&&inp.value);
+  if(!price||price<1){alert('הזינו מחיר תקין');return;}
+  var btn=document.querySelector('[data-act="approve"][data-id="'+id+'"]');if(btn){btn.disabled=true;btn.dataset.label=btn.textContent;btn.textContent='טוען…';}
+  try{
+    var r=await api('/api/ops/orders/'+id+'/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({price:price})});
+    var d=await r.json();
+    if(d&&d.ok){if(d.payment_url){copyPay(d.payment_url);alert('המחיר אושר ✓\\nקישור התשלום הועתק ללוח.');}else{alert('המחיר אושר ✓');}refresh();}
+    else{throw 0;}
+  }catch(e){if(btn){btn.disabled=false;btn.textContent=btn.dataset.label||'אישור מחיר';}alert('שגיאה באישור המחיר. נסו שוב.');}
+}
+function copyPay(url){if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(url).catch(function(){});}else{var t=document.createElement('textarea');t.value=url;document.body.appendChild(t);t.select();try{document.execCommand('copy');}catch(e){}document.body.removeChild(t);}}
+async function setStatus(id,st){await api('/api/ops/orders/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:st})});if(st==='to_pickup'||st==='to_dropoff'){activeId=id;startWatch(id);}if(st==='picked_up'||st==='delivered'||st==='failed'||st==='cancelled')stopWatch();refresh();}
+async function advance(id,cur){if(NEXT[cur])await setStatus(id,NEXT[cur]);}
+async function markPaid(id){if(!confirm('לסמן כשולם ידנית?'))return;await api('/api/ops/orders/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'paid'})});refresh();}
+function toggleDone(){doneOpen=!doneOpen;render();}
+function startGpsForActive(){var o=orders.find(function(x){return x.id===activeId;});if(o&&(o.status==='to_pickup'||o.status==='to_dropoff'))startWatch(o.id);}
+function startWatch(id){if(watchId!==null)return;if(!navigator.geolocation)return;watchId=navigator.geolocation.watchPosition(function(p){var c=p.coords;fetch('/api/ops/orders/'+id+'/gps',{method:'POST',headers:{'Content-Type':'application/json','X-Ops':sess},body:JSON.stringify({lat:c.latitude,lng:c.longitude})});},function(){},{enableHighAccuracy:true,maximumAge:5000});}
 function stopWatch(){if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null;}}
+document.getElementById('app').addEventListener('click',function(e){
+  var b=e.target.closest('[data-act]');if(!b)return;
+  var act=b.getAttribute('data-act'),id=Number(b.getAttribute('data-id'));e.preventDefault();
+  if(act==='approve')approveInline(id);
+  else if(act==='topickup')setStatus(id,'to_pickup');
+  else if(act==='advance')advance(id,b.getAttribute('data-next'));
+  else if(act==='fail'){if(confirm('לסמן את ההזמנה כנכשלת?'))setStatus(id,'failed');}
+  else if(act==='markpaid')markPaid(id);
+  else if(act==='copy'){copyPay(b.getAttribute('data-pay'));alert('הקישור הועתק ללוח ✓');}
+  else if(act==='refresh')refresh();
+  else if(act==='logout')logout();
+  else if(act==='toggledone')toggleDone();
+});
 loginHtml();
-setInterval(()=>{if(sess)refresh();},15000);
+setInterval(function(){if(sess&&!(document.activeElement&&document.activeElement.tagName==='INPUT'))refresh();},15000);
 </script></body></html>`;
 }
