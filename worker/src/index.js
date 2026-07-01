@@ -1,9 +1,10 @@
-import { createOrder, getOrderByToken, getOrderById, listOrders, setOrderStatus, getStatusHistory, addGps, latestGps, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof } from './db.js';
+import { createOrder, getOrderByToken, getOrderById, listOrders, setOrderStatus, getStatusHistory, addGps, latestGps, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof, listRecentNotificationFailures } from './db.js';
 import { priceOrder } from './pricing.js';
-import { sendEmail, makeSession, checkSession, getCookie, genOtp, hashOtp } from './integrations.js';
+import { makeSession, checkSession, getCookie, genOtp, hashOtp } from './integrations.js';
 import { createCharge, settleOrder, verifyShopifyWebhook, parseShopifyOrderWebhook } from './payment.js';
 import { trackingHtml, opsHtml } from './pages.js';
 import { corsFor, maskEmail, publicOrderSummary, clientIp, anonKey } from './security.js';
+import { notifyEmail } from './notify.js';
 
 const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra } });
 const html = (s) => new Response(s, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -77,7 +78,7 @@ export default {
 
       // Notify Eden (optional)
       try {
-        await sendEmail(env, { to: env.OPS_EMAIL, subject: `הזמנה חדשה #${created.id}${isReview ? ' — לבדיקה' : ' — ממתינה לתשלום'}`, html: `${b.name} · ${b.pickup} → ${b.dropoff} · ₪${pr.price}${isReview ? '<br>חריג: ' + pr.reasons : ''}<br><a href="${finalUrl}">${finalUrl}</a>` });
+        await notifyEmail(env, env.DB, { orderId: created.id, template: 'ops_new_order', recipient: env.OPS_EMAIL, subject: `הזמנה חדשה #${created.id}${isReview ? ' — לבדיקה' : ' — ממתינה לתשלום'}`, html: `${b.name} · ${b.pickup} → ${b.dropoff} · ₪${pr.price}${isReview ? '<br>חריג: ' + pr.reasons : ''}<br><a href="${finalUrl}">${finalUrl}</a>` });
       } catch {}
 
       // 2. PR4 — exact-price path: Worker creates a Shopify Draft Order and returns its
@@ -182,7 +183,7 @@ export default {
       }
       const otp = genOtp();
       await setEmailAndOtp(env.DB, o.id, o.email, await hashOtp(env, otp), now + 10 * 60 * 1000);
-      try { await sendEmail(env, { to: o.email, subject: 'קוד האימות שלך ב-EdenMish', html: otpEmailHtml(otp, trackingUrl(env, token)) }); } catch {}
+      await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_otp', recipient: o.email, subject: 'קוד האימות שלך ב-EdenMish', html: otpEmailHtml(otp, trackingUrl(env, token)) });
       return json({ ok: true }, 200, cors);
     }
 
@@ -226,7 +227,7 @@ export default {
         if (o) {
           await settleOrder(env, o); // no-op in 'immediate' mode; captures in future 'preauth' (Mesh) mode
           if (o.email) {
-            try { await sendEmail(env, { to: o.email, subject: 'המשלוח מ-EdenMish נמסר ✓', html: deliverySummaryHtml(o) }); } catch {}
+            try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_delivery_summary', recipient: o.email, subject: 'המשלוח מ-EdenMish נמסר ✓', html: deliverySummaryHtml(o) }); } catch {}
           }
         }
       }
@@ -279,11 +280,18 @@ export default {
       if (!wasDelivered && o) {
         await settleOrder(env, o); // no-op in 'immediate' mode; captures in future 'preauth' (Mesh) mode
         if (o.email) {
-          try { await sendEmail(env, { to: o.email, subject: 'המשלוח מ-EdenMish נמסר ✓', html: deliverySummaryHtml(o) }); } catch {}
+          try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_delivery_summary', recipient: o.email, subject: 'המשלוח מ-EdenMish נמסר ✓', html: deliverySummaryHtml(o) }); } catch {}
         }
       }
       const proof = await getDeliveryProof(env.DB, id);
       return json({ ok: true, order: o, proof });
+    }
+
+    // ---- PR8: recent notification failures (ops-only, for the dashboard panel) ----
+    if (onOps && path === '/api/ops/notifications/failures' && req.method === 'GET') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      const r = await listRecentNotificationFailures(env.DB, 5);
+      return json({ failures: r.results || [] });
     }
 
     // ---- Shopify webhook (replaces PayPlus webhook) ----
@@ -306,9 +314,9 @@ export default {
             if (custEmail && env.SENDGRID_API_KEY) {
               const otp = genOtp();
               await setEmailAndOtp(env.DB, o.id, custEmail, await hashOtp(env, otp), Date.now() + 10 * 60 * 1000);
-              try { await sendEmail(env, { to: custEmail, subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב', html: paymentConfirmedHtml({ ...o, email: custEmail }, trackingUrl(env, o.token), otp) }); } catch {}
+              try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_payment_confirmation', recipient: custEmail, subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב', html: paymentConfirmedHtml({ ...o, email: custEmail }, trackingUrl(env, o.token), otp) }); } catch {}
             }
-            try { await sendEmail(env, { to: env.OPS_EMAIL, subject: `תשלום התקבל #${o.id} — ₪${o.price}`, html: `${o.name} · ${o.pickup} → ${o.dropoff}<br>המתינו לאישור ויציאה לדרך ב- ops.edenmish.com` }); } catch {}
+            try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'ops_payment_received', recipient: env.OPS_EMAIL, subject: `תשלום התקבל #${o.id} — ₪${o.price}`, html: `${o.name} · ${o.pickup} → ${o.dropoff}<br>המתינו לאישור ויציאה לדרך ב- ops.edenmish.com` }); } catch {}
           } else {
             // authorized but not yet captured (future Mesh/preauth mode)
             await env.DB.prepare('UPDATE orders SET shopify_order_id=?, payment_status=? WHERE id=?')

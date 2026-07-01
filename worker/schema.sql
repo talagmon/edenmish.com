@@ -81,6 +81,23 @@ CREATE TABLE IF NOT EXISTS delivery_proofs (
   updated_at INTEGER
 );
 
+-- Notification audit trail (PR8). One row per attempted customer/ops notification.
+-- Stores WHAT was attempted and the OUTCOME — never the body/html or OTP codes.
+CREATE TABLE IF NOT EXISTS notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id INTEGER,                 -- nullable (system/non-order notifications)
+  channel TEXT NOT NULL,            -- 'email' (today) | 'whatsapp_future' | 'sms_future' | 'system'
+  template TEXT,                    -- e.g. 'customer_otp', 'ops_new_order'
+  recipient TEXT,                   -- email address (internal audit; never exposed publicly)
+  subject TEXT,
+  status TEXT NOT NULL,             -- 'pending' | 'sent' | 'failed' | 'skipped'
+  provider_ref TEXT,                -- provider message id (null until sendEmail exposes one)
+  error TEXT,                       -- short, sanitized error string
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_status ON notifications(status, id DESC);
+
 INSERT OR IGNORE INTO pricing_rules (name, value) VALUES
   ('base_envelope','59'),
   ('base_item','69'),

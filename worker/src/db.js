@@ -144,3 +144,55 @@ export async function upsertDeliveryProof(DB, orderId, p) {
   }
   return getDeliveryProof(DB, orderId);
 }
+
+// ---- notification audit trail (PR8) ----
+// NOTE: never store the email body/html or OTP codes here — only metadata + outcome.
+
+function sanitizeError(e) {
+  let s = e && e.message ? e.message : String(e == null ? '' : e);
+  s = s.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return s.slice(0, 200);
+}
+
+export async function createNotificationAttempt(DB, data) {
+  const now = Date.now();
+  const r = await DB.prepare(
+    `INSERT INTO notifications (order_id, channel, template, recipient, subject, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+  ).bind(
+    data.order_id ?? null,
+    data.channel || 'email',
+    data.template ?? null,
+    data.recipient ?? null,
+    data.subject ?? null,
+    data.status || 'pending',
+    now,
+    now
+  ).first();
+  return r ? r.id : null;
+}
+
+export async function markNotificationSent(DB, id, providerRef) {
+  await DB.prepare('UPDATE notifications SET status = ?, provider_ref = ?, updated_at = ? WHERE id = ?')
+    .bind('sent', providerRef ?? null, Date.now(), id).run();
+}
+
+export async function markNotificationFailed(DB, id, error) {
+  await DB.prepare('UPDATE notifications SET status = ?, error = ?, updated_at = ? WHERE id = ?')
+    .bind('failed', sanitizeError(error), Date.now(), id).run();
+}
+
+export async function markNotificationSkipped(DB, id) {
+  await DB.prepare('UPDATE notifications SET status = ?, updated_at = ? WHERE id = ?')
+    .bind('skipped', Date.now(), id).run();
+}
+
+export async function listRecentNotificationFailures(DB, limit = 5) {
+  return DB.prepare('SELECT id, order_id, channel, template, recipient, subject, error, created_at FROM notifications WHERE status = ? ORDER BY id DESC LIMIT ?')
+    .bind('failed', limit).all();
+}
+
+export async function listNotificationsForOrder(DB, orderId) {
+  return DB.prepare('SELECT id, channel, template, recipient, subject, status, provider_ref, error, created_at FROM notifications WHERE order_id = ? ORDER BY id ASC')
+    .bind(orderId).all();
+}

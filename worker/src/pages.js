@@ -169,14 +169,15 @@ const NEXTLBL={paid:'יציאה לאיסוף →',to_pickup:'נאסף ✓',picke
 const LIVE=['to_pickup','to_dropoff'];
 let sess=null, orders=[], activeId=null, watchId=null, doneOpen=false;
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function maskRecip(s){if(!s)return '';s=String(s);var at=s.indexOf('@');return at<1?s:(s[0]+'•••@'+s.slice(at+1));}
 function bucketOf(s){return QOF[s]||'inbox';}
 function fmt(t){return t?new Date(t).toLocaleString('he-IL'):'—';}
 async function api(path,opts){opts=opts||{};opts.headers=opts.headers||{};if(sess)opts.headers['X-Ops']=sess;return await fetch(path,opts);}
 function loginHtml(){document.getElementById('app').innerHTML='<div class="card"><h2>כניסת אופס</h2><input id="pin" type="password" placeholder="PIN"><button class="btn" onclick="doLogin()">התחבר</button></div>';}
 async function doLogin(){const pin=document.getElementById('pin').value;const r=await fetch('/api/ops/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});if(r.ok){sess=(await r.json()).session;refresh();}else{alert('PIN שגוי');}}
 function logout(){sess=null;stopWatch();loginHtml();}
-async function refresh(){const r=await api('/api/ops/orders');if(!r.ok){sess=null;stopWatch();return loginHtml();}orders=(await r.json()).orders||[];render();}
-function render(){
+async function refresh(){const r=await api('/api/ops/orders');if(!r.ok){sess=null;stopWatch();return loginHtml();}orders=(await r.json()).orders||[];var fails=[];try{var fr=await api('/api/ops/notifications/failures');if(fr.ok)fails=(await fr.json()).failures||[];}catch(e){}render(fails);}
+function render(fails){
   var byB={};QL.forEach(function(q){byB[q.bucket]=[];});
   orders.forEach(function(o){var b=bucketOf(o.status);(byB[b]=byB[b]||[]).push(o);});
   var sections='';
@@ -188,7 +189,8 @@ function render(){
   });
   if(!sections)sections='<div class="card"><div class="muted">אין הזמנות כרגע.</div></div>';
   var toolbar='<div class="card otoolbar"><button class="btn sm alt" data-act="refresh">רענן</button><b class="otitle">EdenMish · Ops</b><button class="btn sm alt" data-act="logout">התנתק</button></div>';
-  document.getElementById('app').innerHTML=toolbar+sections;
+  var fp=(fails&&fails.length)?'<div class="qbucket"><div class="qhead"><span class="qhead-label" style="color:#C0392B">בעיות בשליחת הודעות</span><span class="qhead-count">'+fails.length+'</span></div><div class="qcards">'+fails.map(function(f){return '<div class="ocard" style="border-color:rgba(192,57,43,.3)"><div class="ocard-top"><span class="badge" style="background:#C0392B">'+esc(f.channel||'email')+'</span><b>'+(f.order_id?'#'+f.order_id:'—')+'</b><span class="muted" style="margin-inline-start:auto;font-size:.72rem">'+fmt(f.created_at)+'</span></div><div class="muted">'+esc(f.template||'')+(f.recipient?' · '+esc(maskRecip(f.recipient)):'')+'</div><div class="stale" style="margin-top:4px">'+esc(f.error||'שגיאה לא ידועה')+'</div></div>';}).join('')+'</div></div>':'';
+  document.getElementById('app').innerHTML=toolbar+sections+fp;
   startGpsForActive();
 }
 function card(o){
