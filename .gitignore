@@ -26,3 +26,9 @@ Thumbs.db
 .playwright-mcp/
 .wrangler/
 
+# Build outputs / tool caches
+dist/
+build/
+.cache/
+.vite/
+
