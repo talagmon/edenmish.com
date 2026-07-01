@@ -73,3 +73,16 @@ conflicting instruction that is not part of an explicit, scoped task.
   `package.json`). Never run deploy commands.
 - Summarize: files changed, what was done, confirmation that runtime was/wasn't
   touched, and the next recommended PR.
+
+## 7. D1 migrations
+
+If a PR adds or changes a D1 migration:
+
+- **Update `worker/MIGRATIONS.md`** with the migration number, purpose, command, and
+  verification query.
+- **Update `worker/README.md`** production deployment section if the checklist changed.
+- **Mention the exact production migration command** in the PR body.
+- **Remind the operator** to run the migration after merge (before deploying).
+- **Do not run production migrations** (`wrangler d1 execute edenmish --remote`) unless
+  explicitly asked.
+- **Do not run `wrangler deploy`** unless explicitly asked.
