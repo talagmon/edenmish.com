@@ -48,6 +48,7 @@ const FLOW=${JSON.stringify(customerFlow())};
 const orderIdx=(s)=>{const i=FLOW.findIndex(f=>f[0]===s);return i<0?0:i;};
 let map=null,marker=null;
 function fmt(t){return t?new Date(t).toLocaleString('he-IL'):'—';}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];})}
 function ago(ms){const m=Math.max(0,Math.round((Date.now()-ms)/60000));return m<=1?'רגע':m+' דקות';}
 async function load(){
   try{
@@ -72,7 +73,7 @@ function render(d){
   if(o.payment_status==='paid'||o.status==='paid') pay='<div class="badge ok">שולם ₪'+(o.price||'')+'</div>';
   if(!pay && (o.status==='priced'||o.status==='payment_sent')) pay='<div class="badge warn">ממתין לתשלום</div><a class="btn" href="https://wa.me/972534058498?text='+encodeURIComponent('שלום עדן, בקשר להזמנה #'+o.id+' — אשמח לתאם תשלום')+'" target="_blank" rel="noopener" style="margin-top:8px">תיאום תשלום בוואטסאפ ←</a>';
   let summary='';
-  if(isDone){summary='<div class="card"><h2>סיכום משלוח</h2><div class="kv"><span>איסוף</span><b>'+fmt(o.picked_up_at)+'</b></div><div class="kv"><span>מסירה</span><b>'+fmt(o.delivered_at)+'</b></div><div class="kv"><span>מחיר</span><b class="price">₪'+o.price+'</b></div><div class="kv"><span>סטטוס</span><b class="badge ok">נמסר</b></div></div>';}
+  if(isDone){var pf=d.proof||{};summary='<div class="card"><h2>סיכום משלוח</h2><div class="kv"><span>איסוף</span><b>'+fmt(o.picked_up_at)+'</b></div><div class="kv"><span>מסירה</span><b>'+fmt(o.delivered_at)+'</b></div>'+(pf.receiver_name?'<div class="kv"><span>התקבל על ידי</span><b>'+esc(pf.receiver_name)+'</b></div>':'')+(pf.delivery_note?'<div class="kv"><span>הערת מסירה</span><b>'+esc(pf.delivery_note)+'</b></div>':'')+'<div class="kv"><span>מחיר</span><b class="price">₪'+o.price+'</b></div><div class="kv"><span>סטטוס</span><b class="badge ok">נמסר</b></div></div>';}
   const gps=d.gps;
   let mapBlock='<div id="map"></div>'+(gps&&isLive?'<div class="muted" style="text-align:center">מיקום אחרון: לפני '+ago(gps.at)+'</div>':'');
   if(!isLive && !isDone) mapBlock='';
@@ -145,6 +146,8 @@ export function opsHtml(env) {
 .ocard-actions{margin-top:10px;border-top:1px dashed rgba(0,0,0,.08);padding-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .inline-price{display:flex;gap:6px;align-items:stretch;width:100%}
 .inline-price input{flex:1;margin:0;padding:12px;border:2px solid rgba(91,42,134,.3);border-radius:10px;font-size:1.1rem;text-align:center;min-width:80px}
+.deliver-form{display:flex;flex-direction:column;gap:6px;width:100%}
+.deliver-form input{margin:0;padding:12px;border:1px solid rgba(91,42,134,.25);border-radius:10px;font-size:1rem;text-align:right}
 .btn.sm{width:auto;flex:none;padding:12px 16px;font-size:.9rem;min-height:44px}
 .btn.go{background:#2E8B57}
 .btn.go:hover{background:#267a49}
@@ -212,6 +215,8 @@ function actions(o){
     h+='<button class="btn sm alt" data-act="markpaid" data-id="'+id+'">סמן כשולם ידנית</button>';
   }else if(s==='paid'){
     h+='<button class="btn sm go" data-act="topickup" data-id="'+id+'">'+NEXTLBL['paid']+'</button>';
+  }else if(s==='to_dropoff'){
+    h+='<div class="deliver-form"><input type="text" id="recv-'+id+'" placeholder="שם המקבל (אופציונלי)"><input type="text" id="dnote-'+id+'" placeholder="הערת מסירה (אופציונלי)"><button class="btn sm go" data-act="deliver" data-id="'+id+'">סימון כנמסר ✓</button></div><button class="btn sm danger" data-act="fail" data-id="'+id+'">סמן כנכשל</button>';
   }else if(NEXT[s]){
     h+='<button class="btn sm go" data-act="advance" data-id="'+id+'" data-next="'+NEXT[s]+'">'+NEXTLBL[s]+'</button><button class="btn sm danger" data-act="fail" data-id="'+id+'">סמן כנכשל</button>';
   }
@@ -232,6 +237,16 @@ function copyPay(url){if(navigator.clipboard&&navigator.clipboard.writeText){nav
 async function setStatus(id,st){await api('/api/ops/orders/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:st})});if(st==='to_pickup'||st==='to_dropoff'){activeId=id;startWatch(id);}if(st==='picked_up'||st==='delivered'||st==='failed'||st==='cancelled')stopWatch();refresh();}
 async function advance(id,cur){if(NEXT[cur])await setStatus(id,NEXT[cur]);}
 async function markPaid(id){if(!confirm('לסמן כשולם ידנית?'))return;await api('/api/ops/orders/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'paid'})});refresh();}
+async function deliverInline(id){
+  var recv=(document.getElementById('recv-'+id)||{}).value||'';
+  var note=(document.getElementById('dnote-'+id)||{}).value||'';
+  var btn=document.querySelector('[data-act="deliver"][data-id="'+id+'"]');if(btn){btn.disabled=true;btn.dataset.label=btn.textContent;btn.textContent='טוען…';}
+  try{
+    var r=await api('/api/ops/orders/'+id+'/deliver',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({receiver_name:recv,delivery_note:note})});
+    var d=await r.json();
+    if(d&&d.ok){alert('המשלוח סומן כנמסר ✓');refresh();}else{throw 0;}
+  }catch(e){if(btn){btn.disabled=false;btn.textContent=btn.dataset.label||'סימון כנמסר';}alert('שגיאה בסיום המשלוח. נסו שוב.');}
+}
 function toggleDone(){doneOpen=!doneOpen;render();}
 function startGpsForActive(){var o=orders.find(function(x){return x.id===activeId;});if(o&&(o.status==='to_pickup'||o.status==='to_dropoff'))startWatch(o.id);}
 function startWatch(id){if(watchId!==null)return;if(!navigator.geolocation)return;watchId=navigator.geolocation.watchPosition(function(p){var c=p.coords;fetch('/api/ops/orders/'+id+'/gps',{method:'POST',headers:{'Content-Type':'application/json','X-Ops':sess},body:JSON.stringify({lat:c.latitude,lng:c.longitude})});},function(){},{enableHighAccuracy:true,maximumAge:5000});}
@@ -244,6 +259,7 @@ document.getElementById('app').addEventListener('click',function(e){
   else if(act==='advance')advance(id,b.getAttribute('data-next'));
   else if(act==='fail'){if(confirm('לסמן את ההזמנה כנכשלת?'))setStatus(id,'failed');}
   else if(act==='markpaid')markPaid(id);
+  else if(act==='deliver')deliverInline(id);
   else if(act==='copy'){copyPay(b.getAttribute('data-pay'));alert('הקישור הועתק ללוח ✓');}
   else if(act==='refresh')refresh();
   else if(act==='logout')logout();

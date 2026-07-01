@@ -124,3 +124,23 @@ export async function setRateLock(DB, key, lockedUntil) {
 export async function resetRateLimit(DB, key) {
   await DB.prepare('DELETE FROM rate_limits WHERE key = ?').bind(key).run();
 }
+
+// ---- proof of delivery (PR7) ----
+// One row per order (order_id UNIQUE). upserted when Eden marks delivered.
+
+export async function getDeliveryProof(DB, orderId) {
+  return DB.prepare('SELECT receiver_name, delivery_note, photo_url, created_at, updated_at FROM delivery_proofs WHERE order_id = ?').bind(orderId).first();
+}
+
+export async function upsertDeliveryProof(DB, orderId, p) {
+  const now = Date.now();
+  const existing = await DB.prepare('SELECT order_id FROM delivery_proofs WHERE order_id = ?').bind(orderId).first();
+  if (existing) {
+    await DB.prepare('UPDATE delivery_proofs SET receiver_name = ?, delivery_note = ?, photo_url = ?, updated_at = ? WHERE order_id = ?')
+      .bind(p.receiver_name ?? null, p.delivery_note ?? null, p.photo_url ?? null, now, orderId).run();
+  } else {
+    await DB.prepare('INSERT INTO delivery_proofs (order_id, receiver_name, delivery_note, photo_url, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(orderId, p.receiver_name ?? null, p.delivery_note ?? null, p.photo_url ?? null, now, now).run();
+  }
+  return getDeliveryProof(DB, orderId);
+}
