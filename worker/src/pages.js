@@ -1,5 +1,7 @@
 // HTML pages: customer tracking (find.) + ops/driver dashboard (ops.)
 
+import { customerFlow, liveGpsStatuses, opsLabelMap } from './status.js';
+
 const CSS = `
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:#fff;color:#1F2430;direction:rtl;text-align:right}
@@ -41,8 +43,8 @@ export function trackingHtml(env, token) {
 </div>
 <script>
 const TOKEN=${JSON.stringify(token)};
-const LIVE=['to_pickup','to_dropoff'];
-const FLOW=[['received','נתקבלה הבקשה'],['priced','מחיר מחושב אוטומטית'],['payment_sent','קישור תשלום נשלח'],['paid','שולם'],['to_pickup','שליח בדרך לאיסוף'],['picked_up','נאסף'],['to_dropoff','שליח בדרך למסירה'],['delivered','נמסר']];
+const LIVE=${JSON.stringify(liveGpsStatuses())};
+const FLOW=${JSON.stringify(customerFlow())};
 const orderIdx=(s)=>{const i=FLOW.findIndex(f=>f[0]===s);return i<0?0:i;};
 let map=null,marker=null;
 function fmt(t){return t?new Date(t).toLocaleString('he-IL'):'—';}
@@ -150,7 +152,7 @@ input,select{width:100%;padding:10px;border:1px solid rgba(91,42,134,.25);border
 <div id="app"></div>
 </div>
 <script>
-const HE={received:'נתקבלה',priced:'מחושב אוטומטית',review:'בדיקה ידנית',payment_sent:'קישור תשלום נשלח',paid:'שולם',to_pickup:'בדרך לאיסוף',picked_up:'נאסף',to_dropoff:'בדרך למסירה',delivered:'נמסר',failed:'נכשל',cancelled:'בוטל',refund_pending:'ממתין לזיכוי'};
+const HE=${JSON.stringify(opsLabelMap())};
 let sess=null, orders=[], activeId=null, watchId=null;
 const STEPS=[{s:'priced',l:'התקבלה ותומחרה'},{s:'paid',l:'שולם'},{s:'to_pickup',l:'בדרך לאיסוף'},{s:'picked_up',l:'נאסף'},{s:'to_dropoff',l:'בדרך למסירה'},{s:'delivered',l:'נמסר'}];
 function stepIdx(s){var m={received:0,priced:0,payment_sent:0,review:0,paid:1,to_pickup:2,picked_up:3,to_dropoff:4,delivered:5};return m[s]!==undefined?m[s]:0;}
