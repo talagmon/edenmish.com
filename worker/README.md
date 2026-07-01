@@ -37,11 +37,14 @@ It is a **single Worker** that routes by hostname (`find.` vs `ops.`).
 | File | Responsibility |
 |---|---|
 | `index.js` | Request router + endpoint handlers (create order, tracking, ops, webhook). Host-based routing. |
-| `db.js` | D1 data access: `createOrder`, `setOrderStatus` (+ appends `status_history`), `getOrderByToken/Id`, `listOrders`, `getStatusHistory`, `addGps`/`latestGps`, `recordPayment`, `getRules`, `setEmailAndOtp`/`verifyOtp`. |
+| `db.js` | D1 data access: `createOrder`, `setOrderStatus`, `getOrderByToken/Id`, `listOrders`, `getStatusHistory`, `addGps`/`latestGps`, `recordPayment`, `getRules`, `setEmailAndOtp`/`verifyOtp`, rate-limit helpers, delivery-proof helpers, notification-audit helpers. |
 | `pricing.js` | Automatic pricing + exception detection (`priceOrder`). Gush-Dan zone allow-list, km/urgency rules. |
 | `payment.js` | **Clean payment boundary.** `createCharge()` / `settleOrder()`. `immediate` mode today; `preauth` (Mesh) stubbed for the future. |
 | `integrations.js` | Shopify Admin API (`createDraftOrder`), Shopify webhook HMAC verify (`verifyShopifyWebhook`), webhook parser (`parseShopifyOrderWebhook`), SendGrid email (`sendEmail`), OTP helpers, ops session (signed cookie). |
 | `pages.js` | Server-rendered HTML for the tracking page (`trackingHtml`) and ops dashboard (`opsHtml`). |
+| `status.js` | Shared status model: `STATUS`, `STATUS_META` (labels, lifecycle, live-GPS, queue buckets, next-status), `QUEUE_LAYOUT`, helpers. Single source of truth for both UIs. |
+| `security.js` | PII sanitizer (`publicOrderSummary`), `maskEmail`, `corsFor` (CORS allowlist), `clientIp`, `anonKey` (hashed IP rate-limit keys). |
+| `notify.js` | Email notification wrapper (`notifyEmail`): best-effort audit trail in D1 `notifications`; never throws. |
 
 ## Local dev
 
@@ -74,19 +77,20 @@ npm run db:query -- "<SQL>"   # ad-hoc query
 
 Database name: `edenmish`. Binding: `DB`.
 
-### ⚠️ Schema cleanup is deferred to a later PR
+### Schema and migrations
 
-`schema.sql` currently defines the **full** current schema (including the
-columns that migrations `001`/`002` add). The migrations (`ALTER TABLE … ADD
-COLUMN …`) have **no `IF NOT EXISTS`**, so running both `schema.sql` and the
-migrations on a fresh database can fail with "duplicate column".
+`schema.sql` is the **fresh-DB source of truth** — it defines every current table.
+The numbered migrations (`003`–`005`) add tables that were introduced after the initial
+schema. They are all idempotent (`CREATE TABLE IF NOT EXISTS`).
 
-- For a **fresh** DB: run **only** `schema.sql` (`npm run db:init`).
-- Do **not** attempt to "fix" the schema/migration overlap in this PR — it is
-  scheduled for a later data-model PR. Just be aware of it.
+- **Fresh DB:** run `npm run db:init` (schema.sql only).
+- **Existing production DB:** run numbered migrations in order — see **`MIGRATIONS.md`**
+  for the full checklist, commands, and verification queries.
+- Do not run the old `001`/`002` migrations on a DB where `schema.sql` has run (their
+  `ALTER TABLE … ADD COLUMN` would fail with "duplicate column").
 
-The current tables: `orders` (wide), `status_history`, `gps_pings`, `payments`,
-`pricing_rules`. See `../docs/STATUS_MODEL.md` and `../docs/ARCHITECTURE.md`.
+Current tables: `orders`, `status_history`, `gps_pings`, `payments`, `pricing_rules`,
+`rate_limits`, `delivery_proofs`, `notifications`.
 
 ## Secret checklist
 
@@ -118,3 +122,91 @@ Shopify admin → **Settings → Notifications → Webhooks**:
   metafield/note (Draft Order path).
 
 See `../doc/payplus-setup.md` for the step-by-step Shopify + PayPlus setup.
+
+---
+
+## Production deployment checklist
+
+### 1. Pull latest main
+
+```bash
+git checkout main
+git pull --ff-only origin main
+cd worker
+```
+
+### 2. Run required D1 migrations
+
+See **`MIGRATIONS.md`** for the full reference (purpose, verification queries, order).
+
+```bash
+wrangler d1 execute edenmish --file=./migrations/003_rate_limits.sql
+wrangler d1 execute edenmish --file=./migrations/004_delivery_proofs.sql
+wrangler d1 execute edenmish --file=./migrations/005_notifications.sql
+```
+
+> Run only migrations that have not already been applied. They are idempotent, but
+> always confirm before running in production.
+
+### 3. Required Worker secrets
+
+```bash
+wrangler secret put OPS_PIN
+wrangler secret put SESSION_SECRET
+wrangler secret put MAPS_KEY
+wrangler secret put SHOPIFY_ADMIN_TOKEN
+wrangler secret put SHOPIFY_WEBHOOK_SECRET
+wrangler secret put SENDGRID_API_KEY
+```
+
+**Future only** (do not set today):
+
+```bash
+wrangler secret put MESH_API_KEY    # future Mesh/J5 preauth — not required
+```
+
+### 4. Required Worker vars
+
+Set in `wrangler.toml [vars]` (non-secret):
+
+| Var | Value |
+|---|---|
+| `BRAND` | EdenMish |
+| `BOOKING_URL` | `https://edenmish.com` |
+| `WHATSAPP_NUMBER` | Eden's WhatsApp (international, no `+`) |
+| `OPS_EMAIL` | Eden's ops alert address |
+| `SHOPIFY_SHOP` | `edenmish.myshopify.com` |
+| `SHOPIFY_API_VERSION` | `2026-04` |
+| `ALLOWED_ORIGINS` | `https://edenmish.com,https://www.edenmish.com` |
+
+> `ALLOWED_ORIGINS` controls CORS. If unset, CORS falls back to `*` (open).
+> Shopify theme-preview domains may need to be added during testing.
+
+### 5. Shopify webhook
+
+- **Event:** `Order payment` (= `orders/paid`)
+- **URL:** `https://ops.edenmish.com/webhooks/shopify`
+- **Format:** JSON
+- **Secret:** set in the Worker as `SHOPIFY_WEBHOOK_SECRET` (see step 3).
+
+### 6. Deploy Worker
+
+```bash
+wrangler deploy
+```
+
+> **Do not run `wrangler deploy` unless explicitly approved.**
+
+### 7. Smoke test
+
+- [ ] Submit a normal order from the EdenMish funnel.
+- [ ] Confirm D1 order created.
+- [ ] Confirm `payment_url` returned for exact-price order.
+- [ ] Confirm Draft Order invoice opens Shopify checkout.
+- [ ] Confirm paid webhook marks order paid.
+- [ ] Confirm tracking page requires OTP before PII.
+- [ ] Confirm ops dashboard buckets show the order.
+- [ ] Confirm inline price approval works for a review order.
+- [ ] Confirm delivery proof can be saved (receiver name + note).
+- [ ] Confirm notification audit rows are created.
+- [ ] Confirm per-order notification history appears in ops.

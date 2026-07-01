@@ -1,0 +1,127 @@
+# EdenMish Worker Migrations
+
+Reference for every D1 migration and how to apply it.
+
+---
+
+## Rules
+
+- Run migrations **after merging** the PR that introduced them and **before relying on the feature** in production.
+- Run migrations in **numeric order** (003 → 004 → 005 → …).
+- Migrations are designed to be **idempotent** (`CREATE TABLE IF NOT EXISTS`), so re-running them is safe — but always confirm before running in production.
+- **Do not run `schema.sql` on an existing production DB.** It is for fresh-DB setup only.
+- For a **fresh DB**, use `schema.sql` only (it already includes every current table).
+- For an **existing production DB**, run only the numbered migrations that have not yet been applied.
+- Never paste secrets in migration commands.
+- Verify the target D1 database name (`edenmish`) before running commands.
+
+---
+
+## Fresh DB setup
+
+```bash
+wrangler d1 execute edenmish --file=./schema.sql
+```
+
+This creates the full current schema (all tables, indexes, and seed pricing rules).
+Do **not** also run older migrations (`001`, `002`) — `schema.sql` already includes their
+columns, and those migrations use `ALTER TABLE … ADD COLUMN` (no `IF NOT EXISTS`) which
+would fail with "duplicate column" on a DB where `schema.sql` has already run.
+
+---
+
+## Existing production DB — migration order
+
+### 003_rate_limits.sql
+
+**Introduced by:** PR 5 — Harden tracking security and public endpoint abuse protection
+
+**Purpose:** Adds the `rate_limits` table for:
+- Order creation throttling (5 / 10 min, 20 / day per IP)
+- OTP attempt lockout (max 5 failed / 10 min → 15-min lock)
+- OTP resend throttling (max 3 / 15 min, 60 s minimum gap)
+
+**Command:**
+```bash
+wrangler d1 execute edenmish --file=./migrations/003_rate_limits.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM sqlite_master WHERE type='table' AND name='rate_limits';
+```
+
+---
+
+### 004_delivery_proofs.sql
+
+**Introduced by:** PR 7 — Add proof of delivery MVP
+
+**Purpose:** Adds the `delivery_proofs` table for:
+- Receiver name + delivery note at delivery time
+- Reserved `photo_url` column (no upload implemented yet)
+
+**Command:**
+```bash
+wrangler d1 execute edenmish --file=./migrations/004_delivery_proofs.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM sqlite_master WHERE type='table' AND name='delivery_proofs';
+```
+
+---
+
+### 005_notifications.sql
+
+**Introduced by:** PR 8 — Add notification audit table
+
+**Purpose:** Adds the `notifications` table for:
+- Email notification audit (sent / failed / skipped / pending)
+- Per-order notification history
+- Future WhatsApp/SMS notification audit
+
+**Command:**
+```bash
+wrangler d1 execute edenmish --file=./migrations/005_notifications.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM sqlite_master WHERE type='table' AND name='notifications';
+```
+
+---
+
+## Full production migration checklist
+
+- [ ] Confirm current branch is `main`.
+- [ ] Pull latest `main` (`git pull --ff-only origin main`).
+- [ ] Confirm target Cloudflare account.
+- [ ] Confirm target D1 database is `edenmish`.
+- [ ] Run `003_rate_limits.sql` if not already applied.
+- [ ] Run `004_delivery_proofs.sql` if not already applied.
+- [ ] Run `005_notifications.sql` if not already applied.
+- [ ] Run verification queries (see each migration above).
+- [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
+- [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).
+- [ ] Deploy Worker **only after** migrations + secrets are ready.
+- [ ] Smoke-test: order creation → tracking → ops → payment → delivery proof → notification audit.
+
+---
+
+## How to check applied migrations
+
+There is **not yet a formal `applied_migrations` table**. For now, verify by checking
+whether each table exists:
+
+```sql
+SELECT name FROM sqlite_master
+WHERE type='table'
+AND name IN ('rate_limits', 'delivery_proofs', 'notifications')
+ORDER BY name;
+```
+
+A future migration system may add an `applied_migrations` tracking table. Do not implement
+it in this PR.
