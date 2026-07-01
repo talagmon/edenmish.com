@@ -1,0 +1,97 @@
+name: Production deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_worker:
+        description: 'Deploy Cloudflare Worker'
+        type: boolean
+        required: true
+        default: true
+      deploy_theme:
+        description: 'Push Shopify theme (unpublished)'
+        type: boolean
+        required: true
+        default: true
+      publish_theme:
+        description: 'Also publish theme live (use with caution)'
+        type: boolean
+        required: true
+        default: false
+      confirm_migrations_ran:
+        description: 'Type "I ran required migrations" to proceed'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Production deployment
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Verify migration confirmation
+        run: |
+          if [ "${{ inputs.confirm_migrations_ran }}" != "I ran required migrations" ]; then
+            echo "::error::Migration confirmation required. Type 'I ran required migrations' in the workflow input."
+            echo ""
+            echo "Required production migrations (run manually before deploying):"
+            echo "  wrangler d1 execute edenmish --file=./migrations/003_rate_limits.sql"
+            echo "  wrangler d1 execute edenmish --file=./migrations/004_delivery_proofs.sql"
+            echo "  wrangler d1 execute edenmish --file=./migrations/005_notifications.sql"
+            echo ""
+            echo "See worker/MIGRATIONS.md for verification queries."
+            exit 1
+          fi
+          echo "✅ Migration confirmation received."
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Deploy Cloudflare Worker
+        if: ${{ inputs.deploy_worker }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          cd worker
+          npm install
+          npx wrangler deploy
+          echo "✅ Worker deployed to find.edenmish.com + ops.edenmish.com"
+
+      - name: Install Shopify CLI
+        if: ${{ inputs.deploy_theme }}
+        run: npm install -g @shopify/cli@latest
+
+      - name: Push unpublished theme
+        if: ${{ inputs.deploy_theme }}
+        run: |
+          shopify theme push --path theme --unpublished \
+            --store "${{ secrets.SHOPIFY_STORE }}" \
+            --password "${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}"
+          echo "✅ Theme pushed as unpublished preview"
+
+      - name: Publish theme live
+        if: ${{ inputs.deploy_theme && inputs.publish_theme }}
+        run: |
+          echo "::warning::Publishing theme LIVE. This cannot be undone from this workflow."
+          shopify theme push --path theme --live \
+            --store "${{ secrets.SHOPIFY_STORE }}" \
+            --password "${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}"
+          echo "✅ Theme published LIVE on edenmish.com"
+
+      - name: Post-deploy summary
+        run: |
+          echo "## Production deployment complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Worker: ${{ inputs.deploy_worker && '✅ deployed' || '⏭️ skipped' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Theme push: ${{ inputs.deploy_theme && '✅ pushed' || '⏭️ skipped' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Theme live: ${{ inputs.publish_theme && '✅ published' || '⏭️ not published (manual)' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Next: smoke test" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Submit order → Draft Order → pay → webhook → tracking → ops → delivery proof → notifications" >> "$GITHUB_STEP_SUMMARY"

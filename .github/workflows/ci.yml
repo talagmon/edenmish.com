@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  worker-checks:
+    name: Worker syntax checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Worker deps
+        run: cd worker && npm install
+      - name: Syntax check all Worker source files
+        run: |
+          cd worker
+          for f in src/*.js; do
+            cp "$f" "/tmp/$(basename "$f" .js).mjs"
+            node --check "/tmp/$(basename "$f" .js).mjs" || exit 1
+            echo "✅ $f"
+          done
+
+  theme-check:
+    name: Shopify theme check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Shopify CLI
+        run: npm install -g @shopify/cli@latest
+      - name: Run theme check
+        run: shopify theme check --path theme
+        continue-on-error: true
+        # Theme check may surface pre-existing warnings; it should not block PRs.
+        # Only new offenses introduced by the PR should be reviewed manually.

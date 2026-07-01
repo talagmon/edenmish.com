@@ -1,0 +1,69 @@
+name: Shopify theme preview
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'theme/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  preview:
+    name: Push unpublished preview theme
+    runs-on: ubuntu-latest
+    environment: preview
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Shopify CLI
+        run: npm install -g @shopify/cli@latest
+      - name: Push unpublished theme
+        id: push
+        run: |
+          OUTPUT=$(shopify theme push --path theme --unpublished --json \
+            --store "${{ secrets.SHOPIFY_STORE }}" \
+            --password "${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}" 2>&1) || true
+          echo "$OUTPUT"
+          # Extract preview URL from JSON output if present
+          PREVIEW_URL=$(echo "$OUTPUT" | grep -o '"preview_url":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+          echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
+      - name: Comment preview URL on PR
+        if: steps.push.outputs.preview_url
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = '${{ steps.push.outputs.preview_url }}';
+            if (!url) return;
+            const body = `🔗 **Shopify theme preview:** ${url}`;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.includes('Shopify theme preview'));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+        continue-on-error: true
+        # Comment failure must not fail the workflow.
+      - name: Summary
+        if: steps.push.outputs.preview_url
+        run: |
+          echo "Preview theme: ${{ steps.push.outputs.preview_url }}" >> "$GITHUB_STEP_SUMMARY"

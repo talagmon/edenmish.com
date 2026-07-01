@@ -86,3 +86,12 @@ If a PR adds or changes a D1 migration:
 - **Do not run production migrations** (`wrangler d1 execute edenmish --remote`) unless
   explicitly asked.
 - **Do not run `wrangler deploy`** unless explicitly asked.
+
+## 8. CI/CD
+
+- **Never add production auto-deploy on push.** Production deploy must remain
+  `workflow_dispatch` + `production` environment approval.
+- **Theme PRs should get preview deployments** via the `shopify-preview.yml` workflow.
+- **Do not put secrets in workflow files.** Use GitHub repository secrets.
+- **If a workflow adds new secrets or vars**, update `docs/CI_CD.md` to document them.
+- **CI checks** (`ci.yml`) must never require production secrets.
