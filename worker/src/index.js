@@ -1,4 +1,4 @@
-import { createOrder, getOrderByToken, getOrderById, listOrders, setOrderStatus, getStatusHistory, addGps, latestGps, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof, listRecentNotificationFailures } from './db.js';
+import { createOrder, getOrderByToken, getOrderById, listOrders, setOrderStatus, getStatusHistory, addGps, latestGps, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof, listRecentNotificationFailures, listNotificationsForOrder } from './db.js';
 import { priceOrder } from './pricing.js';
 import { makeSession, checkSession, getCookie, genOtp, hashOtp } from './integrations.js';
 import { createCharge, settleOrder, verifyShopifyWebhook, parseShopifyOrderWebhook } from './payment.js';
@@ -292,6 +292,14 @@ export default {
       if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
       const r = await listRecentNotificationFailures(env.DB, 5);
       return json({ failures: r.results || [] });
+    }
+
+    // ---- PR9: per-order notification history (ops-only) ----
+    if (onOps && path.includes('/api/ops/orders/') && path.endsWith('/notifications') && req.method === 'GET') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      const id = Number(path.split('/')[4]);
+      const r = await listNotificationsForOrder(env.DB, id);
+      return json({ ok: true, notifications: r.results || [] });
     }
 
     // ---- Shopify webhook (replaces PayPlus webhook) ----
