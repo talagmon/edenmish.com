@@ -242,3 +242,22 @@ export function opsLabelMap() {
   for (const meta of Object.values(STATUS_META)) out[meta.value] = meta.hebrewLabel;
   return out;
 }
+
+// Ops dashboard queue layout (PR6): ordered buckets with Hebrew labels. Problem is
+// placed before Done so exceptions stay visible above the collapsed "done" section.
+// The status->bucket mapping comes from STATUS_META.queueBucket (see queueStatusMap).
+export const QUEUE_LAYOUT = [
+  { bucket: 'inbox',            hebrewLabel: 'חדשות',         hint: 'התקבלו / ממתינות לאישור מחיר' },
+  { bucket: 'awaiting_payment', hebrewLabel: 'ממתינות לתשלום', hint: 'קישור תשלום נשלח — ממתין ללקוח' },
+  { bucket: 'ready_for_pickup', hebrewLabel: 'מוכנות לאיסוף',  hint: 'שולם — מוכן ליציאה' },
+  { bucket: 'in_progress',      hebrewLabel: 'בדרך',          hint: 'שליח בפעולה (GPS חי)' },
+  { bucket: 'problem',          hebrewLabel: 'בעיות / חריגים', hint: 'נכשל / בוטל / החזר' },
+  { bucket: 'done',             hebrewLabel: 'הושלם',         hint: 'נמסר בהצלחה' },
+];
+
+// {statusValue: bucket} for client-side grouping in the ops dashboard.
+export function queueStatusMap() {
+  const m = {};
+  for (const meta of Object.values(STATUS_META)) m[meta.value] = meta.queueBucket;
+  return m;
+}
