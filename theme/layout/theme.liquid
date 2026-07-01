@@ -34,6 +34,16 @@
     {%- render 'theme-styles-variables' -%}
     {%- render 'color-palette' -%}
 
+    {%- comment -%} PR2 (hide store chrome): EdenMish is a service funnel, not a product
+         store. Hide the cart trigger and the header search button. The interim
+         cart/checkout payment path still works (it uses /cart/add.js + /checkout,
+         not this UI). Remove this block to restore the standard storefront. {%- endcomment -%}
+    <style>
+      [data-testid="cart-drawer-trigger"],
+      a.action__cart,
+      .search-action { display: none !important; }
+    </style>
+
     {% if request.design_mode %}
       {%- render 'theme-editor' -%}
     {% endif %}
@@ -135,13 +145,18 @@
       </footer>
     </div>
 
-    {% render 'cart-drawer', render_wrapper: true %}
+    {%- comment -%} PR2 (hide store chrome): cart drawer, search modal and quick-add
+         modal are disabled for the service-funnel experience. Render 'theme-drawer'
+         is kept — it powers the mobile nav drawer. {% endcomment %}
+    {% comment %}{% render 'cart-drawer', render_wrapper: true %}{% endcomment %}
     {% render 'theme-drawer' %}
 
-    {% render 'search-modal' %}
+    {% comment %}{% render 'search-modal' %}{% endcomment %}
 
+    {% comment %} PR2 — quick-add disabled (no product browsing in the funnel).
     {% if settings.quick_add or settings.mobile_quick_add %}
       {% render 'quick-add-modal' %}
     {% endif %}
+    {% endcomment %}
   </body>
 </html>
