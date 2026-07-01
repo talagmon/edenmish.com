@@ -26,6 +26,7 @@ export async function createDraftOrder(env, order, priceNis) {
   })[order.package] || 'שליחות';
 
   const properties = [
+    { name: '_tracking_token', value: order.token },
     { name: 'איסוף', value: order.pickup || '—' },
     { name: 'מסירה', value: order.dropoff || '—' },
     { name: 'דחיפות', value: order.urgent ? 'דחוף' : 'רגיל' },
@@ -115,7 +116,11 @@ export function parseShopifyOrderWebhook(body) {
     const m = o.note.match(/token:\s*([a-f0-9]+)/i);
     if (m) token = m[1];
   }
-  const paid = /paid|pending/i.test(o.financial_status || '');
+  // Conservative reconciliation: only a clearly paid/captured Shopify order is treated
+  // as paid. `pending` / `authorized` / `partially_paid` / `voided` / `refunded` /
+  // `partially_refunded` must NOT mark the internal order paid — the webhook handler's
+  // non-paid branch just records the financial_status without flipping the order to paid.
+  const paid = /^paid$/i.test((o.financial_status || '').trim());
   return {
     token,
     shopifyOrderId: o.id || null,
