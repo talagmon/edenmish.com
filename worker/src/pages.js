@@ -153,6 +153,10 @@ export function opsHtml(env) {
 .btn.go:hover{background:#267a49}
 .btn.alt{background:transparent;color:#5B2A86;border:1px solid rgba(91,42,134,.3)}
 .btn.danger{background:transparent;color:#C0392B;border:1px solid rgba(192,57,43,.3)}
+.nlist{margin-top:8px;border-top:1px dashed rgba(0,0,0,.08);padding-top:8px}
+.nrow{padding:6px 0;border-bottom:1px solid rgba(0,0,0,.04);font-size:.85rem}
+.nrow:last-child{border-bottom:0}
+.ns-ok{background:#2E8B57}.ns-fail{background:#C0392B}.ns-skip{background:#999}.ns-pend{background:#5B2A86}
 .otoolbar{display:flex;align-items:center;gap:8px;justify-content:space-between;position:sticky;top:0;z-index:5}
 .otoolbar .otitle{font-weight:800;color:#5B2A86;font-size:1rem}
 .live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#C0392B;animation:pulse 1.4s infinite}
@@ -167,7 +171,10 @@ const QOF=${JSON.stringify(queueStatusMap())};
 const NEXT={paid:'to_pickup',to_pickup:'picked_up',picked_up:'to_dropoff',to_dropoff:'delivered'};
 const NEXTLBL={paid:'יציאה לאיסוף →',to_pickup:'נאסף ✓',picked_up:'יציאה למסירה →',to_dropoff:'נמסר ✓'};
 const LIVE=['to_pickup','to_dropoff'];
-let sess=null, orders=[], activeId=null, watchId=null, doneOpen=false;
+const NSTAT={pending:'ממתין',sent:'נשלח',failed:'נכשל',skipped:'דולג'};
+const NCHAN={email:'אימייל',whatsapp_future:'וואטסאפ',sms_future:'SMS',system:'מערכת'};
+const NTPL={ops_new_order:'הזמנה חדשה לעדן',customer_otp:'קוד אימות',customer_payment_confirmation:'אישור תשלום',ops_payment_received:'תשלום התקבל',customer_delivery_summary:'סיכום מסירה'};
+let sess=null, orders=[], activeId=null, watchId=null, doneOpen=false, notifOrderId=null, notifs=[];
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function maskRecip(s){if(!s)return '';s=String(s);var at=s.indexOf('@');return at<1?s:(s[0]+'•••@'+s.slice(at+1));}
 function bucketOf(s){return QOF[s]||'inbox';}
@@ -176,7 +183,7 @@ async function api(path,opts){opts=opts||{};opts.headers=opts.headers||{};if(ses
 function loginHtml(){document.getElementById('app').innerHTML='<div class="card"><h2>כניסת אופס</h2><input id="pin" type="password" placeholder="PIN"><button class="btn" onclick="doLogin()">התחבר</button></div>';}
 async function doLogin(){const pin=document.getElementById('pin').value;const r=await fetch('/api/ops/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});if(r.ok){sess=(await r.json()).session;refresh();}else{alert('PIN שגוי');}}
 function logout(){sess=null;stopWatch();loginHtml();}
-async function refresh(){const r=await api('/api/ops/orders');if(!r.ok){sess=null;stopWatch();return loginHtml();}orders=(await r.json()).orders||[];var fails=[];try{var fr=await api('/api/ops/notifications/failures');if(fr.ok)fails=(await fr.json()).failures||[];}catch(e){}render(fails);}
+async function refresh(){const r=await api('/api/ops/orders');if(!r.ok){sess=null;stopWatch();return loginHtml();}orders=(await r.json()).orders||[];var fails=[];try{var fr=await api('/api/ops/notifications/failures');if(fr.ok)fails=(await fr.json()).failures||[];}catch(e){}notifs=[];if(notifOrderId){try{var nr=await api('/api/ops/orders/'+notifOrderId+'/notifications');if(nr.ok)notifs=(await nr.json()).notifications||[];}catch(e){}}render(fails);}
 function render(fails){
   var byB={};QL.forEach(function(q){byB[q.bucket]=[];});
   orders.forEach(function(o){var b=bucketOf(o.status);(byB[b]=byB[b]||[]).push(o);});
@@ -204,7 +211,7 @@ function card(o){
   if(o.when_text)h+='<span class="chip">⏰ '+esc(o.when_text)+'</span>';
   if(o.payment_status&&o.payment_status!=='none')h+='<span class="chip chip-pay">'+esc(o.payment_status)+'</span>';
   h+='</div><div class="ocard-meta">נוצר: '+fmt(o.created_at)+(o.distance_km?' · '+Number(o.distance_km).toFixed(1)+' ק"מ':'')+'</div>';
-  h+=actions(o)+'</div>';
+  h+=actions(o);if(notifOrderId===id)h+=notifPanel();h+='</div>';
   return h;
 }
 function actions(o){
@@ -222,9 +229,16 @@ function actions(o){
   }else if(NEXT[s]){
     h+='<button class="btn sm go" data-act="advance" data-id="'+id+'" data-next="'+NEXT[s]+'">'+NEXTLBL[s]+'</button><button class="btn sm danger" data-act="fail" data-id="'+id+'">סמן כנכשל</button>';
   }
+  h+='<button class="btn sm alt" data-act="notifs" data-id="'+id+'">'+(notifOrderId===id?'▲ הסתר הודעות':'▼ הצגת הודעות')+'</button>';
   return h+'</div>';
 }
-async function approveInline(id){
+function notifPanel(){
+  if(!notifs.length)return '<div class="nlist"><div class="muted" style="padding:8px 0">אין הודעות להזמנה הזו.</div></div>';
+  return '<div class="nlist">'+notifs.map(function(n){
+    var cls=n.status==='sent'?'ns-ok':n.status==='failed'?'ns-fail':n.status==='skipped'?'ns-skip':'ns-pend';
+    return '<div class="nrow"><span class="badge '+cls+'">'+esc(NSTAT[n.status]||n.status)+'</span> <b>'+esc(NCHAN[n.channel]||n.channel)+'</b> · '+esc(NTPL[n.template]||n.template||'—')+'<div class="muted" style="font-size:.72rem;margin-top:2px">'+fmt(n.created_at)+(n.recipient?' · '+esc(maskRecip(n.recipient)):'')+'</div>'+(n.error?'<div class="stale" style="margin-top:2px">'+esc(n.error)+'</div>':'')+'</div>';
+  }).join('')+'</div>';
+}
   var inp=document.getElementById('price-'+id),price=Number(inp&&inp.value);
   if(!price||price<1){alert('הזינו מחיר תקין');return;}
   var btn=document.querySelector('[data-act="approve"][data-id="'+id+'"]');if(btn){btn.disabled=true;btn.dataset.label=btn.textContent;btn.textContent='טוען…';}
@@ -266,6 +280,7 @@ document.getElementById('app').addEventListener('click',function(e){
   else if(act==='refresh')refresh();
   else if(act==='logout')logout();
   else if(act==='toggledone')toggleDone();
+  else if(act==='notifs'){notifOrderId=(notifOrderId===id)?null:id;refresh();}
 });
 loginHtml();
 setInterval(function(){if(sess&&!(document.activeElement&&document.activeElement.tagName==='INPUT'))refresh();},15000);
