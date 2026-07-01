@@ -1,4 +1,4 @@
-import { createOrder, getOrderByToken, getOrderById, listOrders, setOrderStatus, getStatusHistory, addGps, latestGps, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit } from './db.js';
+import { createOrder, getOrderByToken, getOrderById, listOrders, setOrderStatus, getStatusHistory, addGps, latestGps, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof } from './db.js';
 import { priceOrder } from './pricing.js';
 import { sendEmail, makeSession, checkSession, getCookie, genOtp, hashOtp } from './integrations.js';
 import { createCharge, settleOrder, verifyShopifyWebhook, parseShopifyOrderWebhook } from './payment.js';
@@ -120,9 +120,10 @@ export default {
       if (!o.email_verified) {
         return json({ order: publicOrderSummary(o), history: [], gps: null, otp_pending: true }, 200, cors);
       }
-      const [history, gps] = await Promise.all([getStatusHistory(env.DB, o.id), latestGps(env.DB, o.id)]);
+      const proofP = o.status === 'delivered' ? getDeliveryProof(env.DB, o.id) : Promise.resolve(null);
+      const [history, gps, proof] = await Promise.all([getStatusHistory(env.DB, o.id), latestGps(env.DB, o.id), proofP]);
       delete o.otp_hash;
-      return json({ order: o, history: history.results, gps, otp_pending: false }, 200, cors);
+      return json({ order: o, history: history.results, gps, proof, otp_pending: false }, 200, cors);
     }
 
     // ---- email OTP verify / resend (public, token-based) ----
@@ -260,6 +261,29 @@ export default {
         .bind(price, 'priced', id).run();
       await setOrderStatus(env.DB, id, 'priced');
       return json({ ok: true, payment_url: null });
+    }
+
+    // ---- PR7: mark delivered with proof-of-delivery details ----
+    // Ops-gated. Saves receiver_name/delivery_note (photo_url reserved), then marks
+    // delivered (same side-effects as the status endpoint's delivered branch: settle +
+    // delivery email). wasDelivered guard avoids re-emailing when Eden edits proof later.
+    if (onOps && path.includes('/api/ops/orders/') && path.endsWith('/deliver') && req.method === 'POST') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      const id = Number(path.split('/')[4]);
+      let b; try { b = await req.json(); } catch { b = {}; }
+      const before = await getOrderById(env.DB, id);
+      await upsertDeliveryProof(env.DB, id, { receiver_name: b.receiver_name, delivery_note: b.delivery_note, photo_url: b.photo_url });
+      const wasDelivered = !!(before && before.status === 'delivered');
+      await setOrderStatus(env.DB, id, 'delivered', { delivered_at: (before && before.delivered_at) || Date.now(), payment_status: 'paid' });
+      const o = await getOrderById(env.DB, id);
+      if (!wasDelivered && o) {
+        await settleOrder(env, o); // no-op in 'immediate' mode; captures in future 'preauth' (Mesh) mode
+        if (o.email) {
+          try { await sendEmail(env, { to: o.email, subject: 'המשלוח מ-EdenMish נמסר ✓', html: deliverySummaryHtml(o) }); } catch {}
+        }
+      }
+      const proof = await getDeliveryProof(env.DB, id);
+      return json({ ok: true, order: o, proof });
     }
 
     // ---- Shopify webhook (replaces PayPlus webhook) ----

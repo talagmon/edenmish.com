@@ -69,6 +69,18 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   locked_until INTEGER    -- epoch ms, optional lockout expiry
 );
 
+-- Proof of delivery (PR7). One row per order (upserted). Timestamps follow the
+-- codebase convention (INTEGER epoch ms), matching orders/payments/gps_pings.
+CREATE TABLE IF NOT EXISTS delivery_proofs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id INTEGER NOT NULL UNIQUE,
+  receiver_name TEXT,
+  delivery_note TEXT,
+  photo_url TEXT,          -- future use (no upload in PR7)
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER
+);
+
 INSERT OR IGNORE INTO pricing_rules (name, value) VALUES
   ('base_envelope','59'),
   ('base_item','69'),
