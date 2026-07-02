@@ -8,6 +8,10 @@
   data-price-base="{{ section.settings.price_base | default: 59 }}"
   data-price-per-km="{{ section.settings.price_per_km | default: 4 }}"
   data-storefront-token="{{ section.settings.storefront_token | default: '' }}"
+  data-hours-weekday-start="{{ section.settings.hours_weekday_start | default: 9 }}"
+  data-hours-weekday-end="{{ section.settings.hours_weekday_end | default: 20 }}"
+  data-hours-friday-start="{{ section.settings.hours_friday_start | default: 8 }}"
+  data-hours-friday-end="{{ section.settings.hours_friday_end | default: 13 }}"
 >
   {%- comment -%} ---------------- HERO ---------------- {%- endcomment -%}
   <header class="ef-hero section-padding"
@@ -221,6 +225,20 @@
           <input type="text" name="dropoff_detail" placeholder="לדוגמה: קומה 2, דירה 7 — דנה">
         </label>
 
+        {%- assign wd_start = section.settings.hours_weekday_start | default: 9 -%}
+        {%- assign wd_end = section.settings.hours_weekday_end | default: 20 -%}
+        {%- assign fr_start = section.settings.hours_friday_start | default: 8 -%}
+        {%- assign fr_end = section.settings.hours_friday_end | default: 13 -%}
+        <div class="ef-hours">
+          <div class="ef-hours__title">שעות פעילות</div>
+          <ul class="ef-hours__list">
+            <li><span>א׳–ה׳</span><b dir="ltr">{{ wd_start }}:00–{{ wd_end }}:00</b></li>
+            <li><span>ו׳ / ערבי חג</span><b dir="ltr">{{ fr_start }}:00–{{ fr_end }}:00</b></li>
+            <li><span>שבת וחגים</span><b>לא פעיל</b></li>
+          </ul>
+          <p class="ef-hours__note">השליחויות מתבצעות בשעות הפעילות בלבד. חלונות הזמן המוצגים מותאמים לזמינות השירות.</p>
+        </div>
+
         <fieldset class="ef-sched">
           <legend class="ef-sched__title">סוג השליחות</legend>
           <div class="ef-sched__cards">
@@ -258,6 +276,12 @@
 </section>
 
 {% stylesheet %}
+  .ef-hours { background: #F5F2FB; border: 1px solid rgba(91,42,134,.14); border-radius: 12px; padding: 12px 14px; margin: 0 0 16px; }
+  .ef-hours__title { font-weight: 700; font-size: 1rem; color: #3E1D5E; margin-bottom: 6px; }
+  .ef-hours__list { list-style: none; margin: 0 0 8px; padding: 0; }
+  .ef-hours__list li { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; font-size: .9rem; color: #3E1D5E; }
+  .ef-hours__list li span { color: #9a93a8; }
+  .ef-hours__note { font-size: .78rem; color: #9a93a8; margin: 0; }
   .ef-sched { border: 0; padding: 0; margin: 0 0 16px; }
   .ef-sched__title { font-weight: 700; font-size: 1rem; margin-bottom: 8px; color: #3E1D5E; }
   .ef-sched__cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -286,21 +310,48 @@
   // ---- scheduling helpers (PR12) ----
   function pad2(n) { return n < 10 ? '0' + n : '' + n; }
   function fmtDate(d) { return pad2(d.getDate()) + '/' + pad2(d.getMonth() + 1); }
-  function genWindows(service, dateType) {
-    var now = new Date(), curH = now.getHours(), startH, endH, WIN = 3;
-    if (dateType === 'today') { startH = service === 'urgent' ? curH : curH + 3; endH = 21; }
-    else if (dateType === 'friday') { startH = 8; endH = 13; }
-    else { startH = 9; endH = 20; }
+  // Working hours come from the theme settings (data-hours-* on the section) so the
+  // business can adjust them without a code change. Saturday is always closed.
+  function schedHours(section, day) {
+    var ds = section.dataset;
+    if (day === 6) return null;
+    if (day === 5) return { start: Number(ds.hoursFridayStart || 8), end: Number(ds.hoursFridayEnd || 13) };
+    return { start: Number(ds.hoursWeekdayStart || 9), end: Number(ds.hoursWeekdayEnd || 20) };
+  }
+  function genWindows(section, service, dateType) {
+    var WIN = 3;
+    var day = Number(section.dataset.schedDay);
+    var hours = isNaN(day) ? null : schedHours(section, day);
+    if (!hours) return [];
+    var startH = hours.start, endH = hours.end;
+    if (dateType === 'today') {
+      var curH = new Date().getHours();
+      startH = Math.max(startH, service === 'urgent' ? curH : curH + 3);
+    }
     var wins = [];
     for (var h = startH; h + WIN <= endH; h++) wins.push(pad2(h) + ':00–' + pad2(h + WIN) + ':00');
     return wins;
   }
+  // Never a silent dead end: when a chosen date has no windows, say why (issue #22).
+  function noWindowsMsg(section, dateType) {
+    var day = Number(section.dataset.schedDay);
+    if (day === 6) return 'בשבת ובחגים השירות אינו פעיל — בחרו יום אחר.';
+    var hours = schedHours(section, day);
+    if (dateType === 'today' && hours) return 'לא נותרו חלונות זמן להיום (שעות הפעילות עד ' + pad2(hours.end) + ':00) — בחרו יום אחר.';
+    return 'אין חלונות זמן זמינים בתאריך זה — בחרו יום אחר.';
+  }
   function renderSched(section, form) {
     var service = section.dataset.schedService || '', dateType = section.dataset.schedDateType || '';
-    var wins = (service && dateType) ? genWindows(service, dateType) : [];
     var wf = form.querySelector('.ef-sched--windows'), wg = form.querySelector('.ef-sched__windows'), hint = form.querySelector('.ef-sched__hint');
-    if (!service || !dateType || !wins.length) { if (wf) wf.hidden = true; section.dataset.schedWindow = ''; section.dataset.schedText = ''; return; }
+    if (!service || !dateType) { if (wf) wf.hidden = true; section.dataset.schedWindow = ''; section.dataset.schedText = ''; return; }
+    var wins = genWindows(section, service, dateType);
     if (wf) wf.hidden = false;
+    if (!wins.length) {
+      section.dataset.schedWindow = ''; section.dataset.schedText = '';
+      if (wg) wg.innerHTML = '';
+      if (hint) hint.textContent = noWindowsMsg(section, dateType);
+      return;
+    }
     if (wg) wg.innerHTML = wins.map(function (w) { return '<button type="button" class="ef-sched__window"' + (section.dataset.schedWindow === w ? ' aria-pressed="true"' : '') + '>' + w + '</button>'; }).join('');
     if (hint) hint.textContent = service === 'urgent' ? 'שליחות דחופה — השליחות תושלם בתוך עד 3 שעות' : 'שליחות רגילה — איסוף החל מעוד 3 שעות, מסירה באותו יום';
   }
@@ -392,11 +443,11 @@
       if (dg) {
         var today = new Date(), tom = new Date(today); tom.setDate(tom.getDate() + 1);
         var dates = [
-          { type: 'today', label: 'היום · ' + fmtDate(today) },
-          { type: 'tomorrow', label: 'מחר · ' + fmtDate(tom) }
+          { type: 'today', label: 'היום · ' + fmtDate(today), day: today.getDay() },
+          { type: 'tomorrow', label: 'מחר · ' + fmtDate(tom), day: tom.getDay() }
         ];
         dg.innerHTML = dates.map(function (d) {
-          return '<button type="button" class="ef-sched__date" data-date-type="' + d.type + '" data-date-label="' + d.label + '">' + d.label + '</button>';
+          return '<button type="button" class="ef-sched__date" data-date-type="' + d.type + '" data-date-label="' + d.label + '" data-day="' + d.day + '">' + d.label + '</button>';
         }).join('');
         dg.querySelectorAll('[data-date-type]').forEach(function (btn) {
           btn.addEventListener('click', function () {
@@ -404,6 +455,7 @@
             btn.setAttribute('aria-pressed', 'true');
             section.dataset.schedDateType = btn.dataset.dateType;
             section.dataset.schedDateLabel = btn.dataset.dateLabel;
+            section.dataset.schedDay = btn.dataset.day;
             section.dataset.schedWindow = ''; section.dataset.schedText = '';
             renderSched(section, form);
           });
@@ -420,6 +472,7 @@
           if (dg) dg.querySelectorAll('[data-date-type]').forEach(function (b) { b.removeAttribute('aria-pressed'); });
           section.dataset.schedDateType = type;
           section.dataset.schedDateLabel = dl;
+          section.dataset.schedDay = String(d.getDay());
           section.dataset.schedWindow = ''; section.dataset.schedText = '';
           renderSched(section, form);
         });
@@ -611,6 +664,35 @@
       "id": "storefront_token",
       "label": "Storefront API Access Token",
       "info": "כשמולא — פרטי הלקוח (דוא״ל, שם, טלפון) מולאו אוטומטית בקופה. ריק — הלקוח מזין ידנית."
+    },
+    {
+      "type": "header",
+      "content": "שעות פעילות"
+    },
+    {
+      "type": "number",
+      "id": "hours_weekday_start",
+      "label": "א׳–ה׳ — שעת פתיחה",
+      "default": 9,
+      "info": "שעה עגולה (0–23). קובע גם את חלונות הזמן בבורר המועדים."
+    },
+    {
+      "type": "number",
+      "id": "hours_weekday_end",
+      "label": "א׳–ה׳ — שעת סגירה",
+      "default": 20
+    },
+    {
+      "type": "number",
+      "id": "hours_friday_start",
+      "label": "ו׳ / ערב חג — שעת פתיחה",
+      "default": 8
+    },
+    {
+      "type": "number",
+      "id": "hours_friday_end",
+      "label": "ו׳ / ערב חג — שעת סגירה",
+      "default": 13
     },
     {
       "type": "header",
