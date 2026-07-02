@@ -68,7 +68,7 @@ export const STATUS_META = {
     lifecycleOrder: 1,
     isTerminal: false,
     isLiveGps: false,
-    queueBucket: QUEUE_BUCKETS.INBOX,
+    queueBucket: QUEUE_BUCKETS.AWAITING_PAYMENT,
     nextStatuses: [STATUS.PAID],
   },
   [STATUS.REVIEW]: {
