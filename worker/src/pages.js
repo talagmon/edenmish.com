@@ -29,6 +29,10 @@ h2{font-size:1.15rem;color:#3E1D5E;margin-bottom:8px}
 .btn:hover{background:#4A216F}
 .stale{background:#FFF6E5;border:1px solid #E6CF9A;color:#7a5a13;padding:8px 12px;border-radius:8px;font-size:.85rem;margin:8px 0}
 #map{height:320px;border-radius:12px;margin:10px 0;display:none}
+.otp-cells{display:flex;gap:8px;justify-content:center;margin:0 auto 12px;max-width:280px}
+.otp-cell{width:40px;height:50px;text-align:center;font-size:1.5rem;font-weight:700;border:2px solid #B8A8C9;border-radius:10px;outline:none;color:#3E1D5E}
+.otp-cell:focus{border-color:#5B2A86;background:#F5F2FB}
+.otp-cell.filled{border-color:#5B2A86}
 `;
 
 
@@ -56,7 +60,7 @@ async function load(){
   }catch(e){document.getElementById('app').innerHTML='<div class="card">לא נמצא משלוח. בדקו את הקישור.</div>';}
 }
 function render(d){
-  const prevOtp=document.getElementById('otpInput'); const typedOtp=prevOtp?prevOtp.value:'';
+  const prevCells=[];for(var ci=0;ci<6;ci++){var pc=document.getElementById('otp-'+ci);prevCells.push(pc?pc.value:'');}
   const o=d.order; const his=d.history||[]; const hisByStatus={}; his.forEach(h=>hisByStatus[h.status]=h.at);
   let idx=orderIdx(o.status);
   if(o.status==='review') idx=1;
@@ -82,7 +86,7 @@ function render(d){
     (d.otp_pending
       ? (o.otp_enabled === false
           ? '<div class="card" style="text-align:center"><div class="badge">מס׳ '+o.id+'</div><h2 style="margin-top:10px">מעקב מוגבל</h2><p class="muted" style="margin:8px 0 16px">לצפייה בפרטי השליחות נדרש אימות דוא״ל, אך לא צורפה כתובת דוא״ל להזמנה זו. לקבלת פרטים:</p><a class="btn" href="https://wa.me/972534058498" target="_blank" rel="noopener" style="width:auto;display:inline-block">צרו קשר בוואטסאפ ←</a></div>'
-          : '<div class="card" id="verifyCard"><div style="text-align:center;margin-bottom:12px"><div class="badge">מס׳ '+o.id+'</div></div><h2>אימות כתובת הדוא״ל</h2><div class="muted" style="margin-bottom:16px">לצפייה בפרטי השליחות ובמעקב החי, הזינו את הקוד בן 6 הספרות שנשלח ל-<b>'+(o.email_masked||'')+'</b>.</div><div style="display:flex;gap:8px;align-items:center"><input id="otpInput" inputmode="numeric" maxlength="6" placeholder="••••••" style="flex:1;text-align:center;letter-spacing:8px;font-size:1.4rem;padding:12px;border:2px solid #B8A8C9;border-radius:10px"><button class="btn" onclick="verifyOtpNow()" style="width:auto;flex:none">אימות</button></div><div class="muted" style="text-align:center;margin-top:8px"><a href="#" onclick="resendOtp();return false" style="color:#5B2A86;font-weight:700">שלח קוד מחדש</a></div></div>')
+          : '<div class="card" id="verifyCard"><div style="text-align:center;margin-bottom:12px"><div class="badge">מס׳ '+o.id+'</div></div><h2>אימות כתובת הדוא״ל</h2><div class="muted" style="margin-bottom:16px">לצפייה בפרטי השליחות ובמעקב החי, הזינו את הקוד בן 6 הספרות שנשלח ל-<b>'+(o.email_masked||'')+'</b>.</div><div class="otp-cells" id="otpCells"><input class="otp-cell" type="text" inputmode="numeric" maxlength="1" id="otp-0" autocomplete="one-time-code" aria-label="ספרה 1"><input class="otp-cell" type="text" inputmode="numeric" maxlength="1" id="otp-1" aria-label="ספרה 2"><input class="otp-cell" type="text" inputmode="numeric" maxlength="1" id="otp-2" aria-label="ספרה 3"><input class="otp-cell" type="text" inputmode="numeric" maxlength="1" id="otp-3" aria-label="ספרה 4"><input class="otp-cell" type="text" inputmode="numeric" maxlength="1" id="otp-4" aria-label="ספרה 5"><input class="otp-cell" type="text" inputmode="numeric" maxlength="1" id="otp-5" aria-label="ספרה 6"></div><button class="btn" onclick="verifyOtpNow()">אימות</button><div class="muted" style="text-align:center;margin-top:8px"><a href="#" onclick="resendOtp();return false" style="color:#5B2A86;font-weight:700">שלח קוד מחדש</a></div></div>')
       : '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2>סטטוס הזמנה</h2><span class="badge">מס׳ '+o.id+'</span></div><ul class="tl">'+tl+'</ul></div>'+
         '<div class="card"><h2>פרטי השליחות</h2>'+
           '<div class="kv"><span>איסוף</span><b>'+esc(o.pickup||'—')+(o.pickup_detail?' · '+esc(o.pickup_detail):'')+'</b></div>'+
@@ -95,8 +99,30 @@ function render(d){
         (isLive?'<div class="card"><h2>מפה חיה</h2>'+mapBlock+'</div>':'')+
         summary
     );
-  if(d.otp_pending && typedOtp){ const inp=document.getElementById('otpInput'); if(inp) inp.value=typedOtp; }
+  if(d.otp_pending && prevCells.join('')){for(var ri=0;ri<6;ri++){var rc=document.getElementById('otp-'+ri);if(rc){rc.value=prevCells[ri]||'';if(rc.value)rc.classList.add('filled');}}}
+  if(d.otp_pending){initOtpCells();}
   if(!d.otp_pending && isLive && gps){ showMap(gps); }
+}
+function initOtpCells(){
+  var cells=document.querySelectorAll('.otp-cell');if(!cells.length)return;
+  cells.forEach(function(cell,idx){
+    cell.addEventListener('input',function(e){
+      var val=e.target.value.replace(/\\D/g,'');e.target.value=val;
+      if(val)e.target.classList.add('filled');else e.target.classList.remove('filled');
+      if(val&&idx<5)cells[idx+1].focus();
+      var all=true;for(var i=0;i<6;i++){if(!cells[i].value){all=false;break;}}
+      if(all)verifyOtpNow();
+    });
+    cell.addEventListener('keydown',function(e){
+      if(e.key==='Backspace'&&!e.target.value&&idx>0){cells[idx-1].focus();cells[idx-1].value='';cells[idx-1].classList.remove('filled');}
+    });
+    cell.addEventListener('paste',function(e){
+      e.preventDefault();var p=(e.clipboardData||window.clipboardData).getData('text').replace(/\\D/g,'').slice(0,6);
+      if(!p)return;for(var i=0;i<6;i++){if(i<p.length){cells[i].value=p[i];cells[i].classList.add('filled');}else{cells[i].value='';cells[i].classList.remove('filled');}}
+      if(p.length===6)verifyOtpNow();else if(p.length<6)cells[p.length].focus();
+    });
+  });
+  cells[0].focus();
 }
 function showMap(gps){
   const el=document.getElementById('map'); if(!el) return; el.style.display='block';
@@ -105,16 +131,22 @@ function showMap(gps){
   else{map.panTo(pos);marker.setPosition(pos);}
 }
 async function verifyOtpNow(){
-  var code=document.getElementById('otpInput').value.trim();
-  if(!code){return;}
-  var btn=event.target; btn.disabled=true; btn.textContent='…';
+  var code='';for(var i=0;i<6;i++){var c=document.getElementById('otp-'+i);code+=(c&&c.value)||'';}
+  code=code.replace(/\D/g,'');
+  if(code.length!==6){return;}
+  var btn=document.querySelector('[onclick="verifyOtpNow()"]');if(btn){btn.disabled=true;btn.textContent='…';}
   var r=await fetch('/api/orders/'+TOKEN+'/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:code})});
   var d=await r.json();
   if(d.verified){
     document.getElementById('app').innerHTML='<div class="card" style="text-align:center"><div class="badge ok" style="font-size:1rem;padding:10px">הדוא״ל אומת ✓ טוען פרטים…</div></div>';
     setTimeout(load,500);
   }
-  else{btn.disabled=false; btn.textContent='אימות'; alert(d.error==='locked'?'יותר מדי ניסיונות שגויים — נסו שוב מאוחר יותר.':(d.error==='expired'?'פג תוקף הקוד — בקשו קוד חדש.':'קוד שגוי, נסו שוב.'));}
+  else{
+    if(btn){btn.disabled=false;btn.textContent='אימות';}
+    for(var j=0;j<6;j++){var c2=document.getElementById('otp-'+j);if(c2){c2.value='';c2.classList.remove('filled');}}
+    var f=document.getElementById('otp-0');if(f)f.focus();
+    alert(d.error==='locked'?'יותר מדי ניסיונות שגויים — נסו שוב מאוחר יותר.':(d.error==='expired'?'פג תוקף הקוד — בקשו קוד חדש.':'קוד שגוי, נסו שוב.'));
+  }
 }
 async function resendOtp(){var r=await fetch('/api/orders/'+TOKEN+'/resend-otp',{method:'POST'});var d=await r.json().catch(function(){return{};});alert(d&&d.error==='throttled'?'נשלחו יותר מדי קודים — נסו שוב מאוחר יותר.':'נשלח קוד חדש לדוא״ל');}
 load();
