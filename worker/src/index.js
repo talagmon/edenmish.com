@@ -194,9 +194,10 @@ export default {
       if (rl && rl.last_at && now - rl.last_at < 60 * 1000) {
         return json({ ok: false, error: 'throttled' }, 200, cors);
       }
-      // Don't reveal existence: a missing token / no-email order returns the same
-      // shape as a successful send (and sends nothing).
-      if (!o || !o.email) return json({ ok: true }, 200, cors);
+      // Don't reveal existence: a missing token / no-email / unpaid order returns
+      // the same shape as a successful send (and sends nothing). OTP is only for
+      // paid customers — tracking is a post-payment tool.
+      if (!o || !o.email || o.payment_status !== 'paid') return json({ ok: true }, 200, cors);
       const after = await incrRateLimit(env.DB, RL, 15 * 60 * 1000);
       if (after.count > 3) {
         await setRateLock(env.DB, RL, now + 15 * 60 * 1000);
