@@ -150,7 +150,7 @@
           <a href="#eden-quote" class="ef-btn ef-btn--secondary">הזמנת שליחות</a>
         </div>
       </div>
-      <p class="ef-pricing__note">המחירים הינם מחיר התחלתי בתוך תל אביב. המחיר הסופי מחושב לפי מרחק, דחיפות ושעה — ומאושר בדף המעקב לפני התשלום.</p>
+      <p class="ef-pricing__note">המחירים הינם מחיר התחלתי בתוך תל אביב. המחיר הסופי מחושב לפי מרחק ודחיפות — ומוצג מיד לאחר מילוי הכתובות, לפני התשלום.</p>
       <a href="#eden-quote" class="ef-btn ef-btn--secondary">הזמנת שליחות</a>
     </div>
   </section>
@@ -170,8 +170,8 @@
   {%- comment -%} ---------------- CTA + WHATSAPP QUOTE FORM ---------------- {%- endcomment -%}
   <section id="eden-quote" class="ef-block ef-quote section-padding ef-muted">
     <div class="page-width">
-      <h2 class="ef-block__title ef-center">צריכים שליחות?</h2>
-      <p class="ef-block__intro ef-center">השאירו פרטים ועדן יחזור אליכם עם מחיר וזמן איסוף.</p>
+      <h2 class="ef-block__title ef-center">הזמנת שליחות אונליין</h2>
+      <p class="ef-block__intro ef-center">מלאו פרטים, קבלו מחיר מיידי ושלמו אונליין — קישור מעקב חי יישלח למייל מיד לאחר התשלום.</p>
 
       <form class="ef-form" data-ef-form>
         <div class="ef-form__row">
@@ -282,6 +282,13 @@
   .ef-hours__list li { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; font-size: .9rem; color: #3E1D5E; }
   .ef-hours__list li span { color: #9a93a8; }
   .ef-hours__note { font-size: .78rem; color: #9a93a8; margin: 0; }
+  .ef-success { text-align: center; background: #F5F2FB; border: 1px solid rgba(91,42,134,.18); border-radius: 14px; padding: 28px 20px; }
+  .ef-success__check { width: 52px; height: 52px; line-height: 52px; margin: 0 auto 10px; border-radius: 50%; background: #2E8B57; color: #fff; font-size: 1.6rem; font-weight: 800; }
+  .ef-success__title { font-size: 1.3rem; color: #3E1D5E; margin: 0 0 8px; }
+  .ef-success__msg { color: #5A5566; margin: 0 0 10px; }
+  .ef-success__price { font-size: 1.05rem; color: #3E1D5E; margin-bottom: 10px; }
+  .ef-success__price b { color: #C9A96B; font-size: 1.25rem; }
+  .ef-success__note { font-size: .82rem; color: #9a93a8; margin: 0 0 16px; }
   .ef-sched { border: 0; padding: 0; margin: 0 0 16px; }
   .ef-sched__title { font-weight: 700; font-size: 1rem; margin-bottom: 8px; color: #3E1D5E; }
   .ef-sched__cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -339,6 +346,26 @@
     var hours = schedHours(section, day);
     if (dateType === 'today' && hours) return 'לא נותרו חלונות זמן להיום (שעות הפעילות עד ' + pad2(hours.end) + ':00) — בחרו יום אחר.';
     return 'אין חלונות זמן זמינים בתאריך זה — בחרו יום אחר.';
+  }
+  // Inline post-submit confirmation for orders that can't go straight to checkout
+  // (manual price review, or the payment link couldn't be created). Replaces the old
+  // redirect to the OTP-gated tracking page, which asked for a code that is only
+  // emailed after payment — a guaranteed dead end for unpaid customers.
+  function showOrderReceived(section, form, d) {
+    var wa = (section.dataset.whatsapp || '').replace(/\D/g, '');
+    var priceLine = d.price ? '<div class="ef-success__price">מחיר ' + (d.review ? 'משוער' : '') + ': <b>₪' + Number(d.price) + '</b></div>' : '';
+    var msg = d.review
+      ? 'עדן בודק את המסלול ויאשר את המחיר בהקדם. קישור לתשלום מאובטח יישלח אליכם למייל.'
+      : 'קישור לתשלום מאובטח יישלח אליכם למייל בדקות הקרובות.';
+    form.innerHTML =
+      '<div class="ef-success" role="status">' +
+        '<div class="ef-success__check">✓</div>' +
+        '<h3 class="ef-success__title">הבקשה התקבלה!</h3>' +
+        '<p class="ef-success__msg">' + msg + '</p>' + priceLine +
+        '<p class="ef-success__note">לאחר התשלום יישלח קישור מעקב חי של השליח למייל.</p>' +
+        (wa ? '<a class="ef-btn ef-btn--secondary" href="https://wa.me/' + wa + '" target="_blank" rel="noopener">יש שאלה? וואטסאפ לעדן ←</a>' : '') +
+      '</div>';
+    form.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
   function renderSched(section, form) {
     var service = section.dataset.schedService || '', dateType = section.dataset.schedDateType || '';
@@ -411,15 +438,16 @@
         }).then(function (r) { return r.json(); }).then(function (d) {
           orderData = d;
           if (!d || !d.token) throw new Error('no order');
-          if (d.review) { window.location.href = d.tracking_url; return; }
-          // PR4 — Draft Order payment path: the Worker created a Shopify Draft Order and
-          // returned its invoice URL (d.payment_url). Redirect there to pay via Shopify +
-          // PayPlus. If no payment_url (Shopify not configured / charge failed), fall back
-          // to the tracking page, which shows a pay button or manual-coordination option.
-          window.location.href = d.payment_url || d.tracking_url;
+          // Exact-price path: straight to Shopify checkout (PayPlus). The tracking link
+          // arrives by email after payment — never send an unpaid customer to the
+          // OTP-gated tracking page (the code is only emailed after payment).
+          if (!d.review && d.payment_url) { window.location.href = d.payment_url; return; }
+          // Review orders (or charge-creation failure): confirm inline and set the
+          // expectation — Eden approves the price, then a payment link arrives by email.
+          showOrderReceived(section, form, d);
         }).catch(function () {
           if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || 'המשך לתשלום מאובטח'; }
-          if (orderData && orderData.tracking_url) { window.location.href = orderData.tracking_url; }
+          if (orderData && orderData.token) { showOrderReceived(section, form, orderData); }
           else if (num) { window.open('https://wa.me/' + num + '?text=' + encodeURIComponent(msg), '_blank'); }
           else { alert('שגיאה. נסו שוב או כתבו לנו בוואטסאפ.'); }
         });
@@ -576,7 +604,7 @@
               var price = estimatePrice(section, form, km);
               if (est) {
                 est.hidden = false;
-                est.innerHTML = 'מרחק נסיעה ~' + e.distance.text + ' • <strong>הערכת מחיר: ₪' + price + '</strong> <span>(המחיר הסופי מאושר בדף המעקב)</span>';
+                est.innerHTML = 'מרחק נסיעה ~' + e.distance.text + ' • <strong>הערכת מחיר: ₪' + price + '</strong> <span>(המחיר הסופי מוצג בקופה לפני התשלום)</span>';
                 section.dataset.estimate = 'מרחק ~' + e.distance.text + ', מחיר מוערך ₪' + price;
               }
             }

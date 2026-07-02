@@ -207,7 +207,7 @@ const NEXTLBL={paid:'יציאה לאיסוף →',to_pickup:'נאסף ✓',picke
 const LIVE=['to_pickup','to_dropoff'];
 const NSTAT={pending:'ממתין',sent:'נשלח',failed:'נכשל',skipped:'דולג'};
 const NCHAN={email:'אימייל',whatsapp_future:'וואטסאפ',sms_future:'SMS',system:'מערכת'};
-const NTPL={ops_new_order:'הזמנה חדשה לעדן',customer_otp:'קוד אימות',customer_payment_confirmation:'אישור תשלום',ops_payment_received:'תשלום התקבל',customer_delivery_summary:'סיכום מסירה'};
+const NTPL={ops_new_order:'הזמנה חדשה לעדן',customer_otp:'קוד אימות',customer_payment_confirmation:'אישור תשלום',ops_payment_received:'תשלום התקבל',customer_delivery_summary:'סיכום מסירה',customer_request_received:'אישור קבלת בקשה',customer_payment_link:'קישור תשלום ללקוח'};
 let sess=null, orders=[], activeId=null, watchId=null, doneOpen=false, notifOrderId=null, notifs=[];
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function maskRecip(s){if(!s)return '';s=String(s);var at=s.indexOf('@');return at<1?s:(s[0]+'•••@'+s.slice(at+1));}
@@ -280,7 +280,7 @@ async function approveInline(id){
   try{
     var r=await api('/api/ops/orders/'+id+'/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({price:price})});
     var d=await r.json();
-    if(d&&d.ok){if(d.payment_url){copyPay(d.payment_url);alert('המחיר אושר ✓\\nקישור התשלום הועתק ללוח.');}else{alert('המחיר אושר ✓');}refresh();}
+    if(d&&d.ok){if(d.payment_url){copyPay(d.payment_url);alert('המחיר אושר ✓\\n'+(d.emailed?'קישור התשלום נשלח ללקוח במייל והועתק ללוח.':'קישור התשלום הועתק ללוח — שלחו ללקוח ידנית (המייל לא נשלח).'));}else{alert('המחיר אושר ✓');}refresh();}
     else{throw 0;}
   }catch(e){if(btn){btn.disabled=false;btn.textContent=btn.dataset.label||'אישור מחיר';}alert('שגיאה באישור המחיר. נסו שוב.');}
 }
