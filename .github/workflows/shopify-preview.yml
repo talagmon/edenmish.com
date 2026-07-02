@@ -27,7 +27,11 @@ jobs:
         run: |
           set -euo pipefail
 
+          # --theme names the preview theme so the CLI never prompts (prompts abort CI).
+          # One theme per PR: re-pushes to the same PR update the existing preview theme
+          # instead of piling up new unpublished themes (Shopify caps them at ~20).
           shopify theme push --path theme --unpublished --json \
+            --theme "PR-${{ github.event.number }} preview" \
             --store "${{ secrets.SHOPIFY_STORE }}" \
             --password "${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}" | tee shopify-preview.json
 
