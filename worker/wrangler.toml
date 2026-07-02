@@ -18,6 +18,7 @@ WHATSAPP_NUMBER = "972534058498"
 OPS_EMAIL = "eden@edenmish.com"
 SHOPIFY_SHOP = "edenmish.myshopify.com"
 SHOPIFY_API_VERSION = "2026-04"
+ALLOWED_ORIGINS = "https://edenmish.com,https://www.edenmish.com"
 
 # D1 database
 [[d1_databases]]

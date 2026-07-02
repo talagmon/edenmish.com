@@ -35,14 +35,14 @@ export default {
 
     // ---- public API (CORS) ----
     if (path === '/api/orders' && req.method === 'POST') {
-      // Part E — IP-based abuse protection. Counts every attempt (incl. invalid bodies)
-      // so spam can't bypass via malformed payloads. 5 / 10min and 20 / day per IP.
-      // The IP is HMAC-hashed (anonKey) — the raw IP is never stored in D1 or logged.
-      const k = await anonKey(env, clientIp(req));
-      const r10 = await incrRateLimit(env.DB, 'ord:' + k, 10 * 60 * 1000);
-      if (r10.count > 5) { console.log('order_rate_limited', { window: '10m' }); return json({ error: 'rate_limited' }, 429, { ...cors, 'Retry-After': '600' }); }
-      const rd = await incrRateLimit(env.DB, 'ordd:' + k, 24 * 60 * 60 * 1000);
-      if (rd.count > 20) { console.log('order_rate_limited', { window: 'day' }); return json({ error: 'rate_limited' }, 429, { ...cors, 'Retry-After': '86400' }); }
+      // Part E — IP-based abuse protection (best-effort; never blocks order creation).
+      try {
+        const k = await anonKey(env, clientIp(req));
+        const r10 = await incrRateLimit(env.DB, 'ord:' + k, 10 * 60 * 1000);
+        if (r10.count > 5) { console.log('order_rate_limited', { window: '10m' }); return json({ error: 'rate_limited' }, 429, { ...cors, 'Retry-After': '600' }); }
+        const rd = await incrRateLimit(env.DB, 'ordd:' + k, 24 * 60 * 60 * 1000);
+        if (rd.count > 20) { console.log('order_rate_limited', { window: 'day' }); return json({ error: 'rate_limited' }, 429, { ...cors, 'Retry-After': '86400' }); }
+      } catch (rlErr) { console.error('rate_limit_error', rlErr && rlErr.message ? rlErr.message : String(rlErr)); }
 
       let b; try { b = await req.json(); } catch { return json({ error: 'invalid body' }, 400, cors); }
       // Part A — email is required for new public orders (tracking link + OTP go by email).
@@ -220,12 +220,25 @@ export default {
       let b; try { b = await req.json(); } catch { b = {}; }
       const fields = {};
       if (b.status === 'picked_up') fields.picked_up_at = Date.now();
+      if (b.status === 'paid') fields.payment_status = 'paid';
       if (b.status === 'delivered') { fields.delivered_at = Date.now(); fields.payment_status = fields.payment_status || 'paid'; }
       await setOrderStatus(env.DB, id, b.status, fields);
+      if (b.status === 'paid') {
+        const o = await getOrderById(env.DB, id);
+        if (o) {
+          await recordPayment(env.DB, id, { amount: o.price * 100, status: 'paid', paid_at: Date.now() });
+          if (o.email) {
+            const otp = genOtp();
+            await setEmailAndOtp(env.DB, o.id, o.email, await hashOtp(env, otp), Date.now() + 10 * 60 * 1000);
+            try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_payment_confirmation', recipient: o.email, subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב', html: paymentConfirmedHtml({ ...o, email: o.email }, trackingUrl(env, o.token), otp) }); } catch {}
+          }
+          try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'ops_payment_received', recipient: env.OPS_EMAIL, subject: `תשלום התקבל #${o.id} — ₪${o.price}`, html: `${o.name} · ${o.pickup} → ${o.dropoff}<br>המתינו לאישור ויציאה לדרך ב- ops.edenmish.com` }); } catch {}
+        }
+      }
       if (b.status === 'delivered') {
         const o = await getOrderById(env.DB, id);
         if (o) {
-          await settleOrder(env, o); // no-op in 'immediate' mode; captures in future 'preauth' (Mesh) mode
+          await settleOrder(env, o);
           if (o.email) {
             try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_delivery_summary', recipient: o.email, subject: 'המשלוח מ-EdenMish נמסר ✓', html: deliverySummaryHtml(o) }); } catch {}
           }
