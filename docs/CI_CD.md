@@ -96,7 +96,7 @@ Add in **GitHub → Settings → Secrets and variables → Actions**:
 | Secret | Used by | Example |
 |---|---|---|
 | `SHOPIFY_CLI_THEME_TOKEN` | preview + production | `shptka_…` (from Shopify Theme Access app) |
-| `SHOPIFY_STORE` | preview + production | `edenmish.myshopify.com` |
+| `SHOPIFY_STORE` | preview + production | `r013gt-fc.myshopify.com` (canonical domain — `edenmish.myshopify.com` is an alias that the Theme Access proxy rejects with 401) |
 | `CLOUDFLARE_API_TOKEN` | production only | Cloudflare API token with Workers edit permission |
 | `CLOUDFLARE_ACCOUNT_ID` | production only | `2dd658a7839937523c0cca09eadce085` |
 
