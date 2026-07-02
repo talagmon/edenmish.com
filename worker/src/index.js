@@ -16,6 +16,13 @@ const SUPPORT_LINE = '<p style="color:#777;font-size:13px;margin-top:14px">לש�
 const otpEmailHtml = (otp, url) => `<div dir="rtl" style="font-family:sans-serif;font-size:16px;line-height:1.6">הקוד שלך לאימות הכתובת ב-EdenMish:<div style="font-size:34px;font-weight:800;letter-spacing:6px;color:#5B2A86">${otp}</div>הקוד תקף 10 דקות.${url ? '<div style="margin-top:16px;padding-top:12px;border-top:1px solid #eee"><a href="' + url + '" style="display:inline-block;background:#5B2A86;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:700">מעקב המשלוח שלך ←</a></div>' : ''}</div>`;
 const deliverySummaryHtml = (o) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px"><h2 style="color:#5B2A86;margin:0 0 8px">המשלוח נמסר ✓</h2><p>תודה שבחרתם ב-EdenMish!</p><table style="border-collapse:collapse;font-size:15px"><tr><td style="padding:5px 14px;color:#777">איסוף</td><td style="padding:5px 0">${o.pickup || ''}</td></tr><tr><td style="padding:5px 14px;color:#777">מסירה</td><td style="padding:5px 0">${o.dropoff || ''}</td></tr><tr><td style="padding:5px 14px;color:#777">מחיר</td><td style="padding:5px 0;font-weight:700;color:#C9A96B;font-size:18px">₪${o.price || ''}</td></tr></table>${SUPPORT_LINE}</div>`;
 const paymentConfirmedHtml = (o, url, otp) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px"><h2 style="color:#5B2A86;margin:0 0 8px">התשלום התקבל ✓</h2><p>תודה שבחרתם ב-EdenMish! ההזמנה מאושרת.</p><table style="border-collapse:collapse;font-size:15px"><tr><td style="padding:5px 14px;color:#777">מס׳ הזמנה</td><td style="padding:5px 0">${o.id || ''}</td></tr><tr><td style="padding:5px 14px;color:#777">מחיר</td><td style="padding:5px 0;font-weight:700;color:#C9A96B;font-size:18px">₪${o.price || ''}</td></tr></table><div style="margin:18px 0;padding:14px;background:#F5F2FB;border-radius:10px;text-align:center"><p style="margin:0 0 6px;font-size:14px;color:#555">קוד האימות למעקב המשלוח:</p><div style="font-size:32px;font-weight:800;letter-spacing:6px;color:#5B2A86">${otp || '—'}</div></div><div style="text-align:center"><a href="${url}" style="display:inline-block;background:#5B2A86;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px">מעקב המשלוח שלי ←</a></div>${SUPPORT_LINE}</div>`;
+const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Review-flagged orders: immediate confirmation so the customer knows what happens next
+// (previously they got zero contact until after payment — a funnel dead end).
+const requestReceivedHtml = (o) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px"><h2 style="color:#5B2A86;margin:0 0 8px">קיבלנו את הבקשה ✓</h2><p>עדן בודק את המסלול ויאשר את המחיר בהקדם. ברגע שהמחיר מאושר, יישלח אליכם למייל זה קישור לתשלום מאובטח.</p><table style="border-collapse:collapse;font-size:15px"><tr><td style="padding:5px 14px;color:#777">מס׳ הזמנה</td><td style="padding:5px 0">${o.id || ''}</td></tr><tr><td style="padding:5px 14px;color:#777">איסוף</td><td style="padding:5px 0">${escHtml(o.pickup)}</td></tr><tr><td style="padding:5px 14px;color:#777">מסירה</td><td style="padding:5px 0">${escHtml(o.dropoff)}</td></tr>${o.price ? `<tr><td style="padding:5px 14px;color:#777">מחיר משוער</td><td style="padding:5px 0;font-weight:700;color:#C9A96B">₪${o.price}</td></tr>` : ''}</table><p style="color:#777;font-size:13px;margin-top:10px">לאחר התשלום יישלח קישור מעקב חי וקוד אימות למייל.</p>${SUPPORT_LINE}</div>`;
+// Sent by /approve: the confirmed price + Shopify checkout link (previously the link was
+// only copied to Eden's clipboard and the customer was never notified).
+const paymentLinkHtml = (o, url) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px"><h2 style="color:#5B2A86;margin:0 0 8px">המחיר אושר ✓</h2><p>הזמנה #${o.id || ''} מוכנה לתשלום.</p><table style="border-collapse:collapse;font-size:15px"><tr><td style="padding:5px 14px;color:#777">איסוף</td><td style="padding:5px 0">${escHtml(o.pickup)}</td></tr><tr><td style="padding:5px 14px;color:#777">מסירה</td><td style="padding:5px 0">${escHtml(o.dropoff)}</td></tr><tr><td style="padding:5px 14px;color:#777">מחיר</td><td style="padding:5px 0;font-weight:700;color:#C9A96B;font-size:18px">₪${o.price || ''}</td></tr></table><div style="text-align:center;margin:18px 0"><a href="${url}" style="display:inline-block;background:#5B2A86;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px">לתשלום מאובטח ←</a></div><p style="color:#777;font-size:13px">תשלום באשראי / ביט / Apple Pay דרך Shopify. לאחר התשלום יישלח קישור מעקב חי וקוד אימות למייל.</p>${SUPPORT_LINE}</div>`;
 
 async function isOps(req, env) {
   const c = getCookie(req, 'ops_sess') || req.headers.get('X-Ops');
@@ -88,6 +95,13 @@ export default {
       try {
         await notifyEmail(env, env.DB, { orderId: created.id, template: 'ops_new_order', recipient: env.OPS_EMAIL, subject: `הזמנה חדשה #${created.id}${isReview ? ' — לבדיקה' : ' — ממתינה לתשלום'}`, html: `${b.name} · ${b.pickup} → ${b.dropoff} · ₪${pr.price}${isReview ? '<br>חריג: ' + pr.reasons : ''}<br><a href="${finalUrl}">${finalUrl}</a>` });
       } catch {}
+
+      // Review orders: tell the customer what happens next (Eden confirms the price,
+      // then a payment link arrives by email). Without this they heard nothing at all
+      // until after payment — most would assume the order vanished.
+      if (isReview && b.email) {
+        try { await notifyEmail(env, env.DB, { orderId: created.id, template: 'customer_request_received', recipient: b.email, subject: `קיבלנו את הבקשה ✓ — הזמנה #${created.id} ב-EdenMish`, html: requestReceivedHtml({ id: created.id, pickup: b.pickup, dropoff: b.dropoff, price: pr.price }) }); } catch {}
+      }
 
       // 2. PR4 — exact-price path: Worker creates a Shopify Draft Order and returns its
       //    invoice URL. The customer pays it through Shopify checkout (PayPlus app). The
@@ -301,7 +315,17 @@ export default {
           .bind(price, charge.checkoutUrl, charge.draftOrderId, 'link_sent', charge.mode, 'payment_sent', id).run();
         await setOrderStatus(env.DB, id, 'payment_sent');
         await recordPayment(env.DB, id, { amount: price * 100, status: 'link_sent', url: charge.checkoutUrl });
-        return json({ ok: true, payment_url: charge.checkoutUrl });
+        // Email the customer the approved price + checkout link. This was the funnel's
+        // missing step: the link existed only on Eden's clipboard and customers waiting
+        // on a price confirmation were never notified.
+        let emailed = false;
+        if (o.email) {
+          try {
+            const sent = await notifyEmail(env, env.DB, { orderId: id, template: 'customer_payment_link', recipient: o.email, subject: `המחיר אושר ✓ — קישור לתשלום הזמנה #${id}`, html: paymentLinkHtml({ id, pickup: o.pickup, dropoff: o.dropoff, price }, charge.checkoutUrl) });
+            emailed = !!(sent && sent.ok);
+          } catch {}
+        }
+        return json({ ok: true, payment_url: charge.checkoutUrl, emailed });
       }
       // No Shopify credentials configured — fall back to priced state for WhatsApp quoting.
       await env.DB.prepare('UPDATE orders SET price=?, review_flag=0, review_reason=NULL, status=? WHERE id=?')
