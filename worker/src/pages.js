@@ -56,6 +56,7 @@ async function load(){
   }catch(e){document.getElementById('app').innerHTML='<div class="card">לא נמצא משלוח. בדקו את הקישור.</div>';}
 }
 function render(d){
+  const prevOtp=document.getElementById('otpInput'); const typedOtp=prevOtp?prevOtp.value:'';
   const o=d.order; const his=d.history||[]; const hisByStatus={}; his.forEach(h=>hisByStatus[h.status]=h.at);
   let idx=orderIdx(o.status);
   if(o.status==='review') idx=1;
@@ -84,16 +85,17 @@ function render(d){
           : '<div class="card" id="verifyCard"><div style="text-align:center;margin-bottom:12px"><div class="badge">מס׳ '+o.id+'</div></div><h2>אימות כתובת הדוא״ל</h2><div class="muted" style="margin-bottom:16px">לצפייה בפרטי השליחות ובמעקב החי, הזינו את הקוד בן 6 הספרות שנשלח ל-<b>'+(o.email_masked||'')+'</b>.</div><div style="display:flex;gap:8px;align-items:center"><input id="otpInput" inputmode="numeric" maxlength="6" placeholder="••••••" style="flex:1;text-align:center;letter-spacing:8px;font-size:1.4rem;padding:12px;border:2px solid #B8A8C9;border-radius:10px"><button class="btn" onclick="verifyOtpNow()" style="width:auto;flex:none">אימות</button></div><div class="muted" style="text-align:center;margin-top:8px"><a href="#" onclick="resendOtp();return false" style="color:#5B2A86;font-weight:700">שלח קוד מחדש</a></div></div>')
       : '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2>סטטוס הזמנה</h2><span class="badge">מס׳ '+o.id+'</span></div><ul class="tl">'+tl+'</ul></div>'+
         '<div class="card"><h2>פרטי השליחות</h2>'+
-          '<div class="kv"><span>איסוף</span><b>'+(o.pickup||'—')+(o.pickup_detail?' · '+o.pickup_detail:'')+'</b></div>'+
-          '<div class="kv"><span>מסירה</span><b>'+(o.dropoff||'—')+(o.dropoff_detail?' · '+o.dropoff_detail:'')+'</b></div>'+
-          '<div class="kv"><span>חבילה</span><b>'+(o.package||'—')+'</b></div>'+
-          '<div class="kv"><span>מועד</span><b>'+(o.when_text||'—')+'</b></div>'+
+          '<div class="kv"><span>איסוף</span><b>'+esc(o.pickup||'—')+(o.pickup_detail?' · '+esc(o.pickup_detail):'')+'</b></div>'+
+          '<div class="kv"><span>מסירה</span><b>'+esc(o.dropoff||'—')+(o.dropoff_detail?' · '+esc(o.dropoff_detail):'')+'</b></div>'+
+          '<div class="kv"><span>חבילה</span><b>'+esc(o.package||'—')+'</b></div>'+
+          '<div class="kv"><span>מועד</span><b>'+esc(o.when_text||'—')+'</b></div>'+
           (o.price?'<div class="kv"><span>מחיר</span><b class="price">₪'+o.price+'</b></div>':'')+
         '</div>'+
         (pay?'<div class="card" style="text-align:center">'+pay+'</div>':'')+
         (isLive?'<div class="card"><h2>מפה חיה</h2>'+mapBlock+'</div>':'')+
         summary
     );
+  if(d.otp_pending && typedOtp){ const inp=document.getElementById('otpInput'); if(inp) inp.value=typedOtp; }
   if(!d.otp_pending && isLive && gps){ showMap(gps); }
 }
 function showMap(gps){
@@ -116,7 +118,7 @@ async function verifyOtpNow(){
 }
 async function resendOtp(){var r=await fetch('/api/orders/'+TOKEN+'/resend-otp',{method:'POST'});var d=await r.json().catch(function(){return{};});alert(d&&d.error==='throttled'?'נשלחו יותר מדי קודים — נסו שוב מאוחר יותר.':'נשלח קוד חדש לדוא״ל');}
 load();
-setInterval(()=>{ if(true) load(); },7000);
+setInterval(()=>{ if(!(document.activeElement&&document.activeElement.tagName==='INPUT')) load(); },7000);
 </script></body></html>`;
 }
 
@@ -181,7 +183,7 @@ function bucketOf(s){return QOF[s]||'inbox';}
 function fmt(t){return t?new Date(t).toLocaleString('he-IL'):'—';}
 async function api(path,opts){opts=opts||{};opts.headers=opts.headers||{};if(sess)opts.headers['X-Ops']=sess;return await fetch(path,opts);}
 function loginHtml(){document.getElementById('app').innerHTML='<div class="card"><h2>כניסת אופס</h2><input id="pin" type="password" placeholder="PIN"><button class="btn" onclick="doLogin()">התחבר</button></div>';}
-async function doLogin(){const pin=document.getElementById('pin').value;const r=await fetch('/api/ops/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});if(r.ok){sess=(await r.json()).session;refresh();}else{alert('PIN שגוי');}}
+async function doLogin(){const pin=document.getElementById('pin').value;const r=await fetch('/api/ops/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});if(r.ok){sess=(await r.json()).session;refresh();}else{alert(r.status===429?'יותר מדי ניסיונות שגויים — נסו שוב בעוד 15 דקות':'PIN שגוי');}}
 function logout(){sess=null;stopWatch();loginHtml();}
 async function refresh(){const r=await api('/api/ops/orders');if(!r.ok){sess=null;stopWatch();return loginHtml();}orders=(await r.json()).orders||[];var fails=[];try{var fr=await api('/api/ops/notifications/failures');if(fr.ok)fails=(await fr.json()).failures||[];}catch(e){}notifs=[];if(notifOrderId){try{var nr=await api('/api/ops/orders/'+notifOrderId+'/notifications');if(nr.ok)notifs=(await nr.json()).notifications||[];}catch(e){}}render(fails);}
 function render(fails){

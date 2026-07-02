@@ -5,6 +5,7 @@ import { createCharge, settleOrder, verifyShopifyWebhook, parseShopifyOrderWebho
 import { trackingHtml, opsHtml } from './pages.js';
 import { corsFor, maskEmail, publicOrderSummary, clientIp, anonKey } from './security.js';
 import { notifyEmail } from './notify.js';
+import { normalizeIlPhone } from './validate.js';
 
 const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra } });
 const html = (s) => new Response(s, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -49,6 +50,10 @@ export default {
       const required = ['name', 'phone', 'email', 'pickup', 'dropoff', 'package'];
       for (const f of required) if (!b[f]) return json({ error: 'missing ' + f }, 400, cors);
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(b.email))) return json({ error: 'invalid email' }, 400, cors);
+      // A typo'd phone is a failed delivery — normalize to E.164 or reject up front.
+      const phone = normalizeIlPhone(b.phone);
+      if (!phone) return json({ error: 'invalid phone' }, 400, cors);
+      b = { ...b, phone };
 
       const rules = await getRules(env.DB);
       const pr = priceOrder(b, rules);
@@ -201,9 +206,33 @@ export default {
 
     if (onOps && path === '/api/ops/login' && req.method === 'POST') {
       let b; try { b = await req.json(); } catch { b = {}; }
-      if (b.pin && b.pin === env.OPS_PIN) {
+      // Brute-force protection: 5 failed attempts per 10 min per (hashed) IP → 15 min lock.
+      // Best-effort like the order-creation limiter — a D1 hiccup never locks Eden out.
+      let RL = null;
+      try {
+        RL = 'opspin:' + await anonKey(env, clientIp(req));
+        const now = Date.now();
+        const rl = await getRateLimit(env.DB, RL);
+        if (rl && rl.locked_until && rl.locked_until > now) {
+          console.log('ops_login_locked');
+          return json({ error: 'locked' }, 429, { 'Retry-After': '900' });
+        }
+      } catch (rlErr) { console.error('ops_login_rl_error', rlErr && rlErr.message ? rlErr.message : String(rlErr)); }
+      // HMAC both sides so the comparison leaks no timing information about the PIN.
+      const pinOk = !!(b.pin && env.OPS_PIN && (await hashOtp(env, String(b.pin))) === (await hashOtp(env, String(env.OPS_PIN))));
+      if (pinOk) {
+        if (RL) await resetRateLimit(env.DB, RL);
         const session = await makeSession(env);
         return json({ session }, 200, { 'Set-Cookie': `ops_sess=${session}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=43200` });
+      }
+      if (RL) {
+        const after = await incrRateLimit(env.DB, RL, 10 * 60 * 1000);
+        if (after.count >= 5) {
+          await setRateLock(env.DB, RL, Date.now() + 15 * 60 * 1000);
+          console.log('ops_login_locked', { attempts: after.count });
+          return json({ error: 'locked' }, 429, { 'Retry-After': '900' });
+        }
+        console.log('ops_login_fail', { attempts: after.count });
       }
       return json({ error: 'invalid pin' }, 401);
     }
@@ -261,6 +290,7 @@ export default {
       const id = Number(path.split('/')[4]);
       let b; try { b = await req.json(); } catch { b = {}; }
       const o = await getOrderById(env.DB, id);
+      if (!o) return json({ error: 'not found' }, 404);
       const price = Number(b.price) || o.price;
       const charge = await createCharge(env, { ...o }, price);
       if (charge) {
@@ -328,6 +358,9 @@ export default {
         const o = await getOrderByToken(env.DB, parsed.token);
         if (o) {
           if (parsed.paid) {
+            // Idempotency: Shopify retries webhook deliveries. Re-processing would insert a
+            // duplicate payment row, invalidate the customer's OTP, and re-send both emails.
+            if (o.payment_status === 'paid') return json({ received: true });
             await setOrderStatus(env.DB, o.id, 'paid', { payment_status: 'paid', shopify_order_id: parsed.shopifyOrderId });
             await recordPayment(env.DB, o.id, { amount: o.price * 100, status: 'paid', payplus_id: String(parsed.shopifyOrderId), paid_at: Date.now() });
             // Use checkout email if the order doesn't have one (customer entered it in Shopify checkout)
