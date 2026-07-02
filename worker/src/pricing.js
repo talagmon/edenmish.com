@@ -13,6 +13,19 @@ const PACKAGE_BASE = {
   'קופסה (עד גודל נעל)': 'base_box'
 };
 
+// Tolerance for GPS/rounding noise when comparing the client-declared driving
+// distance against the straight-line distance between the submitted coordinates.
+const DISTANCE_SLACK_KM = 0.3;
+const EARTH_RADIUS_KM = 6371;
+
+export function haversineKm(lat1, lng1, lat2, lng2) {
+  const rad = (d) => (d * Math.PI) / 180;
+  const dLat = rad(lat2 - lat1);
+  const dLng = rad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.sqrt(a));
+}
+
 export function priceOrder(o, rules) {
   const R = rules || {};
   const base = R[PACKAGE_BASE[o.package]] || R.base_item || 69;
@@ -28,6 +41,14 @@ export function priceOrder(o, rules) {
   const km = Number(o.distance_km) || 0;
   if (!o.pickup_lat || !o.dropoff_lat) reasons.push('unclear_address');
   if (km > maxKm) reasons.push('too_far');
+  // distance_km comes from the browser and prices the order — never trust it blindly.
+  // A real driving distance is always >= the straight line between the coordinates, so a
+  // shorter claim (or a missing distance despite valid coords) means tampering or a failed
+  // client-side Distance Matrix call; either way Eden should confirm the price.
+  if (o.pickup_lat && o.pickup_lng && o.dropoff_lat && o.dropoff_lng) {
+    const straightKm = haversineKm(Number(o.pickup_lat), Number(o.pickup_lng), Number(o.dropoff_lat), Number(o.dropoff_lng));
+    if (km < straightKm - DISTANCE_SLACK_KM) reasons.push('distance_mismatch');
+  }
 
   let price = base + Math.max(0, km - includedKm) * perKm;
   if (o.urgent) price = price * (1 + urgentPct / 100);
