@@ -90,39 +90,48 @@ export async function verifyOtp(DB, id) {
 // Each "key" is a composite string scoped to its purpose, e.g. 'otpv:<token>'.
 
 export async function getRateLimit(DB, key) {
-  return DB.prepare('SELECT count, window_start, last_at, locked_until FROM rate_limits WHERE key = ?').bind(key).first();
+  try {
+    return await DB.prepare('SELECT count, window_start, last_at, locked_until FROM rate_limits WHERE key = ?').bind(key).first();
+  } catch (e) { console.error('rl_get_err', e && e.message || String(e)); return null; }
 }
 
 // Increment the counter for a window. If the window has elapsed (windowMs), the
 // counter resets to 1. Returns the post-increment state (lastAt = now).
+// Best-effort: returns safe defaults on D1 error (never throws).
 export async function incrRateLimit(DB, key, windowMs) {
-  const now = Date.now();
-  const r = await DB.prepare('SELECT count, window_start, last_at, locked_until FROM rate_limits WHERE key = ?').bind(key).first();
-  let count, windowStart;
-  if (!r || !r.window_start || now - r.window_start > windowMs) {
-    count = 1; windowStart = now;
-  } else {
-    count = (r.count || 0) + 1; windowStart = r.window_start;
-  }
-  const lockedUntil = r ? r.locked_until : null;
-  await DB.prepare(
-    `INSERT INTO rate_limits (key, count, window_start, last_at, locked_until) VALUES (?,?,?,?,?)
-     ON CONFLICT(key) DO UPDATE SET count = excluded.count, window_start = excluded.window_start, last_at = excluded.last_at, locked_until = excluded.locked_until`
-  ).bind(key, count, windowStart, now, lockedUntil).run();
-  return { count, windowStart, lastAt: now, lockedUntil };
+  try {
+    const now = Date.now();
+    const r = await DB.prepare('SELECT count, window_start, last_at, locked_until FROM rate_limits WHERE key = ?').bind(key).first();
+    let count, windowStart;
+    if (!r || !r.window_start || now - r.window_start > windowMs) {
+      count = 1; windowStart = now;
+    } else {
+      count = (r.count || 0) + 1; windowStart = r.window_start;
+    }
+    const lockedUntil = r ? r.locked_until : null;
+    await DB.prepare(
+      `INSERT INTO rate_limits (key, count, window_start, last_at, locked_until) VALUES (?,?,?,?,?)
+       ON CONFLICT(key) DO UPDATE SET count = excluded.count, window_start = excluded.window_start, last_at = excluded.last_at, locked_until = excluded.locked_until`
+    ).bind(key, count, windowStart, now, lockedUntil).run();
+    return { count, windowStart, lastAt: now, lockedUntil };
+  } catch (e) { console.error('rl_incr_err', e && e.message || String(e)); return { count: 0, windowStart: Date.now(), lastAt: 0, lockedUntil: null }; }
 }
 
 // Set / extend a lockout on a key without resetting the counter.
 export async function setRateLock(DB, key, lockedUntil) {
-  const now = Date.now();
-  await DB.prepare(
-    `INSERT INTO rate_limits (key, count, window_start, last_at, locked_until) VALUES (?,?,?,?,?)
-     ON CONFLICT(key) DO UPDATE SET locked_until = excluded.locked_until, last_at = excluded.last_at`
-  ).bind(key, 0, now, now, lockedUntil).run();
+  try {
+    const now = Date.now();
+    await DB.prepare(
+      `INSERT INTO rate_limits (key, count, window_start, last_at, locked_until) VALUES (?,?,?,?,?)
+       ON CONFLICT(key) DO UPDATE SET locked_until = excluded.locked_until, last_at = excluded.last_at`
+    ).bind(key, 0, now, now, lockedUntil).run();
+  } catch (e) { console.error('rl_lock_err', e && e.message || String(e)); }
 }
 
 export async function resetRateLimit(DB, key) {
-  await DB.prepare('DELETE FROM rate_limits WHERE key = ?').bind(key).run();
+  try {
+    await DB.prepare('DELETE FROM rate_limits WHERE key = ?').bind(key).run();
+  } catch (e) { console.error('rl_reset_err', e && e.message || String(e)); }
 }
 
 // ---- proof of delivery (PR7) ----

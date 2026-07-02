@@ -69,7 +69,7 @@ function render(d){
   if(isReview) tl='<li class="active"><span class="dot"></span>בדיקה ידנית — עדן יאשר מחיר בקרוב</li>'+tl;
   let pay='';
   if(o.payment_url && o.payment_status!=='paid' && o.status!=='paid'){pay='<a class="btn" href="'+o.payment_url+'">לתשלום ₪'+o.price+'</a><div class="muted" style="margin:8px 0;text-align:center">תשלום מאובטח דרך Shopify + PayPlus</div>';}
-  if(isReview) pay='<div class="badge warn">ממתין לאישור מחיר — עדן תחזור אליכם</div>';
+  if(isReview) pay='<div class="badge warn">ממתין לאישור מחיר — עדן יחזור אליכם</div>';
   if(o.payment_status==='paid'||o.status==='paid') pay='<div class="badge ok">שולם ₪'+(o.price||'')+'</div>';
   if(!pay && (o.status==='priced'||o.status==='payment_sent')) pay='<div class="badge warn">ממתין לתשלום</div><a class="btn" href="https://wa.me/972534058498?text='+encodeURIComponent('שלום עדן, בקשר להזמנה #'+o.id+' — אשמח לתאם תשלום')+'" target="_blank" rel="noopener" style="margin-top:8px">תיאום תשלום בוואטסאפ ←</a>';
   let summary='';
@@ -239,6 +239,7 @@ function notifPanel(){
     return '<div class="nrow"><span class="badge '+cls+'">'+esc(NSTAT[n.status]||n.status)+'</span> <b>'+esc(NCHAN[n.channel]||n.channel)+'</b> · '+esc(NTPL[n.template]||n.template||'—')+'<div class="muted" style="font-size:.72rem;margin-top:2px">'+fmt(n.created_at)+(n.recipient?' · '+esc(maskRecip(n.recipient)):'')+'</div>'+(n.error?'<div class="stale" style="margin-top:2px">'+esc(n.error)+'</div>':'')+'</div>';
   }).join('')+'</div>';
 }
+async function approveInline(id){
   var inp=document.getElementById('price-'+id),price=Number(inp&&inp.value);
   if(!price||price<1){alert('הזינו מחיר תקין');return;}
   var btn=document.querySelector('[data-act="approve"][data-id="'+id+'"]');if(btn){btn.disabled=true;btn.dataset.label=btn.textContent;btn.textContent='טוען…';}
