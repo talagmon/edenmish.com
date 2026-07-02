@@ -71,6 +71,9 @@ jobs:
       - name: Push unpublished theme
         if: ${{ inputs.deploy_theme }}
         run: |
+          # theme/.shopifyignore keeps editor-owned settings (templates/*.json,
+          # config/settings_data.json) out of this push so live merchant settings —
+          # e.g. the funnel's Maps key — are never overwritten. Do not bypass it.
           shopify theme push --path theme --unpublished \
             --store "${{ secrets.SHOPIFY_STORE }}" \
             --password "${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}"
@@ -80,6 +83,8 @@ jobs:
         if: ${{ inputs.deploy_theme && inputs.publish_theme }}
         run: |
           echo "::warning::Publishing theme LIVE. This cannot be undone from this workflow."
+          # See theme/.shopifyignore — editor-owned settings files are excluded so a
+          # live push cannot blank the funnel Maps key / Storefront token / prices.
           shopify theme push --path theme --live \
             --store "${{ secrets.SHOPIFY_STORE }}" \
             --password "${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}"

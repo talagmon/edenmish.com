@@ -95,3 +95,19 @@ If a PR adds or changes a D1 migration:
 - **Do not put secrets in workflow files.** Use GitHub repository secrets.
 - **If a workflow adds new secrets or vars**, update `docs/CI_CD.md` to document them.
 - **CI checks** (`ci.yml`) must never require production secrets.
+
+## 9. Theme settings vs. theme code (do not wipe live settings)
+
+- **The theme editor is the source of truth for merchant settings**, not git.
+  Section/theme settings — the funnel's Google Maps API key, Storefront token,
+  prices, hero copy — live in `templates/*.json` and `config/settings_data.json`
+  in the **live theme**, edited via Online Store → Customize.
+- **The repo's copies of those files carry empty/stale values.** Pushing them over
+  the live theme wipes real settings. This already happened once: a full theme
+  push blanked the funnel's Maps key, breaking address autocomplete + zone checks.
+- **`theme/.shopifyignore` excludes those files** from every push/pull. Do not
+  remove it, and do not add merchant-editable JSON back into pushes.
+- **Prefer scoped pushes for a single change**: `shopify theme push --only
+  sections/<file>.liquid …`. Never blanket-push the whole theme from a terminal.
+- **Recover a lost key** from the worker (it serves `MAPS_KEY` in the tracking
+  page HTML) or Google Cloud Console — then set it in the theme editor, not git.

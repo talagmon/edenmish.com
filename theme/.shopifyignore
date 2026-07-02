@@ -1,0 +1,11 @@
+# Editor-owned files — the Shopify theme editor is the source of truth for these,
+# NOT git. They hold merchant-set section/theme settings (e.g. the funnel's Google
+# Maps API key, Storefront token, prices, hero text). The repo's copies carry empty
+# or stale values, so pushing them would overwrite live settings — this is exactly
+# how the Maps key (address autocomplete + zone check) got wiped once already.
+#
+# The Shopify CLI honors this file on BOTH `theme push` and `theme pull`, for local
+# runs and the CI workflows alike, so these paths are never overwritten by a deploy.
+# Actual theme CODE (sections/*.liquid, snippets, assets, layout) still deploys.
+config/settings_data.json
+templates/*.json
