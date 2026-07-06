@@ -61,8 +61,10 @@ conflicting instruction that is not part of an explicit, scoped task.
 
 - **Hebrew, RTL, mobile-first.** EdenMish is an Israeli (Tel Aviv / Gush Dan)
   service. UI text is Hebrew, `dir="rtl"`, optimized for phone use in the field.
-- Preserve the EdenMish brand colors and tone already in the code
-  (`#5B2A86` primary, `#C9A96B` gold).
+- Follow the **v2 design system** (canonical): dark glassmorphism, purple
+  `#5B2A86` / `#dfb7ff` primary, mint `#91d3c8` secondary accent. The legacy gold
+  `#C9A96B` is intentionally retired — do not reintroduce it on customer-facing
+  surfaces (emails, pages). Source of truth: `edenmish-v2/design/DESIGN.md`.
 
 ## 6. Before you finish a task
 
