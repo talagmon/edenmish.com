@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html class="dark" dir="rtl" lang="he">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+<title>EdenMish Ops</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/assets/styles.css"/>
+</head>
+<body class="bg-surface-dim">
+<div id="app">טוען…</div>
+<script>
+var API = "https://ops.edenmish.com";
+var HE = {received:"נתקבלה",priced:"מחושב",review:"בדיקה",payment_sent:"תשלום נשלח",paid:"שולם",to_pickup:"בדרך לאיסוף",picked_up:"נאסף",to_dropoff:"בדרך למסירה",delivered:"נמסר",failed:"נכשל",cancelled:"בוטל"};
+var LIVE = ["to_pickup","to_dropoff"];
+var NEXT = {paid:"to_pickup",to_pickup:"picked_up",picked_up:"to_dropoff"};
+var NEXTLBL = {paid:"אשר יציאה לאיסוף",to_pickup:"אשר איסוף ✓",picked_up:"אשר יציאה למסירה"};
+var sess = null, orders = [], activeOrder = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, activeFilter = "all";
+
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
+function fmt(t){return t?new Date(t).toLocaleString("he-IL",{timeZone:"Asia/Jerusalem",hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"}):"—";}
+function $(id){return document.getElementById(id);}
+async function api(path,opts){
+  opts=opts||{};opts.headers=opts.headers||{};
+  if(sess)opts.headers["X-Ops"]=sess;
+  opts.headers["Content-Type"]="application/json";
+  return fetch(API+path,opts);
+}
+
+function loginView(){
+  $("app").innerHTML = '<div class="min-h-screen flex items-center justify-center p-gutter-mobile">'+
+    '<div class="glass-card rounded-2xl p-stack-lg max-w-sm w-full text-center">'+
+    '<div class="w-16 h-16 rounded-full bg-primary-container flex items-center justify-center mx-auto mb-stack-md">'+
+    '<span class="material-symbols-outlined text-primary text-4xl">local_shipping</span></div>'+
+    '<h1 class="font-headline-md text-headline-md text-primary mb-1">EdenMish Ops</h1>'+
+    '<p class="text-body-md text-on-surface-variant mb-stack-lg">מרכז הבקרה</p>'+
+    '<input id="pin" type="password" placeholder="הזן PIN" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-center text-xl mb-stack-md" style="letter-spacing:6px"/>'+
+    '<button class="w-full bg-primary-container text-on-primary-container font-headline-md py-4 rounded-xl active:scale-95" onclick="doLogin()">התחבר</button>'+
+    '</div></div>';
+}
+
+async function doLogin(){
+  var pin = $("pin").value;
+  var r = await fetch(API+"/api/ops/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pin:pin})});
+  if(r.ok){sess=(await r.json()).session;await refresh();}
+  else{alert(r.status===429?"יותר מדי ניסיונות":"PIN שגוי");}
+}
+function logout(){sess=null;loginView();}
+
+async function refresh(){
+  var r = await api("/api/ops/orders");
+  if(!r.ok){sess=null;return loginView();}
+  orders = (await r.json()).orders || [];
+  if(activeOrder){
+    var u = orders.find(function(o){return o.id===activeOrder.id;});
+    if(u){activeOrder=u;return renderDetail(u);}
+  }
+  renderQueue();
+}
+
+function renderQueue(){
+  var counts = {
+    all: orders.length,
+    inbox: orders.filter(function(o){return ["received","priced","review"].includes(o.status);}).length,
+    payment: orders.filter(function(o){return ["payment_sent"].includes(o.status);}).length,
+    ready: orders.filter(function(o){return ["paid"].includes(o.status);}).length,
+    active: orders.filter(function(o){return LIVE.includes(o.status);}).length,
+    done: orders.filter(function(o){return o.status==="delivered";}).length,
+    problems: orders.filter(function(o){return ["failed","cancelled","refund_pending"].includes(o.status);}).length
+  };
+
+  var filtered = orders;
+  if(activeFilter==="inbox") filtered = orders.filter(function(o){return ["received","priced","review"].includes(o.status);});
+  else if(activeFilter==="payment") filtered = orders.filter(function(o){return ["payment_sent"].includes(o.status);});
+  else if(activeFilter==="ready") filtered = orders.filter(function(o){return ["paid"].includes(o.status);});
+  else if(activeFilter==="active") filtered = orders.filter(function(o){return LIVE.includes(o.status);});
+  else if(activeFilter==="done") filtered = orders.filter(function(o){return o.status==="delivered";});
+  else if(activeFilter==="problems") filtered = orders.filter(function(o){return ["failed","cancelled","refund_pending"].includes(o.status);});
+
+  var sorted = filtered.sort(function(a,b){return b.id-a.id;});
+  if(activeFilter==="all"||activeFilter==="done") sorted = sorted.slice(0, activeFilter==="done"?20:50);
+  var cards = sorted.map(queueCard).join("");
+
+  function tabBtn(key,label,count){
+    var isActive = activeFilter===key;
+    var bg = isActive ? (key==="problems"?"bg-error/20 text-error":key==="done"?"bg-success-mint/20 text-success-mint":key==="active"?"bg-secondary-container text-on-secondary":"bg-primary-container text-on-primary-container") : "glass-card text-on-surface-variant";
+    var dot = (key==="problems"&&count>0) ? '<span class="w-1.5 h-1.5 bg-error rounded-full animate-pulse mr-1"></span>' : '';
+    return '<button onclick="setFilter(\''+key+'\')" class="px-3 py-2 rounded-xl font-label-bold text-label-sm whitespace-nowrap transition-all '+bg+' flex items-center gap-1">'+dot+label+' <span class="opacity-60">('+count+')</span></button>';
+  }
+
+  $("app").innerHTML =
+    '<div class="sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm">'+
+    '<div class="flex items-center justify-between gap-stack-sm">'+
+    '<strong class="font-headline-md text-headline-md text-primary">EdenMish Ops</strong>'+
+    '<div class="flex gap-2">'+
+    '<button onclick="refresh()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">refresh</span></button>'+
+    '<button onclick="logout()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-error"><span class="material-symbols-outlined">logout</span></button>'+
+    '</div></div>'+
+    '<div class="flex gap-2 mt-2 overflow-x-auto scrollbar-hide pb-1">'+
+    tabBtn("all","הכל",counts.all)+
+    tabBtn("inbox","חדשות",counts.inbox)+
+    tabBtn("payment","ממתינות לתשלום",counts.payment)+
+    tabBtn("ready","מוכנות לאיסוף",counts.ready)+
+    tabBtn("active","בדרך",counts.active)+
+    tabBtn("done","הושלם",counts.done)+
+    tabBtn("problems","בעיות",counts.problems)+
+    '</div></div>'+
+    '<div class="px-gutter-mobile py-stack-sm max-w-lg mx-auto space-y-3 pb-24">'+
+    (cards || '<div class="glass-card rounded-2xl p-stack-lg text-center text-on-surface-variant">אין הזמנות בקטגוריה זו.</div>')+
+    '</div>';
+}
+
+function setFilter(f){activeFilter=f;renderQueue();}
+
+function queueCard(o){
+  var isLive = LIVE.includes(o.status);
+  var color = isLive?"border-secondary":(o.status==="delivered"?"border-success-mint/40":"border-glass-border");
+  var liveDot = isLive?'<span class="w-2 h-2 bg-secondary rounded-full animate-pulse"></span>':"";
+  var nameLine = o.name?'<div class="flex items-center gap-2 mt-1"><span class="material-symbols-outlined text-on-surface-variant text-lg">person</span><b class="text-on-surface text-body-md">'+esc(o.name)+'</b></div>':"";
+  var notesLine = o.notes?'<div class="mt-1 text-label-sm text-alert-amber">📝 '+esc(o.notes.slice(0,40))+'</div>':"";
+  var pickupShort = esc((o.pickup||"—").split(",")[0]);
+  var dropoffShort = esc((o.dropoff||"—").split(",")[0]);
+
+  return '<div class="glass-card rounded-xl p-stack-md border-r-4 '+color+' active:scale-[0.98] transition-transform cursor-pointer" onclick="openOrder('+o.id+')">'+
+    '<div class="flex items-center gap-2 flex-wrap">'+
+    liveDot+
+    '<span class="bg-primary-container text-on-primary-container font-label-bold text-label-sm px-3 py-1 rounded-full">'+esc(HE[o.status]||o.status)+'</span>'+
+    '<span class="text-on-surface-variant text-label-sm">#'+o.id+'</span>'+
+    '<b class="font-headline-md text-headline-md text-secondary mr-auto">₪'+(o.price||"?")+'</b></div>'+
+    nameLine+
+    '<div class="flex items-start gap-2 mt-1">'+
+    '<span class="material-symbols-outlined text-secondary text-lg">arrow_upward</span>'+
+    '<span class="text-body-md text-on-surface-variant flex-1">'+pickupShort+'</span>'+
+    '<span class="material-symbols-outlined text-primary text-lg">location_on</span>'+
+    '<span class="text-body-md text-on-surface-variant flex-1">'+dropoffShort+'</span></div>'+
+    notesLine+
+    '</div>';
+}
+
+function openOrder(id){
+  var o = orders.find(function(x){return x.id===id;});
+  if(o){activeOrder=o;renderDetail(o);}
+}
+function backToQueue(){activeOrder=null;renderQueue();}
+
+var STEPS = [
+  {label:"נתקבלה", icon:"inventory_2"},
+  {label:"אושר", icon:"verified_user"},
+  {label:"לאיסוף", icon:"local_shipping"},
+  {label:"נאסף", icon:"inventory"},
+  {label:"למסירה", icon:"directions_run"},
+  {label:"נמסר", icon:"task_alt"}
+];
+function statusStepIdx(s){
+  if(["received","priced","review","payment_sent"].includes(s)) return 0;
+  if(s==="paid") return 1;
+  if(s==="to_pickup") return 2;
+  if(s==="picked_up") return 3;
+  if(s==="to_dropoff") return 4;
+  return 5;
+}
+function timelineHtml(o){
+  var cur = statusStepIdx(o.status);
+  var problem = ["failed","cancelled","refund_pending"].includes(o.status);
+  var h = '<div class="glass-card rounded-xl p-3 mb-4"><div class="flex items-start">';
+  STEPS.forEach(function(st, i){
+    var done = i < cur && !problem;
+    var active = i === cur;
+    var isLast = i === STEPS.length-1;
+    var nodeColor, icon, labelColor, bg;
+    if(problem && active){ nodeColor="#ef4444"; icon="close"; labelColor="#ef4444"; bg="rgba(239,68,68,.12)"; }
+    else if(done){ nodeColor="#91d3c8"; icon="check"; labelColor="#91d3c8"; bg="rgba(145,211,200,.12)"; }
+    else if(active){ nodeColor="#dfb7ff"; icon=st.icon; labelColor="#dfb7ff"; bg="rgba(223,183,255,.14)"; }
+    else { nodeColor="#5a5a5a"; icon=st.icon; labelColor="#7a7a7a"; bg="rgba(255,255,255,.03)"; }
+    h += '<div style="width:52px;flex:none;display:flex;flex-direction:column;align-items:center">';
+    h += '<div style="height:10px">'+(active&&!problem?'<span style="display:inline-block;width:8px;height:8px;background:#91d3c8;border-radius:9999px;animation:pulse 1.5s infinite"></span>':'')+'</div>';
+    h += '<div style="width:38px;height:38px;border-radius:9999px;border:2px solid '+nodeColor+';background:'+bg+';display:flex;align-items:center;justify-content:center">'+
+         '<span class="material-symbols-outlined" style="font-size:20px;color:'+nodeColor+'">'+icon+'</span></div>';
+    h += '<span style="font-size:10px;margin-top:4px;text-align:center;line-height:1.1;font-weight:'+(active||done?'700':'400')+';color:'+labelColor+'">'+st.label+'</span>';
+    h += '</div>';
+    if(!isLast){
+      h += '<div style="flex:1;height:2px;margin-top:29px;margin-left:2px;margin-right:2px;border-radius:9999px;background:'+(i<cur&&!problem?'#91d3c8':'#2e2e2e')+'"></div>';
+    }
+  });
+  h += '</div></div>';
+  return h;
+}
+function renderDetail(o){
+  var s = o.status, isLive = LIVE.includes(s);
+  var urgentBadge = o.urgent?'<div class="flex items-center gap-1 px-3 py-1 rounded-full bg-error/10 border border-error/30 text-error font-bold text-label-sm"><span class="material-symbols-outlined text-[18px]">priority_high</span> דחוף</div>':"";
+  var notesHtml = o.notes?'<div class="glass-card rounded-xl p-3 mb-4 flex items-start gap-2 bg-alert-amber/5"><span class="material-symbols-outlined text-alert-amber">sticky_note_2</span><span class="text-label-bold text-alert-amber">'+esc(o.notes)+'</span></div>':"";
+  var phoneBtn = o.phone?'<a href="tel:'+esc(o.phone)+'" class="p-2 rounded-full bg-secondary/10 text-secondary border border-secondary/20 active:scale-90"><span class="material-symbols-outlined text-[20px]">call</span></a>':"";
+  var statusBadge = '<div class="glass-card px-3 py-1 rounded-xl text-center"><span class="text-label-sm '+(isLive?"text-secondary":"text-primary")+' block">'+esc(HE[s]||s)+'</span></div>';
+
+  $("app").innerHTML =
+    '<div class="sticky top-0 z-50 bg-surface-container-lowest/90 backdrop-blur-xl border-b border-outline-variant/10 px-gutter-mobile py-3 flex items-center justify-between">'+
+    '<button onclick="backToQueue()" class="flex items-center gap-2 text-primary"><span class="material-symbols-outlined">arrow_forward</span><span class="font-label-bold">חזור לתור</span></button>'+
+    statusBadge+
+    '</div>'+
+    '<main class="px-gutter-mobile pb-24 max-w-lg mx-auto">'+
+    '<div class="flex justify-between items-center mb-6 pt-stack-md">'+
+    '<div><h2 class="font-headline-md text-headline-lg-mobile text-on-surface">הזמנה #'+o.id+'</h2>'+
+    '<p class="text-label-sm text-on-surface-variant">'+fmt(o.created_at)+'</p></div>'+
+    urgentBadge+
+    '</div>'+
+    timelineHtml(o)+
+    '<div class="glass-card rounded-xl p-4 mb-4 flex gap-4">'+
+    '<div class="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center flex-none"><span class="material-symbols-outlined">location_on</span></div>'+
+    '<div class="flex-1 text-right">'+
+    '<span class="text-primary font-bold text-label-sm block mb-1">איסוף</span>'+
+    '<h3 class="font-bold text-on-surface mb-1">'+esc(o.pickup||"—")+'</h3>'+
+    (o.name?'<div class="flex items-center justify-between bg-surface-deep/40 rounded-lg p-2 mt-2"><span class="text-on-surface font-semibold text-body-md">'+esc(o.name)+'</span>'+phoneBtn+'</div>':"")+
+    '</div></div>'+
+    '<div class="glass-card rounded-xl p-4 mb-6 flex gap-4">'+
+    '<div class="w-10 h-10 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center flex-none border border-outline-variant/30"><span class="material-symbols-outlined">flag</span></div>'+
+    '<div class="flex-1 text-right">'+
+    '<span class="text-outline font-bold text-label-sm block mb-1">יעד</span>'+
+    '<h3 class="font-bold text-on-surface mb-1">'+esc(o.dropoff||"—")+'</h3>'+
+    '<div class="flex items-center justify-between bg-surface-deep/40 rounded-lg p-2 mt-2"><span class="text-on-surface-variant text-body-md">₪'+(o.price||"?")+' · '+esc(o.package||"—")+'</span>'+(o.when_text?'<span class="text-label-sm text-on-surface-variant">'+esc(o.when_text)+'</span>':"")+'</div>'+
+    '</div></div>'+
+    notesHtml+
+    actionsHtml(o)+
+    '</main>';
+
+  if(isLive && watchId===null) startWatch(o.id);
+}
+
+function actionsHtml(o){
+  var s=o.status, id=o.id;
+  var h = '<div class="space-y-3 mt-2">';
+  if(s==="review"||s==="priced"||s==="received"){
+    h += '<div class="flex gap-2"><input type="number" min="1" id="price-'+id+'" value="'+(o.price||"")+'" placeholder="₪" class="flex-1 bg-surface-container-lowest border border-outline-variant text-on-surface rounded-lg p-3 text-center text-lg"/>';
+    h += '<button onclick="approveInline('+id+')" class="bg-secondary text-on-secondary font-label-bold px-4 py-3 rounded-lg whitespace-nowrap">אישור מחיר ←</button></div>';
+    if(o.review_flag) h += '<div class="text-alert-amber text-label-sm">חריג: '+esc(o.review_reason||"")+'</div>';
+  } else if(s==="payment_sent"){
+    if(o.payment_url) h += '<button onclick="copyPay(\''+esc(o.payment_url)+'\')" class="w-full glass-card border border-primary/30 text-primary font-label-bold py-4 rounded-xl flex items-center justify-center gap-2"><span class="material-symbols-outlined">link</span> העתק קישור תשלום</button>';
+    h += '<button onclick="markPaid('+id+')" class="w-full glass-card text-on-surface font-label-bold py-4 rounded-xl">סמן כשולם ידנית</button>';
+  } else if(s==="paid"){
+    h += '<button onclick="setStatus('+id+',\'to_pickup\')" class="w-full bg-primary text-on-primary py-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-lg shadow-xl shadow-primary/20 active:scale-95"><span class="material-symbols-outlined text-[28px]">local_shipping</span>'+NEXTLBL.paid+'</button>';
+  } else if(s==="to_pickup"){
+    h += '<button onclick="setStatus('+id+',\'picked_up\')" class="w-full bg-secondary text-on-secondary py-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-lg shadow-xl shadow-secondary/20 active:scale-95"><span class="material-symbols-outlined text-[28px]">task_alt</span>'+NEXTLBL.to_pickup+'</button>';
+  } else if(s==="picked_up"){
+    h += '<button onclick="setStatus('+id+',\'to_dropoff\')" class="w-full bg-primary text-on-primary py-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-lg shadow-xl shadow-primary/20 active:scale-95"><span class="material-symbols-outlined text-[28px]">local_shipping</span>'+NEXTLBL.picked_up+'</button>';
+  } else if(s==="to_dropoff"){
+    h += '<button onclick="showPod('+id+')" class="w-full bg-primary text-on-primary py-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-lg shadow-xl shadow-primary/20 active:scale-95"><span class="material-symbols-outlined text-[28px]">photo_camera</span> הוכחת מסירה</button>';
+  } else if(s==="delivered"){
+    h += '<div class="glass-card rounded-xl p-4 text-center"><span class="material-symbols-outlined text-success-mint text-4xl">verified</span><p class="text-success-mint font-bold mt-2">המשלוח נמסר ✓</p></div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+async function approveInline(id){
+  var price = Number($("price-"+id).value);
+  if(!price||price<1) return alert("הזינו מחיר");
+  var r = await api("/api/ops/orders/"+id+"/approve",{method:"POST",body:JSON.stringify({price:price})});
+  var d = await r.json();
+  if(d.ok){
+    if(d.payment_url){copyPay(d.payment_url);alert("מחיר אושר ✓"+(d.emailed?"\nקישור נשלח+הועתק":"\nקישור הועתק — שלחו ידנית"));}
+    refresh();
+  } else {alert("שגיאה");}
+}
+function copyPay(url){if(navigator.clipboard)navigator.clipboard.writeText(url).catch(function(){});}
+async function markPaid(id){if(!confirm("לסמן כשולם ידנית?"))return;await api("/api/ops/orders/"+id+"/status",{method:"POST",body:JSON.stringify({status:"paid"})});refresh();}
+async function setStatus(id,st){await api("/api/ops/orders/"+id+"/status",{method:"POST",body:JSON.stringify({status:st})});if(st==="to_pickup"||st==="to_dropoff")startWatch(id);refresh();}
+
+function showPod(id){
+  $("app").innerHTML =
+    '<div class="fixed inset-0 z-[100] bg-background/95 backdrop-blur-xl p-6 overflow-y-auto">'+
+    '<div class="glass-card rounded-2xl p-stack-lg max-w-md mx-auto space-y-stack-md">'+
+    '<div class="flex justify-between items-center"><h3 class="font-headline-md text-primary">אישור מסירה · #'+id+'</h3>'+
+    '<button onclick="renderDetail(orders.find(function(o){return o.id==='+id+';}))" class="text-on-surface-variant hover:text-error p-2"><span class="material-symbols-outlined">close</span></button></div>'+
+    '<input id="pod-recv" type="text" placeholder="שם המקבל (אופציונלי)" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-right"/>'+
+    '<input id="pod-note" type="text" placeholder="הערת מסירה (אופציונלי)" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-right"/>'+
+    '<label class="glass-card flex flex-col items-center justify-center min-h-[120px] border-2 border-dashed border-primary/40 rounded-xl cursor-pointer p-4 text-center">'+
+    '<span id="pod-photo-ph"><span class="material-symbols-outlined text-primary text-4xl">photo_camera</span><br><span class="text-on-surface-variant text-label-sm">לחצו לצילום החבילה</span></span>'+
+    '<input type="file" accept="image/*" capture="environment" id="pod-photo" class="hidden"/></label>'+
+    '<div class="relative h-40 border border-outline-variant rounded-xl overflow-hidden bg-surface-container-lowest">'+
+    '<canvas id="pod-sig" class="absolute inset-0 w-full h-full" style="touch-action:none"></canvas>'+
+    '<button onclick="clearSig()" class="absolute top-2 left-2 text-label-sm bg-surface-variant/50 text-on-surface-variant px-2 py-1 rounded z-10">נקה</button>'+
+    '<span class="absolute inset-0 flex items-center justify-center pointer-events-none"><span class="material-symbols-outlined text-6xl text-on-surface-variant/20">edit</span></span></div>'+
+    '<button id="pod-submit" onclick="submitPod('+id+')" class="w-full bg-primary text-on-primary font-headline-md py-4 rounded-xl shadow-xl shadow-primary/10 active:scale-95">אשר מסירה וסגור משימה</button>'+
+    '</div></div>';
+
+  requestAnimationFrame(function(){setTimeout(initSig,50);});
+  $("pod-photo").addEventListener("change",function(){
+    var f=this.files[0];if(!f)return;
+    var fr=new FileReader();
+    fr.onload=function(){$("pod-photo-ph").innerHTML='<img src="'+fr.result+'" class="max-h-32 rounded-xl">';};
+    fr.readAsDataURL(f);
+  });
+}
+
+function initSig(){
+  var c=$("pod-sig");if(!c||c.dataset.ready)return;
+  var dpr=devicePixelRatio||1;
+  c.width=c.clientWidth*dpr;c.height=c.clientHeight*dpr;
+  sigCtx=c.getContext("2d");sigCtx.scale(dpr,dpr);
+  sigCtx.lineWidth=2.5;sigCtx.lineCap="round";sigCtx.strokeStyle="#dfb7ff";
+  function pt(e){var r=c.getBoundingClientRect();return{x:(e.clientX||(e.touches&&e.touches[0]?e.touches[0].clientX:0))-r.left,y:(e.clientY||(e.touches&&e.touches[0]?e.touches[0].clientY:0))-r.top};}
+  function dn(e){sigDrawing=true;var p=pt(e);sigCtx.beginPath();sigCtx.moveTo(p.x,p.y);}
+  function mv(e){if(!sigDrawing)return;var p=pt(e);sigCtx.lineTo(p.x,p.y);sigCtx.stroke();sigCtx.beginPath();sigCtx.moveTo(p.x,p.y);sigHas=true;}
+  function up(){sigDrawing=false;sigCtx.beginPath();}
+  c.addEventListener("mousedown",dn);
+  c.addEventListener("mousemove",mv);
+  window.addEventListener("mouseup",up);
+  c.addEventListener("touchstart",function(e){e.preventDefault();dn(e);},{passive:false});
+  c.addEventListener("touchmove",function(e){e.preventDefault();mv(e);},{passive:false});
+  c.addEventListener("touchend",up);
+  c.dataset.ready="1";
+}
+function clearSig(){var c=$("pod-sig");if(sigCtx&&c)sigCtx.clearRect(0,0,c.width,c.height);sigHas=false;}
+
+async function submitPod(id){
+  var btn=$("pod-submit");btn.disabled=true;btn.textContent="שולח…";
+  var photo=null;
+  var f=$("pod-photo").files[0];
+  if(f){
+    photo=await new Promise(function(resolve){
+      var fr=new FileReader();
+      fr.onload=function(){var img=new Image();img.onload=function(){var s=Math.min(1,1024/Math.max(img.width,img.height));var c=document.createElement("canvas");c.width=img.width*s;c.height=img.height*s;c.getContext("2d").drawImage(img,0,0,c.width,c.height);resolve(c.toDataURL("image/jpeg",0.7));};img.src=fr.result;};
+      fr.readAsDataURL(f);
+    });
+  }
+  var sig=sigHas?$("pod-sig").toDataURL("image/png"):null;
+  try{
+    var r=await api("/api/ops/orders/"+id+"/deliver",{method:"POST",body:JSON.stringify({receiver_name:$("pod-recv").value,delivery_note:$("pod-note").value,photo_url:photo,signature:sig})});
+    var d=await r.json();
+    if(d.ok){stopWatch();await refresh();}
+    else{throw 0;}
+  }catch(e){
+    btn.disabled=false;btn.textContent="אשר מסירה וסגור משימה";
+    alert("שגיאה בשמירת הוכחת המסירה");
+  }
+}
+
+function startWatch(id){
+  if(watchId!==null)return;
+  if(!navigator.geolocation)return;
+  watchId=navigator.geolocation.watchPosition(function(p){
+    var c=p.coords;
+    api("/api/ops/orders/"+id+"/gps",{method:"POST",body:JSON.stringify({lat:c.latitude,lng:c.longitude})});
+  },function(){},{enableHighAccuracy:true,maximumAge:5000});
+}
+function stopWatch(){if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null;}}
+
+loginView();
+setInterval(function(){if(sess)refresh();},20000);
+</script>
+</body>
+</html>

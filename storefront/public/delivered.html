@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html class="dark" dir="rtl" lang="he">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>EdenMish | המשלוח נמסר</title>
+<meta name="description" content="אישור מסירת המשלוח שלך עם הוכחת מסירה, מפה ודירוג השירות."/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/assets/styles.css"/>
+<style>
+  .shimmer-bg { background: linear-gradient(90deg, rgba(223,183,255,0.10) 0%, rgba(145,211,200,0.10) 100%); }
+  .star { font-variation-settings: 'FILL' 0, 'wght' 400; cursor: pointer; transition: color .15s, font-variation-settings .15s; user-select: none; }
+  .star.fill { font-variation-settings: 'FILL' 1, 'wght' 500; }
+  .tile-empty { background: repeating-linear-gradient(45deg, rgba(255,255,255,.02) 0 10px, rgba(255,255,255,.04) 10px 20px); }
+</style>
+</head>
+<body class="bg-background text-on-surface antialiased min-h-screen">
+<div id="app" class="max-w-[600px] mx-auto p-gutter-mobile md:p-gutter-desktop">
+  <div id="state-loading" class="py-stack-lg text-center text-on-surface-variant">
+    <span class="material-symbols-outlined text-4xl animate-pulse">hourglass_top</span>
+    <p class="mt-2">טוען פרטי משלוח…</p>
+  </div>
+</div>
+<script>
+const API = "https://find.edenmish.com";
+const WHATSAPP = "972534058498";
+const MAILTO = "support@edenmish.com";
+const $ = id => document.getElementById(id);
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+function fmtTime(t){ try { return new Date(t).toLocaleString("he-IL", { timeZone:"Asia/Jerusalem", day:"numeric", month:"long", hour:"2-digit", minute:"2-digit" }); } catch { return t ? String(t) : "—"; } }
+function params(){ return new URLSearchParams(location.search); }
+const token = (params().get("t") || params().get("token") || "").trim();
+
+async function loadMapsKey(){
+  try { const r = await fetch("/maps-key"); const d = await r.json(); return d && d.key ? d.key : null; }
+  catch { return null; }
+}
+function buildStaticMap(o, key){
+  if(!key) return null;
+  const pu = parseFloat(o.pickup_lat), pul = parseFloat(o.pickup_lng);
+  const du = parseFloat(o.dropoff_lat), dul = parseFloat(o.dropoff_lng);
+  const hasP = !isNaN(pu) && !isNaN(pul);
+  const hasD = !isNaN(du) && !isNaN(dul);
+  if(!hasP && !hasD) return null;
+  const p = [
+    "size=600x400","scale=2",
+    "style=element:geometry|color:0x0b1326",
+    "style=element:labels.text.fill|color:0x9aa3bd",
+    "style=element:labels|invert_lightness:true",
+    "style=feature:road|color:0x222a3d",
+    "style=feature:road.highway|color:0x2d3449",
+    "style=feature:landscape|color:0x0b1326",
+    "style=feature:water|color:0x0a1428"
+  ];
+  if(hasP) p.push("markers=color:0xdfb7ff|label:P|"+pu+","+pul);
+  if(hasD) p.push("markers=color:0x91d3c8|label:D|"+du+","+dul);
+  if(hasP && hasD) p.push("path=color:0x91d3c8|weight:4|"+pu+","+pul+"|"+du+","+dul);
+  else p.push("zoom=15");
+  p.push("key="+encodeURIComponent(key));
+  return "https://maps.googleapis.com/maps/api/staticmap?" + p.join("&").replace(/\|/g, "%7C");
+}
+
+function renderHero(o){
+  const delivered = o.status === "delivered";
+  const icon = delivered ? "check_circle" : (o.status === "failed" ? "cancel" : "local_shipping");
+  const color = delivered ? "text-success-mint" : o.status === "failed" ? "text-error" : "text-secondary";
+  const glow = delivered ? "bg-success-mint/20" : "bg-primary/20";
+  const title = delivered ? "המשלוח נמסר בהצלחה!" : (o.status === "failed" ? "המשלוח לא הגיע ליעדו" : "המשלוח בדרך אליך");
+  const sub = delivered ? "החבילה שלך הגיעה ליעדה בשלום. תודה שבחרת ב-EdenMish." : "פרטי המשלוח שלך מופיעים למטה. למעקב חי היכנס לקישור המעקב.";
+  return '<div class="glass-card rounded-xl p-stack-lg text-center relative overflow-hidden">'+
+    '<div class="absolute -top-10 -right-10 w-40 h-40 '+glow+' blur-[60px] rounded-full"></div>'+
+    '<div class="relative z-10">'+
+      '<span class="material-symbols-outlined text-[64px] mb-stack-md '+color+' block" style="font-variation-settings:'+("'FILL' 1")+'">'+icon+'</span>'+
+      '<h1 class="font-display-lg text-headline-lg md:text-[40px] text-on-surface mb-stack-sm tracking-tight">'+title+'</h1>'+
+      '<p class="text-body-lg text-on-surface-variant">'+sub+'</p>'+
+    '</div>'+
+  '</div>';
+}
+
+function renderProofGrid(o, proof, mapUrl){
+  const photo = proof && proof.photo_url;
+  let h = '<div class="grid grid-cols-1 md:grid-cols-2 gap-stack-md">';
+  // PoD photo (or signature fallback into first tile)
+  h += '<div class="glass-card rounded-xl overflow-hidden flex flex-col">'+
+    '<div class="p-stack-md border-b border-glass-border flex items-center justify-between">'+
+    '<span class="font-label-bold text-label-bold text-secondary">הוכחת מסירה</span>'+
+    '<span class="material-symbols-outlined text-secondary">photo_camera</span></div>';
+  if(photo){
+    h += '<div class="relative h-64 w-full"><img class="w-full h-full object-cover" src="'+esc(photo)+'" alt="הוכחת מסירה"/></div>';
+  } else {
+    h += '<div class="h-64 w-full tile-empty flex flex-col items-center justify-center text-on-surface-variant"><span class="material-symbols-outlined text-4xl mb-2">image_not_supported</span><span class="text-label-sm">אין תמונה</span></div>';
+  }
+  h += '</div>';
+  // Map tile
+  h += '<div class="glass-card rounded-xl overflow-hidden flex flex-col">'+
+    '<div class="p-stack-md border-b border-glass-border flex items-center justify-between">'+
+    '<span class="font-label-bold text-label-bold text-secondary">מסלול משלוח</span>'+
+    '<span class="material-symbols-outlined text-secondary">map</span></div>';
+  if(mapUrl){
+    h += '<div class="relative h-64 w-full"><img class="w-full h-full object-cover" src="'+esc(mapUrl)+'" alt="מפת מסלול המשלוח"/></div>';
+  } else {
+    h += '<div class="h-64 w-full tile-empty flex flex-col items-center justify-center text-on-surface-variant p-4 text-center"><span class="material-symbols-outlined text-4xl mb-2">location_on</span><span class="text-label-sm">'+esc((o.dropoff||"").split(",").slice(-1)[0].trim() || "גוש דן")+'</span></div>';
+  }
+  h += '</div></div>';
+  return h;
+}
+
+function renderDetails(o, proof, history){
+  const receiver = (proof && proof.receiver_name) || o.name || "—";
+  let deliveredAt = "—";
+  if(history && history.length){
+    const d = history.find(h => h.status === "delivered");
+    if(d && d.at) deliveredAt = fmtTime(d.at);
+  } else if(o.delivered_at){
+    deliveredAt = fmtTime(o.delivered_at);
+  } else if(o.created_at){
+    deliveredAt = fmtTime(o.created_at);
+  }
+  const addr = o.dropoff || "—";
+  const sig = proof && proof.signature;
+  let h = '<div class="glass-card rounded-xl p-stack-lg flex flex-col md:flex-row gap-stack-lg items-center">'+
+    '<div class="flex-1 space-y-stack-md w-full">';
+  const row = (k,v) => '<div class="flex justify-between items-center pb-stack-sm border-b border-glass-border/30"><span class="text-on-surface-variant text-label-sm">'+k+'</span><span class="text-on-surface font-label-bold text-label-bold">'+v+'</span></div>';
+  h += row("נמסר ל:", esc(receiver));
+  h += row("תאריך וזמן:", esc(deliveredAt));
+  h += '<div class="flex justify-between items-center"><span class="text-on-surface-variant text-label-sm">כתובת:</span><span class="text-on-surface font-label-bold text-label-bold text-left">'+esc(addr)+'</span></div>';
+  if(proof && proof.delivery_note) h += '<p class="text-label-sm text-on-surface-variant pt-1">'+esc(proof.delivery_note)+'</p>';
+  h += '</div>';
+  h += '<div class="w-full md:w-48 bg-surface-container-high/50 rounded-lg p-stack-md flex flex-col items-center justify-center border border-dashed border-outline-variant">'+
+    '<span class="text-on-surface-variant text-label-sm mb-stack-sm">חתימה דיגיטלית</span>';
+  if(sig){
+    h += '<img class="h-20 w-auto opacity-90" src="'+esc(sig)+'" alt="חתימה דיגיטלית" style="filter:invert(.9) brightness(1.4);"/>';
+  } else {
+    h += '<span class="material-symbols-outlined text-4xl text-on-surface-variant/30">draw</span>';
+  }
+  h += '</div></div>';
+  return h;
+}
+
+let selectedRating = 0, rated = false;
+function renderRating(o){
+  return '<div id="rating-card" class="glass-card rounded-xl p-stack-lg text-center shimmer-bg border border-secondary/20">'+
+    '<h3 class="font-headline-md text-headline-md text-secondary mb-stack-md">דרג את השירות שלנו</h3>'+
+    '<div id="stars" class="flex justify-center gap-stack-sm mb-stack-sm">'+
+      [1,2,3,4,5].map(n => '<span class="material-symbols-outlined star text-secondary-fixed-dim text-[32px]" data-n="'+n+'">star</span>').join('')+
+    '</div>'+
+    '<p id="rating-msg" class="text-label-sm text-on-surface-variant min-h-[1em]">הדירוג שלך עוזר לנו להשתפר</p>'+
+  '</div>';
+}
+function bindStars(){
+  const stars = Array.from(document.querySelectorAll("#stars .star"));
+  if(!stars.length) return;
+  const fill = n => stars.forEach((s,i) => s.classList.toggle("fill", i <= n));
+  const setColor = () => stars.forEach(s => s.style.color = "");
+  stars.forEach((s, i) => {
+    s.addEventListener("mouseenter", () => { if(!rated) fill(i); });
+    s.addEventListener("mouseleave", () => { if(!rated) fill(selectedRating - 1); });
+    s.addEventListener("click", () => {
+      if(rated) return;
+      selectedRating = i + 1;
+      fill(i);
+      stars.forEach(s => s.style.color = "#91d3c8");
+      submitRating(selectedRating);
+    });
+  });
+}
+async function submitRating(rating){
+  const msg = $("rating-msg");
+  const stars = document.querySelectorAll("#stars .star");
+  stars.forEach(s => s.style.pointerEvents = "none");
+  if(msg) msg.textContent = "שומר דירוג…";
+  try {
+    const r = await fetch(API + "/api/orders/" + encodeURIComponent(token) + "/rate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rating })
+    });
+    if(r.ok){
+      rated = true;
+      if(msg) msg.innerHTML = '<span class="text-success-mint font-label-bold">תודה רבה על הדירוג! 🙏</span>';
+    } else {
+      throw new Error("bad status");
+    }
+  } catch(e){
+    if(msg) msg.innerHTML = '<span class="text-error">לא הצלחנו לשמור. נסו שוב.</span>';
+    stars.forEach(s => s.style.pointerEvents = "");
+    selectedRating = 0;
+    document.querySelectorAll("#stars .star").forEach(s => s.classList.remove("fill"));
+  }
+}
+
+function renderActions(){
+  const waText = encodeURIComponent("שלום, רציתי לפנות בנוגע למשלוח " + (token||""));
+  const mailSub = encodeURIComponent("פנייה בנוגע למשלוח");
+  return '<div class="flex flex-col md:flex-row gap-stack-md">'+
+    '<a class="flex-1 bg-primary-container hover:bg-primary-container/80 text-on-primary-container font-label-bold text-label-bold py-stack-md px-stack-lg rounded-lg flex items-center justify-center gap-stack-sm transition-transform active:scale-95 shadow-lg shadow-primary-container/20" href="mailto:'+MAILTO+'?subject='+mailSub+'">'+
+    '<span class="material-symbols-outlined">mail</span> צור קשר במייל</a>'+
+    '<a class="flex-1 border border-secondary-container bg-secondary-container/10 hover:bg-secondary-container/20 text-on-secondary-container font-label-bold text-label-bold py-stack-md px-stack-lg rounded-lg flex items-center justify-center gap-stack-sm transition-transform active:scale-95" href="https://wa.me/'+WHATSAPP+'?text='+waText+'" target="_blank" rel="noopener">'+
+    '<span class="material-symbols-outlined">chat</span> WhatsApp תמיכה</a>'+
+  '</div>';
+}
+
+function renderHeader(o){
+  const num = (o.token || token || "—").toUpperCase();
+  return '<header class="flex justify-between items-center py-stack-lg border-b border-glass-border">'+
+    '<div class="font-headline-md text-headline-md font-bold text-primary">EdenMish</div>'+
+    '<div class="font-label-bold text-label-bold text-on-surface-variant">#'+esc(num)+'</div>'+
+  '</header>';
+}
+function renderFooter(){
+  return '<footer class="py-stack-lg border-t border-glass-border text-center space-y-stack-sm">'+
+    '<div class="font-headline-md text-headline-md text-primary opacity-50">EdenMish</div>'+
+    '<p class="text-label-sm text-on-surface-variant">© 2025 EdenMish Logistics. Premium Precision.</p>'+
+    '<div class="flex justify-center gap-stack-md pt-stack-sm">'+
+      '<a class="text-label-sm text-on-surface-variant hover:text-primary underline" href="/privacy.html">מדיניות פרטיות</a>'+
+      '<a class="text-label-sm text-on-surface-variant hover:text-primary underline" href="/terms.html">תנאי שימוש</a>'+
+      '<a class="text-label-sm text-on-surface-variant hover:text-primary underline" href="/track.html">מעקב משלוח</a>'+
+    '</div>'+
+  '</footer>';
+}
+
+function renderError(msg){
+  $("app").innerHTML = renderHeader({token}) +
+    '<main class="py-stack-lg"><div class="glass-card rounded-xl p-stack-lg text-center">'+
+    '<span class="material-symbols-outlined text-4xl text-error mb-2">error</span>'+
+    '<p class="text-on-surface font-label-bold">'+esc(msg)+'</p>'+
+    '<a href="/track.html" class="inline-block mt-stack-md text-primary underline text-label-bold">למעקב משלוח ←</a>'+
+    '</div></main>' + renderFooter();
+}
+
+async function init(){
+  if(!token) return renderError("חסר מספר מעקב בקישור.");
+  let d;
+  try {
+    const r = await fetch(API + "/api/orders/" + encodeURIComponent(token));
+    if(r.status === 404) return renderError("לא נמצא משלוח תואם. בדקו את הקישור מהמייל.");
+    if(!r.ok) throw new Error("http");
+    d = await r.json();
+  } catch(e){
+    return renderError("בעיית תקשורת. רעננו את הדף או נסו מאוחר יותר.");
+  }
+  if(d && d.otp_pending){
+    location.replace("/track.html?t=" + encodeURIComponent(token));
+    return;
+  }
+  const o = d.order || {};
+  const proof = d.proof || null;
+  const history = Array.isArray(d.history) ? d.history : [];
+  const mapUrl = await buildStaticMapAsync(o);
+
+  $("app").innerHTML = renderHeader(o) +
+    '<main class="py-stack-lg space-y-stack-lg">' +
+    renderHero(o) +
+    renderProofGrid(o, proof, mapUrl) +
+    renderDetails(o, proof, history) +
+    renderRating(o) +
+    renderActions() +
+    '</main>' + renderFooter();
+  bindStars();
+}
+
+let _mapPromise = null;
+function buildStaticMapAsync(o){
+  if(_mapPromise) return _mapPromise;
+  _mapPromise = (async () => {
+    const key = await loadMapsKey();
+    return buildStaticMap(o, key);
+  })();
+  return _mapPromise;
+}
+
+init();
+</script>
+</body>
+</html>

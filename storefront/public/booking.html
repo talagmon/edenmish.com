@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html class="dark" dir="rtl" lang="he">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+<title>EdenMish | הזמנת משלוח חדש</title>
+<meta name="description" content="הזמנת שליח EdenMish בגוש דן - מילוי פרטי המשלוח וקבלת הצעת מחיר."/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/assets/styles.css"/>
+</head>
+<body class="antialiased min-h-screen">
+<div class="fixed inset-0 overflow-hidden pointer-events-none -z-10" aria-hidden="true">
+<div class="glow-bg absolute top-[-10%] left-[-10%]"></div>
+<div class="glow-bg absolute bottom-[-10%] right-[-10%]"></div>
+</div>
+<!-- TopNavBar -->
+<header class="fixed top-0 w-full z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border shadow-sm">
+<div class="flex flex-row-reverse justify-between items-center px-gutter-desktop max-w-container-max mx-auto h-16">
+<a href="/" class="font-display-lg text-headline-md font-bold text-primary">EdenMish</a>
+<nav class="hidden md:flex gap-stack-lg items-center">
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors duration-200" href="/">בית</a>
+<a class="font-body-md text-body-md text-primary font-bold transition-colors duration-200" href="/booking.html">שירותים</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors duration-200" href="/track.html">מעקב משלוחים</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors duration-200" href="/about.html">אודות</a>
+</nav>
+<a href="/booking.html" class="bg-primary-container text-on-primary-container px-6 py-2 rounded-lg font-label-bold active:scale-95 transition-transform hover:opacity-90">שלחו עכשיו</a>
+</div>
+</header>
+<main class="pt-24 pb-stack-lg px-gutter-mobile md:px-gutter-desktop max-w-container-max mx-auto">
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-stack-lg">
+<!-- Left: Order summary (estimator) -->
+<aside class="lg:col-span-4 order-2 lg:order-1">
+<div class="glass-panel rounded-xl p-stack-md sticky top-24">
+<h3 class="font-headline-md text-primary mb-stack-md">סיכום הזמנה</h3>
+<div class="space-y-stack-sm border-b border-glass-border pb-stack-md mb-stack-md">
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-label-bold">מרחק</span>
+<span class="font-body-md" id="dist-val">-</span>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-label-bold">אזור</span>
+<span class="font-body-md" id="est-zone">-</span>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-label-bold">מחיר בסיס</span>
+<span class="font-body-md" id="est-base">-</span>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant" id="est-size-row" hidden>
+<span class="font-label-bold">חבילה בינונית</span>
+<span class="font-body-md">+₪15</span>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant" id="est-surch-row" hidden>
+<span class="font-label-bold" id="est-surch-label">תוספת</span>
+<span class="font-body-md" id="est-surch">-</span>
+</div>
+</div>
+<div class="flex justify-between items-end mb-stack-lg">
+<div>
+<p class="text-on-surface-variant font-label-sm">מחיר סופי</p>
+<p class="text-headline-lg text-secondary font-display-lg">₪<span id="price-val">-</span></p>
+</div>
+<span class="material-symbols-outlined text-secondary text-4xl">payments</span>
+</div>
+<div class="bg-surface-container-high rounded-lg p-stack-sm">
+<p class="text-label-sm text-on-surface-variant text-center">
+* מחיר סופי לפי אזור ורמת שירות. ערב (19-22) +₪30 · שישי/שבת ×1.5.
+</p>
+</div>
+</div>
+</aside>
+<!-- Right: Form -->
+<div class="lg:col-span-8 order-1 lg:order-2">
+<div class="mb-stack-lg">
+<h1 class="font-headline-lg text-on-surface mb-2">הזמנת משלוח חדש</h1>
+<p class="text-on-surface-variant font-body-md">אנא מלאו את פרטי המשלוח כדי לקבל הצעת מחיר מדויקת ולהזמין שליח.</p>
+</div>
+<form id="booking-form" class="space-y-stack-lg" novalidate>
+<!-- Step 1: Package type (required by API) -->
+<section class="glass-panel rounded-xl p-stack-md">
+<div class="flex items-center gap-stack-sm mb-stack-md">
+<span class="w-8 h-8 rounded-full bg-secondary text-on-secondary flex items-center justify-center font-label-bold">1</span>
+<h2 class="font-headline-md text-on-surface">גודל החבילה</h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-stack-md">
+<label class="cursor-pointer group">
+<input class="hidden peer" type="radio" name="size" value="small" checked/>
+<div class="flex flex-col items-center justify-center p-stack-md bg-surface-container-low border-2 border-outline-variant rounded-xl group-hover:border-primary peer-checked:border-primary peer-checked:bg-primary/10 transition-all text-center h-full">
+<span class="material-symbols-outlined text-4xl mb-2 text-on-surface-variant peer-checked:text-primary">description</span>
+<h4 class="font-label-bold text-on-surface">קטן</h4>
+<p class="text-label-sm text-on-surface-variant">מעטפה / מסמך / פריט קטן</p>
+</div>
+</label>
+<label class="cursor-pointer group">
+<input class="hidden peer" type="radio" name="size" value="medium"/>
+<div class="flex flex-col items-center justify-center p-stack-md bg-surface-container-low border-2 border-outline-variant rounded-xl group-hover:border-primary peer-checked:border-primary peer-checked:bg-primary/10 transition-all text-center h-full">
+<span class="material-symbols-outlined text-4xl mb-2 text-on-surface-variant peer-checked:text-primary">inbox</span>
+<h4 class="font-label-bold text-on-surface">בינוני <span class="text-secondary">+₪15</span></h4>
+<p class="text-label-sm text-on-surface-variant">קופסת נעליים / עד 5 ק״ג</p>
+</div>
+</label>
+</div>
+</section>
+<!-- Step 2: Contact Details -->
+<section class="glass-panel rounded-xl p-stack-md relative overflow-hidden">
+<div class="absolute right-0 top-0 w-1 h-full bg-secondary"></div>
+<div class="flex items-center gap-stack-sm mb-stack-md">
+<span class="w-8 h-8 rounded-full bg-secondary text-on-secondary flex items-center justify-center font-label-bold">2</span>
+<h2 class="font-headline-md text-on-surface">פרטי קשר למשלוח</h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-stack-md">
+<div class="flex flex-col gap-1">
+<label for="f-name" class="text-label-bold text-on-surface-variant mr-1">שם מלא</label>
+<input id="f-name" name="name" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 transition-all" placeholder="ישראל ישראלי" type="text" required/>
+</div>
+<div class="flex flex-col gap-1">
+<label for="f-phone" class="text-label-bold text-on-surface-variant mr-1">מספר טלפון</label>
+<input id="f-phone" name="phone" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-left transition-all" dir="ltr" placeholder="050-0000000" type="tel" required/>
+</div>
+<div class="flex flex-col gap-1 md:col-span-2">
+<label for="f-email" class="text-label-bold text-on-surface-variant mr-1">אימייל (לקבלה וקישור מעקב)</label>
+<input id="f-email" name="email" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-left transition-all" dir="ltr" placeholder="email@example.com" type="email" required/>
+</div>
+</div>
+</section>
+<!-- Step 3: Pickup Address -->
+<section class="glass-panel rounded-xl p-stack-md">
+<div class="flex items-center gap-stack-sm mb-stack-md">
+<span class="w-8 h-8 rounded-full bg-surface-container-high text-on-surface flex items-center justify-center font-label-bold">3</span>
+<h2 class="font-headline-md text-on-surface">נקודת איסוף</h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-12 gap-stack-md">
+<div class="flex flex-col gap-1 md:col-span-8">
+<label for="f-pickup-addr" class="text-label-bold text-on-surface-variant mr-1">כתובת איסוף</label>
+<input id="f-pickup-addr" name="pickup_address" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 transition-all" placeholder="רחוב, מספר בית, עיר" type="text" required/>
+</div>
+<div class="flex flex-col gap-1 md:col-span-2">
+<label for="f-pickup-floor" class="text-label-bold text-on-surface-variant mr-1">קומה</label>
+<input id="f-pickup-floor" name="pickup_floor" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 transition-all" placeholder="4" type="text"/>
+</div>
+<div class="flex flex-col gap-1 md:col-span-2">
+<label for="f-pickup-apt" class="text-label-bold text-on-surface-variant mr-1">דירה</label>
+<input id="f-pickup-apt" name="pickup_apt" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 transition-all" placeholder="12" type="text"/>
+</div>
+<div class="flex flex-col gap-1 md:col-span-12">
+<label for="f-pickup-contact" class="text-label-bold text-on-surface-variant mr-1">איש קשר בנקודת האיסוף (אם שונה)</label>
+<input id="f-pickup-contact" name="pickup_contact" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 transition-all" placeholder="שם ומספר טלפון" type="text"/>
+</div>
+</div>
+</section>
+<!-- Step 4: Drop-off Address -->
+<section class="glass-panel rounded-xl p-stack-md">
+<div class="flex items-center gap-stack-sm mb-stack-md">
+<span class="w-8 h-8 rounded-full bg-surface-container-high text-on-surface flex items-center justify-center font-label-bold">4</span>
+<h2 class="font-headline-md text-on-surface">נקודת מסירה</h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-12 gap-stack-md">
+<div class="flex flex-col gap-1 md:col-span-8">
+<label for="f-dropoff-addr" class="text-label-bold text-on-surface-variant mr-1">כתובת יעד</label>
+<input id="f-dropoff-addr" name="dropoff_address" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 transition-all" placeholder="רחוב, מספר בית, עיר" type="text" required/>
+</div>
+<div class="flex flex-col gap-1 md:col-span-2">
+<label for="f-dropoff-floor" class="text-label-bold text-on-surface-variant mr-1">קומה</label>
+<input id="f-dropoff-floor" name="dropoff_floor" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 transition-all" placeholder="קרקע" type="text"/>
+</div>
+<div class="flex flex-col gap-1 md:col-span-2">
+<label for="f-dropoff-apt" class="text-label-bold text-on-surface-variant mr-1">דירה</label>
+<input id="f-dropoff-apt" name="dropoff_apt" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 transition-all" placeholder="1" type="text"/>
+</div>
+<div class="flex flex-col gap-1 md:col-span-12">
+<label for="f-dropoff-contact" class="text-label-bold text-on-surface-variant mr-1">איש קשר בנקודת היעד</label>
+<input id="f-dropoff-contact" name="dropoff_contact" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 transition-all" placeholder="שם ומספר טלפון" type="text"/>
+</div>
+</div>
+</section>
+<!-- Step 5: Delivery Priority -->
+<section class="glass-panel rounded-xl p-stack-md">
+<div class="flex items-center gap-stack-sm mb-stack-md">
+<span class="w-8 h-8 rounded-full bg-surface-container-high text-on-surface flex items-center justify-center font-label-bold">5</span>
+<h2 class="font-headline-md text-on-surface">רמת שירות</h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-stack-md">
+<label class="cursor-pointer group">
+<input class="hidden peer" name="service" type="radio" value="eco"/>
+<div class="flex flex-col items-center justify-center p-stack-md bg-surface-container-low border-2 border-outline-variant rounded-xl group-hover:border-primary peer-checked:border-secondary peer-checked:bg-secondary-container/20 transition-all text-center h-full">
+<span class="material-symbols-outlined text-4xl mb-2 text-on-surface-variant peer-checked:text-secondary">schedule</span>
+<h4 class="font-label-bold text-on-surface">Eco</h4>
+<p class="text-label-sm text-on-surface-variant">מסירה עד סוף היום</p>
+<p class="text-primary font-label-bold mt-2">החל מ₪35</p>
+</div>
+</label>
+<label class="cursor-pointer group">
+<input checked class="hidden peer" name="service" type="radio" value="standard"/>
+<div class="flex flex-col items-center justify-center p-stack-md bg-surface-container-low border-2 border-outline-variant rounded-xl group-hover:border-primary peer-checked:border-secondary peer-checked:bg-secondary-container/20 transition-all text-center h-full">
+<span class="material-symbols-outlined text-4xl mb-2 text-on-surface-variant peer-checked:text-secondary">local_shipping</span>
+<h4 class="font-label-bold text-on-surface">Standard</h4>
+<p class="text-label-sm text-on-surface-variant">מסירה תוך 4 שעות</p>
+<p class="text-primary font-label-bold mt-2">החל מ₪50</p>
+</div>
+</label>
+<label class="cursor-pointer group">
+<input class="hidden peer" name="service" type="radio" value="flash"/>
+<div class="flex flex-col items-center justify-center p-stack-md bg-surface-container-low border-2 border-outline-variant rounded-xl group-hover:border-primary peer-checked:border-secondary peer-checked:bg-secondary-container/20 transition-all text-center h-full">
+<span class="material-symbols-outlined text-4xl mb-2 text-on-surface-variant peer-checked:text-secondary">bolt</span>
+<h4 class="font-label-bold text-on-surface">Flash</h4>
+<p class="text-label-sm text-on-surface-variant">90 דקות, נקודה לנקודה</p>
+<p class="text-secondary font-label-bold mt-2">החל מ₪85</p>
+</div>
+</label>
+</div>
+</section>
+<!-- Step 6: Pickup schedule (business hours) -->
+<section class="glass-panel rounded-xl p-stack-md">
+<div class="flex items-center gap-stack-sm mb-stack-md">
+<span class="w-8 h-8 rounded-full bg-secondary text-on-secondary flex items-center justify-center font-label-bold">6</span>
+<h2 class="font-headline-md text-on-surface">מועד איסוף</h2>
+</div>
+<p class="text-label-sm text-on-surface-variant mb-3">שעות פעילות: א׳-ה׳ 09:00-20:00 · ו׳ 08:00-13:00 · שבת סגור. חלונות הזמן מותאמים לשעות הפעילות.</p>
+<div id="sched-dates" class="flex flex-wrap gap-2 mb-3"></div>
+<label id="sched-custom-wrap" class="flex items-center gap-2 text-label-sm text-on-surface-variant mb-3">
+<span>תאריך אחר:</span>
+<input id="sched-custom-date" type="date" class="bg-surface-container-low border border-outline-variant rounded-lg px-3 py-2 text-on-surface"/>
+</label>
+<div id="sched-windows" class="grid grid-cols-2 md:grid-cols-3 gap-2"></div>
+<div id="sched-flash" hidden></div>
+<p id="sched-hint" class="text-label-sm text-on-surface-variant mt-2 min-h-[1em]"></p>
+</section>
+<!-- Step 7: Special instructions for the driver -->
+<section class="glass-panel rounded-xl p-stack-md">
+<div class="flex items-center gap-stack-sm mb-stack-md">
+<span class="w-8 h-8 rounded-full bg-surface-container-high text-on-surface flex items-center justify-center font-label-bold">7</span>
+<h2 class="font-headline-md text-on-surface">הוראות מיוחדות לשליח</h2>
+</div>
+<textarea name="notes" rows="3" class="w-full bg-surface-container-low border-b-2 border-outline-variant rounded-t-lg p-3 text-on-surface text-right transition-all" placeholder="לדוגמה: קומה 3 ללא מעלית · להשאיר בדלת · להתקשר לפני הגעה · פריט שביר"></textarea>
+</section>
+<!-- Step 8: Terms + notification consent -->
+<section class="glass-panel rounded-xl p-stack-md">
+<label class="flex items-start gap-3 cursor-pointer">
+<input type="checkbox" id="agree-terms" required class="mt-1 w-5 h-5 accent-[#5b2a86] cursor-pointer"/>
+<span class="text-label-sm text-on-surface-variant leading-relaxed">
+קראתי ואני מאשר/ת את <a href="/terms.html" class="text-primary underline">תקנון השירות</a>, <a href="/privacy.html" class="text-primary underline">מדיניות הפרטיות</a> ו<a href="/refund.html" class="text-primary underline">מדיניות הביטול</a>. הנני מסכים/ה לקבל עדכונים בדוא"ל, ב-WhatsApp וב-SMS בנוגע למשלוח שלי.
+</span>
+</label>
+</section>
+<!-- Error + Submit -->
+<div id="form-error" class="hidden bg-error-container/30 border border-error/40 text-error rounded-lg p-stack-sm text-label-bold text-center"></div>
+<div class="flex flex-col md:flex-row justify-between items-center gap-stack-md pt-stack-sm">
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">lock</span>
+<span class="text-label-sm">התשלום מאובטח ומוצפן בתקן PCI-DSS</span>
+</div>
+<button id="submit-btn" type="submit" class="w-full md:w-auto bg-primary text-on-primary px-12 py-4 rounded-xl font-headline-md hover:bg-primary-container hover:text-on-primary-container transition-all shadow-[0_0_20px_rgba(223,183,255,0.3)] active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed">
+אישור והזמנת שליח
+</button>
+</div>
+</form>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="w-full pt-stack-lg pb-stack-md bg-surface-container-lowest border-t border-glass-border mt-stack-lg">
+<div class="flex flex-col md:flex-row-reverse justify-between items-center px-gutter-desktop max-w-container-max mx-auto gap-stack-md">
+<div class="font-display-lg text-headline-md font-bold text-primary">EdenMish</div>
+<div class="flex flex-wrap justify-center gap-x-stack-lg gap-y-stack-sm">
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/">בית</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/booking.html">שירותים</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/track.html">מעקב משלוחים</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/about.html">אודות</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/about.html">צור קשר</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="#">תקנון</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="#">מדיניות פרטיות</a>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant">© 2025 EdenMish. כל הזכויות שמורות.</p>
+</div>
+</footer>
+<script>
+// Existing Worker backend (sibling repo). Public order endpoint only.
+const API = "https://find.edenmish.com";
+const TEST_MODE = new URLSearchParams(location.search).get("test") === "1";
+if (TEST_MODE) {
+  const banner = document.createElement("div");
+  banner.style.cssText = "position:fixed;top:64px;right:0;left:0;z-index:60;background:linear-gradient(135deg,#00534b,#003732);color:#eafff9;text-align:center;padding:8px 16px;font-weight:700;font-size:.85rem;font-family:'Hanken Grotesk',sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.3)";
+  banner.innerHTML = "🧪 מצב בדיקה — ההזמנה תאושר אוטומטית ללא תשלום. מלאו את הטופס ושלחו — לא תחויבו.";
+  document.body.appendChild(banner);
+  document.querySelector("main").style.paddingTop = "110px";
+}
+
+// ---- Google Maps: address autocomplete + drive distance → exact pricing ----
+const geo = { pickupLat:null, pickupLng:null, pickupCity:null, dropoffLat:null, dropoffLng:null, dropoffCity:null, distanceKm:null };
+const distEl = document.getElementById("dist-val");
+// Final price (FINAL_PRICING_SPEC): zone matrix + service level + surcharges.
+const ZONES = { 1:['תל אביב','תל אביב-יפו','תל אביב יפו','רמת גן','גבעתיים','בני ברק'], 2:['הרצליה','רמת השרון','חולון','בת ים','קריית אונו','קרית אונו','גבעת שמואל','אזור','גני תקווה','סביון','אור יהודה'], 3:['ראשון לציון','כפר סבא','רעננה','פתח תקווה','הוד השרון','רמלה','לוד'] };
+const MATRIX = { eco:{1:35,2:55,3:75}, standard:{1:50,2:70,3:115}, flash:{1:85,2:110,3:null} };
+function zoneOf(city){ const c=String(city||'').trim(); for(const z of [1,2,3]){ if(ZONES[z].includes(c)) return z; } return null; }
+function isoDate(d){ return d ? (d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate())) : ""; }
+function isWeekend(iso){ if(!iso) return false; const m=String(iso).match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/); if(!m) return false; const day=new Date(Date.UTC(+m[1],+m[2]-1,+m[3])).getUTCDay(); return day===5||day===6; }
+function computeEstimate(){
+  const service = (document.querySelector('input[name="service"]:checked')||{}).value || "standard";
+  const size = (document.querySelector('input[name="size"]:checked')||{}).value || "small";
+  const pz = zoneOf(geo.pickupCity), dz = zoneOf(geo.dropoffCity);
+  const zone = (pz && dz) ? Math.max(pz,dz) : null;
+  let base = (zone && MATRIX[service]) ? MATRIX[service][zone] : null;
+  if(service==="flash" && zone===3) base = null;
+  const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
+  set("est-zone", zone ? ("אזור "+zone) : "-");
+  const sizeRow = document.getElementById("est-size-row"); if(sizeRow) sizeRow.hidden = (size!=="medium");
+  set("est-base", base!=null ? "₪"+base : "-");
+  const hour = sched.service==="flash" ? new Date().getHours() : (sched.window ? parseInt(sched.window.split(":")[0],10) : -1);
+  const wknd = isWeekend(isoDate(sched.date));
+  let surch = 0; const labels = [];
+  if(hour>=19 && hour<22){ surch += 30; labels.push("ערב +₪30"); }
+  if(wknd){ labels.push("סופ״ש ×1.5"); }
+  const surchRow = document.getElementById("est-surch-row");
+  if(surchRow){ if(labels.length){ surchRow.hidden=false; set("est-surch-label", labels.join(" · ")); set("est-surch", "₪"+surch); } else { surchRow.hidden=true; } }
+  let total = base!=null ? base + (size==="medium"?15:0) + surch : null;
+  if(total!=null && wknd){ total = Math.round(total*1.5); } else if(total!=null){ total = Math.round(total); }
+  set("price-val", total!=null ? total : "-");
+}
+function loadMapsScript(){
+  fetch("/maps-key").then(r=>r.json()).then(d=>{
+    const key = d && d.key; if(!key) return;
+    const s = document.createElement("script");
+    s.src = "https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(key)+"&libraries=places,geometry&language=iw&region=il&v=weekly&callback=__initAutocomplete";
+    s.async = true; s.defer = true;
+    document.head.appendChild(s);
+  }).catch(()=>{});
+}
+window.__initAutocomplete = function(){
+  try {
+    if(!window.google || !google.maps || !google.maps.places) return;
+    const opts = { componentRestrictions:{country:"il"}, types:["geocode"], fields:["formatted_address","address_components","geometry"], bounds:{north:32.20,south:31.90,east:34.95,west:34.70}, strictBounds:true };
+    const a1 = new google.maps.places.Autocomplete(document.getElementById("f-pickup-addr"), opts);
+    const a2 = new google.maps.places.Autocomplete(document.getElementById("f-dropoff-addr"), opts);
+    const onPick = (which) => () => {
+      const p = (which==="pickup"?a1:a2).getPlace();
+      if(!p || !p.geometry) return;
+      const loc = p.geometry.location;
+      const lat = typeof loc.lat==="function" ? loc.lat() : loc.lat;
+      const lng = typeof loc.lng==="function" ? loc.lng() : loc.lng;
+      // Hard geographic gate: reject anything outside the Gush-Dan service rectangle.
+      if(!inGushDanBounds(lat,lng)){
+        document.getElementById(which==="pickup"?"f-pickup-addr":"f-dropoff-addr").value = "";
+        showError(which==="pickup" ? "כתובת האיסוף מחוץ לטווח השירות - אנו פעילים בגוש דן בלבד." : "כתובת היעד מחוץ לטווח השירות - אנו פעילים בגוש דן בלבד.");
+        return;
+      }
+      const comps = p.address_components || [];
+      const city = comps.map(c=> (c.types||[]).some(t=>["locality","postal_town","administrative_area_level_2"].includes(t)) ? c.long_name : null).filter(Boolean)[0] || "";
+      if(which==="pickup"){ geo.pickupLat=lat; geo.pickupLng=lng; geo.pickupCity=city; }
+      else { geo.dropoffLat=lat; geo.dropoffLng=lng; geo.dropoffCity=city; }
+      if(p.formatted_address){ document.getElementById(which==="pickup"?"f-pickup-addr":"f-dropoff-addr").value = p.formatted_address; }
+      maybeDistance();
+    };
+    a1.addListener("place_changed", onPick("pickup"));
+    a2.addListener("place_changed", onPick("dropoff"));
+  } catch(e){ console.warn("EdenMish Maps init failed:", e); }
+};
+function maybeDistance(){
+  if(geo.pickupLat==null || geo.dropoffLat==null) return;
+  try {
+    const svc = new google.maps.DistanceMatrixService();
+    svc.getDistanceMatrix({
+      origins:[{lat:geo.pickupLat,lng:geo.pickupLng}],
+      destinations:[{lat:geo.dropoffLat,lng:geo.dropoffLng}],
+      travelMode:"DRIVING", unitSystem:google.maps.UnitSystem.METRIC
+    }, (resp, status)=>{
+      if(status!=="OK" || !resp || !resp.rows[0] || !resp.rows[0].elements[0] || !resp.rows[0].elements[0].distance) return;
+      geo.distanceKm = Math.round((resp.rows[0].elements[0].distance.value/1000)*100)/100;
+      if(distEl) distEl.textContent = geo.distanceKm + " ק״מ";
+      computeEstimate();
+    });
+  } catch(e){}
+}
+loadMapsScript();
+
+// ---- Service area + business-hours scheduling (mirrors eden-funnel.liquid) ----
+const EDEN_ZONES = ['תל אביב','תל אביב-יפו','תל אביב יפו','רמת גן','גבעתיים','בני ברק','הרצליה','רמת השרון','הוד השרון','קריית אונו','קרית אונו','גבעת שמואל','אור יהודה','בת ים','חולון','ראשון לציון','כפר סבא','רעננה','פתח תקווה','אזור','גני תקווה','סביון','רמלה','לוד'];
+// Hard geographic gate (Gush-Dan service rectangle). strictBounds only biases the
+// dropdown; this reliably rejects out-of-area selections (e.g. far-out localities).
+function inGushDanBounds(lat,lng){ return lat>=31.90 && lat<=32.20 && lng>=34.70 && lng<=34.95; }
+const DAY_NAMES = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
+const WD_HOURS = { start: 9, end: 20 };
+const FRI_HOURS = { start: 8, end: 13 };
+// Flash is present-moment only: last immediate order this many minutes before close.
+const FLASH_LAST_ORDER_BUFFER_MIN = 0;
+const sched = { service: "standard", dateType: "", day: null, date: null, window: "" };
+function pad2(n){ return (n < 10 ? "0" : "") + n; }
+function schedHours(day){ if (day === 6) return null; if (day === 5) return FRI_HOURS; return WD_HOURS; }
+function genWindows(service, dateType){
+  const day = sched.day; if (day == null) return [];
+  const h = schedHours(day); if (!h) return [];
+  let startH = h.start, endH = h.end;
+  if (dateType === "today") { const curH = new Date().getHours(); startH = Math.max(startH, curH + 3); }
+  const WIN = 3, wins = [];
+  for (let hh = startH; hh + WIN <= endH; hh++) wins.push(pad2(hh) + ":00-" + pad2(hh + WIN) + ":00");
+  return wins;
+}
+function noWindowsMsg(dateType){
+  if (sched.day === 6) return "בשבת ובחגים השירות אינו פעיל - בחרו יום אחר.";
+  const h = schedHours(sched.day);
+  if (dateType === "today" && h) return "לא נותרו חלונות זמן להיום (שעות הפעילות עד " + pad2(h.end) + ":00) - בחרו יום אחר.";
+  return "אין חלונות זמן זמינים בתאריך זה - בחרו יום אחר.";
+}
+function fmtChipDate(d){ return DAY_NAMES[d.getDay()] + " " + pad2(d.getDate()) + "/" + pad2(d.getMonth() + 1); }
+function renderDateChips(){
+  const root = document.getElementById("sched-dates"); if (!root) return;
+  root.innerHTML = "";
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const chips = []; const d = new Date(today);
+  for (let i = 0; i < 8 && chips.length < 4; i++) {
+    const day = d.getDay();
+    const prefix = i === 0 ? "היום · " : (i === 1 ? "מחר · " : "");
+    chips.push({ date: new Date(d), day, label: prefix + fmtChipDate(d), dateType: i === 0 ? "today" : "future", closed: day === 6 });
+    d.setDate(d.getDate() + 1);
+  }
+  sched._chips = chips;
+  chips.forEach((c, idx) => {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = c.label;
+    b.className = "px-3 py-2 rounded-lg border text-label-bold transition-all " +
+      (c.closed ? "border-outline-variant text-on-surface-variant opacity-40 line-through"
+                : "border-outline-variant text-on-surface hover:border-primary");
+    if (!c.closed) b.addEventListener("click", () => selectDate(idx));
+    root.appendChild(b);
+  });
+}
+function selectDate(idx){
+  const c = sched._chips[idx]; if (!c) return;
+  sched.dateType = c.dateType; sched.day = c.day; sched.date = c.date; sched.window = "";
+  const root = document.getElementById("sched-dates");
+  Array.from(root.children).forEach((b, i) => {
+    b.style.borderColor = i === idx ? "#dfb7ff" : ""; b.style.background = i === idx ? "rgba(223,183,255,.12)" : "";
+  });
+  renderWindows();
+}
+function styleWinBtn(b, sel){ if(!b) return; b.style.borderColor = sel ? "#dfb7ff" : ""; b.style.background = sel ? "rgba(223,183,255,.12)" : ""; }
+function renderWindows(){
+  const wg = document.getElementById("sched-windows"); const hint = document.getElementById("sched-hint");
+  if (!sched.dateType) { if (wg) wg.innerHTML = ""; if (hint) hint.textContent = ""; return; }
+  const wins = genWindows(sched.service, sched.dateType);
+  if (!wins.length) { sched.window = ""; if (wg) wg.innerHTML = ""; if (hint) hint.textContent = noWindowsMsg(sched.dateType); computeEstimate(); return; }
+  // Auto-select first available window if none chosen or previous pick no longer valid.
+  // Fixes: picking a date left sched.window empty → "נא לבחור מועד" on submit.
+  if (!wins.includes(sched.window)) sched.window = wins[0];
+  if (wg) {
+    wg.innerHTML = "";
+    wins.forEach(w => {
+      const b = document.createElement("button"); b.type = "button"; b.textContent = w;
+      b.className = "px-3 py-2 rounded-lg border border-outline-variant text-on-surface hover:border-primary font-label-bold text-center";
+      styleWinBtn(b, w === sched.window);
+      b.addEventListener("click", () => {
+        sched.window = w;
+        Array.from(wg.children).forEach(x => styleWinBtn(x, false));
+        styleWinBtn(b, true);
+        if (hint) hint.textContent = sched.service === "flash" ? "Flash - השליחות תושלם תוך עד 90 דקות" : "איסוף החל מהחלון שנבחר, מסירה באותו יום";
+        computeEstimate();
+      });
+      wg.appendChild(b);
+    });
+  }
+  if (hint) hint.textContent = sched.service === "flash" ? "Flash - השליחות תושלם תוך עד 90 דקות" : "איסוף החל מהחלון שנבחר, מסירה באותו יום";
+  computeEstimate();
+}
+function flashAvailableNow(){
+  const now = new Date();
+  const h = schedHours(now.getDay());
+  if (!h) return false;
+  const mins = now.getHours() * 60 + now.getMinutes();
+  return mins >= h.start * 60 && mins < h.end * 60 - FLASH_LAST_ORDER_BUFFER_MIN;
+}
+function renderFlashImmediate(){
+  const flashEl = document.getElementById("sched-flash");
+  const hint = document.getElementById("sched-hint");
+  if (!flashEl) return;
+  if (flashAvailableNow()){
+    const now = new Date();
+    sched.dateType = "today"; sched.day = now.getDay(); sched.date = now; sched.window = "NOW";
+    flashEl.innerHTML =
+      '<div class="bg-secondary-container/20 border-2 border-secondary rounded-xl p-stack-md flex items-center gap-stack-sm">' +
+      '<span class="material-symbols-outlined text-secondary text-3xl">bolt</span>' +
+      '<div><h4 class="font-label-bold text-on-surface">משלוח מיידי - עכשיו</h4>' +
+      '<p class="text-label-sm text-on-surface-variant">איסוף מיידי · מסירה עד 90 דקות. ההזמנה תישלח בעדיפות גבוהה לשיגור מיידי ותוצג בלוח הבקרה.</p></div>' +
+      '</div>';
+    if (hint) hint.textContent = "Flash - שיגור מיידי, השליחות תושלם תוך עד 90 דקות";
+  } else {
+    sched.dateType = ""; sched.day = null; sched.date = null; sched.window = "";
+    flashEl.innerHTML =
+      '<div class="bg-error-container/30 border border-error/40 rounded-xl p-stack-md">' +
+      '<p class="text-label-bold text-error">שירות Flash זמין לשיגור מיידי בשעות הפעילות בלבד</p>' +
+      '<p class="text-label-sm text-on-surface-variant mt-1">א׳-ה׳ 09:00-20:00 · ו׳ 08:00-13:00 · שבת סגור. כרגע מחוץ לשעות הפעילות - בחרו שירות Standard או Eco, או חזרו בשעות הפעילות.</p>' +
+      '</div>';
+    if (hint) hint.textContent = "";
+  }
+  computeEstimate();
+}
+function renderSchedule(){
+  const flash = sched.service === "flash";
+  const datesEl = document.getElementById("sched-dates");
+  const customEl = document.getElementById("sched-custom-wrap");
+  const winEl = document.getElementById("sched-windows");
+  const flashEl = document.getElementById("sched-flash");
+  if (datesEl) datesEl.hidden = flash;
+  if (customEl) customEl.hidden = flash;
+  if (winEl) winEl.hidden = flash;
+  if (flashEl) flashEl.hidden = !flash;
+  if (flash){ renderFlashImmediate(); }
+  else { if (flashEl) flashEl.innerHTML = ""; renderWindows(); }
+}
+const customDateEl = document.getElementById("sched-custom-date");
+if (customDateEl) {
+  customDateEl.min = new Date().toISOString().slice(0, 10);
+  customDateEl.addEventListener("change", () => {
+    const dv = customDateEl.value; if (!dv) return;
+    const d = new Date(dv + "T00:00:00"); sched.day = d.getDay(); sched.date = d;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    sched.dateType = d.getTime() === today.getTime() ? "today" : "future"; sched.window = "";
+    renderWindows();
+  });
+}
+renderDateChips();
+document.querySelectorAll('input[name="service"]').forEach(input => {
+  input.addEventListener("change", e => { sched.service = e.target.value; renderSchedule(); computeEstimate(); });
+});
+document.querySelectorAll('input[name="size"]').forEach(input => input.addEventListener("change", computeEstimate));
+computeEstimate();
+// Input label focus micro-interaction
+document.querySelectorAll('input[type="text"], input[type="tel"], input[type="email"]').forEach(input => {
+  input.addEventListener("focus", () => { const l = input.parentElement.querySelector("label"); if (l) l.classList.replace("text-on-surface-variant", "text-primary"); });
+  input.addEventListener("blur",  () => { const l = input.parentElement.querySelector("label"); if (l) l.classList.replace("text-primary", "text-on-surface-variant"); });
+});
+
+const form = document.getElementById("booking-form");
+const errBox = document.getElementById("form-error");
+const submitBtn = document.getElementById("submit-btn");
+const ilPhone = /^(?:\+972|972|0)(?:[23489]|5[0-9]|77)-?\d{3,4}-?\d{3,4}$/;
+
+function showError(msg) {
+  errBox.textContent = msg;
+  errBox.classList.remove("hidden");
+  errBox.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+function clearError() { errBox.classList.add("hidden"); errBox.textContent = ""; }
+
+function combineAddr(address, floor, apt, contact) {
+  const parts = [address];
+  if (floor) parts.push("קומה " + floor);
+  if (apt) parts.push("דירה " + apt);
+  if (contact) parts.push("איש קשר: " + contact);
+  return parts.filter(Boolean).join(", ");
+}
+function cityOf(address) {
+  const parts = String(address || "").split(",").map(s => s.trim()).filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : "";
+}
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  clearError();
+  const fd = new FormData(form);
+  const name = (fd.get("name") || "").toString().trim();
+  const phone = (fd.get("phone") || "").toString().trim();
+  const email = (fd.get("email") || "").toString().trim();
+  const size = (fd.get("size") || "small").toString();
+  const service = (fd.get("service") || "standard").toString();
+  const pickupAddress = (fd.get("pickup_address") || "").toString().trim();
+  const dropoffAddress = (fd.get("dropoff_address") || "").toString().trim();
+
+  if (!name) return showError("נא למלא שם מלא.");
+  if (!ilPhone.test(phone.replace(/\s/g, ""))) return showError("נא למלא מספר טלפון ישראלי תקין.");
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return showError("נא למלא כתובת אימייל תקינה.");
+  if (!pickupAddress) return showError("נא למלא כתובת איסוף.");
+  if (!dropoffAddress) return showError("נא למלא כתובת יעד.");
+
+  // Require selecting both addresses from the autocomplete dropdown (when Maps is
+  // loaded) so coordinates + a real city are sent → exact pricing, no manual review.
+  // If Maps failed to load, we fall through (order becomes review) rather than block.
+  if (window.google && google.maps && google.maps.places) {
+    if (geo.pickupLat == null) return showError("נא לבחור כתובת איסוף מהרשימה (הקלידו ובחרו הצעה).");
+    if (geo.dropoffLat == null) return showError("נא לבחור כתובת יעד מהרשימה (הקלידו ובחרו הצעה).");
+    if (geo.pickupCity && EDEN_ZONES.indexOf(geo.pickupCity) < 0) return showError("כתובת האיסוף מחוץ לטווח השירות - אנו פעילים בגוש דן בלבד.");
+    if (geo.dropoffCity && EDEN_ZONES.indexOf(geo.dropoffCity) < 0) return showError("כתובת היעד מחוץ לטווח השירות - אנו פעילים בגוש דן בלבד.");
+  }
+  if (service === "flash") {
+    if (!flashAvailableNow()) return showError("שירות Flash זמין לשיגור מיידי בשעות הפעילות בלבד (א׳-ה׳ 09:00-20:00 · ו׳ 08:00-13:00). בחרו Standard או Eco, או חזרו בשעות הפעילות.");
+    const pz = zoneOf(geo.pickupCity || cityOf(pickupAddress));
+    const dz = zoneOf(geo.dropoffCity || cityOf(dropoffAddress));
+    const fzone = (pz && dz) ? Math.max(pz, dz) : null;
+    if (fzone !== 1 && fzone !== 2) return showError("שירות Flash זמין באזורים 1-2 בלבד. לאזור זה בחרו Standard או Eco.");
+  } else if (!sched.window) {
+    return showError("נא לבחור מועד לאיסוף (תאריך וחלון זמן).");
+  }
+  if (!document.getElementById("agree-terms").checked) return showError("נא לאשר את התקנון והסכמה לקבלת עדכונים.");
+
+  const hour = service === "flash" ? new Date().getHours() : (sched.window ? parseInt(sched.window.split(":")[0], 10) : -1);
+  const svcLabel = service === "eco" ? "Eco" : service === "flash" ? "Flash" : "Standard";
+  const sizeLabel = size === "medium" ? "בינוני" : "קטן";
+  const payload = {
+    name, phone, email,
+    service, size,
+    package: svcLabel + " · " + sizeLabel,   // legacy column (ops display)
+    urgent: service === "flash" ? 1 : 0,     // legacy column
+    pickup: combineAddr(pickupAddress, fd.get("pickup_floor"), fd.get("pickup_apt"), fd.get("pickup_contact")),
+    dropoff: combineAddr(dropoffAddress, fd.get("dropoff_floor"), fd.get("dropoff_apt"), fd.get("dropoff_contact")),
+    pickup_city: geo.pickupCity || cityOf(pickupAddress),
+    dropoff_city: geo.dropoffCity || cityOf(dropoffAddress),
+    when_text: service === "flash" ? "מיידי · עכשיו (Flash)" : (sched.window + (sched.date ? (" · " + pad2(sched.date.getDate()) + "/" + pad2(sched.date.getMonth() + 1)) : "")),
+    when_date: service === "flash" ? isoDate(new Date()) : isoDate(sched.date),
+    when_hour: hour,
+    asap: service === "flash" ? 1 : 0,
+    notes: (fd.get("notes") || "").toString().trim()
+  };
+  if (geo.pickupLat != null) { payload.pickup_lat = geo.pickupLat; payload.pickup_lng = geo.pickupLng; }
+  if (geo.dropoffLat != null) { payload.dropoff_lat = geo.dropoffLat; payload.dropoff_lng = geo.dropoffLng; }
+  if (geo.distanceKm != null) payload.distance_km = geo.distanceKm;
+
+  submitBtn.disabled = true;
+  const original = submitBtn.textContent;
+  submitBtn.textContent = "שולח הזמנה…";
+  try {
+    const res = await fetch(API + "/api/orders" + (TEST_MODE ? "?test=1" : ""), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    let data = {};
+    try { data = await res.json(); } catch {}
+    if (!res.ok) {
+      if (res.status === 429) return showError("שלחנו יותר מדי בקשות. נא להמתין מספר דקות ולנסות שוב.");
+      if (data && data.error && data.error.startsWith("invalid phone")) return showError("מספר הטלפון אינו תקין.");
+      if (data && data.error && data.error.startsWith("invalid email")) return showError("כתובת האימייל אינה תקינה.");
+      if (data && data.error && data.error.startsWith("missing")) return showError("חסר שדה חובה: " + data.error.replace("missing ", ""));
+      return showError("שגיאה בשליחת ההזמנה. נא לנסות שוב או לפנות אלינו.");
+    }
+    const q = new URLSearchParams({
+      token: data.token || "",
+      tracking_url: data.tracking_url || "",
+      payment_url: data.payment_url || "",
+      price: data.price != null ? String(data.price) : "",
+      review: data.review ? "1" : "0"
+    });
+    window.location.href = "/success.html?" + q.toString();
+  } catch (err) {
+    showError("בעיית תקשורת. בדקו את החיבור לרשת ונסו שוב.");
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = original;
+  }
+});
+</script>
+<script src="/assets/mobile-nav.js" defer></script>
+</body>
+</html>

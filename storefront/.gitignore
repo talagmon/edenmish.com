@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env / secrets — NEVER commit (this is a public frontend)
+.env
+.env.*
+!.env.example
+
+# Cloudflare / Pages local
+.wrangler/
+.cloudflare/
+
+# Editor
+.vscode/
+.idea/
+
+# Build outputs
+dist/
+build/
+.cache/
+
+# Stitch design reference screenshots — large binaries, not shipped.
+# The code.html / *.md comp files in design/ ARE tracked (text reference).
+design/**/*.png

@@ -1,0 +1,20 @@
+{
+  "name": "edenmish-v2",
+  "version": "0.1.0",
+  "private": true,
+  "description": "EdenMish v2 storefront — static frontend (Cloudflare Pages) for v2.edenmish.com.",
+  "scripts": {
+    "build": "tailwindcss -i ./src/styles.css -o ./public/assets/styles.css --minify",
+    "dev": "tailwindcss -i ./src/styles.css -o ./public/assets/styles.css --watch",
+    "serve": "wrangler pages dev public --port 8788",
+    "deploy": "wrangler pages deploy public",
+    "test": "node --test tests/pricing.test.js tests/frontend.test.js tests/api.test.js",
+    "test:api": "API_URL=https://find.edenmish.com node --test tests/api.test.js"
+  },
+  "devDependencies": {
+    "@tailwindcss/container-queries": "^0.1.1",
+    "@tailwindcss/forms": "^0.5.9",
+    "tailwindcss": "^3.4.13",
+    "wrangler": "^3.80.0"
+  }
+}

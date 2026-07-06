@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html class="dark" dir="rtl" lang="he">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+<title>EdenMish | אודות וצור קשר</title>
+<meta name="description" content="EdenMish - שירות שליח אישי בגוש דן. צרו קשר, קראו שאלות נפוצות והזמינו משלוח."/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/assets/styles.css"/>
+<style>
+  .glow-mint { box-shadow: 0 0 15px rgba(145, 211, 200, 0.2); }
+  .glow-purple { box-shadow: 0 0 20px rgba(91, 42, 134, 0.3); }
+  .gradient-text {
+    background: linear-gradient(135deg, #dfb7ff 0%, #91d3c8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .faq-transition { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; }
+  .faq-item.active .faq-transition { max-height: 240px; }
+  .faq-item.active .chevron { transform: rotate(180deg); }
+</style>
+</head>
+<body class="font-body-md text-body-md">
+<!-- TopNavBar -->
+<nav class="fixed top-0 w-full z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border shadow-sm">
+<div class="flex flex-row-reverse justify-between items-center px-gutter-desktop max-w-container-max mx-auto h-16">
+<a href="/" class="font-display-lg text-headline-md font-bold text-primary">EdenMish</a>
+<div class="hidden md:flex items-center gap-stack-lg">
+<a class="text-on-surface-variant hover:text-primary transition-colors duration-200" href="/">בית</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors duration-200" href="/booking.html">שירותים</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors duration-200" href="/track.html">מעקב משלוחים</a>
+<a class="text-primary font-bold border-b-2 border-primary pb-1" href="/about.html">אודות</a>
+</div>
+<a href="/booking.html" class="bg-primary-container text-on-primary-container px-6 py-2 rounded-lg font-label-bold active:scale-95 transition-transform hover:opacity-90">שלחו עכשיו</a>
+</div>
+</nav>
+<main class="pt-24 pb-stack-lg px-gutter-mobile md:px-gutter-desktop max-w-container-max mx-auto relative overflow-hidden">
+<div class="absolute top-[-10%] right-[-10%] w-96 h-96 bg-primary opacity-10 blur-[120px] rounded-full pointer-events-none"></div>
+<div class="absolute bottom-[20%] left-[-10%] w-80 h-80 bg-secondary opacity-10 blur-[100px] rounded-full pointer-events-none"></div>
+<!-- Hero -->
+<section class="grid grid-cols-1 md:grid-cols-2 gap-stack-lg items-center mb-24">
+<div class="order-2 md:order-1">
+<h1 class="font-display-lg text-headline-lg mb-stack-md leading-tight">השליחות האישית של <span class="gradient-text">עדן אריאלי</span></h1>
+<p class="text-body-lg text-on-surface-variant mb-stack-lg max-w-xl">EdenMish הוקמה מתוך הבנה שהעיר המהירה דורשת יותר מחברת שליחויות רגילה. אנחנו מציעים מודל של שליח אישי - כזה שמכיר אתכם, את העסק שלכם ואת הצרכים הייחודיים שלכם. בלב גוש דן, אנחנו מגדירים מחדש מהי מהירות ודיוק.</p>
+<div class="flex gap-stack-md">
+<div class="glass-card p-stack-md rounded-xl flex-1">
+<span class="material-symbols-outlined text-secondary mb-2" style="font-size: 32px;">speed</span>
+<h3 class="font-headline-md text-primary mb-1">דיוק מירבי</h3>
+<p class="text-label-sm text-on-surface-variant">הגעה תוך דקות, לא שעות.</p>
+</div>
+<div class="glass-card p-stack-md rounded-xl flex-1">
+<span class="material-symbols-outlined text-secondary mb-2" style="font-size: 32px;">verified_user</span>
+<h3 class="font-headline-md text-primary mb-1">אחריות אישית</h3>
+<p class="text-label-sm text-on-surface-variant">החבילה שלכם בידיים בטוחות.</p>
+</div>
+</div>
+</div>
+<div class="order-1 md:order-2 flex justify-center">
+<div class="relative w-full aspect-square max-w-[450px]">
+<div class="absolute inset-0 bg-primary opacity-20 blur-3xl rounded-full scale-75"></div>
+<img class="w-full h-full object-cover rounded-3xl relative z-10 glass-card shadow-2xl" alt="פורטרט של עדן אריאלי, היזם שמאחורי EdenMish" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDXXSFeSQxHiCQAFktptSBgrbz3BspEIGiNC7wldernNXItPH1yjypw5gHtj0l0RNAKyk5Yn3eXRHeeYOSdlRWg2FZjMEOAwjZ8KYuXl4Iu9-eGrcBKdHV8XYQLfCKD6mR8A_Ki_AMQ2hynEOqZ8teeQ1ykccVmrKJ3W2DunLuVWYPRfgYP7zt5iuH-Km1NUV1EfQ2sMZVLtu19vN9vyzKmGeSh-Csa3pjF_syhqIizXVFHkc-gJEdG"/>
+</div>
+</div>
+</section>
+<!-- Contact + Area -->
+<section class="grid grid-cols-1 md:grid-cols-3 gap-stack-md mb-24">
+<div class="md:col-span-2 glass-card p-stack-lg rounded-3xl relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-stack-md opacity-20 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined" style="font-size: 120px;">contact_support</span>
+</div>
+<h2 class="font-headline-lg mb-stack-lg text-primary">צרו איתנו קשר</h2>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-stack-lg relative z-10">
+<a class="flex items-center gap-stack-md group/link" href="mailto:eden@edenmish.com">
+<div class="w-12 h-12 rounded-full bg-primary-container flex items-center justify-center group-hover/link:bg-primary transition-colors">
+<span class="material-symbols-outlined text-white">mail</span>
+</div>
+<div>
+<p class="text-label-sm text-on-surface-variant">אימייל להזמנות</p>
+<p class="font-headline-md">eden@edenmish.com</p>
+</div>
+</a>
+<a class="flex items-center gap-stack-md group/link" href="tel:+972534058498">
+<div class="w-12 h-12 rounded-full bg-secondary-container flex items-center justify-center group-hover/link:bg-secondary transition-colors">
+<span class="material-symbols-outlined text-white">call</span>
+</div>
+<div>
+<p class="text-label-sm text-on-surface-variant">טלפון ישיר</p>
+<p class="font-headline-md" dir="ltr">+972-53-405-8498</p>
+</div>
+</a>
+</div>
+<div class="mt-stack-lg pt-stack-lg border-t border-glass-border space-y-2">
+<p class="text-body-md text-on-surface mb-1">שעות פעילות</p>
+<div class="flex justify-between text-body-md"><span class="text-on-surface-variant">א׳-ה׳</span><b dir="ltr" class="text-on-surface">09:00-20:00</b></div>
+<div class="flex justify-between text-body-md"><span class="text-on-surface-variant">ו׳ / ערבי חג</span><b dir="ltr" class="text-on-surface">08:00-13:00</b></div>
+<div class="flex justify-between text-body-md"><span class="text-on-surface-variant">שבת וחגים</span><b class="text-on-surface">סגור</b></div>
+<p class="text-label-sm text-on-surface-variant pt-2">השליחויות מתבצעות בשעות הפעילות בלבד. זמני האיסוף והמסירה הם הערכה בלבד ואינם מובטחים.</p>
+</div>
+</div>
+<div class="glass-card p-stack-lg rounded-3xl flex flex-col justify-between">
+<div>
+<h3 class="font-headline-md text-secondary mb-stack-sm flex items-center gap-2">
+<span class="material-symbols-outlined">location_on</span>
+אזורי שירות
+</h3>
+<p class="text-body-md text-on-surface-variant">כיסוי מלא ומהיר בכל אזור גוש דן: תל אביב, רמת גן, גבעתיים, בני ברק וחולון.</p>
+</div>
+<div class="mt-stack-md rounded-xl overflow-hidden h-32 relative">
+<img class="w-full h-full object-cover grayscale opacity-50" alt="מפה מסוגננת של גוש דן" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCcNtXziUDw9Ay24OxXPIO2ChuQPt9Fonfb2YzUItEUq4QrramaoCukJogH3oQ8QJHA-Wp4GUzOIlRG-9aVNP0K8N89yaBZvA1q8yhBMO2sZiqcjbu8GhW6FJRSAc9I2Ellqes5BNDXNvdX3HXMIpAoyYm-5Hm7jeJH-4LsAee5xrhL-LJYPEYKvMmkbsCJXEiG2Qzf5HrDX0ap6H18C2rFRImPNIYaCw_CROYcVXwpZWv4AwAVZfKL"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container to-transparent opacity-60"></div>
+</div>
+</div>
+</section>
+<!-- FAQ -->
+<section class="max-w-3xl mx-auto mb-24">
+<h2 class="font-display-lg text-headline-lg mb-stack-lg text-center">שאלות <span class="text-secondary">נפוצות</span></h2>
+<div class="space-y-stack-sm">
+<div class="faq-item glass-card rounded-xl overflow-hidden cursor-pointer active" onclick="toggleFaq(this)">
+<div class="p-stack-md flex justify-between items-center">
+<span class="font-headline-md text-primary">מהן שעות הפעילות למשלוח אקספרס?</span>
+<span class="material-symbols-outlined chevron transition-transform text-on-surface-variant">expand_more</span>
+</div>
+<div class="faq-transition">
+<div class="px-stack-md pb-stack-md text-on-surface-variant">אנו מבצעים משלוחים בימים א׳-ה׳ 09:00-20:00 ובימי ו׳ / ערבי חג 08:00-13:00. בשבת ובחגים השירות סגור. הזמנות שמתקבלות לקראת סוף יום הפעילות יתואמו למועד הפתיחה הבא, אלא אם תואם אחרת מראש במקרים דחופים. זמני האיסוף והמסירה הם הערכה בלבד.</div>
+</div>
+</div>
+<div class="faq-item glass-card rounded-xl overflow-hidden cursor-pointer" onclick="toggleFaq(this)">
+<div class="p-stack-md flex justify-between items-center">
+<span class="font-headline-md text-primary">האם יש כיסוי מחוץ לגוש דן?</span>
+<span class="material-symbols-outlined chevron transition-transform text-on-surface-variant">expand_more</span>
+</div>
+<div class="faq-transition">
+<div class="px-stack-md pb-stack-md text-on-surface-variant">התמחות הליבה שלנו היא גוש דן (ת"א, ר"ג, גבעתיים). משלוחים מחוץ לאזור זה אפשריים בתיאום מראש ובכפוף לזמינות השליחים האישיים שלנו באותו היום.</div>
+</div>
+</div>
+<div class="faq-item glass-card rounded-xl overflow-hidden cursor-pointer" onclick="toggleFaq(this)">
+<div class="p-stack-md flex justify-between items-center">
+<span class="font-headline-md text-primary">מה הזמן הממוצע למסירה?</span>
+<span class="material-symbols-outlined chevron transition-transform text-on-surface-variant">expand_more</span>
+</div>
+<div class="faq-transition">
+<div class="px-stack-md pb-stack-md text-on-surface-variant">בתוך תל אביב, זמן המסירה הממוצע מרגע האיסוף הוא פחות מ-45 דקות. בגוש דן המורחב, אנו מתחייבים למסירה בתוך 90 דקות לכל היותר.</div>
+</div>
+</div>
+</div>
+</section>
+<!-- CTA -->
+<section class="glass-card rounded-3xl p-stack-lg text-center relative overflow-hidden">
+<div class="relative z-10">
+<h2 class="font-display-lg text-headline-lg mb-stack-md">מוכנים למשלוח הבא שלכם?</h2>
+<p class="text-body-lg text-on-surface-variant mb-stack-lg">הזמינו עכשיו ותיהנו משירות אישי, מהיר ואמין ללא פשרות.</p>
+<div class="flex flex-col sm:flex-row justify-center gap-stack-md">
+<a href="/booking.html" class="bg-primary-container text-on-primary-container px-12 py-4 rounded-full font-label-bold text-lg hover:bg-primary hover:text-on-primary transition-all glow-purple">הזמן שליחות</a>
+<a href="/track.html" class="glass-card text-on-surface px-12 py-4 rounded-full font-label-bold text-lg border border-secondary hover:bg-secondary/10 transition-all">מעקב משלוח</a>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="w-full pt-stack-lg pb-stack-md bg-surface-container-lowest border-t border-glass-border">
+<div class="flex flex-col md:flex-row-reverse justify-between items-center px-gutter-desktop max-w-container-max mx-auto gap-stack-md">
+<div class="font-display-lg text-headline-md font-bold text-primary">EdenMish</div>
+<div class="flex flex-wrap justify-center gap-x-stack-lg gap-y-stack-sm">
+<a class="text-on-surface-variant hover:text-secondary transition-colors font-body-md" href="/">בית</a>
+<a class="text-on-surface-variant hover:text-secondary transition-colors font-body-md" href="/booking.html">שירותים</a>
+<a class="text-on-surface-variant hover:text-secondary transition-colors font-body-md" href="/track.html">מעקב משלוחים</a>
+<a class="text-on-surface-variant hover:text-secondary transition-colors font-body-md" href="/about.html">אודות</a>
+<a class="text-on-surface-variant hover:text-secondary transition-colors font-body-md" href="/about.html">צור קשר</a>
+<a class="text-on-surface-variant hover:text-secondary transition-colors font-body-md" href="#">תקנון</a>
+<a class="text-on-surface-variant hover:text-secondary transition-colors font-body-md" href="#">מדיניות פרטיות</a>
+</div>
+<div class="text-on-surface-variant font-body-md text-label-sm">© 2025 EdenMish. כל הזכויות שמורות.</div>
+</div>
+</footer>
+<script>
+function toggleFaq(el) {
+  document.querySelectorAll('.faq-item').forEach(i => { if (i !== el) i.classList.remove('active'); });
+  el.classList.toggle('active');
+}
+</script>
+<script src="/assets/mobile-nav.js" defer></script>
+</body>
+</html>

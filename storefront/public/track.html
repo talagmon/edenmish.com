@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html class="dark" dir="rtl" lang="he">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+<title>EdenMish | מעקב משלוח</title>
+<meta name="description" content="מעקב חי אחר משלוח EdenMish - הזינו מספר מעקב וקבלו עדכון בזמן אמת."/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/assets/styles.css"/>
+<style>
+  .glow-primary { box-shadow: 0 0 20px rgba(223, 183, 255, 0.2); }
+  .status-pulse { animation: tpulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+  @keyframes tpulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .7; transform: scale(1.1); } }
+  .map-gradient-overlay { background: linear-gradient(to top, #0b1326 0%, transparent 40%); }
+  .accent-glow { filter: blur(80px); animation: apulse 4s ease-in-out infinite; }
+  @keyframes apulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+  .otp-input:focus { outline: none; border-color: #dfb7ff; box-shadow: 0 0 15px rgba(223, 183, 255, 0.3); transform: translateY(-2px); }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+  .animate-shake { animation: shake .4s ease-in-out; }
+</style>
+</head>
+<body class="bg-background text-on-background selection:bg-primary/30">
+<div id="toast" class="fixed top-20 left-1/2 -translate-x-1/2 z-[60] glass-panel rounded-full px-stack-md py-2 text-label-bold opacity-0 transition-opacity duration-300 pointer-events-none">מתחבר למערכת המעקב של עדן…</div>
+<!-- Nav -->
+<header class="fixed top-0 w-full z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border shadow-sm h-16">
+<nav class="flex flex-row-reverse justify-between items-center px-gutter-desktop max-w-container-max mx-auto h-full">
+<a href="/" class="font-display-lg text-headline-md font-bold text-primary">EdenMish</a>
+<div class="hidden md:flex gap-8 items-center">
+<a class="font-body-md text-body-md hover:text-primary transition-colors duration-200 text-on-surface-variant" href="/">בית</a>
+<a class="font-body-md text-body-md hover:text-primary transition-colors duration-200 text-on-surface-variant" href="/booking.html">שירותים</a>
+<a class="font-body-md text-body-md text-primary font-bold border-b-2 border-primary pb-1" href="/track.html">מעקב משלוחים</a>
+<a class="font-body-md text-body-md hover:text-primary transition-colors duration-200 text-on-surface-variant" href="/about.html">אודות</a>
+</div>
+<a href="/booking.html" class="bg-primary-container text-on-primary-container px-6 py-2 rounded-lg font-label-bold active:scale-95 transition-transform hover:opacity-90">שלחו עכשיו</a>
+</nav>
+</header>
+
+<main class="pt-24 pb-stack-lg px-gutter-mobile md:px-gutter-desktop max-w-container-max mx-auto relative">
+<div class="fixed top-[-10%] right-[-10%] w-[400px] h-[400px] bg-primary/15 accent-glow rounded-full z-0 pointer-events-none"></div>
+
+<!-- VIEW: ENTRY -->
+<section id="view-entry">
+<div class="mb-stack-lg text-center md:text-right relative z-10">
+<h1 class="font-display-lg text-headline-lg-mobile md:text-display-lg mb-stack-sm text-primary">איפה החבילה שלך?</h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl md:ml-0">הזינו מספר מעקב וקבלו עדכון חי על מיקום השליח וזמן הגעה משוער.</p>
+<form id="entry-form" class="mt-stack-lg max-w-2xl glass-card p-2 rounded-xl flex items-center gap-2 transition-all focus-within:ring-2 focus-within:ring-primary/50">
+<input id="entry-input" class="w-full bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-outline py-3 px-4 font-body-md" placeholder="הזינו מספר מעקב" type="text" dir="ltr"/>
+<button class="bg-primary text-on-primary font-label-bold px-8 py-3 rounded-lg flex items-center gap-2 hover:bg-primary-fixed-dim transition-colors whitespace-nowrap" type="submit">
+<span class="material-symbols-outlined">search</span><span>עקבו</span>
+</button>
+</form>
+<p id="entry-msg" class="hidden mt-4 text-status-alert font-label-bold"></p>
+</div>
+</section>
+
+<!-- VIEW: OTP -->
+<section id="view-otp" class="hidden relative z-10">
+<div class="flex justify-center">
+<div class="w-full max-w-[480px] glass-panel rounded-xl p-8 md:p-12 text-center border border-white/10">
+<div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-container/20 mb-8 border border-primary/20">
+<span class="material-symbols-outlined text-primary text-4xl" style="font-variation-settings: 'FILL' 1;">lock</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface mb-4">אימות זהות</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mb-10 max-w-[320px] mx-auto">שלחנו קוד בן 6 ספרות למייל / לטלפון המקושר למשלוח.</p>
+<div id="otp-container" class="flex flex-row-reverse justify-center gap-2 md:gap-3 mb-6">
+<input class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="0"/>
+<input class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="1"/>
+<input class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="2"/>
+<input class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="3"/>
+<input class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="4"/>
+<input class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="5"/>
+</div>
+<p id="otp-msg" class="text-status-alert font-label-sm mb-6 min-h-[1em]">&nbsp;</p>
+<button id="otp-submit" class="w-full bg-primary py-4 rounded-lg text-on-primary font-bold text-lg hover:shadow-[0_0_20px_rgba(223,183,255,0.4)] transition-all duration-300 active:scale-95 disabled:opacity-60">המשיכו למעקב</button>
+<div class="flex flex-col gap-2 mt-6">
+<p class="font-label-sm text-label-sm text-on-surface-variant">לא קיבלתם את הקוד?</p>
+<button id="otp-resend" type="button" class="text-primary font-bold hover:underline transition-all">שלח קוד שוב</button>
+</div>
+</div>
+</div>
+</section>
+
+<!-- VIEW: TRACK -->
+<section id="view-track" class="hidden relative z-10">
+<div class="flex justify-between items-center mb-stack-md">
+<h1 class="font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-surface">סטטוס משלוח</h1>
+<button id="track-another" class="text-primary font-label-bold hover:underline" type="button">מעקב אחר משלוח אחר</button>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- Map card -->
+<div class="lg:col-span-8 rounded-xl overflow-hidden glass-card h-[420px] relative">
+<div id="live-badge" class="hidden absolute top-4 right-4 z-10 flex items-center gap-2 bg-surface-container/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-glass-border">
+<span class="w-2 h-2 bg-secondary rounded-full status-pulse"></span>
+<span class="font-label-sm text-secondary uppercase tracking-wider">GPS פעיל</span>
+</div>
+<div id="map" class="w-full h-full hidden"></div>
+<div id="map-placeholder" class="absolute inset-0 bg-surface-container-high flex flex-col items-center justify-center text-center p-8">
+<span class="material-symbols-outlined text-[72px] text-primary/40 mb-4">my_location</span>
+<p class="text-on-surface-variant max-w-sm">המפה החיה מוצגת בזמן אמת בעת יציאת השליח לדרך.</p>
+<div class="mt-6 glass-panel px-4 py-2 rounded-full text-label-sm text-on-surface-variant">המפה תופיע אוטומטית כשהשליח יצא לדרך</div>
+<p id="gps-last" class="hidden mt-4 text-label-sm text-on-surface-variant"></p>
+</div>
+</div>
+<!-- Stepper + support -->
+<div class="lg:col-span-4 flex flex-col gap-6">
+<div class="glass-card p-6 rounded-xl flex-1">
+<h3 class="font-headline-md text-headline-md mb-6 border-b border-glass-border pb-4">שלבי המשלוח</h3>
+<div id="stepper" class="relative flex flex-col gap-7 pr-4"></div>
+</div>
+<div class="glass-card p-6 rounded-xl">
+<div class="flex items-center gap-4 mb-5">
+<div class="w-12 h-12 rounded-full bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container">support_agent</span></div>
+<div>
+<h4 class="font-label-bold text-on-surface">תמיכת EdenMish</h4>
+<p class="text-label-sm text-on-surface-variant">זמינים לכל שאלה</p>
+</div>
+</div>
+<a class="w-full bg-[#25D366] text-white flex items-center justify-center gap-3 py-3 rounded-lg font-label-bold hover:brightness-110 transition-all active:scale-[0.98]" href="https://wa.me/972534058498" target="_blank" rel="noopener">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">chat_bubble</span><span>וואטסאפ</span>
+</a>
+</div>
+</div>
+</div>
+<!-- Details -->
+<section class="mt-10">
+<h2 class="font-headline-md text-headline-md mb-6">פרטי המשלוח</h2>
+<div id="details" class="grid grid-cols-1 md:grid-cols-3 gap-6"></div>
+</section>
+</section>
+</main>
+
+<footer class="w-full pt-stack-lg pb-stack-md bg-surface-container-lowest border-t border-glass-border mt-stack-lg">
+<div class="flex flex-col md:flex-row-reverse justify-between items-center px-gutter-desktop max-w-container-max mx-auto gap-stack-md">
+<div class="font-display-lg text-headline-md font-bold text-primary">EdenMish</div>
+<div class="flex flex-wrap justify-center gap-x-stack-lg gap-y-stack-sm text-on-surface-variant font-body-md text-body-md">
+<a class="hover:text-secondary transition-colors" href="/">בית</a>
+<a class="hover:text-secondary transition-colors" href="/booking.html">שירותים</a>
+<a class="hover:text-secondary transition-colors" href="/track.html">מעקב משלוחים</a>
+<a class="hover:text-secondary transition-colors" href="/about.html">אודות</a>
+<a class="hover:text-secondary transition-colors" href="/about.html">צור קשר</a>
+<a class="hover:text-secondary transition-colors" href="#">תקנון</a>
+<a class="hover:text-secondary transition-colors" href="#">מדיניות פרטיות</a>
+</div>
+<p class="text-on-surface-variant font-body-md text-body-md opacity-60">© 2025 EdenMish. כל הזכויות שמורות.</p>
+</div>
+</footer>
+
+<script>
+const API = "https://find.edenmish.com";
+// Customer-visible lifecycle (from the Worker's status model, STATUS_META).
+const FLOW = [
+  ["received","נתקבלה הבקשה"],
+  ["priced","מחיר מחושב אוטומטית"],
+  ["payment_sent","קישור תשלום נשלח"],
+  ["paid","שולם"],
+  ["to_pickup","שליח בדרך לאיסוף"],
+  ["picked_up","נאסף"],
+  ["to_dropoff","שליח בדרך למסירה"],
+  ["delivered","נמסר"]
+];
+const OFF_FLOW = { review:"ההזמנה בבדיקה ידנית - נחזור אליכם עם אישור מחיר", failed:"המסירה נכשלה - ניצור איתכם קשר", cancelled:"ההזמנה בוטלה", refund_pending:"ממתין לזיכוי" };
+const orderOf = (s) => { const i = FLOW.findIndex(f => f[0] === s); return i; };
+const $ = (id) => document.getElementById(id);
+const show = (v) => ["entry","otp","track"].forEach(x => $(`view-${x}`).classList.toggle("hidden", x !== v));
+
+let token = "";
+
+function setToken(t){ token = String(t||"").trim().toLowerCase(); const u = new URL(location.href); if(token){ u.searchParams.set("t", token); } else { u.searchParams.delete("t"); } history.replaceState(null,"",u); }
+
+function entryError(msg){ const e = $("entry-msg"); if(!msg){ e.classList.add("hidden"); e.textContent=""; return; } e.textContent = msg; e.classList.remove("hidden"); }
+
+function showToast(msg){ const t=$("toast"); if(!t) return; t.textContent=msg; t.style.opacity="1"; clearTimeout(t._h); t._h=setTimeout(()=>{ t.style.opacity="0"; }, 2200); }
+
+async function loadOrder(){
+  if(!token){ show("entry"); return; }
+  showToast("מתחבר למערכת המעקב של עדן…");
+  try {
+    const r = await fetch(API + "/api/orders/" + encodeURIComponent(token));
+    if(r.status === 404){ location.href = "/error.html?t=" + encodeURIComponent(token); return; }
+    if(!r.ok){ show("entry"); entryError("לא ניתן לטעון את המשלוח כעת. נסו שוב."); return; }
+    const d = await r.json();
+    if(d.otp_pending){ show("otp"); focusOtp(); }
+    else { renderTrack(d); }
+  } catch(e){ show("entry"); entryError("בעיית תקשורת. בדקו את החיבור ונסו שוב."); }
+}
+
+// ---- Live Google Map (loaded via /maps-key) ----
+let gMap=null, gMarker=null, gDestMarker=null, gTrailLine=null, gDirRenderer=null, gPickupMarker=null, gPoll=null, lastStatus=null;
+function loadMapsForTrack(){
+  fetch("/maps-key").then(r=>r.json()).then(d=>{
+    const key=d&&d.key; if(!key) return;
+    const s=document.createElement("script");
+    s.src="https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(key)+"&language=iw&region=il&callback=__trackMapReady";
+    s.async=true; document.head.appendChild(s);
+  }).catch(()=>{});
+}
+window.__trackMapReady = function(){
+  if(window.__lastTrack){ const o=__lastTrack.order||{}; renderMap(["to_pickup","to_dropoff"].includes(o.status), __lastTrack.gps||null, o, __lastTrack.gpsTrail||null); }
+};
+function renderMap(live, gps, order, trail){
+  const ph=$("map-placeholder"), mapEl=$("map");
+  const hasGps = gps && gps.lat != null;
+  const showMap = (live || lastStatus === "delivered") && hasGps && window.google && google.maps && mapEl;
+  if(showMap){
+    const pos={ lat:Number(gps.lat), lng:Number(gps.lng) };
+    if(!gMap){
+      gMap=new google.maps.Map(mapEl,{ center:pos, zoom:14, disableDefaultUI:true, clickableIcons:false });
+      gMarker=new google.maps.Marker({ position:pos, map:gMap, title:"השליח",
+        icon:{ path:google.maps.SymbolPath.CIRCLE, scale:10, fillColor:"#91d3c8", fillOpacity:1, strokeColor:"#fff", strokeWeight:2 } });
+      if(order && order.dropoff_lat){
+        gDestMarker=new google.maps.Marker({ position:{lat:Number(order.dropoff_lat),lng:Number(order.dropoff_lng)}, map:gMap, title:"יעד מסירה",
+          icon:{ path:google.maps.SymbolPath.CIRCLE, scale:10, fillColor:"#dfb7ff", fillOpacity:1, strokeColor:"#fff", strokeWeight:2 } });
+      }
+    } else { gMarker.setPosition(pos); if(live) gMap.panTo(pos); }
+    mapEl.classList.remove("hidden"); if(ph) ph.classList.add("hidden");
+    const gl=$("gps-last"); if(gl && gps.at){ gl.classList.remove("hidden"); gl.textContent="עדכון מיקום אחרון: "+fmtTime(gps.at); }
+    if(trail && trail.length > 1 && google.maps.Polyline){
+      const tp=trail.map(function(p){ return {lat:Number(p.lat),lng:Number(p.lng)}; });
+      if(!gTrailLine){ gTrailLine=new google.maps.Polyline({ path:tp, strokeColor:"#91d3c8", strokeWeight:3, strokeOpacity:0.7, map:gMap }); }
+      else { gTrailLine.setPath(tp); }
+    }
+    // Driving route overlay (roads) + pickup marker
+    if(order && order.pickup_lat && order.dropoff_lat){
+      if(!gPickupMarker){ gPickupMarker=new google.maps.Marker({ position:{lat:Number(order.pickup_lat),lng:Number(order.pickup_lng)}, map:gMap, title:"נקודת איסוף", icon:{ path:google.maps.SymbolPath.CIRCLE, scale:8, fillColor:"#5b2a86", fillOpacity:0.5, strokeColor:"#fff", strokeWeight:1.5 } }); }
+      if(google.maps.DirectionsService && !gDirRenderer){
+        gDirRenderer=new google.maps.DirectionsRenderer({ suppressMarkers:true, polylineOptions:{ strokeColor:"#5b2a86", strokeWeight:6, strokeOpacity:0.4 }, map:gMap });
+        var ds=new google.maps.DirectionsService();
+        var org=(live&&gps)?pos:{lat:Number(order.pickup_lat),lng:Number(order.pickup_lng)};
+        var dest={lat:Number(order.dropoff_lat),lng:Number(order.dropoff_lng)};
+        ds.route({ origin:org, destination:dest, travelMode:"DRIVING" }, function(res,st){
+          if(st==="OK"){ gDirRenderer.setDirections(res); }
+          else{
+            console.warn("Directions API failed:",st,"— enable Directions API in Google Cloud Console");
+            gDirRenderer.setMap(null);
+            new google.maps.Polyline({ path:[org,dest], strokeColor:"#5b2a86", strokeWeight:3, strokeOpacity:0.5, geodesic:true, map:gMap });
+          }
+        });
+      }
+    }
+  } else {
+    if(mapEl) mapEl.classList.add("hidden"); if(ph) ph.classList.remove("hidden");
+  }
+}
+function startLivePoll(){
+  if(gPoll) return;
+  gPoll=setInterval(async ()=>{
+    try{
+      const r=await fetch(API+"/api/orders/"+encodeURIComponent(token));
+      if(!r.ok) return;
+      const d=await r.json();
+      if(d.otp_pending) return;
+      window.__lastTrack=d;
+      const o=d.order||{};
+      if(o.status!==lastStatus){ renderTrack(d); }
+      else { renderMap(["to_pickup","to_dropoff"].includes(o.status), d.gps||null, d.order||{}, d.gpsTrail||null); }
+    }catch(e){}
+  }, 5000);
+}
+loadMapsForTrack();
+
+function renderTrack(d){
+  const o = d.order || {};
+  const history = Array.isArray(d.history) ? d.history : [];
+  const gps = d.gps || null;
+  const proof = d.proof || null;
+  const cur = o.status;
+  const curIdx = orderOf(cur);
+
+  const stepper = $("stepper");
+  stepper.innerHTML = "";
+  if(curIdx === -1){
+    // Off-flow status (review/failed/cancelled/refund_pending)
+    const notice = document.createElement("div");
+    notice.className = "glass-card p-4 rounded-lg border-r-4 border-r-status-alert text-on-surface font-body-md";
+    notice.textContent = OFF_FLOW[cur] || "סטטוס מיוחד - צרו קשר לפרטים.";
+    stepper.appendChild(notice);
+  } else {
+    FLOW.forEach(([val,label], i) => {
+      const done = i < curIdx;
+      const active = i === curIdx;
+      const row = document.createElement("div");
+      row.className = "flex items-start gap-4 relative" + (active ? "" : (done ? "" : " opacity-40"));
+      const dot = document.createElement("div");
+      dot.className = "z-10 w-4 h-4 rounded-full mt-1.5 " + (active ? "bg-secondary ring-4 ring-secondary/20 status-pulse" : (done ? "bg-secondary ring-4 ring-secondary/20" : "bg-surface-variant"));
+      const txt = document.createElement("div");
+      const h = document.createElement("h4");
+      h.className = "font-label-bold " + (active ? "text-secondary" : "text-on-surface");
+      h.textContent = label;
+      txt.appendChild(h);
+      row.appendChild(dot); row.appendChild(txt);
+      stepper.appendChild(row);
+    });
+  }
+
+  // Live badge + live map (no external redirect — map renders in-page)
+  const live = ["to_pickup","to_dropoff"].includes(cur);
+  $("live-badge").classList.toggle("hidden", !live);
+  lastStatus = cur;
+  window.__lastTrack = d;
+  renderMap(live, gps, o, (d.gpsTrail||[]));
+  startLivePoll();
+
+  // Details
+  $("details").innerHTML = "";
+  const cells = [
+    ["מספר מעקב", (o.token || token || "—").toUpperCase()],
+    ["שולח", o.name || "—"],
+    ["איסוף", o.pickup || "—"],
+    ["מסירה", o.dropoff || "—"],
+    ["שירות", o.service ? (o.service.charAt(0).toUpperCase() + o.service.slice(1)) : (o.package || "—")],
+    ["גודל", o.size === "medium" ? "בינוני" : o.size === "small" ? "קטן" : "—"],
+    ["סטטוס תשלום", o.payment_status || "—"],
+    ["סכום", o.price != null ? "₪" + o.price : "—"],
+    ["מועד", o.when_text || "—"],
+    ["הוזמן ב-", o.created_at ? fmtTime(o.created_at) : "—"]
+  ];
+  if (o.notes) cells.push(["הערות לשליח", o.notes]);
+  cells.forEach(([k,v], idx) => {
+    const card = document.createElement("div");
+    card.className = "glass-card p-5 rounded-xl" + (idx === 0 ? " border-r-4 border-primary" : "");
+    card.innerHTML = `<span class="text-label-sm text-on-surface-variant block mb-1">${esc(k)}</span><span class="text-body-lg font-bold text-on-surface break-all">${esc(String(v))}</span>`;
+    $("details").appendChild(card);
+  });
+
+  // Delivery timeline + prominent PoD (above details)
+  if (cur === "delivered") {
+    if (history.length > 0) {
+      const tc = document.createElement("div");
+      tc.className = "glass-card rounded-2xl p-stack-md mb-stack-md";
+      const TL = { paid: "אושר תשלום", to_pickup: "יציאה לאיסוף", picked_up: "חבילה נאספה", to_dropoff: "בדרך למסירה", delivered: "נמסר" };
+      let th = '<h3 class="font-headline-md text-secondary mb-stack-sm">ציר הזמן</h3><div class="space-y-2">';
+      let startAt = null, endAt = null;
+      history.forEach(function(h){ if(TL[h.status]){ th += '<div class="flex justify-between text-body-md"><span class="text-on-surface">' + TL[h.status] + '</span><span class="text-on-surface-variant text-label-sm">' + fmtTime(h.at) + '</span></div>'; if(h.status==="to_pickup") startAt=h.at; if(h.status==="delivered") endAt=h.at; } });
+      if(startAt && endAt){ var mins=Math.round((endAt-startAt)/60000); th += '<div class="mt-stack-sm pt-stack-sm border-t border-glass-border flex justify-between items-center"><span class="text-on-surface-variant text-label-sm">משך המשלוח</span><b class="text-secondary text-headline-md">' + mins + ' דקות</b></div>'; }
+      th += '</div>';
+      tc.innerHTML = th;
+      $("details").parentNode.insertBefore(tc, $("details"));
+    }
+    if (proof && (proof.photo_url || proof.signature)) {
+      const pc = document.createElement("div");
+      pc.className = "glass-card rounded-2xl p-stack-md mb-stack-md";
+      let phtml = '<div class="flex items-center gap-2 mb-stack-sm"><span class="material-symbols-outlined text-success-mint">verified</span><h3 class="font-headline-md text-success-mint">אישור מסירה</h3></div>';
+      if(proof.photo_url) phtml += '<img src="' + proof.photo_url + '" alt="הוכחת מסירה" class="w-full rounded-xl mb-3" style="max-height:300px;object-fit:cover">';
+      if(proof.signature) phtml += '<div class="mb-3"><p class="text-label-sm text-on-surface-variant mb-1">חתימת הלקוח</p><img src="' + proof.signature + '" alt="חתימה" class="rounded-lg" style="max-height:100px;background:rgba(255,255,255,.04)"></div>';
+      if(proof.receiver_name) phtml += '<p class="text-body-md"><span class="text-on-surface-variant">התקבל על ידי:</span> <b class="text-on-surface">' + esc(proof.receiver_name) + '</b></p>';
+      if(proof.delivery_note) phtml += '<p class="text-label-sm text-on-surface-variant mt-1">' + esc(proof.delivery_note) + '</p>';
+      pc.innerHTML = phtml;
+      $("details").parentNode.insertBefore(pc, $("details"));
+    }
+  }
+
+  show("track");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function fmtTime(t){ try { return new Date(t).toLocaleString("he-IL", { timeZone: "Asia/Jerusalem" }); } catch { return String(t); } }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+
+// ---- Entry ----
+$("entry-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const v = $("entry-input").value.trim();
+  if(!v){ entryError("נא להזין מספר מעקב."); return; }
+  entryError(""); setToken(v); loadOrder();
+});
+$("track-another").addEventListener("click", () => { setToken(""); $("entry-input").value=""; show("entry"); $("entry-input").focus(); });
+
+// ---- OTP ----
+const otpInputs = Array.from(document.querySelectorAll(".otp-input"));
+otpInputs.forEach((inp, i) => {
+  inp.addEventListener("input", () => {
+    inp.value = inp.value.replace(/\D/g,"").slice(0,1);
+    if(inp.value && i < otpInputs.length-1) otpInputs[i+1].focus();
+  });
+  inp.addEventListener("keydown", (e) => { if(e.key === "Backspace" && !inp.value && i>0) otpInputs[i-1].focus(); });
+});
+function focusOtp(){ otpMsg(""); setTimeout(()=>otpInputs[0] && otpInputs[0].focus(), 50); }
+function otpCode(){ return otpInputs.map(i => i.value).join(""); }
+function otpMsg(msg, isErr){ const e=$("otp-msg"); e.textContent = msg || "\u00A0"; e.className = "font-label-sm mb-6 min-h-[1em] " + (isErr===false ? "text-status-delivered" : "text-status-alert"); }
+$("otp-submit").addEventListener("click", async () => {
+  const code = otpCode();
+  if(code.length !== 6){ otpMsg("נא להזין את כל 6 הספרות."); const c=document.querySelector("#view-otp .glass-panel"); c.classList.add("animate-shake"); setTimeout(()=>c.classList.remove("animate-shake"),400); return; }
+  const btn = $("otp-submit"); const orig = btn.textContent; btn.disabled = true; btn.textContent = "מאמת…";
+  try {
+    const r = await fetch(API + "/api/orders/" + encodeURIComponent(token) + "/verify-otp", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ code }) });
+    const d = await r.json().catch(()=>({}));
+    if(d.verified){ otpMsg("מאומת! טוען מעקב…", false); loadOrder(); }
+    else if(d.error === "locked"){ otpMsg("יותר מדי ניסיונות. נסו שוב מאוחר יותר."); }
+    else if(d.error === "expired"){ otpMsg("פג תוקף הקוד. שלחו קוד חדש."); }
+    else { otpMsg("קוד שגוי - נסו שוב."); otpInputs.forEach(i=>i.value=""); otpInputs[0].focus(); }
+  } catch(e){ otpMsg("בעיית תקשורת. נסו שוב."); }
+  finally { btn.disabled = false; btn.textContent = orig; }
+});
+$("otp-resend").addEventListener("click", async () => {
+  const btn = $("otp-resend"); const orig = btn.textContent; btn.textContent = "שולח…";
+  try { await fetch(API + "/api/orders/" + encodeURIComponent(token) + "/resend-otp", { method:"POST" }); otpMsg("קוד חדש נשלח.", false); }
+  catch(e){ otpMsg("לא הצלחנו לשלוח. נסו שוב."); }
+  finally { btn.textContent = orig; }
+});
+
+// ---- init ----
+(function init(){
+  const params = new URLSearchParams(location.search);
+  const t = params.get("t") || params.get("token") || "";
+  if(t){ setToken(t); $("entry-input").value = t; loadOrder(); }
+  else { show("entry"); }
+})();
+</script>
+<script src="/assets/mobile-nav.js" defer></script>
+</body>
+</html>
