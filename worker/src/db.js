@@ -146,7 +146,7 @@ export async function resetRateLimit(DB, key) {
 // One row per order (order_id UNIQUE). upserted when Eden marks delivered.
 
 export async function getDeliveryProof(DB, orderId) {
-  return DB.prepare('SELECT receiver_name, delivery_note, photo_url, created_at, updated_at FROM delivery_proofs WHERE order_id = ?').bind(orderId).first();
+  return DB.prepare('SELECT receiver_name, delivery_note, photo_url, signature, created_at, updated_at FROM delivery_proofs WHERE order_id = ?').bind(orderId).first();
 }
 
 export async function upsertDeliveryProof(DB, orderId, p) {
