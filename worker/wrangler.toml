@@ -14,10 +14,9 @@ routes = [
 BRAND = "EdenMish"
 BOOKING_URL = "https://edenmish.com"
 # Customer-facing storefront root used for every link the Worker emits
-# (tracking magic-links, delivery/rating emails, ops dash deeplink). Today this
-# is the v2 staging site; at apex cutover set STOREFRONT_BASE="https://edenmish.com"
-# in prod — one var change, no code edit. Falls back to BOOKING_URL if unset.
-STOREFRONT_BASE = "https://v2.edenmish.com"
+# (tracking magic-links, delivery/rating emails, ops dash deeplink). Apex cutover
+# complete — edenmish.com is the canonical site. Falls back to BOOKING_URL if unset.
+STOREFRONT_BASE = "https://edenmish.com"
 # MAPS_KEY is a Worker secret (set via `wrangler secret put MAPS_KEY`) — injected into the tracking page.
 WHATSAPP_NUMBER = "972534058498"
 OPS_EMAIL = "eden@edenmish.com"
