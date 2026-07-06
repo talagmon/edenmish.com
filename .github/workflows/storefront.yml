@@ -1,0 +1,53 @@
+name: Storefront
+
+# Builds, tests, and deploys the static storefront (storefront/public) to the
+# edenmish-v2 Cloudflare Pages project (= v2.edenmish.com / dash / track).
+# Path-filtered to storefront/** so Worker-only changes don't trigger a redeploy.
+# Requires CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID repo secrets.
+
+on:
+  push:
+    branches: [main]
+    paths: ['storefront/**']
+  pull_request:
+    branches: [main]
+    paths: ['storefront/**']
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: storefront
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build
+      - name: Run tests
+        run: npm test
+
+  deploy:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+        working-directory: storefront
+      - run: npm run build
+        working-directory: storefront
+      - name: Deploy storefront to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy storefront/public --project-name=edenmish-v2 --branch=main
