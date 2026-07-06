@@ -1,21 +1,27 @@
-import { createOrder, getOrderByToken, getOrderById, listOrders, setOrderStatus, getStatusHistory, addGps, latestGps, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof, listRecentNotificationFailures, listNotificationsForOrder } from './db.js';
+import { createOrder, getOrderByToken, getOrderById, listOrders, setOrderStatus, setOrderRating, getStatusHistory, addGps, latestGps, getGpsTrail, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof, listRecentNotificationFailures, listNotificationsForOrder } from './db.js';
 import { priceOrder } from './pricing.js';
 import { makeSession, checkSession, getCookie, genOtp, hashOtp } from './integrations.js';
 import { createCharge, settleOrder, verifyShopifyWebhook, parseShopifyOrderWebhook } from './payment.js';
 import { trackingHtml, opsHtml } from './pages.js';
 import { corsFor, maskEmail, publicOrderSummary, clientIp, anonKey } from './security.js';
-import { notifyEmail } from './notify.js';
+import { notifyEmail, notifyWhatsApp } from './notify.js';
 import { normalizeIlPhone } from './validate.js';
 
 const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra } });
 const html = (s) => new Response(s, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
-const trackingUrl = (env, token) => `https://find.edenmish.com/t/${token}`;
+// Single source of truth for every customer-facing storefront link the Worker emits
+// (tracking magic-links, delivery/rating emails, ops dash deeplink). Today STOREFRONT_BASE
+// is v2.edenmish.com (staging); at apex cutover operators set STOREFRONT_BASE=https://edenmish.com
+// in prod — one var change, no code edit. BOOKING_URL kept as a legacy fallback.
+const storefrontBase = (env) => (env.STOREFRONT_BASE || env.BOOKING_URL || 'https://edenmish.com').replace(/\/+$/, '');
+const storefrontUrl = (env, path) => storefrontBase(env) + (path || '');
+const trackingUrl = (env, token) => storefrontUrl(env, `/track.html?t=${token}`);
 // Business contact line for customer emails — the EdenMish business number only,
 // never a private number. Single definition so the templates can't drift apart.
 const SUPPORT_LINE = '<p style="color:#777;font-size:13px;margin-top:14px">לשאלות: eden@edenmish.com · 053-405-8498</p>';
 const otpEmailHtml = (otp, url) => `<div dir="rtl" style="font-family:sans-serif;font-size:16px;line-height:1.6">הקוד שלך לאימות הכתובת ב-EdenMish:<div style="font-size:34px;font-weight:800;letter-spacing:6px;color:#5B2A86">${otp}</div>הקוד תקף 10 דקות.${url ? '<div style="margin-top:16px;padding-top:12px;border-top:1px solid #eee"><a href="' + url + '" style="display:inline-block;background:#5B2A86;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:700">מעקב המשלוח שלך ←</a></div>' : ''}</div>`;
-const deliverySummaryHtml = (o) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px"><h2 style="color:#5B2A86;margin:0 0 8px">המשלוח נמסר ✓</h2><p>תודה שבחרתם ב-EdenMish!</p><table style="border-collapse:collapse;font-size:15px"><tr><td style="padding:5px 14px;color:#777">איסוף</td><td style="padding:5px 0">${o.pickup || ''}</td></tr><tr><td style="padding:5px 14px;color:#777">מסירה</td><td style="padding:5px 0">${o.dropoff || ''}</td></tr><tr><td style="padding:5px 14px;color:#777">מחיר</td><td style="padding:5px 0;font-weight:700;color:#C9A96B;font-size:18px">₪${o.price || ''}</td></tr></table>${SUPPORT_LINE}</div>`;
-const paymentConfirmedHtml = (o, url, otp) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px"><h2 style="color:#5B2A86;margin:0 0 8px">התשלום התקבל ✓</h2><p>תודה שבחרתם ב-EdenMish! ההזמנה מאושרת.</p><table style="border-collapse:collapse;font-size:15px"><tr><td style="padding:5px 14px;color:#777">מס׳ הזמנה</td><td style="padding:5px 0">${o.id || ''}</td></tr><tr><td style="padding:5px 14px;color:#777">מחיר</td><td style="padding:5px 0;font-weight:700;color:#C9A96B;font-size:18px">₪${o.price || ''}</td></tr></table><div style="margin:18px 0;padding:14px;background:#F5F2FB;border-radius:10px;text-align:center"><p style="margin:0 0 6px;font-size:14px;color:#555">קוד האימות למעקב המשלוח:</p><div style="font-size:32px;font-weight:800;letter-spacing:6px;color:#5B2A86">${otp || '—'}</div></div><div style="text-align:center"><a href="${url}" style="display:inline-block;background:#5B2A86;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px">מעקב המשלוח שלי ←</a></div>${SUPPORT_LINE}</div>`;
+const deliverySummaryHtml = (env, o) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px;margin:0 auto;background:#0b1326;color:#dae2fd;padding:32px 24px;border-radius:16px"><h1 style="color:#dfb7ff;font-size:26px;margin:0 0 8px">המשלוח נמסר בהצלחה! ✓</h1><p style="color:#cec3d2;margin:0 0 20px;font-size:15px">תודה שבחרתם ב-EdenMish. המשלוח הגיע ליעד.</p><div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:16px;margin-bottom:16px"><div style="margin-bottom:10px"><span style="color:#91d3c8;font-size:12px;display:block">איסוף</span><b style="font-size:16px">${o.pickup || ''}</b></div><div style="margin-bottom:10px"><span style="color:#dfb7ff;font-size:12px;display:block">מסירה</span><b style="font-size:16px">${o.dropoff || ''}</b></div><div><span style="color:#cec3d2;font-size:12px">מחיר </span><b style="color:#91d3c8;font-size:20px">₪${o.price || ''}</b></div></div><div style="text-align:center;margin:20px 0"><p style="color:#91d3c8;font-size:14px;margin:0 0 10px">איך היה השירות? נשמח לדירוג ⭐</p><a href="${storefrontUrl(env, '/delivered.html?t=' + (o.token || ''))}" style="display:inline-block;background:#5b2a86;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700">צפו בהוכחת המסירה ודרגו אותנו ←</a></div>${SUPPORT_LINE}</div>`;
+const paymentConfirmedHtml = (o, url, otp) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px;margin:0 auto;background:#0b1326;color:#dae2fd;padding:32px 24px;border-radius:16px"><h1 style="color:#dfb7ff;font-size:26px;margin:0 0 8px">התשלום התקבל ✓</h1><p style="color:#cec3d2;margin:0 0 20px;font-size:15px">תודה שבחרתם ב-EdenMish! ההזמנה מאושרת.</p><div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:16px;margin-bottom:16px"><div style="margin-bottom:10px"><span style="color:#cec3d2;font-size:12px">מס׳ הזמנה </span><b>#${o.id || ''}</b></div><div><span style="color:#cec3d2;font-size:12px">מחיר </span><b style="color:#91d3c8;font-size:20px">₪${o.price || ''}</b></div></div><div style="margin:18px 0;padding:16px;background:rgba(91,42,134,.2);border:1px solid rgba(91,42,134,.3);border-radius:10px;text-align:center"><p style="margin:0 0 6px;font-size:14px;color:#cec3d2">קוד האימות למעקב המשלוח:</p><div style="font-size:32px;font-weight:800;letter-spacing:6px;color:#dfb7ff">${otp || '—'}</div></div><div style="text-align:center"><a href="${url}" style="display:inline-block;background:#5b2a86;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px">מעקב המשלוח שלי ←</a></div>${SUPPORT_LINE}</div>`;
 const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // Review-flagged orders: immediate confirmation so the customer knows what happens next
 // (previously they got zero contact until after payment — a funnel dead end).
@@ -39,8 +45,10 @@ export default {
     const host = (req.headers.get('host') || '').toLowerCase();
     const path = url.pathname;
     const onFind = host.startsWith('find.');
-    const onOps = host.startsWith('ops.');
+    const onOps = host.startsWith('ops.') || path.startsWith('/api/ops/');
     const cors = corsFor(req, env);
+    // Shadow json() to always include CORS headers (enables cross-origin ops dashboard)
+    const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...cors, ...extra } });
 
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
 
@@ -57,7 +65,7 @@ export default {
 
       let b; try { b = await req.json(); } catch { return json({ error: 'invalid body' }, 400, cors); }
       // Part A — email is required for new public orders (tracking link + OTP go by email).
-      const required = ['name', 'phone', 'email', 'pickup', 'dropoff', 'package'];
+      const required = ['name', 'phone', 'email', 'pickup', 'dropoff'];
       for (const f of required) if (!b[f]) return json({ error: 'missing ' + f }, 400, cors);
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(b.email))) return json({ error: 'invalid email' }, 400, cors);
       // A typo'd phone is a failed delivery — normalize to E.164 or reject up front.
@@ -68,6 +76,20 @@ export default {
       const rules = await getRules(env.DB);
       const pr = priceOrder(b, rules);
       const isReview = pr.review;
+
+      // Server-side hard gates: reject out-of-zone, Flash Zone 3, outside business hours.
+      if (pr.reasons.includes('out_of_zone')) return json({ error: 'out_of_zone' }, 400, cors);
+      if (pr.reasons.includes('flash_unavailable_z3')) return json({ error: 'flash_unavailable_z3' }, 400, cors);
+      if (b.when_date) {
+        const m = String(b.when_date).match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+        if (m) {
+          const day = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay();
+          if (day === 6) return json({ error: 'closed_saturday' }, 400, cors);
+          const hrs = day === 5 ? { s: 8, e: 13 } : { s: 9, e: 20 };
+          const hr = Number(b.when_hour);
+          if (!isNaN(hr) && hr >= 0 && (hr < hrs.s || hr >= hrs.e)) return json({ error: 'outside_hours' }, 400, cors);
+        }
+      }
 
       // 1. Create the D1 order. For exact-price orders a Shopify Draft Order is created
       //    below (PR4); the customer pays its invoice URL through Shopify + PayPlus. The
@@ -109,6 +131,24 @@ export default {
       //    orders skip this (Eden approves the price in ops first). If Shopify isn't
       //    configured (createCharge returns null) or it throws, paymentUrl stays null and
       //    the customer lands on the tracking page (pay-from-tracking / manual coordination).
+      // TEST MODE (no charge): skip Shopify/PayPlus and auto-mark the order paid so
+      // the full tracking + ops flow can be exercised end-to-end. Double-gated — needs
+      // env.TEST_MODE=1 (operator) AND ?test=1 on the request — so it can never affect a
+      // real customer. Delete the TEST_MODE secret before going live.
+      const testMode = (env.TEST_MODE === '1' || env.TEST_MODE === 'true') && url.searchParams.get('test') === '1';
+      if (testMode) {
+        await setOrderStatus(env.DB, created.id, 'paid', { payment_status: 'paid' });
+        try { await recordPayment(env.DB, created.id, { amount: (pr.price || 0) * 100, status: 'paid', payplus_id: 'TEST', paid_at: Date.now() }); } catch (e) {}
+        if (b.email) {
+          try {
+            const otp = genOtp();
+            await setEmailAndOtp(env.DB, created.id, b.email, await hashOtp(env, otp), Date.now() + 10 * 60 * 1000);
+            await verifyOtp(env.DB, created.id); // test mode: skip the OTP gate → tracking immediately viewable
+            await notifyEmail(env, env.DB, { orderId: created.id, template: 'customer_payment_confirmation', recipient: b.email, subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב (בדיקה)', html: paymentConfirmedHtml({ ...created, ...b, email: b.email, price: pr.price }, finalUrl, otp) });
+          } catch (e) {}
+        }
+        return json({ token, tracking_url: finalUrl, payment_url: null, status: 'paid', price: pr.price, review: false, reasons: [], test: true }, 200, cors);
+      }
       let paymentUrl = null;
       if (!isReview) {
         try {
@@ -138,15 +178,21 @@ export default {
       const token = path.split('/')[3];
       const o = await getOrderByToken(env.DB, token);
       if (!o) return json({ error: 'not found' }, 404, cors);
-      // Part B — full PII only after email verification. Unverified access (including
-      // legacy no-email orders) gets the sanitized summary only.
-      if (!o.email_verified) {
+      // Magic-link tracking: the unguessable 22-char token authorizes read-only
+      // viewing — no OTP needed to see live status. OTP is re-enabled ONLY by the
+      // 24-hour post-delivery privacy lock (so an old/leaked link can't harvest PII),
+      // and remains available for sensitive "write" actions (address/phone changes,
+      // B2B history) via /verify-otp.
+      const deliveredAt = o.delivered_at ? Number(o.delivered_at) : null;
+      const privacyLocked = o.status === 'delivered' && deliveredAt && (Date.now() - deliveredAt > 24 * 60 * 60 * 1000);
+      if (privacyLocked && !o.email_verified) {
         return json({ order: publicOrderSummary(o), history: [], gps: null, otp_pending: true }, 200, cors);
       }
       const proofP = o.status === 'delivered' ? getDeliveryProof(env.DB, o.id) : Promise.resolve(null);
-      const [history, gps, proof] = await Promise.all([getStatusHistory(env.DB, o.id), latestGps(env.DB, o.id), proofP]);
+      const trailP = getGpsTrail(env.DB, o.id);
+      const [history, gps, proof, trail] = await Promise.all([getStatusHistory(env.DB, o.id), latestGps(env.DB, o.id), proofP, trailP]);
       delete o.otp_hash;
-      return json({ order: o, history: history.results, gps, proof, otp_pending: false }, 200, cors);
+      return json({ order: o, history: history.results, gps, proof, gpsTrail: trail, otp_pending: false }, 200, cors);
     }
 
     // ---- email OTP verify / resend (public, token-based) ----
@@ -210,13 +256,31 @@ export default {
       return json({ ok: true }, 200, cors);
     }
 
+    // ---- public: customer delivery rating (from v2 delivered.html) ----
+    // Token-gated (22-char unguessable magic link). No OTP required — rating is
+    // submitted from the delivery-confirmation email deep-link, not a sensitive
+    // write. Validates 1-5; idempotent (re-submitting overwrites the rating).
+    if (path.startsWith('/api/orders/') && path.endsWith('/rate') && req.method === 'POST') {
+      const token = path.split('/')[3];
+      const o = await getOrderByToken(env.DB, token);
+      if (!o) return json({ ok: false, error: 'not_found' }, 404, cors);
+      let b; try { b = await req.json(); } catch { b = {}; }
+      const rating = Math.round(Number(b.rating));
+      if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+        return json({ ok: false, error: 'invalid_rating' }, 400, cors);
+      }
+      await setOrderRating(env.DB, o.id, rating);
+      console.log('order_rated', { order: o.id, rating });
+      return json({ ok: true, rating }, 200, cors);
+    }
+
     // ---- customer tracking page (find.) ----
     if (onFind && path.startsWith('/t/')) {
       const token = path.split('/')[2];
       return html(trackingHtml(env, token));
     }
     if (onFind && (path === '/' || path === '')) {
-      return Response.redirect(env.BOOKING_URL || 'https://edenmish.com', 302);
+      return Response.redirect(storefrontBase(env), 302);
     }
 
     // ---- ops dashboard (ops.) ----
@@ -287,7 +351,7 @@ export default {
         if (o) {
           await settleOrder(env, o);
           if (o.email) {
-            try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_delivery_summary', recipient: o.email, subject: 'המשלוח מ-EdenMish נמסר ✓', html: deliverySummaryHtml(o) }); } catch {}
+            try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_delivery_summary', recipient: o.email, subject: 'המשלוח מ-EdenMish נמסר ✓', html: deliverySummaryHtml(env, o) }); } catch {}
           }
         }
       }
@@ -344,15 +408,16 @@ export default {
       const id = Number(path.split('/')[4]);
       let b; try { b = await req.json(); } catch { b = {}; }
       const before = await getOrderById(env.DB, id);
-      await upsertDeliveryProof(env.DB, id, { receiver_name: b.receiver_name, delivery_note: b.delivery_note, photo_url: b.photo_url });
+      await upsertDeliveryProof(env.DB, id, { receiver_name: b.receiver_name, delivery_note: b.delivery_note, photo_url: b.photo_url, signature: b.signature });
       const wasDelivered = !!(before && before.status === 'delivered');
       await setOrderStatus(env.DB, id, 'delivered', { delivered_at: (before && before.delivered_at) || Date.now(), payment_status: 'paid' });
       const o = await getOrderById(env.DB, id);
       if (!wasDelivered && o) {
         await settleOrder(env, o); // no-op in 'immediate' mode; captures in future 'preauth' (Mesh) mode
         if (o.email) {
-          try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_delivery_summary', recipient: o.email, subject: 'המשלוח מ-EdenMish נמסר ✓', html: deliverySummaryHtml(o) }); } catch {}
+          try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_delivery_summary', recipient: o.email, subject: 'המשלוח מ-EdenMish נמסר ✓', html: deliverySummaryHtml(env, o) }); } catch {}
         }
+        try { await notifyWhatsApp(env, env.DB, { orderId: o.id, template: 'customer_delivery_summary', recipient: o.phone, body: 'המשלוח שלך הגיע ✓\n' + (o.dropoff || '') + '\nתודה שבחרת ב-EdenMish!' }); } catch {}
       }
       const proof = await getDeliveryProof(env.DB, id);
       return json({ ok: true, order: o, proof });
@@ -399,6 +464,7 @@ export default {
               try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_payment_confirmation', recipient: custEmail, subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב', html: paymentConfirmedHtml({ ...o, email: custEmail }, trackingUrl(env, o.token), otp) }); } catch {}
             }
             try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'ops_payment_received', recipient: env.OPS_EMAIL, subject: `תשלום התקבל #${o.id} — ₪${o.price}`, html: `${o.name} · ${o.pickup} → ${o.dropoff}<br>המתינו לאישור ויציאה לדרך ב- ops.edenmish.com` }); } catch {}
+            try { await notifyWhatsApp(env, env.DB, { orderId: o.id, template: 'ops_payment_received', recipient: env.WHATSAPP_NUMBER, body: `תשלום התקבל #${o.id} — ₪${o.price}\n${o.name} · ${o.pickup} → ${o.dropoff}\nצפייה ואישור: ${storefrontUrl(env, '/dash.html')}` }); } catch {}
           } else {
             // authorized but not yet captured (future Mesh/preauth mode)
             await env.DB.prepare('UPDATE orders SET shopify_order_id=?, payment_status=? WHERE id=?')

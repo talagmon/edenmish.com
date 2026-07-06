@@ -42,10 +42,14 @@ export async function setOrderStatus(DB, orderId, status, fields = {}) {
 }
 
 export async function getOrderByToken(DB, token) {
-  return DB.prepare(`SELECT * FROM orders WHERE token = ?`).bind(token).first();
+  return DB.prepare(`SELECT * FROM orders WHERE LOWER(token) = LOWER(?)`).bind(token).first();
 }
 export async function getOrderById(DB, id) {
   return DB.prepare(`SELECT * FROM orders WHERE id = ?`).bind(id).first();
+}
+// Customer delivery rating (1-5) submitted from v2 delivered.html. Token-gated.
+export async function setOrderRating(DB, orderId, rating) {
+  await DB.prepare(`UPDATE orders SET rating = ? WHERE id = ?`).bind(rating, orderId).run();
 }
 
 export async function listOrders(DB, limit = 100) {
@@ -61,6 +65,10 @@ export async function addGps(DB, orderId, lat, lng) {
 }
 export async function latestGps(DB, orderId) {
   return DB.prepare(`SELECT lat, lng, at FROM gps_pings WHERE order_id = ? ORDER BY at DESC LIMIT 1`).bind(orderId).first();
+}
+export async function getGpsTrail(DB, orderId) {
+  const r = await DB.prepare(`SELECT lat, lng, at FROM gps_pings WHERE order_id = ? ORDER BY at ASC`).bind(orderId).all();
+  return r.results || [];
 }
 
 export async function recordPayment(DB, orderId, p) {
@@ -145,11 +153,11 @@ export async function upsertDeliveryProof(DB, orderId, p) {
   const now = Date.now();
   const existing = await DB.prepare('SELECT order_id FROM delivery_proofs WHERE order_id = ?').bind(orderId).first();
   if (existing) {
-    await DB.prepare('UPDATE delivery_proofs SET receiver_name = ?, delivery_note = ?, photo_url = ?, updated_at = ? WHERE order_id = ?')
-      .bind(p.receiver_name ?? null, p.delivery_note ?? null, p.photo_url ?? null, now, orderId).run();
+    await DB.prepare('UPDATE delivery_proofs SET receiver_name = ?, delivery_note = ?, photo_url = ?, signature = ?, updated_at = ? WHERE order_id = ?')
+      .bind(p.receiver_name ?? null, p.delivery_note ?? null, p.photo_url ?? null, p.signature ?? null, now, orderId).run();
   } else {
-    await DB.prepare('INSERT INTO delivery_proofs (order_id, receiver_name, delivery_note, photo_url, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .bind(orderId, p.receiver_name ?? null, p.delivery_note ?? null, p.photo_url ?? null, now, now).run();
+    await DB.prepare('INSERT INTO delivery_proofs (order_id, receiver_name, delivery_note, photo_url, signature, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(orderId, p.receiver_name ?? null, p.delivery_note ?? null, p.photo_url ?? null, p.signature ?? null, now, now).run();
   }
   return getDeliveryProof(DB, orderId);
 }

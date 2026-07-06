@@ -94,6 +94,46 @@ SELECT name FROM sqlite_master WHERE type='table' AND name='notifications';
 
 ---
 
+### 006_pod_signature.sql
+
+**Introduced by:** PR 9 — PoD signature capture
+
+**Purpose:** Adds the `signature` column to `delivery_proofs` for the customer's
+digital signature captured at delivery (base64 PNG). The PoD photo reuses the
+existing `photo_url` column.
+
+**Command:**
+```bash
+wrangler d1 execute edenmish --file=./migrations/006_pod_signature.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM pragma_table_info('delivery_proofs') WHERE name='signature';
+```
+
+---
+
+### 007_order_rating.sql
+
+**Introduced by:** PR 10 — Customer delivery rating
+
+**Purpose:** Adds the `rating` column (INTEGER, 1-5) to `orders` for the customer
+delivery rating submitted from the v2 delivery-confirmation page
+(`edenmish-v2/public/delivered.html`) via `POST /api/orders/:token/rate`.
+
+**Command:**
+```bash
+wrangler d1 execute edenmish --file=./migrations/007_order_rating.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM pragma_table_info('orders') WHERE name='rating';
+```
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -103,6 +143,8 @@ SELECT name FROM sqlite_master WHERE type='table' AND name='notifications';
 - [ ] Run `003_rate_limits.sql` if not already applied.
 - [ ] Run `004_delivery_proofs.sql` if not already applied.
 - [ ] Run `005_notifications.sql` if not already applied.
+- [ ] Run `006_pod_signature.sql` if not already applied.
+- [ ] Run `007_order_rating.sql` if not already applied.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).
@@ -133,7 +175,7 @@ it in this PR.
 The following are **planned** but not yet implemented. See `docs/DATA_MODEL_V2.md` for
 the full design.
 
-- `006_data_model_v2_tables.sql` — adds `customers`, `stops`, `route_plans`,
+- `008_data_model_v2_tables.sql` — adds `customers`, `stops`, `route_plans`,
   `route_stops`, `status_events`, `applied_migrations` (additive, no destructive changes).
 - Backfill + read/write-path migration will follow in separate PRs (PR13–PR15 per the plan).
 

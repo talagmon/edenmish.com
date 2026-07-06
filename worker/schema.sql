@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS orders (
   authorized_amount INTEGER,        -- used only in preauth mode (max hold)
   created_at INTEGER NOT NULL,
   picked_up_at INTEGER, delivered_at INTEGER,
+  rating INTEGER,                       -- customer delivery rating 1-5 (POST /api/orders/:token/rate)
   email TEXT, email_verified INTEGER DEFAULT 0, otp_hash TEXT, otp_expires INTEGER
 );
 
@@ -76,7 +77,8 @@ CREATE TABLE IF NOT EXISTS delivery_proofs (
   order_id INTEGER NOT NULL UNIQUE,
   receiver_name TEXT,
   delivery_note TEXT,
-  photo_url TEXT,          -- future use (no upload in PR7)
+  photo_url TEXT,          -- PoD photo (client-resized base64 JPEG)
+  signature TEXT,          -- PoD customer signature (base64 PNG)
   created_at INTEGER NOT NULL,
   updated_at INTEGER
 );
