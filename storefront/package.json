@@ -1,8 +1,8 @@
 {
-  "name": "edenmish-v2",
+  "name": "edenmish-storefront",
   "version": "0.1.0",
   "private": true,
-  "description": "EdenMish v2 storefront — static frontend (Cloudflare Pages) for v2.edenmish.com.",
+  "description": "EdenMish storefront — static frontend (Cloudflare Pages) for v2.edenmish.com. Colocated in the edenmish.com monorepo under storefront/.",
   "scripts": {
     "build": "tailwindcss -i ./src/styles.css -o ./public/assets/styles.css --minify",
     "dev": "tailwindcss -i ./src/styles.css -o ./public/assets/styles.css --watch",
