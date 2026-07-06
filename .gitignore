@@ -25,6 +25,7 @@ Thumbs.db
 # Local dev artifacts (contain session snapshots, typed secrets, caches)
 .playwright-mcp/
 .wrangler/
+.dev.vars
 
 # Build outputs / tool caches
 dist/

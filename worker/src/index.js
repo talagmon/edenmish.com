@@ -133,8 +133,10 @@ export default {
       //    the customer lands on the tracking page (pay-from-tracking / manual coordination).
       // TEST MODE (no charge): skip Shopify/PayPlus and auto-mark the order paid so
       // the full tracking + ops flow can be exercised end-to-end. Double-gated — needs
-      // env.TEST_MODE=1 (operator) AND ?test=1 on the request — so it can never affect a
-      // real customer. Delete the TEST_MODE secret before going live.
+      // env.TEST_MODE=1 (set ONLY in local worker/.dev.vars, gitignored) AND ?test=1 on
+      // the request, so it can never affect a real customer. TEST_MODE must NEVER be set
+      // on the production Worker — keep it out of wrangler.toml [vars] and never
+      // `wrangler secret put TEST_MODE` in prod.
       const testMode = (env.TEST_MODE === '1' || env.TEST_MODE === 'true') && url.searchParams.get('test') === '1';
       if (testMode) {
         await setOrderStatus(env.DB, created.id, 'paid', { payment_status: 'paid' });
