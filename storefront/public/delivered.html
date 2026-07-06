@@ -37,33 +37,53 @@ function fmtTime(t){ try { return new Date(t).toLocaleString("he-IL", { timeZone
 function params(){ return new URLSearchParams(location.search); }
 const token = (params().get("t") || params().get("token") || "").trim();
 
-async function loadMapsKey(){
-  try { const r = await fetch("/maps-key"); const d = await r.json(); return d && d.key ? d.key : null; }
-  catch { return null; }
+// Route map via the Maps JavaScript API. The key is authorized for the JS API
+// (but NOT the Static API), so we render a real map instead of a static <img>.
+const MAP_DARK = [
+  {elementType:"geometry", stylers:[{color:"#0b1326"}]},
+  {elementType:"labels.text.fill", stylers:[{color:"#9aa3bd"}]},
+  {elementType:"labels.text.stroke", stylers:[{visibility:"off"}]},
+  {featureType:"road", elementType:"geometry", stylers:[{color:"#222a3d"}]},
+  {featureType:"road.highway", elementType:"geometry", stylers:[{color:"#2d3449"}]},
+  {featureType:"landscape", stylers:[{color:"#0b1326"}]},
+  {featureType:"water", stylers:[{color:"#0a1428"}]},
+  {featureType:"poi", stylers:[{visibility:"off"}]},
+  {featureType:"transit", stylers:[{visibility:"off"}]}
+];
+let _mapJsPromise = null;
+function loadMapsJs(){
+  if(_mapJsPromise) return _mapJsPromise;
+  _mapJsPromise = (async () => {
+    let key = "";
+    try { const r = await fetch("/maps-key"); key = (await r.json()).key || ""; } catch {}
+    if(!key || (window.google && google.maps)) return !!key;
+    return new Promise(resolve => {
+      window.__emMapInit = () => resolve(true);
+      const s = document.createElement("script");
+      s.src = "https://maps.googleapis.com/maps/api/js?key=" + encodeURIComponent(key) + "&v=weekly&callback=__emMapInit";
+      s.async = true; s.onerror = () => resolve(false);
+      document.head.appendChild(s);
+    });
+  })();
+  return _mapJsPromise;
 }
-function buildStaticMap(o, key){
-  if(!key) return null;
+function routeFallbackLabel(o){ return esc((o.dropoff || "").split(",").slice(-1)[0].trim() || "גוש דן"); }
+function renderRouteMap(o){
+  const el = document.getElementById("route-map");
+  if(!el) return;
+  const fallback = '<div class="h-full w-full flex flex-col items-center justify-center text-on-surface-variant"><span class="material-symbols-outlined text-4xl mb-2">location_on</span><span class="text-label-sm">' + routeFallbackLabel(o) + '</span></div>';
+  if(!window.google || !google.maps){ el.innerHTML = fallback; return; }
   const pu = parseFloat(o.pickup_lat), pul = parseFloat(o.pickup_lng);
   const du = parseFloat(o.dropoff_lat), dul = parseFloat(o.dropoff_lng);
-  const hasP = !isNaN(pu) && !isNaN(pul);
-  const hasD = !isNaN(du) && !isNaN(dul);
-  if(!hasP && !hasD) return null;
-  const p = [
-    "size=600x400","scale=2",
-    "style=element:geometry|color:0x0b1326",
-    "style=element:labels.text.fill|color:0x9aa3bd",
-    "style=element:labels|invert_lightness:true",
-    "style=feature:road|color:0x222a3d",
-    "style=feature:road.highway|color:0x2d3449",
-    "style=feature:landscape|color:0x0b1326",
-    "style=feature:water|color:0x0a1428"
-  ];
-  if(hasP) p.push("markers=color:0xdfb7ff|label:P|"+pu+","+pul);
-  if(hasD) p.push("markers=color:0x91d3c8|label:D|"+du+","+dul);
-  if(hasP && hasD) p.push("path=color:0x91d3c8|weight:4|"+pu+","+pul+"|"+du+","+dul);
-  else p.push("zoom=15");
-  p.push("key="+encodeURIComponent(key));
-  return "https://maps.googleapis.com/maps/api/staticmap?" + p.join("&").replace(/\|/g, "%7C");
+  const hasP = !isNaN(pu) && !isNaN(pul), hasD = !isNaN(du) && !isNaN(dul);
+  if(!hasP && !hasD){ el.innerHTML = fallback; return; }
+  const map = new google.maps.Map(el, { disableDefaultUI: true, zoomControl: true, clickableIcons: false, styles: MAP_DARK });
+  const bounds = new google.maps.LatLngBounds();
+  if(hasP){ const m = new google.maps.Marker({ position:{lat:pu,lng:pul}, map, label:{text:"P",color:"#0b1326",fontSize:"11px",fontWeight:"bold"} }); bounds.extend(m.getPosition()); }
+  if(hasD){ const m = new google.maps.Marker({ position:{lat:du,lng:dul}, map, label:{text:"D",color:"#0b1326",fontSize:"11px",fontWeight:"bold"} }); bounds.extend(m.getPosition()); }
+  if(hasP && hasD){ new google.maps.Polyline({ path:[{lat:pu,lng:pul},{lat:du,lng:dul}], map, strokeColor:"#91d3c8", strokeWeight:4, geodesic:true }); }
+  if(bounds.isEmpty()){ map.setCenter({lat:(hasP?pu:du), lng:(hasP?pul:dul)}); map.setZoom(14); }
+  else { map.fitBounds(bounds, 60); }
 }
 
 function renderHero(o){
@@ -83,7 +103,7 @@ function renderHero(o){
   '</div>';
 }
 
-function renderProofGrid(o, proof, mapUrl){
+function renderProofGrid(o, proof){
   const photo = proof && proof.photo_url;
   let h = '<div class="grid grid-cols-1 md:grid-cols-2 gap-stack-md">';
   // PoD photo (or signature fallback into first tile)
@@ -102,11 +122,7 @@ function renderProofGrid(o, proof, mapUrl){
     '<div class="p-stack-md border-b border-glass-border flex items-center justify-between">'+
     '<span class="font-label-bold text-label-bold text-secondary">מסלול משלוח</span>'+
     '<span class="material-symbols-outlined text-secondary">map</span></div>';
-  if(mapUrl){
-    h += '<div class="relative h-64 w-full"><img class="w-full h-full object-cover" src="'+esc(mapUrl)+'" alt="מפת מסלול המשלוח"/></div>';
-  } else {
-    h += '<div class="h-64 w-full tile-empty flex flex-col items-center justify-center text-on-surface-variant p-4 text-center"><span class="material-symbols-outlined text-4xl mb-2">location_on</span><span class="text-label-sm">'+esc((o.dropoff||"").split(",").slice(-1)[0].trim() || "גוש דן")+'</span></div>';
-  }
+  h += '<div id="route-map" class="h-64 w-full bg-surface-container-high"></div>';
   h += '</div></div>';
   return h;
 }
@@ -252,27 +268,16 @@ async function init(){
   const o = d.order || {};
   const proof = d.proof || null;
   const history = Array.isArray(d.history) ? d.history : [];
-  const mapUrl = await buildStaticMapAsync(o);
-
   $("app").innerHTML = renderHeader(o) +
     '<main class="py-stack-lg space-y-stack-lg">' +
     renderHero(o) +
-    renderProofGrid(o, proof, mapUrl) +
+    renderProofGrid(o, proof) +
     renderDetails(o, proof, history) +
     renderRating(o) +
     renderActions() +
     '</main>' + renderFooter();
   bindStars();
-}
-
-let _mapPromise = null;
-function buildStaticMapAsync(o){
-  if(_mapPromise) return _mapPromise;
-  _mapPromise = (async () => {
-    const key = await loadMapsKey();
-    return buildStaticMap(o, key);
-  })();
-  return _mapPromise;
+  loadMapsJs().then(() => renderRouteMap(o));
 }
 
 init();
