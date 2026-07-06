@@ -50,4 +50,5 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy storefront/public --project-name=edenmish-v2 --branch=main
+          workingDirectory: storefront   # so wrangler finds sibling functions/ (maps-key Pages Function)
+          command: pages deploy public --project-name=edenmish-v2 --branch=main
