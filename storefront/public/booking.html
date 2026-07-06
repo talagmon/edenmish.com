@@ -124,7 +124,8 @@
 </div>
 <div class="flex flex-col gap-1 md:col-span-2">
 <label for="f-email" class="text-label-bold text-on-surface-variant mr-1">אימייל (לקבלה וקישור מעקב)</label>
-<input id="f-email" name="email" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-left transition-all" dir="ltr" placeholder="email@example.com" type="email" required/>
+<input id="f-email" name="email" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-left transition-all" dir="ltr" placeholder="email@example.com" type="email" required autocomplete="email"/>
+  <div id="email-status" class="text-label-sm min-h-[1.15rem] flex items-center gap-1 mr-1"></div>
 </div>
 </div>
 </section>
@@ -532,6 +533,28 @@ document.querySelectorAll('input[type="text"], input[type="tel"], input[type="em
   input.addEventListener("blur",  () => { const l = input.parentElement.querySelector("label"); if (l) l.classList.replace("text-primary", "text-on-surface-variant"); });
 });
 
+// Email: shared regex (used here + at submit), real-time inline validation, trim-on-blur.
+// Server-side validation remains authoritative; this is convenience/UX only.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+(function(){
+  const inp = document.getElementById("f-email");
+  const st = document.getElementById("email-status");
+  if(!inp || !st) return;
+  let touched = false;
+  const render = (ok, msg) => {
+    st.innerHTML = ok
+      ? '<span class="material-symbols-outlined text-success-mint" style="font-size:16px">check_circle</span><span class="text-success-mint">כתובת תקינה</span>'
+      : '<span class="material-symbols-outlined text-error" style="font-size:16px">cancel</span><span class="text-error">' + msg + '</span>';
+  };
+  const check = () => {
+    const v = inp.value.trim();
+    if(!v) return render(false, "נא למלא אימייל");
+    return render(EMAIL_RE.test(v), 'פורמט לא תקין — למשל name@example.com');
+  };
+  inp.addEventListener("blur", () => { touched = true; inp.value = inp.value.trim(); check(); });
+  inp.addEventListener("input", () => { if(touched) check(); });
+})();
+
 const form = document.getElementById("booking-form");
 const errBox = document.getElementById("form-error");
 const submitBtn = document.getElementById("submit-btn");
@@ -570,7 +593,7 @@ form.addEventListener("submit", async (e) => {
 
   if (!name) return showError("נא למלא שם מלא.");
   if (!ilPhone.test(phone.replace(/\s/g, ""))) return showError("נא למלא מספר טלפון ישראלי תקין.");
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return showError("נא למלא כתובת אימייל תקינה.");
+  if (!EMAIL_RE.test(email)) return showError("נא למלא כתובת אימייל תקינה.");
   if (!pickupAddress) return showError("נא למלא כתובת איסוף.");
   if (!dropoffAddress) return showError("נא למלא כתובת יעד.");
 
