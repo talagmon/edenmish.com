@@ -282,14 +282,6 @@
 <script>
 // Existing Worker backend (sibling repo). Public order endpoint only.
 const API = "https://find.edenmish.com";
-const TEST_MODE = new URLSearchParams(location.search).get("test") === "1";
-if (TEST_MODE) {
-  const banner = document.createElement("div");
-  banner.style.cssText = "position:fixed;top:64px;right:0;left:0;z-index:60;background:linear-gradient(135deg,#00534b,#003732);color:#eafff9;text-align:center;padding:8px 16px;font-weight:700;font-size:.85rem;font-family:'Hanken Grotesk',sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.3)";
-  banner.innerHTML = "🧪 מצב בדיקה — ההזמנה תאושר אוטומטית ללא תשלום. מלאו את הטופס ושלחו — לא תחויבו.";
-  document.body.appendChild(banner);
-  document.querySelector("main").style.paddingTop = "110px";
-}
 
 // ---- Google Maps: address autocomplete + drive distance → exact pricing ----
 const geo = { pickupLat:null, pickupLng:null, pickupCity:null, dropoffLat:null, dropoffLng:null, dropoffCity:null, distanceKm:null };
@@ -643,7 +635,7 @@ form.addEventListener("submit", async (e) => {
   const original = submitBtn.textContent;
   submitBtn.textContent = "שולח הזמנה…";
   try {
-    const res = await fetch(API + "/api/orders" + (TEST_MODE ? "?test=1" : ""), {
+    const res = await fetch(API + "/api/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
