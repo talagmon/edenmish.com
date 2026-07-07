@@ -180,6 +180,19 @@
 <label for="f-email" class="text-label-bold text-on-surface-variant mr-1">אימייל (לקבלה וקישור מעקב)</label>
 <input id="f-email" name="email" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-left transition-all" dir="ltr" placeholder="email@example.com" type="email" required autocomplete="email"/>
   <div id="email-status" class="text-label-sm min-h-[1.15rem] flex items-center gap-1 mr-1"></div>
+  <div id="email-suggest" hidden class="mt-2 rounded-lg border border-secondary/40 bg-secondary-container/20 p-3">
+    <div class="flex items-start justify-between gap-2">
+      <div class="flex items-start gap-2">
+        <span class="material-symbols-outlined text-secondary text-xl mt-0.5">spellcheck</span>
+        <p id="email-suggest-text" class="text-label-sm text-on-surface leading-relaxed"></p>
+      </div>
+      <button type="button" id="email-suggest-x" class="text-on-surface-variant hover:text-on-surface text-xl leading-none" aria-label="סגור">×</button>
+    </div>
+    <div class="flex flex-wrap gap-2 mt-2">
+      <button type="button" id="email-suggest-accept" class="bg-secondary text-on-secondary px-3 py-2 rounded-lg font-label-bold text-label-sm">כן, תקן בבקשה</button>
+      <button type="button" id="email-suggest-keep" class="border border-outline-variant text-on-surface px-3 py-2 rounded-lg text-label-sm">השאר כפי שהקלדתי</button>
+    </div>
+  </div>
 </div>
 </div>
 </section>
@@ -584,11 +597,90 @@ document.querySelectorAll('input[type="text"], input[type="tel"], input[type="em
   input.addEventListener("blur",  () => { const l = input.parentElement.querySelector("label"); if (l) l.classList.replace("text-primary", "text-on-surface-variant"); });
 });
 
-// Email: shared regex (used here + at submit), real-time inline validation, trim-on-blur.
-// Server-side validation remains authoritative; this is convenience/UX only.
+// Email: shared regex (used here + at submit), real-time inline validation, trim-on-blur,
+// plus typo detection for well-known providers (gmail/outlook/icloud/...) with a
+// confirm-to-fix suggestion. Server-side validation remains authoritative.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const KNOWN_DOMAINS = [
+  "gmail.com", "googlemail.com",
+  "outlook.com", "hotmail.com", "live.com", "msn.com",
+  "yahoo.com", "yahoo.co.il",
+  "aol.com",
+  "icloud.com", "me.com", "mac.com",
+  "protonmail.com", "proton.me",
+  "gmx.com", "gmx.net", "gmx.de",
+  "zoho.com", "yandex.com", "mail.com",
+  "walla.co.il", "walla.com",
+  "netvision.net.il", "013.net.il", "bezeqint.net"
+];
+const DOMAIN_FIXES = {
+  "gmai.com":"gmail.com", "gmial.com":"gmail.com", "gmil.com":"gmail.com",
+  "gmal.com":"gmail.com", "gnail.com":"gmail.com", "gmaill.com":"gmail.com",
+  "gmail.co":"gmail.com", "gmail.cm":"gmail.com", "gmail.con":"gmail.com",
+  "gmail.om":"gmail.com", "gmail.net":"gmail.com", "gmail.org":"gmail.com",
+  "gmailcom":"gmail.com", "g.mail.com":"gmail.com",
+  "outlok.com":"outlook.com", "outlock.com":"outlook.com",
+  "outlook.co":"outlook.com", "outlook.cm":"outlook.com",
+  "hotmial.com":"hotmail.com", "hotmai.com":"hotmail.com",
+  "hotmal.com":"hotmail.com", "hotnail.com":"hotmail.com",
+  "hotmail.co":"hotmail.com", "hotmail.cm":"hotmail.com",
+  "yaho.com":"yahoo.com", "yhaoo.com":"yahoo.com",
+  "yahoo.co":"yahoo.com", "yahoo.cm":"yahoo.com",
+  "iclod.com":"icloud.com", "iclould.com":"icloud.com",
+  "iclod.co":"icloud.com", "icloud.co":"icloud.com"
+};
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  let prev = [], curr = [];
+  for (let j = 0; j <= n; j++) prev[j] = j;
+  for (let i = 1; i <= m; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i-1] === b[j-1] ? 0 : 1;
+      curr[j] = Math.min(prev[j] + 1, curr[j-1] + 1, prev[j-1] + cost);
+    }
+    prev = curr; curr = [];
+  }
+  return prev[n];
+}
+function suggestEmailDomain(domain) {
+  const d = String(domain || "").toLowerCase().trim();
+  if (!d || KNOWN_DOMAINS.indexOf(d) >= 0) return null;
+  if (DOMAIN_FIXES[d]) return DOMAIN_FIXES[d];
+  let best = null, bestDist = 99;
+  for (let i = 0; i < KNOWN_DOMAINS.length; i++) {
+    const k = KNOWN_DOMAINS[i];
+    const dist = levenshtein(d, k);
+    if (dist < bestDist) { bestDist = dist; best = k; }
+  }
+  return (best && bestDist > 0 && bestDist <= 2 && d.length >= 4) ? best : null;
+}
+function splitDomain(v) {
+  const at = String(v || "").lastIndexOf("@");
+  return at < 0 ? null : { local: v.slice(0, at), domain: v.slice(at + 1) };
+}
+const emailInput = document.getElementById("f-email");
+const emailSuggestBox = document.getElementById("email-suggest");
+const emailSuggestText = document.getElementById("email-suggest-text");
+let emailState = { value: null, suggested: null, resolved: false };
+function showEmailSuggestion(suggestedEmail) {
+  emailState.suggested = suggestedEmail;
+  emailState.resolved = false;
+  emailSuggestText.innerHTML = 'האם התכוונת ל-<b dir="ltr" class="text-secondary">' + suggestedEmail + '</b>?';
+  emailSuggestBox.hidden = false;
+}
+function hideEmailSuggestion() { emailSuggestBox.hidden = true; }
+if (emailSuggestBox) {
+  document.getElementById("email-suggest-accept").addEventListener("click", () => {
+    if (emailState.suggested) { emailInput.value = emailState.suggested; emailState.resolved = true; }
+    hideEmailSuggestion();
+  });
+  document.getElementById("email-suggest-keep").addEventListener("click", () => { emailState.resolved = true; hideEmailSuggestion(); });
+  document.getElementById("email-suggest-x").addEventListener("click", () => { emailState.resolved = true; hideEmailSuggestion(); });
+}
 (function(){
-  const inp = document.getElementById("f-email");
+  const inp = emailInput;
   const st = document.getElementById("email-status");
   if(!inp || !st) return;
   let touched = false;
@@ -600,7 +692,18 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
   const check = () => {
     const v = inp.value.trim();
     if(!v) return render(false, "נא למלא אימייל");
-    return render(EMAIL_RE.test(v), 'פורמט לא תקין — למשל name@example.com');
+    if(!EMAIL_RE.test(v)) return render(false, 'פורמט לא תקין — למשל name@example.com');
+    render(true, "");
+    // Typo detection on known-provider domains (format is valid, but domain may be misspelled).
+    const parts = splitDomain(v);
+    const fixed = parts ? suggestEmailDomain(parts.domain) : null;
+    if (fixed && fixed !== parts.domain) {
+      if (emailState.value !== v) { emailState.value = v; emailState.resolved = false; }
+      if (!emailState.resolved) showEmailSuggestion(parts.local + "@" + fixed);
+    } else {
+      emailState.suggested = null;
+      hideEmailSuggestion();
+    }
   };
   inp.addEventListener("blur", () => { touched = true; inp.value = inp.value.trim(); check(); });
   inp.addEventListener("input", () => { if(touched) check(); });
@@ -645,6 +748,20 @@ form.addEventListener("submit", async (e) => {
   if (!name) return showError("נא למלא שם מלא.");
   if (!ilPhone.test(phone.replace(/\s/g, ""))) return showError("נא למלא מספר טלפון ישראלי תקין.");
   if (!EMAIL_RE.test(email)) return showError("נא למלא כתובת אימייל תקינה.");
+  // Typo gate: if the domain looks like a misspelling of a known provider,
+  // surface the suggestion and require the user to accept or dismiss before continuing.
+  if (!emailState.resolved || emailState.value !== email) {
+    const parts = splitDomain(email);
+    const fixed = parts ? suggestEmailDomain(parts.domain) : null;
+    if (fixed && fixed !== parts.domain) {
+      emailState.value = email;
+      emailState.suggested = parts.local + "@" + fixed;
+      emailState.resolved = false;
+      showEmailSuggestion(emailState.suggested);
+      emailSuggestBox.scrollIntoView({ behavior: "smooth", block: "center" });
+      return showError("נראה שיש שגיאת כתיב בכתובת האימייל. אנא אשרו או דחו את ההצעה.");
+    }
+  }
   if (!pickupAddress) return showError("נא למלא כתובת איסוף.");
   if (!dropoffAddress) return showError("נא למלא כתובת יעד.");
 
