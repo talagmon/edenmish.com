@@ -300,6 +300,10 @@ function renderDetail(o){
     '<div class="flex-1 text-right">'+
     '<span class="text-primary font-bold text-label-sm block mb-1">איסוף</span>'+
     '<h3 class="font-bold text-on-surface mb-1">'+esc(o.pickup||"—")+'</h3>'+
+    '<div class="flex items-center gap-2 mt-1">'+
+    '<a href="https://waze.com/ul?q='+encodeURIComponent(o.pickup||"")+'&navigate=yes" target="_blank" class="flex items-center gap-1 text-label-sm bg-primary/10 text-primary px-2 py-1 rounded-lg active:scale-95"><span class="material-symbols-outlined text-[16px]">navigation</span>Waze</a>'+
+    (o.pickup_lat?'<a href="https://waze.com/ul?ll='+o.pickup_lat+'%2C'+o.pickup_lng+'&navigate=yes" target="_blank" class="flex items-center gap-1 text-label-sm bg-secondary/10 text-secondary px-2 py-1 rounded-lg active:scale-95"><span class="material-symbols-outlined text-[16px]">my_location</span>ניווט מדויק</a>':'')+
+    '</div>'+
     (o.name?'<div class="flex items-center justify-between bg-surface-deep/40 rounded-lg p-2 mt-2"><span class="text-on-surface font-semibold text-body-md">'+esc(o.name)+'</span>'+phoneBtn+'</div>':"")+
     '</div></div>'+
     '<div class="glass-card rounded-xl p-4 mb-6 flex gap-4">'+
@@ -307,6 +311,10 @@ function renderDetail(o){
     '<div class="flex-1 text-right">'+
     '<span class="text-outline font-bold text-label-sm block mb-1">יעד</span>'+
     '<h3 class="font-bold text-on-surface mb-1">'+esc(o.dropoff||"—")+'</h3>'+
+    '<div class="flex items-center gap-2 mt-1">'+
+    '<a href="https://waze.com/ul?q='+encodeURIComponent(o.dropoff||"")+'&navigate=yes" target="_blank" class="flex items-center gap-1 text-label-sm bg-primary/10 text-primary px-2 py-1 rounded-lg active:scale-95"><span class="material-symbols-outlined text-[16px]">navigation</span>Waze</a>'+
+    (o.dropoff_lat?'<a href="https://waze.com/ul?ll='+o.dropoff_lat+'%2C'+o.dropoff_lng+'&navigate=yes" target="_blank" class="flex items-center gap-1 text-label-sm bg-secondary/10 text-secondary px-2 py-1 rounded-lg active:scale-95"><span class="material-symbols-outlined text-[16px]">my_location</span>ניווט מדויק</a>':'')+
+    '</div>'+
     '<div class="flex items-center justify-between bg-surface-deep/40 rounded-lg p-2 mt-2"><span class="text-on-surface-variant text-body-md">₪'+(o.price||"?")+' · '+esc(o.package||"—")+'</span>'+(o.when_text?'<span class="text-label-sm text-on-surface-variant">'+esc(o.when_text)+'</span>':"")+'</div>'+
     '</div></div>'+
     notesHtml+
