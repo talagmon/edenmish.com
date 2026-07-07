@@ -91,9 +91,9 @@
 <thead>
 <tr>
 <th class="p-2 text-label-sm text-on-surface-variant font-label-bold"></th>
-<th class="p-2 text-label-bold rounded-t-lg" style="background:rgba(145,211,200,.08)"><span class="text-secondary block">Eco</span><span class="text-label-sm text-on-surface-variant">עד סוף יום</span></th>
-<th class="p-2 text-label-bold rounded-t-lg" style="background:rgba(223,183,255,.08)"><span class="text-primary block">Standard</span><span class="text-label-sm text-on-surface-variant">4 שעות</span></th>
-<th class="p-2 text-label-bold rounded-t-lg" style="background:rgba(239,68,68,.06)"><span class="text-error block">Flash</span><span class="text-label-sm text-on-surface-variant">90 דקות</span></th>
+<th class="p-2 text-label-bold rounded-t-lg" style="background:rgba(145,211,200,.08)"><span class="text-secondary block">חסכוני</span><span class="text-label-sm text-on-surface-variant">עד סוף יום</span></th>
+<th class="p-2 text-label-bold rounded-t-lg" style="background:rgba(223,183,255,.08)"><span class="text-primary block">רגיל</span><span class="text-label-sm text-on-surface-variant">4 שעות</span></th>
+<th class="p-2 text-label-bold rounded-t-lg" style="background:rgba(239,68,68,.06)"><span class="text-error block">מהיר</span><span class="text-label-sm text-on-surface-variant">90 דקות</span></th>
 </tr>
 </thead>
 <tbody>
@@ -132,7 +132,7 @@
 <span class="text-label-sm text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-alert-amber">info</span> ערב (19-22) +₪30</span>
 <span class="text-label-sm text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-alert-amber">info</span> סופ״ש ×1.5</span>
 </div>
-<p class="text-label-sm text-on-surface-variant mt-2 px-2 opacity-70">המחירים סופיים · עוסק פטור (211568928) · Flash זמין באזורים 1-2 בלבד</p>
+<p class="text-label-sm text-on-surface-variant mt-2 px-2 opacity-70">המחירים סופיים · עוסק פטור (211568928) · שירות מהיר זמין באזורים 1-2 בלבד</p>
 </section>
 <form id="booking-form" class="space-y-stack-lg" novalidate>
 <!-- Step 1: Package type (required by API) -->
@@ -244,7 +244,7 @@
 <input class="hidden peer" name="service" type="radio" value="eco"/>
 <div class="flex flex-col items-center justify-center p-stack-md bg-surface-container-low border-2 border-outline-variant rounded-xl group-hover:border-primary peer-checked:border-secondary peer-checked:bg-secondary-container/20 transition-all text-center h-full">
 <span class="material-symbols-outlined text-4xl mb-2 text-on-surface-variant peer-checked:text-secondary">schedule</span>
-<h4 class="font-label-bold text-on-surface">Eco</h4>
+<h4 class="font-label-bold text-on-surface">חסכוני</h4>
 <p class="text-label-sm text-on-surface-variant">מסירה עד סוף היום</p>
 <p class="text-primary font-label-bold mt-2">החל מ₪35</p>
 </div>
@@ -253,7 +253,7 @@
 <input checked class="hidden peer" name="service" type="radio" value="standard"/>
 <div class="flex flex-col items-center justify-center p-stack-md bg-surface-container-low border-2 border-outline-variant rounded-xl group-hover:border-primary peer-checked:border-secondary peer-checked:bg-secondary-container/20 transition-all text-center h-full">
 <span class="material-symbols-outlined text-4xl mb-2 text-on-surface-variant peer-checked:text-secondary">local_shipping</span>
-<h4 class="font-label-bold text-on-surface">Standard</h4>
+<h4 class="font-label-bold text-on-surface">רגיל</h4>
 <p class="text-label-sm text-on-surface-variant">מסירה תוך 4 שעות</p>
 <p class="text-primary font-label-bold mt-2">החל מ₪50</p>
 </div>
@@ -262,7 +262,7 @@
 <input class="hidden peer" name="service" type="radio" value="flash"/>
 <div class="flex flex-col items-center justify-center p-stack-md bg-surface-container-low border-2 border-outline-variant rounded-xl group-hover:border-primary peer-checked:border-secondary peer-checked:bg-secondary-container/20 transition-all text-center h-full">
 <span class="material-symbols-outlined text-4xl mb-2 text-on-surface-variant peer-checked:text-secondary">bolt</span>
-<h4 class="font-label-bold text-on-surface">Flash</h4>
+<h4 class="font-label-bold text-on-surface">מהיר</h4>
 <p class="text-label-sm text-on-surface-variant">90 דקות, נקודה לנקודה</p>
 <p class="text-secondary font-label-bold mt-2">החל מ₪85</p>
 </div>
@@ -507,13 +507,13 @@ function renderWindows(){
         sched.window = w;
         Array.from(wg.children).forEach(x => styleWinBtn(x, false));
         styleWinBtn(b, true);
-        if (hint) hint.textContent = sched.service === "flash" ? "Flash - השליחות תושלם תוך עד 90 דקות" : "איסוף החל מהחלון שנבחר, מסירה באותו יום";
+        if (hint) hint.textContent = sched.service === "flash" ? "מהיר - השליחות תושלם תוך עד 90 דקות" : "איסוף החל מהחלון שנבחר, מסירה באותו יום";
         computeEstimate();
       });
       wg.appendChild(b);
     });
   }
-  if (hint) hint.textContent = sched.service === "flash" ? "Flash - השליחות תושלם תוך עד 90 דקות" : "איסוף החל מהחלון שנבחר, מסירה באותו יום";
+  if (hint) hint.textContent = sched.service === "flash" ? "מהיר - השליחות תושלם תוך עד 90 דקות" : "איסוף החל מהחלון שנבחר, מסירה באותו יום";
   computeEstimate();
 }
 function flashAvailableNow(){
@@ -536,13 +536,13 @@ function renderFlashImmediate(){
       '<div><h4 class="font-label-bold text-on-surface">משלוח מיידי - עכשיו</h4>' +
       '<p class="text-label-sm text-on-surface-variant">איסוף מיידי · מסירה עד 90 דקות. ההזמנה תישלח בעדיפות גבוהה לשיגור מיידי ותוצג בלוח הבקרה.</p></div>' +
       '</div>';
-    if (hint) hint.textContent = "Flash - שיגור מיידי, השליחות תושלם תוך עד 90 דקות";
+    if (hint) hint.textContent = "מהיר - שיגור מיידי, השליחות תושלם תוך עד 90 דקות";
   } else {
     sched.dateType = ""; sched.day = null; sched.date = null; sched.window = "";
     flashEl.innerHTML =
       '<div class="bg-error-container/30 border border-error/40 rounded-xl p-stack-md">' +
-      '<p class="text-label-bold text-error">שירות Flash זמין לשיגור מיידי בשעות הפעילות בלבד</p>' +
-      '<p class="text-label-sm text-on-surface-variant mt-1">א׳-ה׳ 09:00-20:00 · ו׳ 08:00-13:00 · שבת סגור. כרגע מחוץ לשעות הפעילות - בחרו שירות Standard או Eco, או חזרו בשעות הפעילות.</p>' +
+      '<p class="text-label-bold text-error">שירות מהיר זמין לשיגור מיידי בשעות הפעילות בלבד</p>' +
+      '<p class="text-label-sm text-on-surface-variant mt-1">א׳-ה׳ 09:00-20:00 · ו׳ 08:00-13:00 · שבת סגור. כרגע מחוץ לשעות הפעילות - בחרו שירות רגיל או חסכוני, או חזרו בשעות הפעילות.</p>' +
       '</div>';
     if (hint) hint.textContent = "";
   }
@@ -658,11 +658,11 @@ form.addEventListener("submit", async (e) => {
     if (geo.dropoffCity && EDEN_ZONES.indexOf(geo.dropoffCity) < 0) return showError("כתובת היעד מחוץ לטווח השירות - אנו פעילים בגוש דן בלבד.");
   }
   if (service === "flash") {
-    if (!flashAvailableNow()) return showError("שירות Flash זמין לשיגור מיידי בשעות הפעילות בלבד (א׳-ה׳ 09:00-20:00 · ו׳ 08:00-13:00). בחרו Standard או Eco, או חזרו בשעות הפעילות.");
+    if (!flashAvailableNow()) return showError("שירות מהיר זמין לשיגור מיידי בשעות הפעילות בלבד (א׳-ה׳ 09:00-20:00 · ו׳ 08:00-13:00). בחרו רגיל או חסכוני, או חזרו בשעות הפעילות.");
     const pz = zoneOf(geo.pickupCity || cityOf(pickupAddress));
     const dz = zoneOf(geo.dropoffCity || cityOf(dropoffAddress));
     const fzone = (pz && dz) ? Math.max(pz, dz) : null;
-    if (fzone !== 1 && fzone !== 2) return showError("שירות Flash זמין באזורים 1-2 בלבד. לאזור זה בחרו Standard או Eco.");
+    if (fzone !== 1 && fzone !== 2) return showError("שירות שירות מהיר זמין באזורים 1-2 בלבד. לאזור זה בחרו רגיל או חסכוני.");
   } else if (!sched.window) {
     return showError("נא לבחור מועד לאיסוף (תאריך וחלון זמן).");
   }

@@ -204,7 +204,7 @@ function queueCard(o){
   var color = isUrgent?"border-error":(isLive?"border-secondary":(o.status==="delivered"?"border-success-mint/40":"border-glass-border"));
   var liveDot = isLive?'<span class="w-2 h-2 bg-secondary rounded-full animate-pulse"></span>':"";
   var urgentBadge = isUrgent?'<span class="bg-error/20 text-error font-label-bold text-label-sm px-2 py-0.5 rounded-full flex items-center gap-0.5"><span class="material-symbols-outlined text-[14px]">priority_high</span>דחוף</span>':"";
-  var svcLabel = o.service==='flash'?'Flash':o.service==='standard'?'Standard':o.service==='eco'?'Eco':"";
+  var svcLabel = o.service==='flash'?'מהיר':o.service==='standard'?'רגיל':o.service==='eco'?'חסכוני':"";
   var svcChip = svcLabel?'<span class="text-label-sm px-2 py-0.5 rounded-full '+(o.service==='flash'?'bg-error/10 text-error':o.service==='standard'?'bg-primary/10 text-primary':'bg-secondary/10 text-secondary')+'">'+svcLabel+'</span>':"";
   var nameLine = o.name?'<div class="flex items-center gap-2 mt-1"><span class="material-symbols-outlined text-on-surface-variant text-lg">person</span><b class="text-on-surface text-body-md">'+esc(o.name)+'</b></div>':"";
   var notesLine = o.notes?'<div class="mt-1 text-label-sm text-alert-amber">📝 '+esc(o.notes.slice(0,40))+'</div>':"";
