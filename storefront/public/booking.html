@@ -76,10 +76,64 @@
 </aside>
 <!-- Right: Form -->
 <div class="lg:col-span-8 order-1 lg:order-2">
-<div class="mb-stack-lg">
+ <div class="mb-stack-lg">
 <h1 class="font-headline-lg text-on-surface mb-2">הזמנת משלוח חדש</h1>
 <p class="text-on-surface-variant font-body-md">אנא מלאו את פרטי המשלוח כדי לקבל הצעת מחיר מדויקת ולהזמין שליח.</p>
 </div>
+<!-- Pricing Chart (CRO: transparency + confidence) -->
+<section class="glass-panel rounded-xl p-stack-md mb-stack-lg">
+<div class="flex items-center gap-stack-sm mb-stack-md">
+<span class="w-8 h-8 rounded-full bg-surface-container-high text-on-surface flex items-center justify-center font-label-bold"><span class="material-symbols-outlined text-lg">payments</span></span>
+<h2 class="font-headline-md text-on-surface">טבלת מחירים</h2>
+</div>
+<div class="overflow-x-auto -mx-2 px-2">
+<table class="w-full text-center border-collapse" style="min-width:400px">
+<thead>
+<tr>
+<th class="p-2 text-label-sm text-on-surface-variant font-label-bold"></th>
+<th class="p-2 text-label-bold rounded-t-lg" style="background:rgba(145,211,200,.08)"><span class="text-secondary block">Eco</span><span class="text-label-sm text-on-surface-variant">עד סוף יום</span></th>
+<th class="p-2 text-label-bold rounded-t-lg" style="background:rgba(223,183,255,.08)"><span class="text-primary block">Standard</span><span class="text-label-sm text-on-surface-variant">4 שעות</span></th>
+<th class="p-2 text-label-bold rounded-t-lg" style="background:rgba(239,68,68,.06)"><span class="text-error block">Flash</span><span class="text-label-sm text-on-surface-variant">90 דקות</span></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="p-2 text-right">
+<span class="font-label-bold text-on-surface block">אזור 1</span>
+<span class="text-label-sm text-on-surface-variant">תל אביב · רמת גן · גבעתיים · בני ברק</span>
+</td>
+<td class="p-2 font-headline-md text-secondary" style="background:rgba(145,211,200,.04)">₪35</td>
+<td class="p-2 font-headline-md text-primary" style="background:rgba(223,183,255,.04)">₪50</td>
+<td class="p-2 font-headline-md text-error" style="background:rgba(239,68,68,.03)">₪85</td>
+</tr>
+<tr>
+<td class="p-2 text-right">
+<span class="font-label-bold text-on-surface block">אזור 2</span>
+<span class="text-label-sm text-on-surface-variant">הרצליה · חולון · בת ים · אור יהודה</span>
+</td>
+<td class="p-2 font-headline-md text-secondary" style="background:rgba(145,211,200,.04)">₪55</td>
+<td class="p-2 font-headline-md text-primary" style="background:rgba(223,183,255,.04)">₪70</td>
+<td class="p-2 font-headline-md text-error" style="background:rgba(239,68,68,.03)">₪110</td>
+</tr>
+<tr>
+<td class="p-2 text-right">
+<span class="font-label-bold text-on-surface block">אזור 3</span>
+<span class="text-label-sm text-on-surface-variant">ראשון · כפר סבא · פתח תקווה · הוד השרון</span>
+</td>
+<td class="p-2 font-headline-md text-secondary" style="background:rgba(145,211,200,.04)">₪75</td>
+<td class="p-2 font-headline-md text-primary" style="background:rgba(223,183,255,.04)">₪115</td>
+<td class="p-2 font-headline-md text-on-surface-variant">—</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="flex flex-wrap gap-x-4 gap-y-1 mt-3 px-2">
+<span class="text-label-sm text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-alert-amber">info</span> חבילה בינונית +₪15</span>
+<span class="text-label-sm text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-alert-amber">info</span> ערב (19-22) +₪30</span>
+<span class="text-label-sm text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-alert-amber">info</span> סופ״ש ×1.5</span>
+</div>
+<p class="text-label-sm text-on-surface-variant mt-2 px-2 opacity-70">המחירים סופיים · עוסק פטור (211568928) · Flash זמין באזורים 1-2 בלבד</p>
+</section>
 <form id="booking-form" class="space-y-stack-lg" novalidate>
 <!-- Step 1: Package type (required by API) -->
 <section class="glass-panel rounded-xl p-stack-md">
