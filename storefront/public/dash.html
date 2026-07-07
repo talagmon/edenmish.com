@@ -198,6 +198,7 @@ function renderStats(){
 function queueCard(o){
   var isLive = LIVE.includes(o.status);
   var isUrgent = o.urgent || o.review_flag;
+  var isTerminal = ["delivered","cancelled","failed"].includes(o.status);
   var color = isUrgent?"border-error":(isLive?"border-secondary":(o.status==="delivered"?"border-success-mint/40":"border-glass-border"));
   var liveDot = isLive?'<span class="w-2 h-2 bg-secondary rounded-full animate-pulse"></span>':"";
   var urgentBadge = isUrgent?'<span class="bg-error/20 text-error font-label-bold text-label-sm px-2 py-0.5 rounded-full flex items-center gap-0.5"><span class="material-symbols-outlined text-[14px]">priority_high</span>דחוף</span>':"";
@@ -209,8 +210,14 @@ function queueCard(o){
   var dropoffShort = esc((o.dropoff||"—").split(",")[0]);
   var whenLine = o.when_text?'<span class="text-label-sm text-on-surface-variant">'+esc(o.when_text)+'</span>':"";
   var reviewReason = o.review_reason?'<span class="text-label-sm text-alert-amber">'+esc(o.review_reason)+'</span>':"";
+  var canCancel = !isTerminal;
+  var cardId = 'card-'+o.id;
 
-  return '<div class="glass-card rounded-xl p-stack-md border-r-4 '+color+' '+(isUrgent?'ring-1 ring-error/30':"")+' active:scale-[0.98] transition-transform cursor-pointer" onclick="openOrder('+o.id+')">'+
+  return '<div class="relative overflow-hidden rounded-xl" id="wrap-'+cardId+'">'+
+    (canCancel?'<div class="absolute inset-y-0 left-0 flex items-center justify-center bg-error/90 px-8" style="z-index:0"><span class="material-symbols-outlined text-white text-2xl">delete</span></div>':"")+
+    '<div id="'+cardId+'" class="glass-card rounded-xl p-stack-md border-r-4 '+color+' '+(isUrgent?'ring-1 ring-error/30':"")+' active:scale-[0.98] transition-transform cursor-pointer relative" style="z-index:1;touch-action:pan-y" '+
+    (canCancel?'data-oid="'+o.id+'" data-x="0" ontouchstart="swipeStart(event)" ontouchmove="swipeMove(event)" ontouchend="swipeEnd(event)" ontransitionend="swipeTransitionEnd(event)"':'')+
+    ' onclick="'+(canCancel?'':'openOrder('+o.id+')')+'">'+
     '<div class="flex items-center gap-2 flex-wrap">'+
     liveDot+
     '<span class="bg-primary-container text-on-primary-container font-label-bold text-label-sm px-3 py-1 rounded-full">'+esc(HE[o.status]||o.status)+'</span>'+
@@ -225,7 +232,54 @@ function queueCard(o){
     '<span class="text-body-md text-on-surface-variant flex-1">'+dropoffShort+'</span></div>'+
     (whenLine||reviewReason||timeLeftBadge(o)?'<div class="flex items-center gap-2 mt-1 flex-wrap">'+whenLine+reviewReason+timeLeftBadge(o)+'</div>':"")+
     notesLine+
-    '</div>';
+    '</div></div>';
+}
+var _swipe = {id:null,x:0,startX:0,el:null};
+function swipeStart(e){
+  _swipe.startX = e.touches[0].clientX;
+  _swipe.el = e.currentTarget;
+  _swipe.id = _swipe.el.dataset.oid;
+  _swipe.el.style.transition = "none";
+}
+function swipeMove(e){
+  if(!_swipe.el) return;
+  var dx = e.touches[0].clientX - _swipe.startX;
+  if(dx > 0) dx = dx * 0.2;
+  _swipe.x = dx;
+  _swipe.el.style.transform = "translateX("+dx+"px)";
+  var abs = Math.abs(dx);
+  _swipe.el.style.opacity = Math.max(0.4, 1 - abs/300);
+}
+function swipeEnd(e){
+  if(!_swipe.el) return;
+  _swipe.el.style.transition = "transform 0.3s ease, opacity 0.3s ease";
+  if(_swipe.x < -140){
+    _swipe.el.style.transform = "translateX(-120%)";
+    _swipe.el.style.opacity = "0";
+    var oid = _swipe.id;
+    setTimeout(function(){
+      if(confirm("לבטל את ההזמנה #"+oid+"?")){
+        cancelOrder(oid);
+      } else {
+        var el = document.getElementById("card-"+oid);
+        if(el){el.style.transform="translateX(0)";el.style.opacity="1";}
+      }
+    }, 250);
+  } else {
+    _swipe.el.style.transform = "translateX(0)";
+    _swipe.el.style.opacity = "1";
+  }
+  _swipe.el = null;
+}
+function swipeTransitionEnd(e){
+  if(e.propertyName === "transform" && e.target.style.transform === "translateX(0)"){
+    e.target.style.transition = "";
+  }
+}
+function cancelOrder(id){
+  api("/api/ops/orders/"+id+"/status",{method:"POST",body:JSON.stringify({status:"cancelled"})}).then(function(){
+    refresh();
+  }).catch(function(){ alert("שגיאה בביטול ההזמנה"); refresh(); });
 }
 
 function openOrder(id){
