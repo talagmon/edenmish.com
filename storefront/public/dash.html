@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
-<title>EdenMish Ops</title>
+<title>מעקב הזמנות | עדן מיש</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
@@ -38,7 +38,7 @@ function loginView(){
     '<div class="glass-card rounded-2xl p-stack-lg max-w-sm w-full text-center">'+
     '<div class="w-16 h-16 rounded-full bg-primary-container flex items-center justify-center mx-auto mb-stack-md">'+
     '<span class="material-symbols-outlined text-primary text-4xl">local_shipping</span></div>'+
-    '<h1 class="font-headline-md text-headline-md text-primary mb-1">EdenMish Ops</h1>'+
+    '<h1 class="font-headline-md text-headline-md text-primary mb-1">מעקב הזמנות | עדן מיש</h1>'+
     '<p class="text-body-md text-on-surface-variant mb-stack-lg">מרכז הבקרה</p>'+
     '<input id="pin" type="password" placeholder="הזן PIN" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-center text-xl mb-stack-md" style="letter-spacing:6px"/>'+
     '<button class="w-full bg-primary-container text-on-primary-container font-headline-md py-4 rounded-xl active:scale-95" onclick="doLogin()">התחבר</button>'+
@@ -103,7 +103,7 @@ function renderQueue(){
   $("app").innerHTML =
     '<div class="sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm">'+
     '<div class="flex items-center justify-between gap-stack-sm">'+
-    '<div class="flex items-center gap-2"><strong class="font-headline-md text-headline-md text-primary">EdenMish Ops</strong>'+(urgentCount?'<span class="bg-error/20 text-error text-label-sm px-2 py-0.5 rounded-full animate-pulse flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">priority_high</span>'+urgentCount+' דחופות</span>':'')+'</div>'+
+    '<div class="flex items-center gap-2"><strong class="font-headline-md text-headline-md text-primary">מעקב הזמנות | עדן מיש</strong>'+(urgentCount?'<span class="bg-error/20 text-error text-label-sm px-2 py-0.5 rounded-full animate-pulse flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">priority_high</span>'+urgentCount+' דחופות</span>':'')+'</div>'+
     '<div class="flex bg-surface-container-low rounded-xl p-0.5"><button onclick="setView(\'queue\')" class="px-3 py-1 rounded-lg text-label-sm '+(currentView==='queue'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">תור</button><button onclick="setView(\'stats\')" class="px-3 py-1 rounded-lg text-label-sm '+(currentView==='stats'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">סטטיסטיקה</button></div>'+
     '<div class="flex gap-2">'+
     '<button onclick="refresh()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">refresh</span></button>'+
@@ -122,6 +122,35 @@ function renderQueue(){
 
 function setFilter(f){activeFilter=f;renderQueue();}
 function setView(v){currentView=v;if(v==="stats")renderStats();else renderQueue();}
+
+// Delivery deadline (SLA): Flash 90min, Standard 4h, Eco end-of-day from created_at
+function deliveryDeadline(o){
+  if(!o.created_at) return null;
+  var c=Number(o.created_at);
+  if(o.service==='flash') return c+90*60*1000;
+  if(o.service==='standard') return c+4*60*60*1000;
+  var d=new Date(c); var eod=new Date(d.getFullYear(),d.getMonth(),d.getDate(),20,0,0);
+  if(eod.getTime()<c) eod.setDate(eod.getDate()+1);
+  return eod.getTime();
+}
+function timeLeftBadge(o){
+  var onlyActive = ["paid","to_pickup","picked_up","to_dropoff"].includes(o.status);
+  var onlyDelivered = o.status==="delivered";
+  if(!onlyActive && !onlyDelivered) return "";
+  var dl=deliveryDeadline(o); if(!dl) return "";
+  var ref = onlyDelivered && o.delivered_at ? Number(o.delivered_at) : Date.now();
+  var diff=dl-ref; var ad=Math.abs(diff); var mins=Math.floor(ad/60000);
+  var hrs=Math.floor(mins/60); var m=mins%60;
+  var label=hrs>0?hrs+'ש'+m+'ד\'':mins+'ד\'';
+  if(onlyDelivered){
+    if(ref<=dl) return '<span class="text-label-sm text-success-mint flex items-center gap-0.5"><span class="material-symbols-outlined text-[14px]">check_circle</span>בזמן</span>';
+    return '<span class="text-label-sm text-error flex items-center gap-0.5"><span class="material-symbols-outlined text-[14px]">warning</span>איחור '+label+'</span>';
+  }
+  if(diff<0) return '<span class="text-label-sm text-error font-bold flex items-center gap-0.5"><span class="material-symbols-outlined text-[14px]">warning</span>איחור '+label+'</span>';
+  if(mins<15) return '<span class="text-label-sm text-error animate-pulse flex items-center gap-0.5"><span class="material-symbols-outlined text-[14px]">timer</span>'+label+'</span>';
+  if(mins<30) return '<span class="text-label-sm text-alert-amber flex items-center gap-0.5"><span class="material-symbols-outlined text-[14px]">timer</span>'+label+'</span>';
+  return '<span class="text-label-sm text-success-mint flex items-center gap-0.5"><span class="material-symbols-outlined text-[14px]">timer</span>'+label+'</span>';
+}
 function renderStats(){
   var delivered=orders.filter(function(o){return o.status==='delivered';});
   var failed=orders.filter(function(o){return ['failed','cancelled'].includes(o.status);});
@@ -147,7 +176,7 @@ function renderStats(){
   var sBars=Object.entries(sc).filter(function(e){return e[1]>0;}).sort(function(a,b){return b[1]-a[1];}).map(function(e){var p=e[1]/sMax*100;return '<div class="flex items-center gap-2"><span class="text-label-sm text-on-surface-variant w-20 truncate">'+HE[e[0]]+'</span><div class="flex-1 bg-surface-container-low rounded-full h-4 overflow-hidden"><div class="h-full bg-primary-container rounded-full" style="width:'+p+'%"></div></div><span class="text-label-bold text-on-surface w-5 text-center">'+e[1]+'</span></div>';}).join('');
   var hdr='<div class="flex bg-surface-container-low rounded-xl p-0.5"><button onclick="setView(\'queue\')" class="px-3 py-1 rounded-lg text-label-sm '+(currentView==='queue'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">תור</button><button onclick="setView(\'stats\')" class="px-3 py-1 rounded-lg text-label-sm '+(currentView==='stats'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">סטטיסטיקה</button></div>';
   $("app").innerHTML=
-    '<div class="sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm"><div class="flex items-center justify-between gap-stack-sm"><strong class="font-headline-md text-headline-md text-primary">EdenMish Ops</strong>'+hdr+'<div class="flex gap-2"><button onclick="refresh()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">refresh</span></button><button onclick="logout()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-error"><span class="material-symbols-outlined">logout</span></button></div></div></div>'+
+    '<div class="sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm"><div class="flex items-center justify-between gap-stack-sm"><strong class="font-headline-md text-headline-md text-primary">מעקב הזמנות | עדן מיש</strong>'+hdr+'<div class="flex gap-2"><button onclick="refresh()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">refresh</span></button><button onclick="logout()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-error"><span class="material-symbols-outlined">logout</span></button></div></div></div>'+
     '<div class="px-gutter-mobile py-stack-sm max-w-lg mx-auto space-y-3 pb-24">'+
     '<div class="grid grid-cols-2 gap-3">'+kpi('אחוז הצלחה',sr+'%','verified','#91d3c8')+kpi('זמן ממוצע',at>0?at+' דק\'':'—','schedule','#dfb7ff')+kpi('דירוג ממוצע',ar,'star','#fbbf24')+kpi('הכנסה','₪'+rev,'payments','#91d3c8')+'</div>'+
     '<div class="glass-card rounded-2xl p-stack-md"><h3 class="font-headline-md text-on-surface mb-3">הזמנות ליום</h3><svg viewBox="0 0 280 100" class="w-full">'+bars+'</svg></div>'+
