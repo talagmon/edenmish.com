@@ -1,0 +1,17 @@
+{
+  "env": { "browser": true, "es2021": true, "node": true },
+  "parserOptions": { "ecmaVersion": 2022, "sourceType": "script" },
+  "rules": {
+    "no-unused-vars": "warn",
+    "no-undef": "warn",
+    "no-redeclare": "error",
+    "no-dupe-keys": "error",
+    "no-unreachable": "warn",
+    "no-constant-condition": "warn",
+    "no-debugger": "error"
+  },
+  "overrides": [{
+    "files": ["tests/**/*.js"],
+    "env": { "node": true }
+  }]
+}
