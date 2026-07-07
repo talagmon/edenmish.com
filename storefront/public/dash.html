@@ -70,7 +70,8 @@ function renderQueue(){
     inbox: orders.filter(function(o){return ["received","priced","review","payment_sent"].includes(o.status);}).length,
     active: orders.filter(function(o){return ["paid"].concat(LIVE).includes(o.status);}).length,
     done: orders.filter(function(o){return o.status==="delivered";}).length,
-    problems: orders.filter(function(o){return ["failed","cancelled","refund_pending"].includes(o.status);}).length
+    cancelled: orders.filter(function(o){return o.status==="cancelled";}).length,
+    problems: orders.filter(function(o){return ["failed","refund_pending"].includes(o.status);}).length
   };
   var revenue = orders.filter(function(o){return o.payment_status==='paid';}).reduce(function(s,o){return s+(o.price||0);},0);
   var urgentCount = orders.filter(function(o){return o.urgent||o.review_flag;}).length;
@@ -79,7 +80,8 @@ function renderQueue(){
   if(activeFilter==="inbox") filtered = orders.filter(function(o){return ["received","priced","review","payment_sent"].includes(o.status);});
   else if(activeFilter==="active") filtered = orders.filter(function(o){return ["paid"].concat(LIVE).includes(o.status);});
   else if(activeFilter==="done") filtered = orders.filter(function(o){return o.status==="delivered";});
-  else if(activeFilter==="problems") filtered = orders.filter(function(o){return ["failed","cancelled","refund_pending"].includes(o.status);});
+  else if(activeFilter==="cancelled") filtered = orders.filter(function(o){return o.status==="cancelled";});
+  else if(activeFilter==="problems") filtered = orders.filter(function(o){return ["failed","refund_pending"].includes(o.status);});
 
   var sorted = filtered.sort(function(a,b){
     var pa=(a.urgent||a.review_flag)?0:1, pb=(b.urgent||b.review_flag)?0:1;
@@ -114,10 +116,10 @@ function renderQueue(){
     '<div class="flex bg-surface-container-low rounded-xl p-0.5 flex-1"><button onclick="setView(\'queue\')" class="flex-1 px-3 py-1 rounded-lg text-label-sm '+(currentView==='queue'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">תור</button><button onclick="setView(\'stats\')" class="flex-1 px-3 py-1 rounded-lg text-label-sm '+(currentView==='stats'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">סטטיסטיקה</button></div>'+
     '</div>'+
     '<div class="flex gap-2 mt-2">'+
-    kpiCard("סה״כ",counts.all,"primary")+kpiCard("פעילות",counts.active,"secondary")+kpiCard("הכנסה","₪"+revenue,"success-mint")+kpiCard("חריגות",counts.problems,counts.problems>0?"error":"on-surface-variant")+
+    kpiCard("סה״כ",counts.all,"primary")+kpiCard("פעילות",counts.active,"secondary")+kpiCard("הכנסה","₪"+revenue,"success-mint")+kpiCard("חריגות",counts.problems+counts.cancelled,(counts.problems+counts.cancelled)>0?"error":"on-surface-variant")+
     '</div>'+
     '<div class="flex gap-2 mt-2 overflow-x-auto scrollbar-hide pb-1">'+
-    tabBtn("all","הכל",counts.all)+tabBtn("inbox","חדשות",counts.inbox)+tabBtn("active","פעילות",counts.active)+tabBtn("done","הושלם",counts.done)+tabBtn("problems","חריגות",counts.problems)+
+    tabBtn("all","הכל",counts.all)+tabBtn("inbox","חדשות",counts.inbox)+tabBtn("active","פעילות",counts.active)+tabBtn("done","הושלם",counts.done)+tabBtn("cancelled","בוטלו",counts.cancelled)+tabBtn("problems","תקלות",counts.problems)+
     '</div></div>'+
     '<div class="px-gutter-mobile py-stack-sm max-w-lg mx-auto space-y-3 pb-24">'+
     (cards || '<div class="glass-card rounded-2xl p-stack-lg text-center text-on-surface-variant">אין הזמנות בקטגוריה זו.</div>')+
@@ -217,7 +219,7 @@ function queueCard(o){
     (canCancel?'<div class="absolute inset-y-0 left-0 flex items-center justify-center bg-error/90 px-8" style="z-index:0"><span class="material-symbols-outlined text-white text-2xl">delete</span></div>':"")+
     '<div id="'+cardId+'" class="glass-card rounded-xl p-stack-md border-r-4 '+color+' '+(isUrgent?'ring-1 ring-error/30':"")+' active:scale-[0.98] transition-transform cursor-pointer relative" style="z-index:1;touch-action:pan-y" '+
     (canCancel?'data-oid="'+o.id+'" data-x="0" ontouchstart="swipeStart(event)" ontouchmove="swipeMove(event)" ontouchend="swipeEnd(event)" ontransitionend="swipeTransitionEnd(event)"':'')+
-    ' onclick="'+(canCancel?'':'openOrder('+o.id+')')+'">'+
+    ' onclick="cardClick('+o.id+')">'+
     '<div class="flex items-center gap-2 flex-wrap">'+
     liveDot+
     '<span class="bg-primary-container text-on-primary-container font-label-bold text-label-sm px-3 py-1 rounded-full">'+esc(HE[o.status]||o.status)+'</span>'+
@@ -234,17 +236,23 @@ function queueCard(o){
     notesLine+
     '</div></div>';
 }
-var _swipe = {id:null,x:0,startX:0,el:null};
+var _swipe = {id:null,x:0,startX:0,el:null,moved:false,suppressClick:false};
+function cardClick(id){
+  if(_swipe.suppressClick){ _swipe.suppressClick=false; return; }
+  openOrder(id);
+}
 function swipeStart(e){
   _swipe.startX = e.touches[0].clientX;
   _swipe.el = e.currentTarget;
   _swipe.id = _swipe.el.dataset.oid;
+  _swipe.moved = false;
   _swipe.el.style.transition = "none";
 }
 function swipeMove(e){
   if(!_swipe.el) return;
   var dx = e.touches[0].clientX - _swipe.startX;
   if(dx > 0) dx = dx * 0.2;
+  if(Math.abs(dx) > 10) _swipe.moved = true;
   _swipe.x = dx;
   _swipe.el.style.transform = "translateX("+dx+"px)";
   var abs = Math.abs(dx);
@@ -253,6 +261,7 @@ function swipeMove(e){
 function swipeEnd(e){
   if(!_swipe.el) return;
   _swipe.el.style.transition = "transform 0.3s ease, opacity 0.3s ease";
+  if(_swipe.moved) _swipe.suppressClick = true;
   if(_swipe.x < -140){
     _swipe.el.style.transform = "translateX(-120%)";
     _swipe.el.style.opacity = "0";
