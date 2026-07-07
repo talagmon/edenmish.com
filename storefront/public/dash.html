@@ -21,7 +21,7 @@ var HE = {received:"נתקבלה",priced:"מחושב",review:"בדיקה",paymen
 var LIVE = ["to_pickup","to_dropoff"];
 var NEXT = {paid:"to_pickup",to_pickup:"picked_up",picked_up:"to_dropoff"};
 var NEXTLBL = {paid:"אשר יציאה לאיסוף",to_pickup:"אשר איסוף ✓",picked_up:"אשר יציאה למסירה"};
-var sess = null, orders = [], activeOrder = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, activeFilter = "all";
+var sess = null, orders = [], activeOrder = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, activeFilter = "all", currentView = "queue";
 
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
 function fmt(t){return t?new Date(t).toLocaleString("he-IL",{timeZone:"Asia/Jerusalem",hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"}):"—";}
@@ -61,8 +61,7 @@ async function refresh(){
     var u = orders.find(function(o){return o.id===activeOrder.id;});
     if(u){activeOrder=u;return renderDetail(u);}
   }
-  renderQueue();
-}
+  if(currentView==="stats") renderStats(); else renderQueue();
 
 function renderQueue(){
   var counts = {
@@ -104,6 +103,7 @@ function renderQueue(){
     '<div class="sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm">'+
     '<div class="flex items-center justify-between gap-stack-sm">'+
     '<div class="flex items-center gap-2"><strong class="font-headline-md text-headline-md text-primary">EdenMish Ops</strong>'+(urgentCount?'<span class="bg-error/20 text-error text-label-sm px-2 py-0.5 rounded-full animate-pulse flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">priority_high</span>'+urgentCount+' דחופות</span>':'')+'</div>'+
+    '<div class="flex bg-surface-container-low rounded-xl p-0.5"><button onclick="setView(\'queue\')" class="px-3 py-1 rounded-lg text-label-sm '+(currentView==='queue'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">תור</button><button onclick="setView(\'stats\')" class="px-3 py-1 rounded-lg text-label-sm '+(currentView==='stats'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">סטטיסטיקה</button></div>'+
     '<div class="flex gap-2">'+
     '<button onclick="refresh()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">refresh</span></button>'+
     '<button onclick="logout()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-error"><span class="material-symbols-outlined">logout</span></button>'+
@@ -120,6 +120,43 @@ function renderQueue(){
 }
 
 function setFilter(f){activeFilter=f;renderQueue();}
+function setView(v){currentView=v;if(v==="stats")renderStats();else renderQueue();}
+function renderStats(){
+  var delivered=orders.filter(function(o){return o.status==='delivered';});
+  var failed=orders.filter(function(o){return ['failed','cancelled'].includes(o.status);});
+  var rated=orders.filter(function(o){return o.rating!=null&&o.rating>0;});
+  var sr=(delivered.length+failed.length)>0?Math.round(delivered.length/(delivered.length+failed.length)*100):0;
+  var times=delivered.filter(function(o){return o.delivered_at&&o.created_at;}).map(function(o){return Math.round((o.delivered_at-o.created_at)/60000);});
+  var at=times.length?Math.round(times.reduce(function(a,b){return a+b;},0)/times.length):0;
+  var ar=rated.length?(rated.reduce(function(s,o){return s+(o.rating||0);},0)/rated.length).toFixed(1):'—';
+  var rev=orders.filter(function(o){return o.payment_status==='paid';}).reduce(function(s,o){return s+(o.price||0);},0);
+  var svc={eco:0,standard:0,flash:0};orders.forEach(function(o){if(svc[o.service]!=null)svc[o.service]++;});
+  var days=[],dm={};var now=new Date();
+  for(var i=6;i>=0;i--){var d=new Date(now);d.setDate(d.getDate()-i);var k=d.getDate()+'/'+(d.getMonth()+1);days.push(k);dm[k]=0;}
+  orders.forEach(function(o){if(!o.created_at)return;var d=new Date(o.created_at);var k=d.getDate()+'/'+(d.getMonth()+1);if(k in dm)dm[k]++;});
+  var dmax=Math.max.apply(null,days.map(function(k){return dm[k];}).concat([1]));
+  var sc={};Object.keys(HE).forEach(function(s){sc[s]=0;});orders.forEach(function(o){if(sc[o.status]!=null)sc[o.status]++;});
+  var sMax=Math.max.apply(null,Object.values(sc).concat([1]));
+  function kpi(l,v,ic,c){return '<div class="glass-card rounded-xl p-3 text-center"><span class="material-symbols-outlined text-'+c+' text-2xl">'+ic+'</span><div class="font-headline-md text-headline-md-mobile text-on-surface mt-1">'+v+'</div><div class="text-label-sm text-on-surface-variant">'+l+'</div></div>';}
+  var bars=days.map(function(k,i){var v=dm[k];var h=dmax>0?Math.max(2,v/dmax*72):0;var x=8+i*38;return '<rect x="'+x+'" y="'+(82-h)+'" width="30" height="'+h+'" fill="#5b2a86" rx="3" opacity="'+(i===6?'1':'0.6')+'"/><text x="'+(x+15)+'" y="'+(78-h)+'" text-anchor="middle" fill="#91d3c8" font-size="10" font-weight="bold">'+(v||'')+'</text><text x="'+(x+15)+'" y="96" text-anchor="middle" fill="#978d9b" font-size="8">'+k+'</text>';}).join('');
+  var svcT=svc.eco+svc.standard+svc.flash;
+  var svcC={eco:'#91d3c8',standard:'#dfb7ff',flash:'#ef4444'};
+  var donut='',off=0,C=2*Math.PI*34;
+  if(svcT>0){['eco','standard','flash'].forEach(function(s){if(svc[s]===0)return;var len=svc[s]/svcT*C;donut+='<circle cx="50" cy="50" r="34" fill="none" stroke="'+svcC[s]+'" stroke-width="14" stroke-dasharray="'+len+' '+(C-len)+'" stroke-dashoffset="-'+off+'" transform="rotate(-90 50 50)"/>';off+=len;});}
+  var sBars=Object.entries(sc).filter(function(e){return e[1]>0;}).sort(function(a,b){return b[1]-a[1];}).map(function(e){var p=e[1]/sMax*100;return '<div class="flex items-center gap-2"><span class="text-label-sm text-on-surface-variant w-20 truncate">'+HE[e[0]]+'</span><div class="flex-1 bg-surface-container-low rounded-full h-4 overflow-hidden"><div class="h-full bg-primary-container rounded-full" style="width:'+p+'%"></div></div><span class="text-label-bold text-on-surface w-5 text-center">'+e[1]+'</span></div>';}).join('');
+  var hdr='<div class="flex bg-surface-container-low rounded-xl p-0.5"><button onclick="setView(\'queue\')" class="px-3 py-1 rounded-lg text-label-sm '+(currentView==='queue'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">תור</button><button onclick="setView(\'stats\')" class="px-3 py-1 rounded-lg text-label-sm '+(currentView==='stats'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">סטטיסטיקה</button></div>';
+  $("app").innerHTML=
+    '<div class="sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm"><div class="flex items-center justify-between gap-stack-sm"><strong class="font-headline-md text-headline-md text-primary">EdenMish Ops</strong>'+hdr+'<div class="flex gap-2"><button onclick="refresh()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">refresh</span></button><button onclick="logout()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-error"><span class="material-symbols-outlined">logout</span></button></div></div></div>'+
+    '<div class="px-gutter-mobile py-stack-sm max-w-lg mx-auto space-y-3 pb-24">'+
+    '<div class="grid grid-cols-2 gap-3">'+kpi('אחוז הצלחה',sr+'%','verified','#91d3c8')+kpi('זמן ממוצע',at>0?at+' דק\'':'—','schedule','#dfb7ff')+kpi('דירוג ממוצע',ar,'star','#fbbf24')+kpi('הכנסה','₪'+rev,'payments','#91d3c8')+'</div>'+
+    '<div class="glass-card rounded-2xl p-stack-md"><h3 class="font-headline-md text-on-surface mb-3">הזמנות ליום</h3><svg viewBox="0 0 280 100" class="w-full">'+bars+'</svg></div>'+
+    '<div class="grid grid-cols-1 md:grid-cols-2 gap-3">'+
+    '<div class="glass-card rounded-2xl p-stack-md text-center"><h3 class="font-headline-md text-on-surface mb-2">פילוח שירות</h3>'+(svcT>0?'<svg viewBox="0 0 100 100" class="w-28 h-28 mx-auto">'+donut+'<text x="50" y="48" text-anchor="middle" fill="#dae2fd" font-size="18" font-weight="bold">'+svcT+'</text><text x="50" y="62" text-anchor="middle" fill="#cec3d2" font-size="8">סה"כ</text></svg><div class="flex justify-center gap-3 mt-2 text-label-sm"><span class="text-secondary">Eco '+svc.eco+'</span><span class="text-primary">Std '+svc.standard+'</span><span class="text-error">Flash '+svc.flash+'</span></div>':'<div class="py-8 text-on-surface-variant">אין נתונים</div>')+'</div>'+
+    '<div class="glass-card rounded-2xl p-stack-md"><h3 class="font-headline-md text-on-surface mb-3">פילוח סטטוס</h3><div class="space-y-1.5">'+(sBars||'<div class="text-on-surface-variant text-center py-4">אין נתונים</div>')+'</div></div>'+
+    '</div>'+
+    '<div class="glass-card rounded-2xl p-stack-md"><div class="grid grid-cols-3 gap-2 text-center"><div><div class="font-headline-md text-secondary">'+delivered.length+'</div><div class="text-label-sm text-on-surface-variant">נמסרו</div></div><div><div class="font-headline-md text-error">'+failed.length+'</div><div class="text-label-sm text-on-surface-variant">נכשלו/בוטלו</div></div><div><div class="font-headline-md text-primary">'+orders.length+'</div><div class="text-label-sm text-on-surface-variant">סה"כ הזמנות</div></div></div></div>'+
+    '</div>';
+}
 
 function queueCard(o){
   var isLive = LIVE.includes(o.status);
