@@ -1,6 +1,7 @@
 // HTML pages: customer tracking (find.) + ops/driver dashboard (ops.)
 
 import { customerFlow, liveGpsStatuses, opsLabelMap, QUEUE_LAYOUT, queueStatusMap } from './status.js';
+import { versionString } from './version.js';
 
 const CSS = `
 *{box-sizing:border-box;margin:0;padding:0}
@@ -33,6 +34,8 @@ h2{font-size:1.15rem;color:#3E1D5E;margin-bottom:8px}
 .otp-cell{width:40px;height:50px;text-align:center;font-size:1.5rem;font-weight:700;border:2px solid #B8A8C9;border-radius:10px;outline:none;color:#3E1D5E}
 .otp-cell:focus{border-color:#5B2A86;background:#F5F2FB}
 .otp-cell.filled{border-color:#5B2A86}
+.vfoot{margin-top:28px;padding-top:14px;border-top:1px dashed rgba(0,0,0,.08);text-align:center;color:#9a8fa6;font-size:.72rem;direction:ltr}
+.vfoot a{color:#9a8fa6;text-decoration:none}
 `;
 
 
@@ -151,52 +154,87 @@ async function verifyOtpNow(){
 async function resendOtp(){var r=await fetch('/api/orders/'+TOKEN+'/resend-otp',{method:'POST'});var d=await r.json().catch(function(){return{};});alert(d&&d.error==='throttled'?'נשלחו יותר מדי קודים — נסו שוב מאוחר יותר.':'נשלח קוד חדש לדוא״ל');}
 load();
 setInterval(()=>{ if(!(document.activeElement&&document.activeElement.tagName==='INPUT')) load(); },7000);
-</script></body></html>`;
+</script>
+<div class="vfoot">${versionString()}</div>
+</body></html>`;
 }
 
 export function opsHtml(env) {
   return `<!doctype html><html lang="he" dir="rtl"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>EdenMish · ניהול שליחויות</title>
-<style>${CSS}
-.qbucket{margin:14px 0}
-.qhead{display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:2px solid rgba(91,42,134,.18);margin-bottom:8px;flex-wrap:wrap}
-.qhead-label{font-weight:800;color:#3E1D5E;font-size:1.02rem}
-.qhead-count{background:#5B2A86;color:#fff;border-radius:999px;padding:2px 10px;font-size:.78rem;font-weight:700}
-.qhead-hint{color:#9a93a8;font-size:.72rem;font-weight:400}
-.qhead-toggle{margin-inline-start:auto;color:#5B2A86;font-size:.82rem;font-weight:700;cursor:pointer;background:none;border:0;padding:4px}
-.qcards{display:flex;flex-direction:column;gap:8px}
-.ocard{background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:12px}
-.ocard-active{border-color:#2E8B57;background:#F4FBF6}
-.ocard-live{box-shadow:inset 0 0 0 2px rgba(192,57,43,.35)}
-.ocard-top{display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap}
-.ocard-top .price{margin-inline-start:auto;font-weight:800;color:#C9A96B}
-.ocard-name{font-weight:700;font-size:.95rem}
-.ocard-route{color:#5A5566;font-size:.92rem;margin:2px 0}
-.ocard-meta{margin-top:6px;font-size:.72rem;color:#9a93a8}
-.chip{display:inline-block;font-size:.68rem;padding:2px 8px;border-radius:999px;background:#eee;margin-inline-end:4px;margin-top:5px}
-.chip-urg{background:#FDECEA;color:#C0392B;font-weight:700}
-.chip-pay{background:#D8F0E0;color:#1c5e36}
-.ocard-actions{margin-top:10px;border-top:1px dashed rgba(0,0,0,.08);padding-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-.inline-price{display:flex;gap:6px;align-items:stretch;width:100%}
-.inline-price input{flex:1;margin:0;padding:12px;border:2px solid rgba(91,42,134,.3);border-radius:10px;font-size:1.1rem;text-align:center;min-width:80px}
-.deliver-form{display:flex;flex-direction:column;gap:6px;width:100%}
-.deliver-form input{margin:0;padding:12px;border:1px solid rgba(91,42,134,.25);border-radius:10px;font-size:1rem;text-align:right}
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+<!-- ops-v2-dark -->
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Hanken Grotesk',system-ui,sans-serif;background:#0b1326;color:#dae2fd;direction:rtl;text-align:right;background-image:radial-gradient(50rem 50rem at 85% -10%,rgba(91,42,134,.35),transparent 60%),radial-gradient(40rem 40rem at 0% 100%,rgba(0,83,75,.22),transparent 55%);background-attachment:fixed;min-height:100vh}
+.material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;vertical-align:middle}
+.wrap{max-width:980px;margin:0 auto;padding:24px 16px 80px}
+.glass-card{background:rgba(255,255,255,.05);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.1);border-radius:16px}
+.muted{color:#cec3d2}
+.stale{color:#fbbf24}
+.price{color:#91d3c8;font-weight:800}
+.badge{display:inline-block;padding:4px 12px;border-radius:999px;font-size:.8rem;font-weight:700;background:#5b2a86;color:#fff}
+input{background:rgba(13,8,20,.6);border:1px solid rgba(255,255,255,.14);color:#dae2fd;border-radius:10px;padding:12px;font-family:inherit}
+input:focus{outline:none;border-color:#dfb7ff;box-shadow:0 0 10px rgba(223,183,255,.25)}
+.btn{display:inline-block;background:linear-gradient(135deg,#5b2a86,#7847a4);color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:700;border:0;cursor:pointer;font-size:1rem;width:100%;text-align:center;font-family:inherit}
+.btn:hover{filter:brightness(1.08)}
 .btn.sm{width:auto;flex:none;padding:12px 16px;font-size:.9rem;min-height:44px}
-.btn.go{background:#2E8B57}
-.btn.go:hover{background:#267a49}
-.btn.alt{background:transparent;color:#5B2A86;border:1px solid rgba(91,42,134,.3)}
-.btn.danger{background:transparent;color:#C0392B;border:1px solid rgba(192,57,43,.3)}
-.nlist{margin-top:8px;border-top:1px dashed rgba(0,0,0,.08);padding-top:8px}
-.nrow{padding:6px 0;border-bottom:1px solid rgba(0,0,0,.04);font-size:.85rem}
+.btn.go{background:linear-gradient(135deg,#00534b,#003732);color:#eafff9}
+.btn.alt{background:rgba(255,255,255,.05);color:#dae2fd;border:1px solid rgba(255,255,255,.18)}
+.btn.danger{background:rgba(239,68,68,.12);color:#ff8a8a;border:1px solid rgba(239,68,68,.4)}
+.qbucket{margin:14px 0}
+.qhead{display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:2px solid rgba(223,183,255,.18);margin-bottom:8px;flex-wrap:wrap}
+.qhead-label{font-weight:800;color:#dfb7ff;font-size:1.02rem}
+.qhead-count{background:#5b2a86;color:#fff;border-radius:999px;padding:2px 10px;font-size:.78rem;font-weight:700}
+.qhead-hint{color:#978d9b;font-size:.72rem;font-weight:400}
+.qhead-toggle{margin-inline-start:auto;color:#91d3c8;font-size:.82rem;font-weight:700;cursor:pointer;background:none;border:0;padding:4px}
+.qcards{display:flex;flex-direction:column;gap:10px}
+.ocard,.glass-card.ocard{background:rgba(255,255,255,.05);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:14px;margin:0}
+.ocard-active{border-color:#91d3c8;background:rgba(0,83,75,.18)}
+.ocard-live{box-shadow:inset 0 0 0 2px rgba(239,68,68,.5)}
+.ocard-top{display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap}
+.ocard-top .price{margin-inline-start:auto;font-weight:800;color:#91d3c8}
+.ocard-name{font-weight:700;font-size:.95rem;color:#dae2fd}
+.ocard-route{color:#cec3d2;font-size:.92rem;margin:2px 0}
+.ocard-meta{margin-top:6px;font-size:.72rem;color:#978d9b}
+.vstamp{display:inline-block;font-size:.65rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#7d7287;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:2px 6px;direction:ltr}
+.chip{display:inline-block;font-size:.68rem;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.08);color:#cec3d2;margin-inline-end:4px;margin-top:5px}
+.chip-urg{background:rgba(239,68,68,.18);color:#ff8a8a;font-weight:700}
+.chip-pay{background:rgba(52,211,153,.18);color:#34d399}
+.ocard-actions{margin-top:10px;border-top:1px dashed rgba(255,255,255,.12);padding-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.inline-price{display:flex;gap:6px;align-items:stretch;width:100%}
+.inline-price input{flex:1;margin:0;padding:12px;border:1px solid rgba(255,255,255,.18);border-radius:10px;font-size:1.1rem;text-align:center;min-width:80px;background:rgba(13,8,20,.6);color:#dae2fd}
+.deliver-form{display:flex;flex-direction:column;gap:6px;width:100%}
+.deliver-form input{margin:0;padding:12px;border:1px solid rgba(255,255,255,.18);border-radius:10px;font-size:1rem;text-align:right;background:rgba(13,8,20,.6);color:#dae2fd}
+.nlist{margin-top:8px;border-top:1px dashed rgba(255,255,255,.12);padding-top:8px}
+.nrow{padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:.85rem;color:#cec3d2}
 .nrow:last-child{border-bottom:0}
-.ns-ok{background:#2E8B57}.ns-fail{background:#C0392B}.ns-skip{background:#999}.ns-pend{background:#5B2A86}
-.otoolbar{display:flex;align-items:center;gap:8px;justify-content:space-between;position:sticky;top:0;z-index:5}
-.otoolbar .otitle{font-weight:800;color:#5B2A86;font-size:1rem}
-.live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#C0392B;animation:pulse 1.4s infinite}
+.ns-ok{background:#34d399}.ns-fail{background:#ef4444}.ns-skip{background:#9a93a8}.ns-pend{background:#5b2a86}
+.live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;animation:pulse 1.4s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.pod-overlay{position:fixed;inset:0;z-index:100;background:rgba(11,19,38,.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);overflow-y:auto;padding:20px}
+.pod-card{max-width:480px;margin:0 auto;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:14px}
+.pod-head{display:flex;justify-content:space-between;align-items:center}
+.pod-head b{color:#dfb7ff;font-size:1.1rem}
+.pod-x{background:none;border:0;color:#cec3d2;font-size:1.4rem;cursor:pointer}
+.pod-photo{display:flex;align-items:center;justify-content:center;min-height:120px;border:2px dashed rgba(223,183,255,.4);border-radius:14px;cursor:pointer;color:#cec3d2;text-align:center;padding:14px;overflow:hidden}
+.pod-photo img{max-height:200px;border-radius:12px;margin:0 auto}
+.pod-sig{position:relative;height:160px;border:1px solid rgba(255,255,255,.15);border-radius:14px;overflow:hidden;background:rgba(13,8,20,.4)}
+.pod-sig canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+.pod-sig-clear{position:absolute;top:6px;left:6px;font-size:.7rem;background:rgba(255,255,255,.1);color:#cec3d2;border:0;padding:3px 8px;border-radius:6px;cursor:pointer}
 </style></head><body><div class="wrap">
 <div id="app"></div>
+</div>
+<div id="pod" class="pod-overlay" hidden>
+<div class="pod-card">
+<div class="pod-head"><b>אישור מסירה (הוכחה)</b><button class="pod-x" onclick="hidePod()" aria-label="סגור">✕</button></div>
+<input type="text" id="pod-recv" placeholder="שם המקבל (אופציונלי)">
+<input type="text" id="pod-note" placeholder="הערת מסירה (אופציונלי)">
+<label class="pod-photo" for="pod-photo"><span id="pod-photo-ph">📸 לחצו לצלם את החבילה ביעד</span><input type="file" accept="image/*" capture="environment" id="pod-photo" hidden onchange="podPreview()"></label>
+<div class="pod-sig"><canvas id="pod-sig-canvas"></canvas><button class="pod-sig-clear" onclick="clearSig()" type="button">נקה</button></div>
+<button class="btn go" id="pod-submit" onclick="submitPod()" type="button">אשר מסירה וסגור משימה</button>
+</div>
 </div>
 <script>
 const HE=${JSON.stringify(opsLabelMap())};
@@ -214,7 +252,7 @@ function maskRecip(s){if(!s)return '';s=String(s);var at=s.indexOf('@');return a
 function bucketOf(s){return QOF[s]||'inbox';}
 function fmt(t){return t?new Date(t).toLocaleString('he-IL'):'—';}
 async function api(path,opts){opts=opts||{};opts.headers=opts.headers||{};if(sess)opts.headers['X-Ops']=sess;return await fetch(path,opts);}
-function loginHtml(){document.getElementById('app').innerHTML='<div class="card"><h2>כניסת אופס</h2><input id="pin" type="password" placeholder="PIN"><button class="btn" onclick="doLogin()">התחבר</button></div>';}
+function loginHtml(){document.getElementById('app').innerHTML='<div style="display:flex;align-items:center;justify-content:center;min-height:80vh;padding:20px"><div class="glass-card" style="max-width:360px;border-radius:20px;padding:32px;text-align:center"><div style="width:64px;height:64px;border-radius:50%;background:#5b2a86;display:flex;align-items:center;justify-content:center;margin:0 auto 16px"><span class="material-symbols-outlined" style="font-size:32px;color:#dfb7ff">two_wheeler</span></div><h2 style="color:#dfb7ff;font-size:1.3rem;margin-bottom:6px;font-family:Hanken Grotesk,sans-serif;font-weight:700">EdenMish Ops</h2><p class="muted" style="margin-bottom:20px;font-size:.85rem">מרכז הבקרה - גוש דן</p><input id="pin" type="password" placeholder="הזן PIN" style="text-align:center;font-size:1.2rem;letter-spacing:6px;margin-bottom:16px;background:rgba(13,8,20,.6);border:1px solid rgba(255,255,255,.14);color:#dae2fd;border-radius:10px;padding:14px;width:100%"><button class="btn" style="width:100%" onclick="doLogin()">התחבר</button></div></div>';}
 async function doLogin(){const pin=document.getElementById('pin').value;const r=await fetch('/api/ops/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});if(r.ok){sess=(await r.json()).session;refresh();}else{alert(r.status===429?'יותר מדי ניסיונות שגויים — נסו שוב בעוד 15 דקות':'PIN שגוי');}}
 function logout(){sess=null;stopWatch();loginHtml();}
 async function refresh(){const r=await api('/api/ops/orders');if(!r.ok){sess=null;stopWatch();return loginHtml();}orders=(await r.json()).orders||[];var fails=[];try{var fr=await api('/api/ops/notifications/failures');if(fr.ok)fails=(await fr.json()).failures||[];}catch(e){}notifs=[];if(notifOrderId){try{var nr=await api('/api/ops/orders/'+notifOrderId+'/notifications');if(nr.ok)notifs=(await nr.json()).notifications||[];}catch(e){}}render(fails);}
@@ -229,22 +267,27 @@ function render(fails){
     sections+='<div class="qbucket"><div class="qhead"><span class="qhead-label">'+esc(q.hebrewLabel)+'</span><span class="qhead-count">'+all.length+'</span>'+toggle+'</div><div class="qcards">'+showing.map(card).join('')+'</div></div>';
   });
   if(!sections)sections='<div class="card"><div class="muted">אין הזמנות כרגע.</div></div>';
-  var toolbar='<div class="card otoolbar"><button class="btn sm alt" data-act="refresh">רענן</button><b class="otitle">EdenMish · Ops</b><button class="btn sm alt" data-act="logout">התנתק</button></div>';
+  var active=orders.filter(function(o){return LIVE.indexOf(o.status)>=0;}).length;
+  var pending=orders.filter(function(o){return ['review','priced','received','payment_sent'].indexOf(o.status)>=0;}).length;
+  var done=orders.filter(function(o){return o.status==='delivered';}).length;
+  var toolbar='<div class="glass-card" style="border-radius:16px;padding:16px;margin:0 0 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px"><div><div style="display:flex;align-items:center;gap:8px"><span class="material-symbols-outlined" style="font-size:22px;color:#91d3c8">two_wheeler</span><strong style="color:#dfb7ff;font-size:1.1rem;font-family:Hanken Grotesk,sans-serif">EdenMish Ops</strong><span class="vstamp" title="גרסה">'+versionString()+'</span></div><div style="color:#cec3d2;font-size:.75rem;margin-top:2px">מרכז הבקרה: תל אביב וגוש דן</div></div><div style="display:flex;gap:8px"><div class="glass-card" style="padding:6px 14px;border-radius:12px;text-align:center"><div style="color:#91d3c8;font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700">פעילות</div><div style="color:#dae2fd;font-size:1.2rem;font-weight:700">'+active+'</div></div><div class="glass-card" style="padding:6px 14px;border-radius:12px;text-align:center"><div style="color:#dfb7ff;font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700">בתור</div><div style="color:#dae2fd;font-size:1.2rem;font-weight:700">'+pending+'</div></div><div class="glass-card" style="padding:6px 14px;border-radius:12px;text-align:center"><div style="color:#34D399;font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700">הושלם</div><div style="color:#dae2fd;font-size:1.2rem;font-weight:700">'+done+'</div></div></div><div style="display:flex;gap:6px"><button class="btn sm alt" data-act="refresh" title="רענן"><span class="material-symbols-outlined" style="font-size:18px">refresh</span></button><button class="btn sm danger" data-act="logout" title="התנתק"><span class="material-symbols-outlined" style="font-size:18px">logout</span></button></div></div>';
   var fp=(fails&&fails.length)?'<div class="qbucket"><div class="qhead"><span class="qhead-label" style="color:#C0392B">בעיות בשליחת הודעות</span><span class="qhead-count">'+fails.length+'</span></div><div class="qcards">'+fails.map(function(f){return '<div class="ocard" style="border-color:rgba(192,57,43,.3)"><div class="ocard-top"><span class="badge" style="background:#C0392B">'+esc(f.channel||'email')+'</span><b>'+(f.order_id?'#'+f.order_id:'—')+'</b><span class="muted" style="margin-inline-start:auto;font-size:.72rem">'+fmt(f.created_at)+'</span></div><div class="muted">'+esc(f.template||'')+(f.recipient?' · '+esc(maskRecip(f.recipient)):'')+'</div><div class="stale" style="margin-top:4px">'+esc(f.error||'שגיאה לא ידועה')+'</div></div>';}).join('')+'</div></div>':'';
   document.getElementById('app').innerHTML=toolbar+sections+fp;
   startGpsForActive();
 }
 function card(o){
   var s=o.status,id=o.id,isLive=LIVE.indexOf(s)>=0,isActive=o.id===activeId;
-  var h='<div class="ocard'+(isActive?' ocard-active':'')+(isLive?' ocard-live':'')+'">';
-  h+='<div class="ocard-top">'+(isLive?'<span class="live-dot"></span>':'')+'<span class="badge">'+esc(HE[s]||s)+'</span><b>#'+id+'</b><span class="price">₪'+(o.price||'?')+'</span></div>';
+  var h='<div class="glass-card ocard'+(isActive?' ocard-active':'')+(isLive?' ocard-live':'')+'" style="border-radius:16px;margin:0">';
+  h+='<div class="ocard-top">'+(isLive?'<span class="live-dot"></span>':'')+'<span class="badge">'+esc(HE[s]||s)+'</span><b style="opacity:.6">#'+id+'</b><span class="price">₪'+(o.price||'?')+'</span></div>';
   if(o.name)h+='<div class="ocard-name">'+esc(o.name)+'</div>';
-  h+='<div class="ocard-route">'+esc(o.pickup||'—')+' ← '+esc(o.dropoff||'—')+'</div><div>';
+  h+='<div class="ocard-route" style="line-height:1.8"><span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;color:#91d3c8">arrow_upward</span> '+esc(o.pickup||'—')+'<br><span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;color:#dfb7ff">location_on</span> '+esc(o.dropoff||'—')+'</div><div>';
   if(o.package)h+='<span class="chip">'+esc(o.package)+'</span>';
   if(o.urgent)h+='<span class="chip chip-urg">דחוף</span>';
-  if(o.when_text)h+='<span class="chip">⏰ '+esc(o.when_text)+'</span>';
+  if(o.when_text)h+='<span class="chip">'+esc(o.when_text)+'</span>';
   if(o.payment_status&&o.payment_status!=='none')h+='<span class="chip chip-pay">'+esc(o.payment_status)+'</span>';
-  h+='</div><div class="ocard-meta">נוצר: '+fmt(o.created_at)+(o.distance_km?' · '+Number(o.distance_km).toFixed(1)+' ק"מ':'')+'</div>';
+  h+='</div>';
+  if(o.notes)h+='<div style="margin-top:6px;padding:6px 10px;background:rgba(251,191,36,.1);border-radius:8px;font-size:.78rem;color:#FBBF24"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">sticky_note_2</span> '+esc(o.notes)+'</div>';
+  h+='<div class="ocard-meta">'+fmt(o.created_at)+'</div>';
   h+=actions(o);if(notifOrderId===id)h+=notifPanel();h+='</div>';
   return h;
 }
@@ -259,7 +302,7 @@ function actions(o){
   }else if(s==='paid'){
     h+='<button class="btn sm go" data-act="topickup" data-id="'+id+'">'+NEXTLBL['paid']+'</button>';
   }else if(s==='to_dropoff'){
-    h+='<div class="deliver-form"><input type="text" id="recv-'+id+'" placeholder="שם המקבל (אופציונלי)"><input type="text" id="dnote-'+id+'" placeholder="הערת מסירה (אופציונלי)"><button class="btn sm go" data-act="deliver" data-id="'+id+'">סימון כנמסר ✓</button></div><button class="btn sm danger" data-act="fail" data-id="'+id+'">סמן כנכשל</button>';
+    h+='<button class="btn sm go" data-act="pod" data-id="'+id+'">📸 הוכחת מסירה (צילום + חתימה)</button><button class="btn sm danger" data-act="fail" data-id="'+id+'">סמן כנכשל</button>';
   }else if(NEXT[s]){
     h+='<button class="btn sm go" data-act="advance" data-id="'+id+'" data-next="'+NEXT[s]+'">'+NEXTLBL[s]+'</button><button class="btn sm danger" data-act="fail" data-id="'+id+'">סמן כנכשל</button>';
   }
@@ -288,15 +331,39 @@ function copyPay(url){if(navigator.clipboard&&navigator.clipboard.writeText){nav
 async function setStatus(id,st){await api('/api/ops/orders/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:st})});if(st==='to_pickup'||st==='to_dropoff'){activeId=id;startWatch(id);}if(st==='picked_up'||st==='delivered'||st==='failed'||st==='cancelled')stopWatch();refresh();}
 async function advance(id,cur){if(NEXT[cur])await setStatus(id,NEXT[cur]);}
 async function markPaid(id){if(!confirm('לסמן כשולם ידנית?'))return;await api('/api/ops/orders/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'paid'})});refresh();}
-async function deliverInline(id){
-  var recv=(document.getElementById('recv-'+id)||{}).value||'';
-  var note=(document.getElementById('dnote-'+id)||{}).value||'';
-  var btn=document.querySelector('[data-act="deliver"][data-id="'+id+'"]');if(btn){btn.disabled=true;btn.dataset.label=btn.textContent;btn.textContent='טוען…';}
+var podOrderId=null,sigCtx=null,sigDrawing=false,sigHas=false;
+function showPod(id){podOrderId=id;var p=document.getElementById('pod');p.hidden=false;document.getElementById('pod-recv').value='';document.getElementById('pod-note').value='';document.getElementById('pod-photo').value='';document.getElementById('pod-photo-ph').innerHTML='📸 לחצו לצלם את החבילה ביעד';clearSig();initSig();}
+function hidePod(){document.getElementById('pod').hidden=true;}
+function initSig(){
+  var c=document.getElementById('pod-sig-canvas');if(!c||c.dataset.ready)return;
+  var dpr=window.devicePixelRatio||1;c.width=c.clientWidth*dpr;c.height=c.clientHeight*dpr;
+  sigCtx=c.getContext('2d');sigCtx.scale(dpr,dpr);sigCtx.lineWidth=2.5;sigCtx.lineCap='round';sigCtx.lineJoin='round';sigCtx.strokeStyle='#dfb7ff';
+  function pt(e){var r=c.getBoundingClientRect();var cx=(e.clientX!=null?e.clientX:(e.touches&&e.touches[0]?e.touches[0].clientX:0));var cy=(e.clientY!=null?e.clientY:(e.touches&&e.touches[0]?e.touches[0].clientY:0));return {x:cx-r.left,y:cy-r.top};}
+  function down(e){sigDrawing=true;var p=pt(e);sigCtx.beginPath();sigCtx.moveTo(p.x,p.y);}
+  function move(e){if(!sigDrawing)return;var p=pt(e);sigCtx.lineTo(p.x,p.y);sigCtx.stroke();sigCtx.beginPath();sigCtx.moveTo(p.x,p.y);sigHas=true;}
+  function up(){sigDrawing=false;sigCtx.beginPath();}
+  c.addEventListener('mousedown',down);c.addEventListener('mousemove',move);window.addEventListener('mouseup',up);
+  c.addEventListener('touchstart',function(e){e.preventDefault();down(e);},{passive:false});
+  c.addEventListener('touchmove',function(e){e.preventDefault();move(e);},{passive:false});
+  c.addEventListener('touchend',up);
+  c.dataset.ready='1';
+}
+function clearSig(){var c=document.getElementById('pod-sig-canvas');if(sigCtx&&c){sigCtx.clearRect(0,0,c.width,c.height);sigHas=false;}}
+function podPreview(){
+  var f=document.getElementById('pod-photo').files[0];var ph=document.getElementById('pod-photo-ph');
+  if(!f){ph.innerHTML='📸 לחצו לצלם את החבילה ביעד';return;}
+  var fr=new FileReader();fr.onload=function(){ph.innerHTML='<img src="'+fr.result+'" alt="תצלום המסירה">';};fr.readAsDataURL(f);
+}
+function photoResize(file,cb){if(!file){cb(null);return;}var fr=new FileReader();fr.onload=function(){var img=new Image();img.onload=function(){var max=1024,scale=Math.min(1,max/Math.max(img.width,img.height)),c=document.createElement('canvas');c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);c.getContext('2d').drawImage(img,0,0,c.width,c.height);cb(c.toDataURL('image/jpeg',0.7));};img.src=fr.result;};fr.readAsDataURL(file);}
+async function submitPod(){
+  var btn=document.getElementById('pod-submit');btn.disabled=true;var orig=btn.textContent;btn.textContent='שולח…';
+  var photo=null;await new Promise(function(res){photoResize(document.getElementById('pod-photo').files[0],function(b){photo=b;res();});});
+  var sig=sigHas?document.getElementById('pod-sig-canvas').toDataURL('image/png'):null;
   try{
-    var r=await api('/api/ops/orders/'+id+'/deliver',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({receiver_name:recv,delivery_note:note})});
+    var r=await api('/api/ops/orders/'+podOrderId+'/deliver',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({receiver_name:document.getElementById('pod-recv').value||'',delivery_note:document.getElementById('pod-note').value||'',photo_url:photo,signature:sig})});
     var d=await r.json();
-    if(d&&d.ok){alert('המשלוח סומן כנמסר ✓');refresh();}else{throw 0;}
-  }catch(e){if(btn){btn.disabled=false;btn.textContent=btn.dataset.label||'סימון כנמסר';}alert('שגיאה בסיום המשלוח. נסו שוב.');}
+    if(d&&d.ok){hidePod();refresh();}else{throw 0;}
+  }catch(e){btn.disabled=false;btn.textContent=orig;alert('שגיאה בשמירת הוכחת המסירה. נסו שוב.');}
 }
 function toggleDone(){doneOpen=!doneOpen;render();}
 function startGpsForActive(){var o=orders.find(function(x){return x.id===activeId;});if(o&&(o.status==='to_pickup'||o.status==='to_dropoff'))startWatch(o.id);}
@@ -310,7 +377,7 @@ document.getElementById('app').addEventListener('click',function(e){
   else if(act==='advance')advance(id,b.getAttribute('data-next'));
   else if(act==='fail'){if(confirm('לסמן את ההזמנה כנכשלת?'))setStatus(id,'failed');}
   else if(act==='markpaid')markPaid(id);
-  else if(act==='deliver')deliverInline(id);
+  else if(act==='pod')showPod(id);
   else if(act==='copy'){copyPay(b.getAttribute('data-pay'));alert('הקישור הועתק ללוח ✓');}
   else if(act==='refresh')refresh();
   else if(act==='logout')logout();

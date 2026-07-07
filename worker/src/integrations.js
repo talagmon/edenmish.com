@@ -19,17 +19,16 @@ export async function createDraftOrder(env, order, priceNis) {
   const apiVersion = env.SHOPIFY_API_VERSION || '2026-04';
   const url = `https://${env.SHOPIFY_SHOP}/admin/api/${apiVersion}/draft_orders.json`;
 
-  const pkgTitle = ({
-    'מעטפה/מסמך': 'שליחות — מעטפה/מסמך',
-    'פריט קטן': 'שליחות — פריט קטן',
-    'קופסה (עד גודל נעל)': 'שליחות — קופסה',
-  })[order.package] || 'שליחות';
+  const SERVICE_HE = { eco: 'Eco (עד סוף יום)', standard: 'Standard (4 שעות)', flash: 'Flash (90 דקות)' };
+  const SIZE_HE = { small: 'קטן', medium: 'בינוני' };
+  const pkgTitle = 'שליחות — ' + (SERVICE_HE[order.service] || 'שליחות') + (order.size === 'medium' ? ' · עד גודל קופסת נעלים' : '');
 
   const properties = [
     { name: '_tracking_token', value: order.token },
     { name: 'איסוף', value: order.pickup || '—' },
     { name: 'מסירה', value: order.dropoff || '—' },
-    { name: 'דחיפות', value: order.urgent ? 'דחוף' : 'רגיל' },
+    { name: 'רמת שירות', value: SERVICE_HE[order.service] || order.service || '—' },
+    { name: 'גודל', value: SIZE_HE[order.size] || '—' },
     { name: 'טלפון', value: order.phone || '—' },
   ];
   if (order.when_text) properties.push({ name: 'מועד', value: order.when_text });
@@ -147,6 +146,21 @@ export async function sendEmail(env, { to, subject, html }) {
     })
   }).catch(() => null);
   return !!(res && (res.ok || res.status === 202));
+}
+
+// ---- WhatsApp Business Cloud API (optional) ----
+// Gated on env.WHATSAPP_TOKEN + env.WHATSAPP_PHONE_ID; no-ops cleanly otherwise.
+// Note: business-initiated messages to a recipient may require a pre-approved
+// template depending on the WhatsApp Business account setup.
+export async function sendWhatsApp(env, { to, body }) {
+  if (!env.WHATSAPP_TOKEN || !env.WHATSAPP_PHONE_ID || !to) return null;
+  const num = String(to).replace(/\D/g, '');
+  const res = await fetch(`https://graph.facebook.com/v20.0/${env.WHATSAPP_PHONE_ID}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaging_product: 'whatsapp', to: num, type: 'text', text: { body: String(body).slice(0, 4000) } })
+  }).catch(() => null);
+  return !!(res && res.ok);
 }
 
 // ---- OTP helpers ----

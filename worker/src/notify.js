@@ -7,7 +7,7 @@
 // - NEVER stores the email body/html or OTP codes — only metadata + outcome.
 // - The audit row itself is best-effort: if D1 is unavailable we still attempt the send.
 
-import { sendEmail } from './integrations.js';
+import { sendEmail, sendWhatsApp } from './integrations.js';
 import { createNotificationAttempt, markNotificationSent, markNotificationFailed, markNotificationSkipped } from './db.js';
 
 const sanitizeError = (e) => {
@@ -45,6 +45,41 @@ export async function notifyEmail(env, db, { orderId, template, recipient, subje
     const ok = await sendEmail(env, { to: recipient, subject, html, text });
     if (ok) {
       if (id) { try { await markNotificationSent(db, id, null); } catch (e) {} } // provider_ref null until sendEmail exposes SendGrid's X-Message-Id
+      return { ok: true, id };
+    }
+    if (id) { try { await markNotificationFailed(db, id, 'send_failed'); } catch (e) {} }
+    return { ok: false, id, error: 'send_failed' };
+  } catch (e) {
+    if (id) { try { await markNotificationFailed(db, id, sanitizeError(e)); } catch (e2) {} }
+    return { ok: false, id, error: sanitizeError(e) };
+  }
+}
+
+// notifyWhatsApp(env, db, { orderId, template, recipient, body })
+// Best-effort WhatsApp Business Cloud API send with the same durable audit trail.
+// Skips cleanly when WHATSAPP_TOKEN / WHATSAPP_PHONE_ID are not configured.
+export async function notifyWhatsApp(env, db, { orderId, template, recipient, body }) {
+  let id = null;
+  try {
+    id = await createNotificationAttempt(db, {
+      order_id: orderId ?? null,
+      channel: 'whatsapp',
+      template: template || null,
+      recipient: recipient || null,
+      subject: null,
+      status: 'pending',
+    });
+  } catch (e) { id = null; }
+
+  if (!recipient || !env || !env.WHATSAPP_TOKEN || !env.WHATSAPP_PHONE_ID) {
+    if (id) { try { await markNotificationSkipped(db, id); } catch (e) {} }
+    return { ok: false, skipped: true, id };
+  }
+
+  try {
+    const ok = await sendWhatsApp(env, { to: recipient, body });
+    if (ok) {
+      if (id) { try { await markNotificationSent(db, id, null); } catch (e) {} }
       return { ok: true, id };
     }
     if (id) { try { await markNotificationFailed(db, id, 'send_failed'); } catch (e) {} }

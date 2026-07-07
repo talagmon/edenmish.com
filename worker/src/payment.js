@@ -25,8 +25,12 @@ export async function createCharge(env, order, priceNis) {
   // Immediate capture via Shopify Draft Order + PayPlus app.
   const draft = await createDraftOrder(env, order, priceNis);
   if (!draft) return null;
+  // Force Hebrew checkout. Shopify respects ?locale=he on the invoice URL (Hebrew
+  // must be a published language in Shopify admin → Settings → Languages).
+  let checkoutUrl = draft.invoice_url;
+  try { const u = new URL(checkoutUrl); u.searchParams.set('locale', 'he'); checkoutUrl = u.toString(); } catch (e) {}
   return {
-    checkoutUrl: draft.invoice_url,
+    checkoutUrl,
     mode: 'immediate',
     processorRef: String(draft.id),
     draftOrderId: draft.id,
