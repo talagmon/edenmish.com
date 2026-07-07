@@ -67,26 +67,32 @@ async function refresh(){
 function renderQueue(){
   var counts = {
     all: orders.length,
-    inbox: orders.filter(function(o){return ["received","priced","review"].includes(o.status);}).length,
-    payment: orders.filter(function(o){return ["payment_sent"].includes(o.status);}).length,
-    ready: orders.filter(function(o){return ["paid"].includes(o.status);}).length,
-    active: orders.filter(function(o){return LIVE.includes(o.status);}).length,
+    inbox: orders.filter(function(o){return ["received","priced","review","payment_sent"].includes(o.status);}).length,
+    active: orders.filter(function(o){return ["paid"].concat(LIVE).includes(o.status);}).length,
     done: orders.filter(function(o){return o.status==="delivered";}).length,
     problems: orders.filter(function(o){return ["failed","cancelled","refund_pending"].includes(o.status);}).length
   };
+  var revenue = orders.filter(function(o){return o.payment_status==='paid';}).reduce(function(s,o){return s+(o.price||0);},0);
+  var urgentCount = orders.filter(function(o){return o.urgent||o.review_flag;}).length;
 
   var filtered = orders;
-  if(activeFilter==="inbox") filtered = orders.filter(function(o){return ["received","priced","review"].includes(o.status);});
-  else if(activeFilter==="payment") filtered = orders.filter(function(o){return ["payment_sent"].includes(o.status);});
-  else if(activeFilter==="ready") filtered = orders.filter(function(o){return ["paid"].includes(o.status);});
-  else if(activeFilter==="active") filtered = orders.filter(function(o){return LIVE.includes(o.status);});
+  if(activeFilter==="inbox") filtered = orders.filter(function(o){return ["received","priced","review","payment_sent"].includes(o.status);});
+  else if(activeFilter==="active") filtered = orders.filter(function(o){return ["paid"].concat(LIVE).includes(o.status);});
   else if(activeFilter==="done") filtered = orders.filter(function(o){return o.status==="delivered";});
   else if(activeFilter==="problems") filtered = orders.filter(function(o){return ["failed","cancelled","refund_pending"].includes(o.status);});
 
-  var sorted = filtered.sort(function(a,b){return b.id-a.id;});
-  if(activeFilter==="all"||activeFilter==="done") sorted = sorted.slice(0, activeFilter==="done"?20:50);
+  var sorted = filtered.sort(function(a,b){
+    var pa=(a.urgent||a.review_flag)?0:1, pb=(b.urgent||b.review_flag)?0:1;
+    if(pa!==pb) return pa-pb;
+    return b.id-a.id;
+  });
+  if(activeFilter==="all") sorted = sorted.slice(0,50);
+  if(activeFilter==="done") sorted = sorted.slice(0,20);
   var cards = sorted.map(queueCard).join("");
 
+  function kpiCard(label,val,color){
+    return '<div class="glass-card flex-1 rounded-xl p-2 text-center min-w-0"><div class="text-label-sm text-on-surface-variant truncate">'+label+'</div><div class="font-headline-md text-headline-md-mobile mt-0.5 text-'+color+' truncate">'+val+'</div></div>';
+  }
   function tabBtn(key,label,count){
     var isActive = activeFilter===key;
     var bg = isActive ? (key==="problems"?"bg-error/20 text-error":key==="done"?"bg-success-mint/20 text-success-mint":key==="active"?"bg-secondary-container text-on-secondary":"bg-primary-container text-on-primary-container") : "glass-card text-on-surface-variant";
@@ -97,19 +103,16 @@ function renderQueue(){
   $("app").innerHTML =
     '<div class="sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm">'+
     '<div class="flex items-center justify-between gap-stack-sm">'+
-    '<strong class="font-headline-md text-headline-md text-primary">EdenMish Ops</strong>'+
+    '<div class="flex items-center gap-2"><strong class="font-headline-md text-headline-md text-primary">EdenMish Ops</strong>'+(urgentCount?'<span class="bg-error/20 text-error text-label-sm px-2 py-0.5 rounded-full animate-pulse flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">priority_high</span>'+urgentCount+' דחופות</span>':'')+'</div>'+
     '<div class="flex gap-2">'+
     '<button onclick="refresh()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">refresh</span></button>'+
     '<button onclick="logout()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-error"><span class="material-symbols-outlined">logout</span></button>'+
     '</div></div>'+
+    '<div class="flex gap-2 mt-2">'+
+    kpiCard("סה״כ",counts.all,"primary")+kpiCard("פעילות",counts.active,"secondary")+kpiCard("הכנסה","₪"+revenue,"success-mint")+kpiCard("חריגות",counts.problems,counts.problems>0?"error":"on-surface-variant")+
+    '</div>'+
     '<div class="flex gap-2 mt-2 overflow-x-auto scrollbar-hide pb-1">'+
-    tabBtn("all","הכל",counts.all)+
-    tabBtn("inbox","חדשות",counts.inbox)+
-    tabBtn("payment","ממתינות לתשלום",counts.payment)+
-    tabBtn("ready","מוכנות לאיסוף",counts.ready)+
-    tabBtn("active","בדרך",counts.active)+
-    tabBtn("done","הושלם",counts.done)+
-    tabBtn("problems","בעיות",counts.problems)+
+    tabBtn("all","הכל",counts.all)+tabBtn("inbox","חדשות",counts.inbox)+tabBtn("active","פעילות",counts.active)+tabBtn("done","הושלם",counts.done)+tabBtn("problems","חריגות",counts.problems)+
     '</div></div>'+
     '<div class="px-gutter-mobile py-stack-sm max-w-lg mx-auto space-y-3 pb-24">'+
     (cards || '<div class="glass-card rounded-2xl p-stack-lg text-center text-on-surface-variant">אין הזמנות בקטגוריה זו.</div>')+
@@ -120,17 +123,24 @@ function setFilter(f){activeFilter=f;renderQueue();}
 
 function queueCard(o){
   var isLive = LIVE.includes(o.status);
-  var color = isLive?"border-secondary":(o.status==="delivered"?"border-success-mint/40":"border-glass-border");
+  var isUrgent = o.urgent || o.review_flag;
+  var color = isUrgent?"border-error":(isLive?"border-secondary":(o.status==="delivered"?"border-success-mint/40":"border-glass-border"));
   var liveDot = isLive?'<span class="w-2 h-2 bg-secondary rounded-full animate-pulse"></span>':"";
+  var urgentBadge = isUrgent?'<span class="bg-error/20 text-error font-label-bold text-label-sm px-2 py-0.5 rounded-full flex items-center gap-0.5"><span class="material-symbols-outlined text-[14px]">priority_high</span>דחוף</span>':"";
+  var svcLabel = o.service==='flash'?'Flash':o.service==='standard'?'Standard':o.service==='eco'?'Eco':"";
+  var svcChip = svcLabel?'<span class="text-label-sm px-2 py-0.5 rounded-full '+(o.service==='flash'?'bg-error/10 text-error':o.service==='standard'?'bg-primary/10 text-primary':'bg-secondary/10 text-secondary')+'">'+svcLabel+'</span>':"";
   var nameLine = o.name?'<div class="flex items-center gap-2 mt-1"><span class="material-symbols-outlined text-on-surface-variant text-lg">person</span><b class="text-on-surface text-body-md">'+esc(o.name)+'</b></div>':"";
   var notesLine = o.notes?'<div class="mt-1 text-label-sm text-alert-amber">📝 '+esc(o.notes.slice(0,40))+'</div>':"";
   var pickupShort = esc((o.pickup||"—").split(",")[0]);
   var dropoffShort = esc((o.dropoff||"—").split(",")[0]);
+  var whenLine = o.when_text?'<span class="text-label-sm text-on-surface-variant">'+esc(o.when_text)+'</span>':"";
+  var reviewReason = o.review_reason?'<span class="text-label-sm text-alert-amber">'+esc(o.review_reason)+'</span>':"";
 
-  return '<div class="glass-card rounded-xl p-stack-md border-r-4 '+color+' active:scale-[0.98] transition-transform cursor-pointer" onclick="openOrder('+o.id+')">'+
+  return '<div class="glass-card rounded-xl p-stack-md border-r-4 '+color+' '+(isUrgent?'ring-1 ring-error/30':"")+' active:scale-[0.98] transition-transform cursor-pointer" onclick="openOrder('+o.id+')">'+
     '<div class="flex items-center gap-2 flex-wrap">'+
     liveDot+
     '<span class="bg-primary-container text-on-primary-container font-label-bold text-label-sm px-3 py-1 rounded-full">'+esc(HE[o.status]||o.status)+'</span>'+
+    svcChip+urgentBadge+
     '<span class="text-on-surface-variant text-label-sm">#'+o.id+'</span>'+
     '<b class="font-headline-md text-headline-md text-secondary mr-auto">₪'+(o.price||"?")+'</b></div>'+
     nameLine+
@@ -139,6 +149,7 @@ function queueCard(o){
     '<span class="text-body-md text-on-surface-variant flex-1">'+pickupShort+'</span>'+
     '<span class="material-symbols-outlined text-primary text-lg">location_on</span>'+
     '<span class="text-body-md text-on-surface-variant flex-1">'+dropoffShort+'</span></div>'+
+    (whenLine||reviewReason?'<div class="flex items-center gap-2 mt-1">'+whenLine+reviewReason+'</div>':"")+
     notesLine+
     '</div>';
 }

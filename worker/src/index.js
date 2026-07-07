@@ -314,7 +314,7 @@ export default {
     }
 
     // ---- ops dashboard (ops.) ----
-    if (onOps && (path === '/' || path === '')) return html(opsHtml(env));
+    if (onOps && (path === '/' || path === '')) return Response.redirect(storefrontUrl(env, '/dash.html'), 302);
 
     if (onOps && path === '/api/ops/login' && req.method === 'POST') {
       let b; try { b = await req.json(); } catch { b = {}; }
