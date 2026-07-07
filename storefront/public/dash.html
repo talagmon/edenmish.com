@@ -38,7 +38,7 @@ function loginView(){
     '<div class="glass-card rounded-2xl p-stack-lg max-w-sm w-full text-center">'+
     '<div class="w-16 h-16 rounded-full bg-primary-container flex items-center justify-center mx-auto mb-stack-md">'+
     '<span class="material-symbols-outlined text-primary text-4xl">local_shipping</span></div>'+
-    '<h1 class="font-headline-md text-headline-md text-primary mb-1">מעקב הזמנות | עדן מיש</h1>'+
+    '<h1 class="font-label-bold text-label-bold text-primary mb-1">מעקב הזמנות | עדן מיש</h1>'+
     '<p class="text-body-md text-on-surface-variant mb-stack-lg">מרכז הבקרה</p>'+
     '<input id="pin" type="password" placeholder="הזן PIN" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-center text-xl mb-stack-md" style="letter-spacing:6px"/>'+
     '<button class="w-full bg-primary-container text-on-primary-container font-headline-md py-4 rounded-xl active:scale-95" onclick="doLogin()">התחבר</button>'+
@@ -84,6 +84,8 @@ function renderQueue(){
   var sorted = filtered.sort(function(a,b){
     var pa=(a.urgent||a.review_flag)?0:1, pb=(b.urgent||b.review_flag)?0:1;
     if(pa!==pb) return pa-pb;
+    var da=deliveryDeadline(a)||Infinity, db=deliveryDeadline(b)||Infinity;
+    if(da!==db) return da-db;
     return b.id-a.id;
   });
   if(activeFilter==="all") sorted = sorted.slice(0,50);
@@ -103,12 +105,14 @@ function renderQueue(){
   $("app").innerHTML =
     '<div class="sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm">'+
     '<div class="flex items-center justify-between gap-stack-sm">'+
-    '<div class="flex items-center gap-2"><strong class="font-headline-md text-headline-md text-primary">מעקב הזמנות | עדן מיש</strong>'+(urgentCount?'<span class="bg-error/20 text-error text-label-sm px-2 py-0.5 rounded-full animate-pulse flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">priority_high</span>'+urgentCount+' דחופות</span>':'')+'</div>'+
-    '<div class="flex bg-surface-container-low rounded-xl p-0.5"><button onclick="setView(\'queue\')" class="px-3 py-1 rounded-lg text-label-sm '+(currentView==='queue'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">תור</button><button onclick="setView(\'stats\')" class="px-3 py-1 rounded-lg text-label-sm '+(currentView==='stats'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">סטטיסטיקה</button></div>'+
-    '<div class="flex gap-2">'+
+    '<div class="flex items-center gap-2 min-w-0"><strong class="font-label-bold text-label-bold text-primary truncate">מעקב הזמנות | עדן מיש</strong>'+(urgentCount?'<span class="bg-error/20 text-error text-label-sm px-2 py-0.5 rounded-full animate-pulse flex items-center gap-1 shrink-0"><span class="material-symbols-outlined text-[14px]">priority_high</span>'+urgentCount+'</span>':'')+'</div>'+
+    '<div class="flex gap-2 shrink-0">'+
     '<button onclick="refresh()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">refresh</span></button>'+
     '<button onclick="logout()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-error"><span class="material-symbols-outlined">logout</span></button>'+
     '</div></div>'+
+    '<div class="flex gap-2 mt-2">'+
+    '<div class="flex bg-surface-container-low rounded-xl p-0.5 flex-1"><button onclick="setView(\'queue\')" class="flex-1 px-3 py-1 rounded-lg text-label-sm '+(currentView==='queue'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">תור</button><button onclick="setView(\'stats\')" class="flex-1 px-3 py-1 rounded-lg text-label-sm '+(currentView==='stats'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">סטטיסטיקה</button></div>'+
+    '</div>'+
     '<div class="flex gap-2 mt-2">'+
     kpiCard("סה״כ",counts.all,"primary")+kpiCard("פעילות",counts.active,"secondary")+kpiCard("הכנסה","₪"+revenue,"success-mint")+kpiCard("חריגות",counts.problems,counts.problems>0?"error":"on-surface-variant")+
     '</div>'+
@@ -154,6 +158,8 @@ function timeLeftBadge(o){
 function renderStats(){
   var delivered=orders.filter(function(o){return o.status==='delivered';});
   var failed=orders.filter(function(o){return ['failed','cancelled'].includes(o.status);});
+  var onTime=0,lateDel=0;
+  delivered.forEach(function(o){var dl=deliveryDeadline(o);if(!dl||!o.delivered_at)return;if(Number(o.delivered_at)<=dl)onTime++;else lateDel++;});
   var rated=orders.filter(function(o){return o.rating!=null&&o.rating>0;});
   var sr=(delivered.length+failed.length)>0?Math.round(delivered.length/(delivered.length+failed.length)*100):0;
   var times=delivered.filter(function(o){return o.delivered_at&&o.created_at;}).map(function(o){return Math.round((o.delivered_at-o.created_at)/60000);});
@@ -174,9 +180,9 @@ function renderStats(){
   var donut='',off=0,C=2*Math.PI*34;
   if(svcT>0){['eco','standard','flash'].forEach(function(s){if(svc[s]===0)return;var len=svc[s]/svcT*C;donut+='<circle cx="50" cy="50" r="34" fill="none" stroke="'+svcC[s]+'" stroke-width="14" stroke-dasharray="'+len+' '+(C-len)+'" stroke-dashoffset="-'+off+'" transform="rotate(-90 50 50)"/>';off+=len;});}
   var sBars=Object.entries(sc).filter(function(e){return e[1]>0;}).sort(function(a,b){return b[1]-a[1];}).map(function(e){var p=e[1]/sMax*100;return '<div class="flex items-center gap-2"><span class="text-label-sm text-on-surface-variant w-20 truncate">'+HE[e[0]]+'</span><div class="flex-1 bg-surface-container-low rounded-full h-4 overflow-hidden"><div class="h-full bg-primary-container rounded-full" style="width:'+p+'%"></div></div><span class="text-label-bold text-on-surface w-5 text-center">'+e[1]+'</span></div>';}).join('');
-  var hdr='<div class="flex bg-surface-container-low rounded-xl p-0.5"><button onclick="setView(\'queue\')" class="px-3 py-1 rounded-lg text-label-sm '+(currentView==='queue'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">תור</button><button onclick="setView(\'stats\')" class="px-3 py-1 rounded-lg text-label-sm '+(currentView==='stats'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">סטטיסטיקה</button></div>';
+  var hdr='<div class="flex bg-surface-container-low rounded-xl p-0.5 flex-1"><button onclick="setView(\'queue\')" class="flex-1 px-3 py-1 rounded-lg text-label-sm '+(currentView==='queue'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">תור</button><button onclick="setView(\'stats\')" class="flex-1 px-3 py-1 rounded-lg text-label-sm '+(currentView==='stats'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">סטטיסטיקה</button></div>';
   $("app").innerHTML=
-    '<div class="sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm"><div class="flex items-center justify-between gap-stack-sm"><strong class="font-headline-md text-headline-md text-primary">מעקב הזמנות | עדן מיש</strong>'+hdr+'<div class="flex gap-2"><button onclick="refresh()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">refresh</span></button><button onclick="logout()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-error"><span class="material-symbols-outlined">logout</span></button></div></div></div>'+
+    '<div class="sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm"><div class="flex items-center justify-between gap-stack-sm"><strong class="font-label-bold text-label-bold text-primary truncate">מעקב הזמנות | עדן מיש</strong><div class="flex gap-2 shrink-0"><button onclick="refresh()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">refresh</span></button><button onclick="logout()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-error"><span class="material-symbols-outlined">logout</span></button></div></div><div class="flex gap-2 mt-2">'+hdr+'</div></div>'+
     '<div class="px-gutter-mobile py-stack-sm max-w-lg mx-auto space-y-3 pb-24">'+
     '<div class="grid grid-cols-2 gap-3">'+kpi('אחוז הצלחה',sr+'%','verified','#91d3c8')+kpi('זמן ממוצע',at>0?at+' דק\'':'—','schedule','#dfb7ff')+kpi('דירוג ממוצע',ar,'star','#fbbf24')+kpi('הכנסה','₪'+rev,'payments','#91d3c8')+'</div>'+
     '<div class="glass-card rounded-2xl p-stack-md"><h3 class="font-headline-md text-on-surface mb-3">הזמנות ליום</h3><svg viewBox="0 0 280 100" class="w-full">'+bars+'</svg></div>'+
@@ -185,6 +191,7 @@ function renderStats(){
     '<div class="glass-card rounded-2xl p-stack-md"><h3 class="font-headline-md text-on-surface mb-3">פילוח סטטוס</h3><div class="space-y-1.5">'+(sBars||'<div class="text-on-surface-variant text-center py-4">אין נתונים</div>')+'</div></div>'+
     '</div>'+
     '<div class="glass-card rounded-2xl p-stack-md"><div class="grid grid-cols-3 gap-2 text-center"><div><div class="font-headline-md text-secondary">'+delivered.length+'</div><div class="text-label-sm text-on-surface-variant">נמסרו</div></div><div><div class="font-headline-md text-error">'+failed.length+'</div><div class="text-label-sm text-on-surface-variant">נכשלו/בוטלו</div></div><div><div class="font-headline-md text-primary">'+orders.length+'</div><div class="text-label-sm text-on-surface-variant">סה"כ הזמנות</div></div></div></div>'+
+    '<div class="glass-card rounded-2xl p-stack-md"><div class="flex items-center justify-center gap-stack-md"><div class="text-center"><div class="font-headline-md text-success-mint">'+onTime+'</div><div class="text-label-sm text-on-surface-variant">בזמן ✓</div></div><div class="w-px h-10 bg-outline-variant/30"></div><div class="text-center"><div class="font-headline-md text-error">'+lateDel+'</div><div class="text-label-sm text-on-surface-variant">באיחור ⚠</div></div></div></div>'+
     '</div>';
 }
 
@@ -216,7 +223,7 @@ function queueCard(o){
     '<span class="text-body-md text-on-surface-variant flex-1">'+pickupShort+'</span>'+
     '<span class="material-symbols-outlined text-primary text-lg">location_on</span>'+
     '<span class="text-body-md text-on-surface-variant flex-1">'+dropoffShort+'</span></div>'+
-    (whenLine||reviewReason?'<div class="flex items-center gap-2 mt-1">'+whenLine+reviewReason+'</div>':"")+
+    (whenLine||reviewReason||timeLeftBadge(o)?'<div class="flex items-center gap-2 mt-1 flex-wrap">'+whenLine+reviewReason+timeLeftBadge(o)+'</div>':"")+
     notesLine+
     '</div>';
 }
