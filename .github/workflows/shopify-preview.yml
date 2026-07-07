@@ -17,6 +17,8 @@ jobs:
     environment: preview
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # current_version.sh needs tag history
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -25,10 +27,10 @@ jobs:
       - name: Inject theme version
         run: |
           chmod +x scripts/*.sh
-          v=$(tr -d '[:space:]' < VERSION)
-          bn=$(./scripts/compute_build_number.sh)
-          sha=$(git rev-parse --short HEAD)
-          APP_VERSION="$v" BUILD_NUMBER="$bn" GIT_SHA="$sha" ./scripts/inject-theme-version.sh
+          APP_VERSION="$(./scripts/current_version.sh)" \
+          BUILD_NUMBER="$(./scripts/compute_build_number.sh)" \
+          GIT_SHA="$(git rev-parse --short HEAD)" \
+          ./scripts/inject-theme-version.sh
       - name: Push unpublished theme
         id: push
         run: |

@@ -73,26 +73,31 @@ and gated by environment approval.
 
 ---
 
-### `release.yml` — auto-bump VERSION from conventional commits
+### `release.yml` — auto-tag from conventional commits
 
 **Trigger:** `push` to `main` (typically a merged PR).
 
 **Behavior:**
 - Runs `scripts/bump_version.sh --tag` — reads Conventional Commit messages
-  since the last `v*` tag and bumps the repo-root `VERSION` file:
+  since the last `v*` tag and creates a new tag:
   - `BREAKING CHANGE:` / `<type>!:` → major
   - `feat:` → minor
   - `fix:`, `perf:`, `refactor:`, … → patch
   - `chore:`, `test:`, `docs:` only → no bump (exits 0)
-- If `VERSION` changed: commits it back to `main` as
-  `chore(release): bump VERSION X.Y.Z → A.B.C` and pushes tag `vA.B.C`.
+- If a new tag was created: pushes only the tag to origin.
+  **Never commits to main** — main's history stays 100% human-authored.
 - If no bump: no-op.
 
 **This workflow does NOT deploy.** Production deploy stays manual per §8 of
 `AGENTS.md`. The bump only advances the version *name*; the build *number* is
 always recomputed at deploy time.
 
-**Permissions:** `contents: write` (to push the VERSION commit + tag).
+**Why tags, not a VERSION file:** tags are not subject to branch protection,
+so this workflow needs only `contents: write` for tag pushes (never for
+branch pushes). It works regardless of main's protection rules, and there's
+no self-trigger loop to guard against.
+
+**Permissions:** `contents: write` (to push the `vX.Y.Z` tag).
 
 **Secrets required:** none beyond the default `GITHUB_TOKEN`.
 
@@ -112,7 +117,8 @@ always recomputed at deploy time.
 
 **Behavior:**
 1. Fails immediately if `confirm_migrations_ran` ≠ `I ran required migrations`.
-2. Computes version metadata (VERSION file + `compute_build_number.sh` + git SHA).
+2. Computes version metadata (latest `v*` tag via `current_version.sh` +
+   `compute_build_number.sh` + git SHA).
 3. Injects the version into the Worker (`worker/src/version.js`) and theme
    (`theme/snippets/app-version.liquid`) before any deploy runs. The injected
    values are not committed — they live only in the CI runner's checkout.
@@ -159,12 +165,19 @@ Add in **GitHub → Settings → Secrets and variables → Actions**:
 Every deployed surface reports a build stamp of the form
 `vX.Y.Z #BUILD_NUMBER (GIT_SHA)` — e.g. `v0.2.0 #270421 (77fe86e)`.
 
-- **`VERSION`** (repo root, committed) — the X.Y.Z release name. Bumped by
-  `release.yml` from Conventional Commits. Edit manually only for hotfixes.
+- **`X.Y.Z`** — the release name. Source of truth is the **latest `v*` git tag**
+  (read by `scripts/current_version.sh`). Tags are created automatically by
+  `release.yml` from Conventional Commits; never blocked by branch protection.
 - **`BUILD_NUMBER`** — minutes since `2026-01-01 00:00:00 UTC`, computed by
   `scripts/compute_build_number.sh`. Monotonic across branches/runners.
   Override with the `BUILD_NUMBER` env var (CI / hotfix).
 - **`GIT_SHA`** — `git rev-parse --short HEAD` at build time.
+
+> **Why tags, not a VERSION file:** a VERSION file requires the release bot
+> to commit back to main, which collides with branch protection rules.
+> Tags live outside branch protection, so the bot needs only `contents: write`
+> for tag pushes — never for branch pushes. Main's history stays 100%
+> human-authored.
 
 ### Where the stamp shows up
 
@@ -196,10 +209,10 @@ To cut a release manually instead of waiting for `release.yml`:
 
 ```bash
 ./scripts/bump_version.sh --tag
-git add VERSION
-git commit -m "chore(release): vX.Y.Z"
-git push origin "vX.Y.Z"
+git push origin "v$(./scripts/current_version.sh)"
 ```
+
+(`current_version.sh` will then return the new tag on the next run.)
 
 ---
 

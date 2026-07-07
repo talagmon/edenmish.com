@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 # bump_version.sh
 #
-# Bumps the X.Y.Z version in the repo-root VERSION file based on
-# Conventional Commits (https://www.conventionalcommits.org) since the
-# last `v*` git tag. Writes the new version back to VERSION and optionally
-# creates a `vX.Y.Z` tag.
+# Computes the next X.Y.Z version from Conventional Commits
+# (https://www.conventionalcommits.org) since the last `v*` git tag, and
+# optionally creates + pushes the new tag.
+#
+# Source of truth for "current version" is the latest v* tag
+# (scripts/current_version.sh), NOT a VERSION file. Tags cannot be
+# blocked by branch protection, so the release bot only needs tag-push
+# permission — main's history stays 100% human-authored.
 #
 # Bump rules:
 #   - BREAKING CHANGE footer  OR  <type>!:` header  →  MAJOR
@@ -13,17 +17,16 @@
 #   - chore:, test: only (no feat/fix)                →  no bump
 #
 # Usage:
-#   scripts/bump_version.sh                # bump VERSION file in place
-#   scripts/bump_version.sh --tag          # also create + push a v* tag
+#   scripts/bump_version.sh                # print what the next version would be
+#   scripts/bump_version.sh --tag          # also create a vX.Y.Z tag (local only)
 #   scripts/bump_version.sh --dry-run      # print what would happen, no writes
 #
 # Environment:
 #   DRY_RUN=1    same as --dry-run
 #
-# This script is safe to run locally and idempotent (running twice with no
-# new commits produces no change). CI invokes it from the release workflow
-# (release.yml) on every push to main; CI commits VERSION back and pushes
-# the tag.
+# CI invokes this from release.yml on every push to main. CI pushes the
+# tag (tags don't need branch-protection bypass). Production deploy stays
+# manual per AGENTS.md §8.
 
 set -euo pipefail
 
@@ -41,14 +44,9 @@ for arg in "$@"; do
 done
 if [[ "${DRY_RUN:-0}" == "1" ]]; then dry_run=1; fi
 
-if [[ ! -f VERSION ]]; then
-  echo "error: VERSION file not found at repo root" >&2
-  exit 1
-fi
-
-current=$(tr -d '[:space:]' < VERSION)
+current=$("$repo_root/scripts/current_version.sh")
 if ! [[ "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "error: VERSION '$current' is not X.Y.Z" >&2
+  echo "error: current version '$current' is not X.Y.Z" >&2
   exit 1
 fi
 
@@ -56,7 +54,6 @@ IFS='.' read -r major minor patch <<< "$current"
 
 # Find the last v* tag (e.g. v0.2.0). If none, scan all commits.
 last_tag=$(git tag --list 'v*' --sort=-version:refname 2>/dev/null | head -n1 || true)
-
 if [[ -n "$last_tag" ]]; then
   range="${last_tag}..HEAD"
 else
@@ -84,7 +81,7 @@ case "$bump" in
   minor) minor=$((minor+1)); patch=0 ;;
   patch) patch=$((patch+1)) ;;
   none)
-    echo "no version-relevant commits since ${last_tag:-start}; VERSION stays $current"
+    echo "no version-relevant commits since ${last_tag:-start}; current stays $current"
     exit 0
     ;;
 esac
@@ -93,15 +90,14 @@ new_version="${major}.${minor}.${patch}"
 new_tag="v${new_version}"
 
 if (( dry_run )); then
-  echo "dry-run: would bump VERSION $current → $new_version (bump=$bump)"
+  echo "dry-run: would bump $current → $new_version (bump=$bump)"
   if (( do_tag )); then
     echo "dry-run: would create tag $new_tag"
   fi
   exit 0
 fi
 
-printf '%s\n' "$new_version" > VERSION
-echo "bumped VERSION $current → $new_version (bump=$bump)"
+echo "bump $current → $new_version (bump=$bump)"
 
 if (( do_tag )); then
   git tag "$new_tag"

@@ -21,15 +21,16 @@ jobs:
         working-directory: storefront
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # current_version.sh needs tag history
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - name: Prepare version env
-        id: ver
         working-directory: .
         run: |
           chmod +x scripts/*.sh
-          v=$(tr -d '[:space:]' < VERSION)
+          v=$(./scripts/current_version.sh)
           bn=$(./scripts/compute_build_number.sh)
           sha=$(git rev-parse --short HEAD)
           echo "APP_VERSION=$v"  >> "$GITHUB_ENV"
@@ -51,13 +52,15 @@ jobs:
       deployments: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # current_version.sh needs tag history
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - name: Prepare version env
         run: |
           chmod +x scripts/*.sh
-          v=$(tr -d '[:space:]' < VERSION)
+          v=$(./scripts/current_version.sh)
           bn=$(./scripts/compute_build_number.sh)
           sha=$(git rev-parse --short HEAD)
           echo "APP_VERSION=$v"  >> "$GITHUB_ENV"

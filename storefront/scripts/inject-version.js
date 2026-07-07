@@ -2,8 +2,10 @@
 // inject-version.js
 //
 // Post-build step for the EdenMish storefront. Reads version metadata from
-// the environment (preferred, set by CI) or falls back to repo files +
-// `git rev-parse --short HEAD` (for local `npm run build`).
+// the environment (preferred, set by CI) or falls back to git:
+//   - APP_VERSION from scripts/current_version.sh (latest v* tag)
+//   - APP_BUILD  from scripts/compute_build_number.sh
+//   - APP_SHA    from `git rev-parse --short HEAD`
 //
 // For every public/*.html it:
 //   1. Adds/updates <meta name="app-version" content="X.Y.Z+#bn (sha)"> in <head>.
@@ -21,19 +23,20 @@ const REPO_ROOT = path.resolve(STOREFRONT_ROOT, '..');
 const PUBLIC_DIR = path.join(STOREFRONT_ROOT, 'public');
 const PLACEHOLDER = '<!--vstamp-->';
 
-function readVersionFile() {
-  const f = path.join(REPO_ROOT, 'VERSION');
-  if (!fs.existsSync(f)) return null;
-  const v = fs.readFileSync(f, 'utf8').trim();
-  return /^\d+\.\d+\.\d+$/.test(v) ? v : null;
+function run(script, args = []) {
+  try {
+    return execSync([script, ...args].join(' '), { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
+  } catch {
+    return null;
+  }
+}
+
+function readCurrentVersion() {
+  return run('./scripts/current_version.sh') || '0.0.0-dev';
 }
 
 function readBuildNumber() {
-  try {
-    return execSync('./scripts/compute_build_number.sh', { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
-  } catch {
-    return '0';
-  }
+  return run('./scripts/compute_build_number.sh') || '0';
 }
 
 function readGitSha() {
@@ -44,7 +47,7 @@ function readGitSha() {
   }
 }
 
-const VERSION = process.env.APP_VERSION || readVersionFile() || '0.0.0-dev';
+const VERSION = process.env.APP_VERSION || readCurrentVersion();
 const BUILD = process.env.APP_BUILD || readBuildNumber();
 const SHA = process.env.APP_SHA || readGitSha();
 const STAMP = `v${VERSION} #${BUILD} (${SHA})`;

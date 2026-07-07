@@ -59,7 +59,7 @@ jobs:
         id: ver
         run: |
           chmod +x scripts/*.sh
-          v=$(tr -d '[:space:]' < VERSION)
+          v=$(./scripts/current_version.sh)
           bn=$(./scripts/compute_build_number.sh)
           sha=$(git rev-parse --short HEAD)
           echo "APP_VERSION=$v"  >> "$GITHUB_OUTPUT"

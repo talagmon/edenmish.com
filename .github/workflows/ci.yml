@@ -48,17 +48,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate VERSION file
+        with:
+          fetch-depth: 0  # current_version.sh + bump_version.sh need tag history
+      - name: current_version.sh returns X.Y.Z
         run: |
-          v=$(tr -d '[:space:]' < VERSION)
+          chmod +x scripts/*.sh
+          v=$(./scripts/current_version.sh)
           if ! [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::VERSION file must contain X.Y.Z, got '$v'"
+            echo "::error::current_version.sh must return X.Y.Z, got '$v'"
             exit 1
           fi
-          echo "VERSION=$v"
+          echo "current version = $v"
       - name: compute_build_number.sh runs
         run: |
-          chmod +x scripts/compute_build_number.sh
           bn=$(./scripts/compute_build_number.sh)
           echo "BUILD_NUMBER=$bn"
           if ! [[ "$bn" =~ ^[0-9]+$ ]]; then
@@ -66,6 +68,4 @@ jobs:
             exit 1
           fi
       - name: bump_version.sh --dry-run
-        run: |
-          chmod +x scripts/bump_version.sh
-          ./scripts/bump_version.sh --dry-run
+        run: ./scripts/bump_version.sh --dry-run

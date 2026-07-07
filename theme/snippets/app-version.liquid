@@ -5,8 +5,8 @@
   scripts/inject-theme-version.sh before `shopify theme push`. Local
   dev keeps the defaults below so the theme renders without generation.
 
-  Source of truth: repo-root VERSION file + scripts/compute_build_number.sh
-  + git short SHA. See docs/CI_CD.md.
+  Source of truth: latest v* git tag (scripts/current_version.sh) +
+  scripts/compute_build_number.sh + git short SHA. See docs/CI_CD.md.
 {% endcomment %}
 {% assign app_version = '0.0.0-dev' %}
 {% assign app_build = '0' %}
