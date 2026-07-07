@@ -14,6 +14,12 @@ name: Release (version bump)
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'VERSION'
+      - 'CHANGELOG.md'
+# When the bot commits the VERSION bump, that push would re-trigger this
+# workflow. paths-ignore on VERSION breaks the loop. (The next merged PR
+# with feat/fix commits will pick up where the last tag left off.)
 
 permissions:
   contents: write   # needed to push the VERSION commit + tag back to main
