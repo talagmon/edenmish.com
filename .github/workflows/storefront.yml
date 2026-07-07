@@ -26,6 +26,8 @@ jobs:
           node-version: 20
       - run: npm ci
       - run: npm run build
+      - name: Syntax check (inline JS)
+        run: npm run syntax-check
       - name: Run tests
         run: npm test
 
