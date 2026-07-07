@@ -373,7 +373,7 @@ function computeEstimate(){
   if(service==="flash" && zone===3) base = null;
   const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
   set("est-zone", zone ? ("אזור "+zone) : "-");
-  const sizeRow = document.getElementById("est-size-row"); if(sizeRow) sizeRow.hidden = (size!=="medium");
+  const sizeRow = document.getElementById("est-size-row"); if(sizeRow) sizeRow.classList.toggle("hidden", size!=="medium");
   set("est-base", base!=null ? "₪"+base : "-");
   const hour = sched.service==="flash" ? new Date().getHours() : (sched.window ? parseInt(sched.window.split(":")[0],10) : -1);
   const wknd = isWeekend(isoDate(sched.date));
@@ -381,7 +381,7 @@ function computeEstimate(){
   if(hour>=19 && hour<22){ surch += 30; labels.push("ערב +₪30"); }
   if(wknd){ labels.push("סופ״ש ×1.5"); }
   const surchRow = document.getElementById("est-surch-row");
-  if(surchRow){ if(labels.length){ surchRow.hidden=false; set("est-surch-label", labels.join(" · ")); set("est-surch", "₪"+surch); } else { surchRow.hidden=true; } }
+  if(surchRow){ if(labels.length){ surchRow.classList.remove("hidden"); set("est-surch-label", labels.join(" · ")); set("est-surch", "₪"+surch); } else { surchRow.classList.add("hidden"); } }
   let total = base!=null ? base + (size==="medium"?15:0) + surch : null;
   if(total!=null && wknd){ total = Math.round(total*1.5); } else if(total!=null){ total = Math.round(total); }
   set("price-val", total!=null ? total : "-");
