@@ -22,6 +22,13 @@ jobs:
           node-version: '22'
       - name: Install Shopify CLI
         run: npm install -g @shopify/cli@latest
+      - name: Inject theme version
+        run: |
+          chmod +x scripts/*.sh
+          v=$(tr -d '[:space:]' < VERSION)
+          bn=$(./scripts/compute_build_number.sh)
+          sha=$(git rev-parse --short HEAD)
+          APP_VERSION="$v" BUILD_NUMBER="$bn" GIT_SHA="$sha" ./scripts/inject-theme-version.sh
       - name: Push unpublished theme
         id: push
         run: |

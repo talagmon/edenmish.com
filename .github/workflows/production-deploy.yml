@@ -48,10 +48,40 @@ jobs:
           echo "✅ Migration confirmation received."
 
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # bump_version.sh needs tag history
 
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+
+      - name: Prepare version metadata
+        id: ver
+        run: |
+          chmod +x scripts/*.sh
+          v=$(tr -d '[:space:]' < VERSION)
+          bn=$(./scripts/compute_build_number.sh)
+          sha=$(git rev-parse --short HEAD)
+          echo "APP_VERSION=$v"  >> "$GITHUB_OUTPUT"
+          echo "BUILD_NUMBER=$bn" >> "$GITHUB_OUTPUT"
+          echo "GIT_SHA=$sha"     >> "$GITHUB_OUTPUT"
+          echo "Version stamp: v$v #$bn ($sha)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Inject Worker version
+        if: ${{ inputs.deploy_worker }}
+        env:
+          APP_VERSION: ${{ steps.ver.outputs.APP_VERSION }}
+          BUILD_NUMBER: ${{ steps.ver.outputs.BUILD_NUMBER }}
+          GIT_SHA: ${{ steps.ver.outputs.GIT_SHA }}
+        run: ./scripts/inject-worker-version.sh
+
+      - name: Inject theme version
+        if: ${{ inputs.deploy_theme }}
+        env:
+          APP_VERSION: ${{ steps.ver.outputs.APP_VERSION }}
+          BUILD_NUMBER: ${{ steps.ver.outputs.BUILD_NUMBER }}
+          GIT_SHA: ${{ steps.ver.outputs.GIT_SHA }}
+        run: ./scripts/inject-theme-version.sh
 
       - name: Deploy Cloudflare Worker
         if: ${{ inputs.deploy_worker }}
@@ -92,6 +122,8 @@ jobs:
           echo "- Worker: ${{ inputs.deploy_worker && '✅ deployed' || '⏭️ skipped' }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Theme push: ${{ inputs.deploy_theme && '✅ pushed' || '⏭️ skipped' }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Theme live: ${{ inputs.publish_theme && '✅ published' || '⏭️ not published (manual)' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Version: v${{ steps.ver.outputs.APP_VERSION }} #${{ steps.ver.outputs.BUILD_NUMBER }} (${{ steps.ver.outputs.GIT_SHA }})" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "### Next: smoke test" >> "$GITHUB_STEP_SUMMARY"
           echo "- Submit order → Draft Order → pay → webhook → tracking → ops → delivery proof → notifications" >> "$GITHUB_STEP_SUMMARY"

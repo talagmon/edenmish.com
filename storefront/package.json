@@ -4,7 +4,7 @@
   "private": true,
   "description": "EdenMish storefront — static frontend (Cloudflare Pages) for v2.edenmish.com. Colocated in the edenmish.com monorepo under storefront/.",
   "scripts": {
-    "build": "tailwindcss -i ./src/styles.css -o ./public/assets/styles.css --minify",
+    "build": "tailwindcss -i ./src/styles.css -o ./public/assets/styles.css --minify && node scripts/inject-version.js",
     "dev": "tailwindcss -i ./src/styles.css -o ./public/assets/styles.css --watch",
     "serve": "wrangler pages dev public --port 8788",
     "deploy": "wrangler pages deploy public",

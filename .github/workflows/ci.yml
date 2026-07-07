@@ -42,3 +42,30 @@ jobs:
         continue-on-error: true
         # Theme check may surface pre-existing warnings; it should not block PRs.
         # Only new offenses introduced by the PR should be reviewed manually.
+
+  version-check:
+    name: Version metadata sanity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate VERSION file
+        run: |
+          v=$(tr -d '[:space:]' < VERSION)
+          if ! [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::VERSION file must contain X.Y.Z, got '$v'"
+            exit 1
+          fi
+          echo "VERSION=$v"
+      - name: compute_build_number.sh runs
+        run: |
+          chmod +x scripts/compute_build_number.sh
+          bn=$(./scripts/compute_build_number.sh)
+          echo "BUILD_NUMBER=$bn"
+          if ! [[ "$bn" =~ ^[0-9]+$ ]]; then
+            echo "::error::build number is not an integer: $bn"
+            exit 1
+          fi
+      - name: bump_version.sh --dry-run
+        run: |
+          chmod +x scripts/bump_version.sh
+          ./scripts/bump_version.sh --dry-run

@@ -24,6 +24,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Prepare version env
+        id: ver
+        working-directory: .
+        run: |
+          chmod +x scripts/*.sh
+          v=$(tr -d '[:space:]' < VERSION)
+          bn=$(./scripts/compute_build_number.sh)
+          sha=$(git rev-parse --short HEAD)
+          echo "APP_VERSION=$v"  >> "$GITHUB_ENV"
+          echo "APP_BUILD=$bn"   >> "$GITHUB_ENV"
+          echo "APP_SHA=$sha"    >> "$GITHUB_ENV"
       - run: npm ci
       - run: npm run build
       - name: Syntax check (inline JS)
@@ -43,6 +54,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Prepare version env
+        run: |
+          chmod +x scripts/*.sh
+          v=$(tr -d '[:space:]' < VERSION)
+          bn=$(./scripts/compute_build_number.sh)
+          sha=$(git rev-parse --short HEAD)
+          echo "APP_VERSION=$v"  >> "$GITHUB_ENV"
+          echo "APP_BUILD=$bn"   >> "$GITHUB_ENV"
+          echo "APP_SHA=$sha"    >> "$GITHUB_ENV"
+          echo "Storefront version: v$v #$bn ($sha)" >> "$GITHUB_STEP_SUMMARY"
       - run: npm ci
         working-directory: storefront
       - run: npm run build

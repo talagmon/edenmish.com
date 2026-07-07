@@ -1,0 +1,16 @@
+{% comment %}
+  Build-time version metadata for the Shopify theme.
+
+  CI rewrites APP_VERSION / APP_BUILD / APP_SHA via
+  scripts/inject-theme-version.sh before `shopify theme push`. Local
+  dev keeps the defaults below so the theme renders without generation.
+
+  Source of truth: repo-root VERSION file + scripts/compute_build_number.sh
+  + git short SHA. See docs/CI_CD.md.
+{% endcomment %}
+{% assign app_version = '0.0.0-dev' %}
+{% assign app_build = '0' %}
+{% assign app_sha = 'dev' %}
+<div class="app-version-stamp" style="text-align:center;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:#9a8fa6;direction:ltr;padding:8px 12px 20px;opacity:.6">
+  v{{ app_version }} #{{ app_build }} ({{ app_sha }})
+</div>

@@ -29,8 +29,27 @@ and gated by environment approval.
 **Checks:**
 - Worker: `npm install` in `worker/`, then `node --check` on every `src/*.js`.
 - Theme: `shopify theme check --path theme` (non-blocking — `continue-on-error`).
+- Version metadata: validates the repo-root `VERSION` file is `X.Y.Z`, that
+  `scripts/compute_build_number.sh` returns an integer, and that
+  `scripts/bump_version.sh --dry-run` runs without error.
 
 **Secrets required:** none. CI runs without any credentials.
+
+---
+
+### `storefront.yml` — Storefront build + deploy
+
+**Trigger:** `push` or `pull_request` to `main`, only when `storefront/**` changes.
+
+**Behavior:**
+- Computes version metadata (`APP_VERSION` from `VERSION`, `BUILD_NUMBER` from
+  `scripts/compute_build_number.sh`, `GIT_SHA` from `git rev-parse --short HEAD`)
+  and exposes it as env vars for the build.
+- `npm run build` runs Tailwind, then `storefront/scripts/inject-version.js`
+  bakes `<meta name="app-version">` + a footer stamp into every `public/*.html`.
+- On `push` to `main`: deploys `public/` to Cloudflare Pages (`edenmish-v2` project).
+
+**Secrets required:** `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
 
 ---
 
@@ -39,6 +58,8 @@ and gated by environment approval.
 **Trigger:** `pull_request` to `main`, only when `theme/**` files change.
 
 **Behavior:**
+- Injects version metadata into `theme/snippets/app-version.liquid` so the
+  preview shows the same stamp production will.
 - Pushes an **unpublished** theme to the Shopify store using `shopify theme push --unpublished`.
 - Extracts the preview URL from the JSON output.
 - Comments the preview URL on the PR (updates if re-run).
@@ -49,6 +70,31 @@ and gated by environment approval.
 **Secrets required:** `SHOPIFY_CLI_THEME_TOKEN`, `SHOPIFY_STORE`.
 
 **Environment:** `preview`.
+
+---
+
+### `release.yml` — auto-bump VERSION from conventional commits
+
+**Trigger:** `push` to `main` (typically a merged PR).
+
+**Behavior:**
+- Runs `scripts/bump_version.sh --tag` — reads Conventional Commit messages
+  since the last `v*` tag and bumps the repo-root `VERSION` file:
+  - `BREAKING CHANGE:` / `<type>!:` → major
+  - `feat:` → minor
+  - `fix:`, `perf:`, `refactor:`, … → patch
+  - `chore:`, `test:`, `docs:` only → no bump (exits 0)
+- If `VERSION` changed: commits it back to `main` as
+  `chore(release): bump VERSION X.Y.Z → A.B.C` and pushes tag `vA.B.C`.
+- If no bump: no-op.
+
+**This workflow does NOT deploy.** Production deploy stays manual per §8 of
+`AGENTS.md`. The bump only advances the version *name*; the build *number* is
+always recomputed at deploy time.
+
+**Permissions:** `contents: write` (to push the VERSION commit + tag).
+
+**Secrets required:** none beyond the default `GITHUB_TOKEN`.
 
 ---
 
@@ -66,9 +112,13 @@ and gated by environment approval.
 
 **Behavior:**
 1. Fails immediately if `confirm_migrations_ran` ≠ `I ran required migrations`.
-2. If `deploy_worker`: `cd worker && npx wrangler deploy`.
-3. If `deploy_theme`: `shopify theme push --unpublished`.
-4. If `publish_theme`: `shopify theme push --live` (requires `deploy_theme` too).
+2. Computes version metadata (VERSION file + `compute_build_number.sh` + git SHA).
+3. Injects the version into the Worker (`worker/src/version.js`) and theme
+   (`theme/snippets/app-version.liquid`) before any deploy runs. The injected
+   values are not committed — they live only in the CI runner's checkout.
+4. If `deploy_worker`: `cd worker && npx wrangler deploy`.
+5. If `deploy_theme`: `shopify theme push --unpublished`.
+6. If `publish_theme`: `shopify theme push --live` (requires `deploy_theme` too).
 
 **Never runs automatically on push/merge.**
 
@@ -101,6 +151,55 @@ Add in **GitHub → Settings → Secrets and variables → Actions**:
 | `CLOUDFLARE_ACCOUNT_ID` | production only | `2dd658a7839937523c0cca09eadce085` |
 
 > Do not put real values in workflow files or docs. These are GitHub repository secrets only.
+
+---
+
+## Version metadata
+
+Every deployed surface reports a build stamp of the form
+`vX.Y.Z #BUILD_NUMBER (GIT_SHA)` — e.g. `v0.2.0 #270421 (77fe86e)`.
+
+- **`VERSION`** (repo root, committed) — the X.Y.Z release name. Bumped by
+  `release.yml` from Conventional Commits. Edit manually only for hotfixes.
+- **`BUILD_NUMBER`** — minutes since `2026-01-01 00:00:00 UTC`, computed by
+  `scripts/compute_build_number.sh`. Monotonic across branches/runners.
+  Override with the `BUILD_NUMBER` env var (CI / hotfix).
+- **`GIT_SHA`** — `git rev-parse --short HEAD` at build time.
+
+### Where the stamp shows up
+
+| Surface | Where | How it's injected |
+|---|---|---|
+| Worker — customer tracking page (`find.edenmish.com/t/:token`) | Footer line below the timeline | `worker/src/version.js` (rewritten by `scripts/inject-worker-version.sh` before `wrangler deploy`) |
+| Worker — ops dashboard (`ops.edenmish.com`) | Toolbar, next to the bike icon | Same |
+| Storefront (`edenmish.com`, all HTML pages) | `<meta name="app-version">` in `<head>` + footer stamp on customer pages | `storefront/scripts/inject-version.js` runs as part of `npm run build` |
+| Shopify theme (`edenmish.com` Shopify-served pages) | Footer via `{% render 'app-version' %}` in `theme/layout/theme.liquid` | `theme/snippets/app-version.liquid` (rewritten by `scripts/inject-theme-version.sh` before `shopify theme push`) |
+
+### Local dev
+
+The committed files ship `0.0.0-dev` defaults so `wrangler dev`, the theme
+preview, and `npm run build` all work without any version generation. CI
+overwrites the values at deploy time only.
+
+### Local build side effect
+
+`cd storefront && npm run build` mutates `public/*.html` in place with the
+current version stamp. To discard the local changes after a build:
+
+```bash
+git checkout -- storefront/public/
+```
+
+### Manual bump (hotfix / pre-release)
+
+To cut a release manually instead of waiting for `release.yml`:
+
+```bash
+./scripts/bump_version.sh --tag
+git add VERSION
+git commit -m "chore(release): vX.Y.Z"
+git push origin "vX.Y.Z"
+```
 
 ---
 
