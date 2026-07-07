@@ -62,6 +62,7 @@ async function refresh(){
     if(u){activeOrder=u;return renderDetail(u);}
   }
   if(currentView==="stats") renderStats(); else renderQueue();
+}
 
 function renderQueue(){
   var counts = {
