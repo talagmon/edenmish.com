@@ -217,9 +217,9 @@ function queueCard(o){
 
   return '<div class="relative overflow-hidden rounded-xl" id="wrap-'+cardId+'">'+
     (canCancel?'<div class="absolute inset-y-0 left-0 flex items-center justify-center bg-error/90 px-8" style="z-index:0"><span class="material-symbols-outlined text-white text-2xl">delete</span></div>':"")+
-    '<div id="'+cardId+'" class="glass-card rounded-xl p-stack-md border-r-4 '+color+' '+(isUrgent?'ring-1 ring-error/30':"")+' active:scale-[0.98] transition-transform cursor-pointer relative" style="z-index:1;touch-action:pan-y" '+
-    (canCancel?'data-oid="'+o.id+'" data-x="0" ontouchstart="swipeStart(event)" ontouchmove="swipeMove(event)" ontouchend="swipeEnd(event)" ontransitionend="swipeTransitionEnd(event)"':'')+
-    ' onclick="cardClick('+o.id+')">'+
+    '<div id="'+cardId+'" class="glass-card rounded-xl p-stack-md border-r-4 '+color+' '+(isUrgent?'ring-1 ring-error/30':"")+' active:scale-[0.98] transition-transform cursor-pointer relative" style="z-index:1" '+
+    (canCancel?'data-oid="'+o.id+'"':'')+
+    ' onclick="openOrder('+o.id+')">'+
     '<div class="flex items-center gap-2 flex-wrap">'+
     liveDot+
     '<span class="bg-primary-container text-on-primary-container font-label-bold text-label-sm px-3 py-1 rounded-full">'+esc(HE[o.status]||o.status)+'</span>'+
