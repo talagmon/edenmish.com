@@ -35,6 +35,31 @@ async function isOps(req, env) {
   return await checkSession(env, c);
 }
 
+// Lazy self-registration: ensures Shopify sends orders/paid to this Worker.
+// Idempotent (checks before registering). Runs once per isolate.
+let _whReady = false;
+async function ensureWebhook(env) {
+  if (_whReady || !env.SHOPIFY_ADMIN_TOKEN || !env.SHOPIFY_SHOP) return;
+  _whReady = true;
+  try {
+    const shop = env.SHOPIFY_SHOP;
+    const ver = env.SHOPIFY_API_VERSION || '2024-10';
+    const r = await fetch(`https://${shop}/admin/api/${ver}/webhooks.json`, {
+      headers: { 'X-Shopify-Access-Token': env.SHOPIFY_ADMIN_TOKEN }
+    });
+    const d = await r.json();
+    const exists = (d.webhooks || []).some(w => w.topic === 'orders/paid' && (w.address || '').includes('/webhooks/shopify'));
+    if (exists) { console.log('webhook_already_registered'); return; }
+    const cr = await fetch(`https://${shop}/admin/api/${ver}/webhooks.json`, {
+      method: 'POST',
+      headers: { 'X-Shopify-Access-Token': env.SHOPIFY_ADMIN_TOKEN, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ webhook: { topic: 'orders/paid', address: 'https://find.edenmish.com/webhooks/shopify', format: 'json' } })
+    });
+    const cd = await cr.json();
+    console.log('webhook_registered', cd.webhook ? { id: cd.webhook.id, address: cd.webhook.address } : (cd.errors || cd));
+  } catch (e) { console.log('webhook_check_error', e.message); }
+}
+
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
@@ -51,6 +76,9 @@ export default {
     const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...cors, ...extra } });
 
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
+
+    // Ensure Shopify orders/paid webhook is registered (once per isolate, never blocks on failure)
+    try { await ensureWebhook(env); } catch (e) {}
 
     // ---- public API (CORS) ----
     if (path === '/api/orders' && req.method === 'POST') {
