@@ -298,6 +298,15 @@ function renderTrack(d){
     });
   }
 
+  // Payment CTA for unpaid orders (customer can pay directly from the tracking page)
+  if (o.payment_url && o.payment_status !== "paid") {
+    const pay = document.createElement("a");
+    pay.href = o.payment_url;
+    pay.className = "mt-4 w-full bg-secondary hover:brightness-110 text-on-secondary font-bold py-4 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 shadow-lg shadow-secondary/20";
+    pay.innerHTML = '<span class="material-symbols-outlined">credit_card</span> לתשלום כעת' + (o.price ? ' — ₪' + o.price : '');
+    stepper.appendChild(pay);
+  }
+
   // Live badge + live map (no external redirect — map renders in-page)
   const live = ["to_pickup","to_dropoff"].includes(cur);
   $("live-badge").classList.toggle("hidden", !live);
