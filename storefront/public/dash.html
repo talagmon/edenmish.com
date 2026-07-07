@@ -231,7 +231,7 @@ function queueCard(o){
   var isLive = LIVE.includes(o.status);
   var isUrgent = o.urgent || o.review_flag;
   var isTerminal = ["delivered","cancelled","failed"].includes(o.status);
-  var color = isUrgent?"border-error":(isLive?"border-secondary":(o.status==="delivered"?"border-success-mint/40":"border-glass-border"));
+  var color = isUrgent?"border-status-alert":(isLive?"border-secondary":(o.status==="delivered"?"border-success-mint/40":"border-glass-border"));
   var liveDot = isLive?'<span class="w-2 h-2 bg-secondary rounded-full animate-pulse"></span>':"";
   var urgentBadge = isUrgent?'<span class="bg-error/20 text-error font-label-bold text-label-sm px-2 py-0.5 rounded-full flex items-center gap-0.5"><span class="material-symbols-outlined text-[14px]">priority_high</span>דחוף</span>':"";
   var svcLabel = o.service==='flash'?'מהיר':o.service==='standard'?'רגיל':o.service==='eco'?'חסכוני':"";
