@@ -619,14 +619,20 @@ const DOMAIN_FIXES = {
   "gmail.co":"gmail.com", "gmail.cm":"gmail.com", "gmail.con":"gmail.com",
   "gmail.om":"gmail.com", "gmail.net":"gmail.com", "gmail.org":"gmail.com",
   "gmailcom":"gmail.com", "g.mail.com":"gmail.com",
+  "gmai.co":"gmail.com", "gmai.il":"gmail.com", "gmai.com":"gmail.com",
+  "gmil.co":"gmail.com", "gmal.co":"gmail.com", "gnail.co":"gmail.com",
+  "gmaill.co":"gmail.com", "gmial.co":"gmail.com",
   "outlok.com":"outlook.com", "outlock.com":"outlook.com",
   "outlook.co":"outlook.com", "outlook.cm":"outlook.com",
+  "outlok.co":"outlook.com",
   "hotmial.com":"hotmail.com", "hotmai.com":"hotmail.com",
   "hotmal.com":"hotmail.com", "hotnail.com":"hotmail.com",
   "hotmail.co":"hotmail.com", "hotmail.cm":"hotmail.com",
+  "hotmial.co":"hotmail.com", "hotmai.co":"hotmail.com",
   "yaho.com":"yahoo.com", "yhaoo.com":"yahoo.com",
   "yahoo.co":"yahoo.com", "yahoo.cm":"yahoo.com",
   "iclod.com":"icloud.com", "iclould.com":"icloud.com",
+  "iclod.co":"icloud.com", "icloud.co":"icloud.com",
   "iclod.co":"icloud.com", "icloud.co":"icloud.com"
 };
 function levenshtein(a, b) {
@@ -693,17 +699,21 @@ if (emailSuggestBox) {
     const v = inp.value.trim();
     if(!v) return render(false, "נא למלא אימייל");
     if(!EMAIL_RE.test(v)) return render(false, 'פורמט לא תקין — למשל name@example.com');
-    render(true, "");
     // Typo detection on known-provider domains (format is valid, but domain may be misspelled).
     const parts = splitDomain(v);
     const fixed = parts ? suggestEmailDomain(parts.domain) : null;
     if (fixed && fixed !== parts.domain) {
       if (emailState.value !== v) { emailState.value = v; emailState.resolved = false; }
-      if (!emailState.resolved) showEmailSuggestion(parts.local + "@" + fixed);
+      if (!emailState.resolved) {
+        showEmailSuggestion(parts.local + "@" + fixed);
+        st.innerHTML = '<span class="material-symbols-outlined text-alert-amber" style="font-size:16px">warning</span><span class="text-alert-amber">ייתכן שייש טעות בכתובת — בדקו את ההצעה</span>';
+        return;
+      }
     } else {
       emailState.suggested = null;
       hideEmailSuggestion();
     }
+    render(true, "");
   };
   inp.addEventListener("blur", () => { touched = true; inp.value = inp.value.trim(); check(); });
   inp.addEventListener("input", () => { if(touched) check(); });
