@@ -37,7 +37,7 @@ function loginView(){
   $("app").innerHTML = '<div class="min-h-screen flex items-center justify-center p-gutter-mobile">'+
     '<div class="glass-card rounded-2xl p-stack-lg max-w-sm w-full text-center">'+
     '<div class="w-16 h-16 rounded-full bg-primary-container flex items-center justify-center mx-auto mb-stack-md">'+
-    '<span class="material-symbols-outlined text-primary text-4xl">local_shipping</span></div>'+
+    '<span class="material-symbols-outlined text-primary text-4xl">two_wheeler</span></div>'+
     '<h1 class="font-label-bold text-label-bold text-primary mb-1">מעקב הזמנות | עדן מיש</h1>'+
     '<p class="text-body-md text-on-surface-variant mb-stack-lg">מרכז הבקרה</p>'+
     '<input id="pin" type="password" placeholder="הזן PIN" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-center text-xl mb-stack-md" style="letter-spacing:6px"/>'+
@@ -122,8 +122,38 @@ function renderQueue(){
     tabBtn("all","הכל",counts.all)+tabBtn("inbox","חדשות",counts.inbox)+tabBtn("active","פעילות",counts.active)+tabBtn("done","הושלם",counts.done)+tabBtn("cancelled","בוטלו",counts.cancelled)+tabBtn("problems","תקלות",counts.problems)+
     '</div></div>'+
     '<div class="px-gutter-mobile py-stack-sm max-w-lg mx-auto space-y-3 pb-24">'+
-    (cards || '<div class="glass-card rounded-2xl p-stack-lg text-center text-on-surface-variant">אין הזמנות בקטגוריה זו.</div>')+
+    (cards || '<div class="glass-card rounded-2xl p-stack-lg text-center text-on-surface-variant">אין הזמנות בקטטגוריה זו.</div>')+
     '</div>';
+  attachSwipeHandlers();
+}
+function attachSwipeHandlers(){
+  document.querySelectorAll("div[data-oid]").forEach(function(el){
+    var oid = el.dataset.oid;
+    var sx = 0, dx = 0, moved = false;
+    el.addEventListener("touchstart", function(e){
+      sx = e.touches[0].clientX; el.style.transition="none"; moved=false;
+    }, {passive:true});
+    el.addEventListener("touchmove", function(e){
+      dx = e.touches[0].clientX - sx;
+      if(dx>0) dx*=0.2;
+      if(Math.abs(dx)>10) moved=true;
+      el.style.transform="translateX("+dx+"px)";
+      el.style.opacity=Math.max(0.4,1-Math.abs(dx)/300);
+    }, {passive:true});
+    el.addEventListener("touchend", function(){
+      el.style.transition="transform 0.3s ease, opacity 0.3s ease";
+      if(moved && dx<-140){
+        el.style.transform="translateX(-120%)"; el.style.opacity="0";
+        var id = oid;
+        setTimeout(function(){
+          if(confirm("לבטל את ההזמנה #"+id+"?")){ cancelOrder(id); }
+          else { var c=document.getElementById("card-"+id); if(c){c.style.transform="translateX(0)";c.style.opacity="1";} }
+        },250);
+      } else {
+        el.style.transform="translateX(0)"; el.style.opacity="1";
+      }
+    }, {passive:true});
+  });
 }
 
 function setFilter(f){activeFilter=f;renderQueue();}
@@ -300,7 +330,7 @@ function backToQueue(){activeOrder=null;renderQueue();}
 var STEPS = [
   {label:"נתקבלה", icon:"inventory_2"},
   {label:"אושר", icon:"verified_user"},
-  {label:"לאיסוף", icon:"local_shipping"},
+  {label:"לאיסוף", icon:"two_wheeler"},
   {label:"נאסף", icon:"inventory"},
   {label:"למסירה", icon:"directions_run"},
   {label:"נמסר", icon:"task_alt"}
@@ -398,11 +428,11 @@ function actionsHtml(o){
     if(o.payment_url) h += '<button onclick="copyPay(\''+esc(o.payment_url)+'\')" class="w-full glass-card border border-primary/30 text-primary font-label-bold py-4 rounded-xl flex items-center justify-center gap-2"><span class="material-symbols-outlined">link</span> העתק קישור תשלום</button>';
     h += '<button onclick="markPaid('+id+')" class="w-full glass-card text-on-surface font-label-bold py-4 rounded-xl">סמן כשולם ידנית</button>';
   } else if(s==="paid"){
-    h += '<button onclick="setStatus('+id+',\'to_pickup\')" class="w-full bg-primary text-on-primary py-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-lg shadow-xl shadow-primary/20 active:scale-95"><span class="material-symbols-outlined text-[28px]">local_shipping</span>'+NEXTLBL.paid+'</button>';
+    h += '<button onclick="setStatus('+id+',\'to_pickup\')" class="w-full bg-primary text-on-primary py-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-lg shadow-xl shadow-primary/20 active:scale-95"><span class="material-symbols-outlined text-[28px]">two_wheeler</span>'+NEXTLBL.paid+'</button>';
   } else if(s==="to_pickup"){
     h += '<button onclick="setStatus('+id+',\'picked_up\')" class="w-full bg-secondary text-on-secondary py-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-lg shadow-xl shadow-secondary/20 active:scale-95"><span class="material-symbols-outlined text-[28px]">task_alt</span>'+NEXTLBL.to_pickup+'</button>';
   } else if(s==="picked_up"){
-    h += '<button onclick="setStatus('+id+',\'to_dropoff\')" class="w-full bg-primary text-on-primary py-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-lg shadow-xl shadow-primary/20 active:scale-95"><span class="material-symbols-outlined text-[28px]">local_shipping</span>'+NEXTLBL.picked_up+'</button>';
+    h += '<button onclick="setStatus('+id+',\'to_dropoff\')" class="w-full bg-primary text-on-primary py-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-lg shadow-xl shadow-primary/20 active:scale-95"><span class="material-symbols-outlined text-[28px]">two_wheeler</span>'+NEXTLBL.picked_up+'</button>';
   } else if(s==="to_dropoff"){
     h += '<button onclick="showPod('+id+')" class="w-full bg-primary text-on-primary py-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-lg shadow-xl shadow-primary/20 active:scale-95"><span class="material-symbols-outlined text-[28px]">photo_camera</span> הוכחת מסירה</button>';
   } else if(s==="delivered"){

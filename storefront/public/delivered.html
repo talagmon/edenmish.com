@@ -88,7 +88,7 @@ function renderRouteMap(o){
 
 function renderHero(o){
   const delivered = o.status === "delivered";
-  const icon = delivered ? "check_circle" : (o.status === "failed" ? "cancel" : "local_shipping");
+  const icon = delivered ? "check_circle" : (o.status === "failed" ? "cancel" : "two_wheeler");
   const color = delivered ? "text-success-mint" : o.status === "failed" ? "text-error" : "text-secondary";
   const glow = delivered ? "bg-success-mint/20" : "bg-primary/20";
   const title = delivered ? "המשלוח נמסר בהצלחה!" : (o.status === "failed" ? "המשלוח לא הגיע ליעדו" : "המשלוח בדרך אליך");
