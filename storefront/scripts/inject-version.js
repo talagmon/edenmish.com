@@ -32,7 +32,13 @@ function run(script, args = []) {
 }
 
 function readCurrentVersion() {
-  return run('./scripts/current_version.sh') || '0.0.0-dev';
+  const fromScript = run('./scripts/current_version.sh');
+  if (fromScript && fromScript !== '0.0.0' && fromScript !== '0.0.0-dev') return fromScript;
+  try {
+    return require(path.join(STOREFRONT_ROOT, 'package.json')).version || '0.0.0-dev';
+  } catch {
+    return '0.0.0-dev';
+  }
 }
 
 function readBuildNumber() {
@@ -50,7 +56,7 @@ function readGitSha() {
 const VERSION = process.env.APP_VERSION || readCurrentVersion();
 const BUILD = process.env.APP_BUILD || readBuildNumber();
 const SHA = process.env.APP_SHA || readGitSha();
-const STAMP = `v${VERSION} #${BUILD} (${SHA})`;
+const STAMP = `v${VERSION}(${BUILD})`;
 
 if (!fs.existsSync(PUBLIC_DIR)) {
   console.log('inject-version: no public/ yet, skipping');
