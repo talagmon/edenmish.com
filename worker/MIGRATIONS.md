@@ -134,6 +134,34 @@ SELECT name FROM pragma_table_info('orders') WHERE name='rating';
 
 ---
 
+### 008_coupons.sql
+
+**Introduced by:** Coupons PR (step 1) — D1 schema for Shopify-defined discount codes
+
+**Purpose:**
+- Adds coupon snapshot columns to `orders`: `subtotal_price`, `discount_code`,
+  `discount_amount`, `discount_title`.
+- Adds the `coupons` table — synced snapshot of Shopify Admin discount codes
+  (percentage / fixed_amount, usage_limit, once-per-customer).
+- Adds the `coupon_redemptions` table — one row per redemption, used by the Worker
+  to enforce usage limits via D1 counts.
+
+**Command:**
+```bash
+# Local:
+wrangler d1 execute edenmish --local --file=./migrations/008_coupons.sql
+# Production:
+wrangler d1 execute edenmish --remote --file=./migrations/008_coupons.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM sqlite_master WHERE type='table' AND name IN ('coupons','coupon_redemptions');
+SELECT name FROM pragma_table_info('orders') WHERE name IN ('subtotal_price','discount_code','discount_amount','discount_title');
+```
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -145,6 +173,7 @@ SELECT name FROM pragma_table_info('orders') WHERE name='rating';
 - [ ] Run `005_notifications.sql` if not already applied.
 - [ ] Run `006_pod_signature.sql` if not already applied.
 - [ ] Run `007_order_rating.sql` if not already applied.
+- [ ] Run `008_coupons.sql` if not already applied.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).
@@ -161,7 +190,7 @@ whether each table exists:
 ```sql
 SELECT name FROM sqlite_master
 WHERE type='table'
-AND name IN ('rate_limits', 'delivery_proofs', 'notifications')
+AND name IN ('rate_limits', 'delivery_proofs', 'notifications', 'coupons', 'coupon_redemptions')
 ORDER BY name;
 ```
 
@@ -175,7 +204,7 @@ it in this PR.
 The following are **planned** but not yet implemented. See `docs/DATA_MODEL_V2.md` for
 the full design.
 
-- `008_data_model_v2_tables.sql` — adds `customers`, `stops`, `route_plans`,
+- `009_data_model_v2_tables.sql` — adds `customers`, `stops`, `route_plans`,
   `route_stops`, `status_events`, `applied_migrations` (additive, no destructive changes).
 - Backfill + read/write-path migration will follow in separate PRs (PR13–PR15 per the plan).
 

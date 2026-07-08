@@ -4,6 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
 <title>EdenMish | ההזמנה נקלטה בהצלחה</title>
+<meta name="app-version" content="v0.2.0(272015)">
 <meta name="robots" content="noindex"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -130,6 +131,11 @@ const trackingUrl = params.get("tracking_url") || "";
 const paymentUrl = params.get("payment_url") || "";
 const price = params.get("price");
 const review = params.get("review") === "1";
+// Coupon breakdown (numbers coerced + code escaped — these come from the URL)
+const discountCode = params.get("discount_code") || "";
+const discountAmount = Number(params.get("discount_amount")) || 0;
+const subtotalPrice = Number(params.get("subtotal_price")) || 0;
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 const idEl = document.getElementById("tracking-id");
 if (token) {
@@ -138,7 +144,18 @@ if (token) {
   idEl.textContent = "-";
   idEl.classList.remove("tracking-widest");
 }
-if (price) document.getElementById("price-line").textContent = "סכום מוערך: ₪" + price;
+if (price) {
+  const priceLine = document.getElementById("price-line");
+  if (discountCode && discountAmount > 0) {
+    // Final price stays primary; subtotal struck through + mint coupon line beneath
+    priceLine.innerHTML = "סכום מוערך: " +
+      (subtotalPrice > 0 ? '<s class="text-on-surface-variant font-normal opacity-70">₪' + subtotalPrice + "</s> " : "") +
+      "₪" + esc(price) +
+      '<span class="block text-xs font-medium mt-1">קופון <span dir="ltr">' + esc(discountCode) + "</span>: −₪" + discountAmount + "</span>";
+  } else {
+    priceLine.textContent = "סכום מוערך: ₪" + price;
+  }
+}
 const trackCta = document.getElementById("track-cta");
 if (trackingUrl) trackCta.href = trackingUrl;
 else if (token) trackCta.href = "/track.html?t=" + encodeURIComponent(token);

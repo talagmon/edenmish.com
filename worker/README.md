@@ -80,8 +80,9 @@ Database name: `edenmish`. Binding: `DB`.
 ### Schema and migrations
 
 `schema.sql` is the **fresh-DB source of truth** — it defines every current table.
-The numbered migrations (`003`–`005`) add tables that were introduced after the initial
-schema. They are all idempotent (`CREATE TABLE IF NOT EXISTS`).
+The numbered migrations (`003`–`008`) add tables/columns that were introduced after the
+initial schema. Tables are idempotent (`CREATE TABLE IF NOT EXISTS`); `ALTER TABLE …
+ADD COLUMN` migrations (`006`–`008`) must run only on DBs that predate their columns.
 
 - **Fresh DB:** run `npm run db:init` (schema.sql only).
 - **Existing production DB:** run numbered migrations in order — see **`MIGRATIONS.md`**
@@ -90,7 +91,7 @@ schema. They are all idempotent (`CREATE TABLE IF NOT EXISTS`).
   `ALTER TABLE … ADD COLUMN` would fail with "duplicate column").
 
 Current tables: `orders`, `status_history`, `gps_pings`, `payments`, `pricing_rules`,
-`rate_limits`, `delivery_proofs`, `notifications`.
+`rate_limits`, `delivery_proofs`, `notifications`, `coupons`, `coupon_redemptions`.
 
 ## Secret checklist
 
@@ -143,6 +144,9 @@ See **`MIGRATIONS.md`** for the full reference (purpose, verification queries, o
 wrangler d1 execute edenmish --file=./migrations/003_rate_limits.sql
 wrangler d1 execute edenmish --file=./migrations/004_delivery_proofs.sql
 wrangler d1 execute edenmish --file=./migrations/005_notifications.sql
+wrangler d1 execute edenmish --file=./migrations/006_pod_signature.sql
+wrangler d1 execute edenmish --file=./migrations/007_order_rating.sql
+wrangler d1 execute edenmish --file=./migrations/008_coupons.sql
 ```
 
 > Run only migrations that have not already been applied. They are idempotent, but

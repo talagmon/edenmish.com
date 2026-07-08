@@ -23,6 +23,15 @@ export async function createDraftOrder(env, order, priceNis) {
   const SIZE_HE = { small: 'קטן', medium: 'בינוני' };
   const pkgTitle = 'שליחות — ' + (SERVICE_HE[order.service] || 'שליחות') + (order.size === 'medium' ? ' · עד גודל קופסת נעלים' : '');
 
+  // Coupon (migration 008): the line item keeps the ORIGINAL subtotal and the
+  // discount is attached as Shopify's applied_discount. Always fixed_amount — even
+  // for percentage coupons — so the Shopify checkout total is exactly `priceNis`
+  // (the Worker's final integer-shekel price) with no percentage re-rounding drift.
+  // Non-coupon orders: hasDiscount is false and the payload is unchanged.
+  const discountAmount = Math.max(0, Math.round(Number(order.discount_amount) || 0));
+  const hasDiscount = !!(order.discount_code && discountAmount > 0);
+  const lineItemPrice = Number(priceNis) + (hasDiscount ? discountAmount : 0);
+
   const properties = [
     { name: '_tracking_token', value: order.token },
     { name: 'איסוף', value: order.pickup || '—' },
@@ -38,7 +47,7 @@ export async function createDraftOrder(env, order, priceNis) {
     draft_order: {
       line_items: [{
         title: pkgTitle,
-        price: Number(priceNis).toFixed(2),
+        price: lineItemPrice.toFixed(2),
         quantity: 1,
         requires_shipping: false,
         taxable: false,
@@ -54,6 +63,17 @@ export async function createDraftOrder(env, order, priceNis) {
       }],
     },
   };
+
+  if (hasDiscount) {
+    body.draft_order.applied_discount = {
+      title: order.discount_code,
+      description: 'EdenMish coupon',
+      value_type: 'fixed_amount',
+      // Canonical Shopify decimal format ("5.00"), matching the line-item price above.
+      value: discountAmount.toFixed(2),
+      amount: discountAmount.toFixed(2),
+    };
+  }
 
   if (order.name || order.phone || (order.email && order.email_verified)) {
     body.draft_order.customer = {};
@@ -75,6 +95,92 @@ export async function createDraftOrder(env, order, priceNis) {
   const draft = data && data.draft_order;
   if (!draft || !draft.invoice_url) return null;
   return draft; // { id, invoice_url, ... }
+}
+
+// ---- Shopify Admin GraphQL: look up a discount code definition ----
+// Coupons are created/edited in Shopify Admin; the Worker syncs their definition
+// into the D1 `coupons` table (see src/coupons.js) and enforces them server-side.
+//
+// Returns a `coupons` row shape (migrations/008_coupons.sql), or:
+//   null                  → Shopify says no such code exists
+//   { unsupported: true } → the code exists but is not a Basic code discount
+//                           (BxGy / free shipping / app discount) or has a value
+//                           shape we don't handle
+// Throws on missing credentials / network / HTTP / GraphQL errors so the caller
+// can fall back to its cached D1 row (stale-while-error).
+export async function fetchShopifyDiscountByCode(env, code) {
+  if (!env.SHOPIFY_SHOP || !env.SHOPIFY_ADMIN_TOKEN) throw new Error('shopify_not_configured');
+  const apiVersion = env.SHOPIFY_API_VERSION || '2026-04';
+  const url = `https://${env.SHOPIFY_SHOP}/admin/api/${apiVersion}/graphql.json`;
+
+  const query = `query DiscountByCode($code: String!) {
+    codeDiscountNodeByCode(code: $code) {
+      id
+      codeDiscount {
+        __typename
+        ... on DiscountCodeBasic {
+          title
+          status
+          startsAt
+          endsAt
+          usageLimit
+          appliesOncePerCustomer
+          customerGets {
+            value {
+              __typename
+              ... on DiscountPercentage { percentage }
+              ... on DiscountAmount { amount { amount currencyCode } }
+            }
+          }
+        }
+      }
+    }
+  }`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'X-Shopify-Access-Token': env.SHOPIFY_ADMIN_TOKEN,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ query, variables: { code } }),
+  });
+  if (!res.ok) throw new Error('shopify_http_' + res.status);
+  const data = await res.json();
+  if (data.errors && data.errors.length) throw new Error('shopify_graphql_error');
+
+  const node = data.data && data.data.codeDiscountNodeByCode;
+  if (!node) return null; // no such code in Shopify
+  const d = node.codeDiscount;
+  if (!d || d.__typename !== 'DiscountCodeBasic') return { unsupported: true };
+
+  const val = d.customerGets && d.customerGets.value;
+  let value_type = null;
+  let value = null;
+  if (val && val.__typename === 'DiscountPercentage' && typeof val.percentage === 'number') {
+    value_type = 'percentage';
+    // GraphQL returns a 0..1 fraction (0.15 = 15%); we store 0-100.
+    // Round to 2 decimals to shed float dust (0.15 * 100 === 15.000000000000002).
+    value = Math.round(val.percentage * 100 * 100) / 100;
+  } else if (val && val.__typename === 'DiscountAmount' && val.amount) {
+    value_type = 'fixed_amount';
+    value = Number(val.amount.amount); // ILS — same money unit as pricing.js
+  }
+  if (value_type == null || !Number.isFinite(value)) return { unsupported: true };
+
+  return {
+    code: String(code).trim().toUpperCase(),
+    shopify_discount_id: node.id || null,
+    title: d.title || null,
+    value_type,
+    value,
+    status: String(d.status || '').toLowerCase() || null, // 'active' | 'expired' | 'scheduled'
+    starts_at: d.startsAt ? Date.parse(d.startsAt) : null, // epoch ms
+    ends_at: d.endsAt ? Date.parse(d.endsAt) : null,
+    usage_limit: d.usageLimit ?? null, // NULL = unlimited
+    applies_once_per_customer: d.appliesOncePerCustomer ? 1 : 0,
+    raw_shopify_json: JSON.stringify(node),
+  };
 }
 
 // ---- Shopify webhook HMAC verification (REQUIRED before trusting any webhook) ----

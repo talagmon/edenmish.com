@@ -13,6 +13,10 @@ import { createDraftOrder, verifyShopifyWebhook, parseShopifyOrderWebhook } from
 // - 'immediate' mode: returns a Shopify checkout URL; payment is captured at checkout.
 // - 'preauth' mode (future Mesh): would return a checkout URL + hold a max amount;
 //   settleOrder() must be called later to capture the actual amount.
+// - Coupons: the order's discount snapshot (discount_code / discount_amount /
+//   subtotal_price / discount_title, migration 008) rides through on `order` into
+//   createDraftOrder, which attaches it as a Shopify applied_discount. `priceNis`
+//   is always the FINAL (post-discount) amount the customer pays.
 export async function createCharge(env, order, priceNis) {
   const mode = env.PAYMENT_MODE === 'preauth' ? 'preauth' : 'immediate';
 

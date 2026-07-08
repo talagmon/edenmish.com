@@ -349,6 +349,15 @@ function renderTrack(d){
     ["מועד", o.when_text || "—"],
     ["הוזמן ב-", o.created_at ? fmtTime(o.created_at) : "—"]
   ];
+  // Coupon (migration 008): "סכום" stays the FINAL price; when a discount applied,
+  // show the pre-discount subtotal + the coupon code right after it.
+  if (Number(o.discount_amount) > 0) {
+    const at = cells.findIndex(c => c[0] === "סכום") + 1;
+    const extra = [];
+    if (o.subtotal_price != null) extra.push(["מחיר לפני הנחה", "₪" + o.subtotal_price]);
+    if (o.discount_code) extra.push(["קופון", o.discount_code + " (−₪" + o.discount_amount + ")"]);
+    cells.splice(at, 0, ...extra);
+  }
   if (o.notes) cells.push(["הערות לשליח", o.notes]);
   cells.forEach(([k,v], idx) => {
     const card = document.createElement("div");

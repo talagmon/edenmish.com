@@ -4,6 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
 <title>מעקב הזמנות | עדן מיש</title>
+<meta name="app-version" content="v0.2.0(272015)">
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
@@ -227,6 +228,10 @@ function renderStats(){
     '</div>';
 }
 
+// Compact mint coupon badge (migration 008 discount snapshot) — empty when no discount.
+function discountBadgeHtml(o){
+  return (Number(o.discount_amount)>0&&o.discount_code)?'<span class="bg-secondary/15 text-secondary font-label-bold text-label-sm px-2 py-0.5 rounded-full whitespace-nowrap" dir="ltr">'+esc(o.discount_code)+' −₪'+o.discount_amount+'</span>':"";
+}
 function queueCard(o){
   var isLive = LIVE.includes(o.status);
   var isUrgent = o.urgent || o.review_flag;
@@ -242,6 +247,7 @@ function queueCard(o){
   var dropoffShort = esc((o.dropoff||"—").split(",")[0]);
   var whenLine = o.when_text?'<span class="text-label-sm text-on-surface-variant">'+esc(o.when_text)+'</span>':"";
   var reviewReason = o.review_reason?'<span class="text-label-sm text-alert-amber">'+esc(o.review_reason)+'</span>':"";
+  var discountBadge = discountBadgeHtml(o);
   var canCancel = !isTerminal;
   var cardId = 'card-'+o.id;
 
@@ -255,6 +261,7 @@ function queueCard(o){
     '<span class="bg-primary-container text-on-primary-container font-label-bold text-label-sm px-3 py-1 rounded-full">'+esc(HE[o.status]||o.status)+'</span>'+
     svcChip+urgentBadge+
     '<span class="text-on-surface-variant text-label-sm">#'+o.id+'</span>'+
+    discountBadge+
     '<b class="font-headline-md text-headline-md text-secondary mr-auto">₪'+(o.price||"?")+'</b></div>'+
     nameLine+
     '<div class="flex items-start gap-2 mt-1">'+
@@ -408,7 +415,8 @@ function renderDetail(o){
     '<a href="https://waze.com/ul?q='+encodeURIComponent(o.dropoff||"")+'&navigate=yes" target="_blank" class="flex items-center gap-1 text-label-sm bg-primary/10 text-primary px-2 py-1 rounded-lg active:scale-95"><span class="material-symbols-outlined text-[16px]">navigation</span>Waze</a>'+
     (o.dropoff_lat?'<a href="https://waze.com/ul?ll='+o.dropoff_lat+'%2C'+o.dropoff_lng+'&navigate=yes" target="_blank" class="flex items-center gap-1 text-label-sm bg-secondary/10 text-secondary px-2 py-1 rounded-lg active:scale-95"><span class="material-symbols-outlined text-[16px]">my_location</span>ניווט מדויק</a>':'')+
     '</div>'+
-    '<div class="flex items-center justify-between bg-surface-deep/40 rounded-lg p-2 mt-2"><span class="text-on-surface-variant text-body-md">₪'+(o.price||"?")+' · '+esc(o.package||"—")+'</span>'+(o.when_text?'<span class="text-label-sm text-on-surface-variant">'+esc(o.when_text)+'</span>':"")+'</div>'+
+    '<div class="flex items-center justify-between bg-surface-deep/40 rounded-lg p-2 mt-2"><span class="text-on-surface-variant text-body-md">'+(Number(o.discount_amount)>0&&o.subtotal_price!=null?'<s class="opacity-60">₪'+o.subtotal_price+'</s> ':'')+'₪'+(o.price||"?")+' · '+esc(o.package||"—")+'</span>'+(o.when_text?'<span class="text-label-sm text-on-surface-variant">'+esc(o.when_text)+'</span>':"")+'</div>'+
+    (discountBadgeHtml(o)?'<div class="mt-2">'+discountBadgeHtml(o)+'</div>':"")+
     '</div></div>'+
     notesHtml+
     actionsHtml(o)+

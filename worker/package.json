@@ -4,8 +4,10 @@
   "private": true,
   "description": "EdenMish delivery order + tracking backend (Cloudflare Worker + D1)",
   "main": "src/index.js",
+  "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "test": "node --test \"tests/**/*.test.js\"",
     "deploy": "wrangler deploy",
     "db:init": "wrangler d1 execute edenmish --file=./schema.sql",
     "db:query": "wrangler d1 execute edenmish --command"

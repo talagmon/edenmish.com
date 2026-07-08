@@ -100,6 +100,37 @@ describe('Frontend: Booking form', () => {
     assertContains(html, 'flashAvailableNow', 'flash working-hours gate');
     assertContains(html, 'asap:', 'payload asap flag');
   });
+
+  test('Has coupon UI in price summary', () => {
+    assertContains(html, 'id="coupon-toggle"', 'coupon toggle');
+    assertContains(html, 'יש לך קוד קופון?', 'coupon toggle text');
+    assertContains(html, 'id="coupon-input"', 'coupon input');
+    assertContains(html, 'id="coupon-apply"', 'coupon apply button');
+    assertContains(html, 'החל', 'coupon apply text');
+    assertContains(html, 'id="coupon-active"', 'coupon active panel');
+    assertContains(html, 'id="coupon-original"', 'coupon original price');
+    assertContains(html, 'id="coupon-discount"', 'coupon discount amount');
+    assertContains(html, 'id="coupon-final"', 'coupon final price');
+    assertContains(html, 'id="coupon-remove"', 'coupon remove button');
+    assertContains(html, 'הסרת קופון', 'coupon remove text');
+    assertContains(html, 'id="coupon-error"', 'coupon error');
+    assertContains(html, 'id="coupon-cleared"', 'coupon cleared notice');
+  });
+
+  test('Calls coupon validation API', () => {
+    assertContains(html, '/api/coupons/validate', 'coupon validate endpoint');
+    assertContains(html, 'validateCoupon', 'validateCoupon function');
+  });
+
+  test('Sends coupon_code in order payload conditionally', () => {
+    assertContains(html, 'couponState.code', 'coupon state check');
+    assertContains(html, 'payload.coupon_code', 'coupon payload field');
+  });
+
+  test('Handles invalid_coupon server response', () => {
+    assertContains(html, '"invalid_coupon"', 'invalid_coupon error string');
+    assertContains(html, 'showCouponError', 'showCouponError handler');
+  });
 });
 
 describe('Frontend: Tracking page', () => {

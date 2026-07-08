@@ -4,6 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
 <title>EdenMish | הזמנת משלוח חדש</title>
+<meta name="app-version" content="v0.2.0(272015)">
 <meta name="description" content="הזמנת שליח EdenMish בגוש דן - מילוי פרטי המשלוח וקבלת הצעת מחיר."/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -67,6 +68,42 @@
 </div>
 <span class="material-symbols-outlined text-secondary text-4xl">payments</span>
 </div>
+<!-- Coupon UI -->
+<div id="coupon-section" class="mt-stack-md pt-stack-sm border-t border-glass-border">
+  <button type="button" id="coupon-toggle" class="text-label-bold text-primary hover:text-secondary transition-colors w-full text-center">
+    יש לך קוד קופון?
+  </button>
+  <div id="coupon-expand" hidden class="mt-stack-sm">
+    <div class="flex gap-2">
+      <input id="coupon-input" type="text" dir="ltr" class="flex-1 bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-center transition-all uppercase" placeholder="הזן קוד קופון" autocomplete="off" />
+      <button type="button" id="coupon-apply" class="bg-primary text-on-primary px-4 py-2 rounded-lg font-label-bold active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-not-allowed">החל</button>
+    </div>
+    <div id="coupon-error" class="hidden mt-2 text-label-sm text-error text-center"></div>
+  </div>
+  <div id="coupon-active" hidden class="mt-stack-sm space-y-1">
+    <div class="flex justify-between items-center text-on-surface-variant">
+      <span class="font-label-bold">מחיר לפני הנחה</span>
+      <span class="font-body-md line-through" id="coupon-original">-</span>
+    </div>
+    <div class="flex justify-between items-center text-secondary">
+      <span class="font-label-bold flex items-center gap-1">
+        <span class="material-symbols-outlined text-[16px]">local_offer</span>
+        <span id="coupon-title">קופון</span>
+      </span>
+      <span class="font-body-md" dir="ltr" id="coupon-discount">-₪0</span>
+    </div>
+    <div class="flex justify-between items-end pt-1">
+      <span class="text-on-surface-variant font-label-sm">מחיר סופי</span>
+      <span class="text-headline-md text-secondary font-display-lg">₪<span id="coupon-final">-</span></span>
+    </div>
+    <button type="button" id="coupon-remove" class="text-label-sm text-error hover:text-error/80 transition-colors flex items-center gap-1 mx-auto mt-1">
+      <span class="material-symbols-outlined text-[16px]">close</span>
+      הסרת קופון
+    </button>
+  </div>
+  <div id="coupon-cleared" hidden class="mt-2 text-label-sm text-alert-amber text-center"></div>
+</div>
+<!-- /Coupon UI -->
 <div class="bg-surface-container-high rounded-lg p-stack-sm">
 <p class="text-label-sm text-on-surface-variant text-center">
 * מחיר סופי לפי אזור ורמת שירות. ערב (19-22) +₪30 · שישי/שבת ×1.5.
@@ -349,6 +386,7 @@
 <div class="flex items-center justify-center gap-2 mt-3 opacity-60">
   <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener"><img src="/assets/se-footer.png" class="w-7 h-7 rounded-full" alt="Six Elements Altiora"></a>
   <span class="text-label-sm">פותח על ידי <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Six Elements Altiora</a> · <a href="https://talagmon.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Tal Agmon</a></span>
+<span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.2.0(272015)</span>
 </div>
 </footer>
 <script>
@@ -441,6 +479,150 @@ function maybeDistance(){
   } catch(e){}
 }
 loadMapsScript();
+
+// ---- Coupon UI ----
+const couponSection = document.getElementById("coupon-section");
+const couponToggle = document.getElementById("coupon-toggle");
+const couponExpand = document.getElementById("coupon-expand");
+const couponInput = document.getElementById("coupon-input");
+const couponApply = document.getElementById("coupon-apply");
+const couponError = document.getElementById("coupon-error");
+const couponActive = document.getElementById("coupon-active");
+const couponOriginal = document.getElementById("coupon-original");
+const couponTitle = document.getElementById("coupon-title");
+const couponDiscount = document.getElementById("coupon-discount");
+const couponFinal = document.getElementById("coupon-final");
+const couponRemove = document.getElementById("coupon-remove");
+const couponCleared = document.getElementById("coupon-cleared");
+
+const couponState = { code: null, data: null };
+let lastCouponFingerprint = "";
+
+function getCouponPricingFields() {
+  const service = (document.querySelector('input[name="service"]:checked') || {}).value || "standard";
+  const size = (document.querySelector('input[name="size"]:checked') || {}).value || "small";
+  const phone = (document.getElementById("f-phone") || {}).value || "";
+  const hour = service === "flash" ? new Date().getHours() : (sched.window ? parseInt(sched.window.split(":")[0], 10) : -1);
+  const payload = {
+    service,
+    size,
+    pickup_city: geo.pickupCity || cityOf(document.getElementById("f-pickup-addr").value),
+    dropoff_city: geo.dropoffCity || cityOf(document.getElementById("f-dropoff-addr").value),
+    when_date: service === "flash" ? isoDate(new Date()) : isoDate(sched.date),
+    when_hour: hour
+  };
+  if (geo.distanceKm != null) payload.distance_km = geo.distanceKm;
+  if (phone) payload.phone = phone;
+  return payload;
+}
+
+function couponFingerprint() {
+  const f = getCouponPricingFields();
+  return [f.service, f.size, f.pickup_city, f.dropoff_city, f.when_date, f.when_hour].join("|");
+}
+
+function showCouponError(msg) {
+  if (couponError) { couponError.textContent = msg; couponError.classList.remove("hidden"); }
+}
+function hideCouponError() { if (couponError) couponError.classList.add("hidden"); }
+function showCouponCleared(msg) {
+  if (couponCleared) { couponCleared.textContent = msg; couponCleared.classList.remove("hidden"); setTimeout(() => { if (couponCleared) couponCleared.classList.add("hidden"); }, 4000); }
+}
+
+function renderCouponUI() {
+  const hasCoupon = couponState.data && couponState.data.valid;
+  if (couponToggle) couponToggle.hidden = hasCoupon;
+  if (couponExpand) {
+    const isOpen = couponExpand.dataset.open === "1";
+    couponExpand.hidden = hasCoupon || !isOpen;
+  }
+  if (couponActive) couponActive.hidden = !hasCoupon;
+  if (hasCoupon) {
+    const d = couponState.data;
+    const subtotal = d.subtotal_price != null ? d.subtotal_price : (d.price + d.discount_amount);
+    if (couponOriginal) couponOriginal.textContent = "₪" + subtotal;
+    if (couponTitle) couponTitle.textContent = d.title || ("קופון " + d.code);
+    if (couponDiscount) couponDiscount.textContent = "−₪" + d.discount_amount;
+    if (couponFinal) couponFinal.textContent = d.price;
+  }
+}
+
+async function validateCoupon(code) {
+  hideCouponError();
+  if (!code) return;
+  if (couponApply) { couponApply.disabled = true; couponApply.textContent = "בודק…"; }
+  try {
+    const payload = { ...getCouponPricingFields(), coupon_code: code };
+    const res = await fetch(API + "/api/coupons/validate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (res.status === 429) { showCouponError(data.message || "יותר מדי ניסיונות. נא להמתין."); return; }
+    if (!data.valid) { showCouponError(data.message || "קוד הקופון אינו תקף."); return; }
+    couponState.code = code;
+    couponState.data = data;
+    lastCouponFingerprint = couponFingerprint();
+    if (couponInput) couponInput.value = "";
+    if (couponExpand) { couponExpand.dataset.open = ""; couponExpand.hidden = true; }
+    renderCouponUI();
+    computeEstimate();
+  } catch (err) {
+    showCouponError("בעיית תקשורת בבדיקת הקופון.");
+  } finally {
+    if (couponApply) { couponApply.disabled = false; couponApply.textContent = "החל"; }
+  }
+}
+
+function removeCoupon() {
+  couponState.code = null;
+  couponState.data = null;
+  lastCouponFingerprint = "";
+  if (couponExpand) { couponExpand.dataset.open = ""; couponExpand.hidden = true; }
+  if (couponToggle) couponToggle.hidden = false;
+  hideCouponError();
+  renderCouponUI();
+  computeEstimate();
+}
+
+if (couponToggle) {
+  couponToggle.addEventListener("click", () => {
+    const isOpen = couponExpand && couponExpand.dataset.open === "1";
+    if (isOpen) { couponExpand.hidden = true; couponExpand.dataset.open = ""; }
+    else { couponExpand.hidden = false; couponExpand.dataset.open = "1"; }
+  });
+}
+if (couponApply) {
+  couponApply.addEventListener("click", () => {
+    const code = (couponInput.value || "").trim();
+    if (!code) return;
+    validateCoupon(code);
+  });
+}
+if (couponRemove) {
+  couponRemove.addEventListener("click", removeCoupon);
+}
+
+// Hook into computeEstimate to show coupon price and auto-clear on change
+const _origComputeEstimate = computeEstimate;
+computeEstimate = function() {
+  _origComputeEstimate();
+  if (couponState.code) {
+    const fp = couponFingerprint();
+    if (fp !== lastCouponFingerprint) {
+      showCouponCleared("הקופון הוסר כי פרטי המשלוח השתנו.");
+      removeCoupon();
+      return;
+    }
+  }
+  if (couponState.data && couponState.data.valid) {
+    const el = document.getElementById("price-val");
+    if (el) el.textContent = couponState.data.price;
+  }
+  renderCouponUI();
+};
+// ---- /Coupon UI ----
 
 // ---- Service area + business-hours scheduling (mirrors eden-funnel.liquid) ----
 const EDEN_ZONES = ['תל אביב','תל אביב-יפו','תל אביב יפו','רמת גן','גבעתיים','בני ברק','הרצליה','רמת השרון','הוד השרון','קריית אונו','קרית אונו','גבעת שמואל','אור יהודה','בת ים','חולון','ראשון לציון','כפר סבא','רעננה','פתח תקווה','אזור','גני תקווה','סביון','רמלה','לוד'];
@@ -816,6 +998,7 @@ form.addEventListener("submit", async (e) => {
   if (geo.pickupLat != null) { payload.pickup_lat = geo.pickupLat; payload.pickup_lng = geo.pickupLng; }
   if (geo.dropoffLat != null) { payload.dropoff_lat = geo.dropoffLat; payload.dropoff_lng = geo.dropoffLng; }
   if (geo.distanceKm != null) payload.distance_km = geo.distanceKm;
+  if (couponState.code) payload.coupon_code = couponState.code;
 
   submitBtn.disabled = true;
   const original = submitBtn.textContent;
@@ -832,6 +1015,11 @@ form.addEventListener("submit", async (e) => {
       if (res.status === 429) return showError("שלחנו יותר מדי בקשות. נא להמתין מספר דקות ולנסות שוב.");
       if (data && data.error && data.error.startsWith("invalid phone")) return showError("מספר הטלפון אינו תקין.");
       if (data && data.error && data.error.startsWith("invalid email")) return showError("כתובת האימייל אינה תקינה.");
+      if (data && data.error && data.error === "invalid_coupon") {
+        showCouponError(data.message || "קוד הקופון אינו תקף.");
+        if (couponSection) couponSection.scrollIntoView({ behavior: "smooth", block: "center" });
+        return showError(data.message || "קוד הקופון אינו תקף.");
+      }
       if (data && data.error && data.error.startsWith("missing")) return showError("חסר שדה חובה: " + data.error.replace("missing ", ""));
       return showError("שגיאה בשליחת ההזמנה. נא לנסות שוב או לפנות אלינו.");
     }
@@ -842,6 +1030,12 @@ form.addEventListener("submit", async (e) => {
       price: data.price != null ? String(data.price) : "",
       review: data.review ? "1" : "0"
     });
+    // Coupon snapshot → success page shows the discount breakdown (only when applied)
+    if (data.discount_code && Number(data.discount_amount) > 0) {
+      q.set("discount_code", data.discount_code);
+      q.set("discount_amount", String(data.discount_amount));
+      if (data.subtotal_price != null) q.set("subtotal_price", String(data.subtotal_price));
+    }
     window.location.href = "/success.html?" + q.toString();
   } catch (err) {
     showError("בעיית תקשורת. בדקו את החיבור לרשת ונסו שוב.");

@@ -20,6 +20,11 @@ CREATE TABLE IF NOT EXISTS orders (
   created_at INTEGER NOT NULL,
   picked_up_at INTEGER, delivered_at INTEGER,
   rating INTEGER,                       -- customer delivery rating 1-5 (POST /api/orders/:token/rate)
+  -- Coupon snapshot (008): price stays the final charged amount; these record how we got there.
+  subtotal_price INTEGER,               -- price before discount (incl. surcharges)
+  discount_code TEXT,                   -- normalized uppercase code applied
+  discount_amount INTEGER DEFAULT 0,
+  discount_title TEXT,                  -- human title snapshot from Shopify
   email TEXT, email_verified INTEGER DEFAULT 0, otp_hash TEXT, otp_expires INTEGER
 );
 
@@ -99,6 +104,39 @@ CREATE TABLE IF NOT EXISTS notifications (
   updated_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_status ON notifications(status, id DESC);
+
+-- Coupons (008). Synced snapshot of Shopify discount codes. Shopify Admin is where
+-- codes are created/edited; this table caches the definition the Worker validates against.
+CREATE TABLE IF NOT EXISTS coupons (
+  code TEXT PRIMARY KEY,               -- normalized uppercase
+  shopify_discount_id TEXT,            -- Shopify price rule / discount node id
+  title TEXT,
+  value_type TEXT CHECK(value_type IN ('percentage','fixed_amount')),
+  value REAL NOT NULL,                 -- percentage (0-100) or fixed amount in ILS
+  status TEXT,                         -- e.g. 'active' | 'expired' | 'disabled'
+  starts_at INTEGER,                   -- epoch ms
+  ends_at INTEGER,                     -- epoch ms
+  usage_limit INTEGER,                 -- NULL = unlimited (from Shopify definition)
+  applies_once_per_customer INTEGER DEFAULT 0,
+  synced_at INTEGER,                   -- epoch ms of last Shopify sync
+  raw_shopify_json TEXT                -- full Shopify payload for debugging/resync
+);
+
+-- One row per successful coupon redemption (008). Usage limits are enforced by
+-- counting rows here (per code, and per code+customer_key for once-per-customer).
+CREATE TABLE IF NOT EXISTS coupon_redemptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id INTEGER NOT NULL,
+  code TEXT NOT NULL,                  -- normalized uppercase
+  customer_key TEXT,                   -- stable customer identifier (e.g. normalized email)
+  price_before INTEGER,                -- subtotal incl. surcharges
+  discount_amount INTEGER,
+  price_after INTEGER,                 -- floored at 0
+  created_at INTEGER,                  -- epoch ms
+  FOREIGN KEY (order_id) REFERENCES orders(id)
+);
+CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_code ON coupon_redemptions(code);
+CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_customer ON coupon_redemptions(customer_key);
 
 INSERT OR IGNORE INTO pricing_rules (name, value) VALUES
   ('base_envelope','59'),

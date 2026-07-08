@@ -6,6 +6,7 @@ import { trackingHtml, opsHtml } from './pages.js';
 import { corsFor, maskEmail, publicOrderSummary, clientIp, anonKey } from './security.js';
 import { notifyEmail, notifyWhatsApp } from './notify.js';
 import { normalizeIlPhone } from './validate.js';
+import { validateCoupon, recordRedemption } from './coupons.js';
 
 const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra } });
 const html = (s) => new Response(s, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -19,9 +20,14 @@ const trackingUrl = (env, token) => storefrontUrl(env, `/track.html?t=${token}`)
 // Business contact line for customer emails — the EdenMish business number only,
 // never a private number. Single definition so the templates can't drift apart.
 const SUPPORT_LINE = '<p style="color:#777;font-size:13px;margin-top:14px">לשאלות: eden@edenmish.com · 053-405-8498</p>';
+// Coupon line for customer emails (migration 008 snapshot) — mint accent per the v2
+// palette. Renders nothing when no discount applied, so non-coupon emails are unchanged.
+const discountLineHtml = (o) => (o && o.discount_code && Number(o.discount_amount) > 0)
+  ? `<div style="margin-top:6px"><span style="color:#cec3d2;font-size:12px">קופון ${escHtml(o.discount_code)}: </span><b style="color:#91d3c8;font-size:14px">−₪${Number(o.discount_amount)}</b></div>`
+  : '';
 const otpEmailHtml = (otp, url) => `<div dir="rtl" style="font-family:sans-serif;font-size:16px;line-height:1.6">הקוד שלך לאימות הכתובת ב-EdenMish:<div style="font-size:34px;font-weight:800;letter-spacing:6px;color:#5B2A86">${otp}</div>הקוד תקף 10 דקות.${url ? '<div style="margin-top:16px;padding-top:12px;border-top:1px solid #eee"><a href="' + url + '" style="display:inline-block;background:#5B2A86;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:700">מעקב המשלוח שלך ←</a></div>' : ''}</div>`;
-const deliverySummaryHtml = (env, o) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px;margin:0 auto;background:#0b1326;color:#dae2fd;padding:32px 24px;border-radius:16px"><h1 style="color:#dfb7ff;font-size:26px;margin:0 0 8px">המשלוח נמסר בהצלחה! ✓</h1><p style="color:#cec3d2;margin:0 0 20px;font-size:15px">תודה שבחרתם ב-EdenMish. המשלוח הגיע ליעד.</p><div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:16px;margin-bottom:16px"><div style="margin-bottom:10px"><span style="color:#91d3c8;font-size:12px;display:block">איסוף</span><b style="font-size:16px">${o.pickup || ''}</b></div><div style="margin-bottom:10px"><span style="color:#dfb7ff;font-size:12px;display:block">מסירה</span><b style="font-size:16px">${o.dropoff || ''}</b></div><div><span style="color:#cec3d2;font-size:12px">מחיר </span><b style="color:#91d3c8;font-size:20px">₪${o.price || ''}</b></div></div><div style="text-align:center;margin:20px 0"><p style="color:#91d3c8;font-size:14px;margin:0 0 10px">איך היה השירות? נשמח לדירוג ⭐</p><a href="${storefrontUrl(env, '/delivered.html?t=' + (o.token || ''))}" style="display:inline-block;background:#5b2a86;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700">צפו בהוכחת המסירה ודרגו אותנו ←</a></div>${SUPPORT_LINE}</div>`;
-const paymentConfirmedHtml = (o, url, otp) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px;margin:0 auto;background:#0b1326;color:#dae2fd;padding:32px 24px;border-radius:16px"><h1 style="color:#dfb7ff;font-size:26px;margin:0 0 8px">התשלום התקבל ✓</h1><p style="color:#cec3d2;margin:0 0 20px;font-size:15px">תודה שבחרתם ב-EdenMish! ההזמנה מאושרת.</p><div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:16px;margin-bottom:16px"><div style="margin-bottom:10px"><span style="color:#cec3d2;font-size:12px">מס׳ הזמנה </span><b>#${o.id || ''}</b></div><div><span style="color:#cec3d2;font-size:12px">מחיר </span><b style="color:#91d3c8;font-size:20px">₪${o.price || ''}</b></div></div><div style="margin:18px 0;padding:16px;background:rgba(91,42,134,.2);border:1px solid rgba(91,42,134,.3);border-radius:10px;text-align:center"><p style="margin:0 0 6px;font-size:14px;color:#cec3d2">קוד האימות למעקב המשלוח:</p><div style="font-size:32px;font-weight:800;letter-spacing:6px;color:#dfb7ff">${otp || '—'}</div></div><div style="text-align:center"><a href="${url}" style="display:inline-block;background:#5b2a86;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px">מעקב המשלוח שלי ←</a></div>${SUPPORT_LINE}</div>`;
+const deliverySummaryHtml = (env, o) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px;margin:0 auto;background:#0b1326;color:#dae2fd;padding:32px 24px;border-radius:16px"><h1 style="color:#dfb7ff;font-size:26px;margin:0 0 8px">המשלוח נמסר בהצלחה! ✓</h1><p style="color:#cec3d2;margin:0 0 20px;font-size:15px">תודה שבחרתם ב-EdenMish. המשלוח הגיע ליעד.</p><div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:16px;margin-bottom:16px"><div style="margin-bottom:10px"><span style="color:#91d3c8;font-size:12px;display:block">איסוף</span><b style="font-size:16px">${o.pickup || ''}</b></div><div style="margin-bottom:10px"><span style="color:#dfb7ff;font-size:12px;display:block">מסירה</span><b style="font-size:16px">${o.dropoff || ''}</b></div><div><span style="color:#cec3d2;font-size:12px">מחיר </span><b style="color:#91d3c8;font-size:20px">₪${o.price || ''}</b>${discountLineHtml(o)}</div></div><div style="text-align:center;margin:20px 0"><p style="color:#91d3c8;font-size:14px;margin:0 0 10px">איך היה השירות? נשמח לדירוג ⭐</p><a href="${storefrontUrl(env, '/delivered.html?t=' + (o.token || ''))}" style="display:inline-block;background:#5b2a86;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700">צפו בהוכחת המסירה ודרגו אותנו ←</a></div>${SUPPORT_LINE}</div>`;
+const paymentConfirmedHtml = (o, url, otp) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px;margin:0 auto;background:#0b1326;color:#dae2fd;padding:32px 24px;border-radius:16px"><h1 style="color:#dfb7ff;font-size:26px;margin:0 0 8px">התשלום התקבל ✓</h1><p style="color:#cec3d2;margin:0 0 20px;font-size:15px">תודה שבחרתם ב-EdenMish! ההזמנה מאושרת.</p><div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:16px;margin-bottom:16px"><div style="margin-bottom:10px"><span style="color:#cec3d2;font-size:12px">מס׳ הזמנה </span><b>#${o.id || ''}</b></div><div><span style="color:#cec3d2;font-size:12px">מחיר </span><b style="color:#91d3c8;font-size:20px">₪${o.price || ''}</b>${discountLineHtml(o)}</div></div><div style="margin:18px 0;padding:16px;background:rgba(91,42,134,.2);border:1px solid rgba(91,42,134,.3);border-radius:10px;text-align:center"><p style="margin:0 0 6px;font-size:14px;color:#cec3d2">קוד האימות למעקב המשלוח:</p><div style="font-size:32px;font-weight:800;letter-spacing:6px;color:#dfb7ff">${otp || '—'}</div></div><div style="text-align:center"><a href="${url}" style="display:inline-block;background:#5b2a86;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px">מעקב המשלוח שלי ←</a></div>${SUPPORT_LINE}</div>`;
 const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // Review-flagged orders: immediate confirmation so the customer knows what happens next
 // (previously they got zero contact until after payment — a funnel dead end).
@@ -29,6 +35,22 @@ const requestReceivedHtml = (o) => `<div dir="rtl" style="font-family:sans-serif
 // Sent by /approve: the confirmed price + Shopify checkout link (previously the link was
 // only copied to Eden's clipboard and the customer was never notified).
 const paymentLinkHtml = (o, url) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px"><h2 style="color:#5B2A86;margin:0 0 8px">המחיר אושר ✓</h2><p>הזמנה #${o.id || ''} מוכנה לתשלום.</p><table style="border-collapse:collapse;font-size:15px"><tr><td style="padding:5px 14px;color:#777">איסוף</td><td style="padding:5px 0">${escHtml(o.pickup)}</td></tr><tr><td style="padding:5px 14px;color:#777">מסירה</td><td style="padding:5px 0">${escHtml(o.dropoff)}</td></tr><tr><td style="padding:5px 14px;color:#777">מחיר</td><td style="padding:5px 0;font-weight:700;color:#91d3c8;font-size:18px">₪${o.price || ''}</td></tr></table><div style="text-align:center;margin:18px 0"><a href="${url}" style="display:inline-block;background:#5B2A86;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px">לתשלום מאובטח ←</a></div><p style="color:#777;font-size:13px">תשלום באשראי / ביט / Apple Pay דרך Shopify. לאחר התשלום יישלח קישור מעקב חי וקוד אימות למייל.</p>${SUPPORT_LINE}</div>`;
+
+// Safe customer-facing Hebrew per validateCoupon rejection reason. Never expose the
+// raw reason string alone — the UI shows `message`; `reason` is for programmatic use.
+const COUPON_MESSAGES = {
+  not_found: 'קוד הקופון לא תקף',
+  unsupported: 'קוד הקופון לא תקף',
+  inactive: 'הקופון אינו פעיל',
+  not_started: 'הקופון עדיין לא פעיל',
+  expired: 'פג תוקף הקופון',
+  usage_limit_reached: 'הקופון מוצה',
+  already_used: 'הקופון כבר מומש',
+};
+const couponMessage = (reason) => COUPON_MESSAGES[reason] || COUPON_MESSAGES.not_found;
+// Stable customer identifier for once-per-customer coupon enforcement.
+// Phone (E.164-normalized) preferred — it's required on orders; email is the fallback.
+const couponCustomerKey = (b) => normalizeIlPhone(b && b.phone) || (b && b.email ? String(b.email).trim().toLowerCase() : null);
 
 async function isOps(req, env) {
   const c = getCookie(req, 'ops_sess') || req.headers.get('X-Ops');
@@ -81,6 +103,27 @@ export default {
     try { await ensureWebhook(env); } catch (e) {}
 
     // ---- public API (CORS) ----
+    // Coupon pre-check for the booking funnel: same pricing inputs as POST /api/orders
+    // + coupon_code (+ phone/email for once-per-customer checks). The price is always
+    // recomputed server-side — the client never sends a price. Rate-limited per
+    // (hashed) IP so discount codes can't be brute-forced.
+    if (path === '/api/coupons/validate' && req.method === 'POST') {
+      try {
+        const k = await anonKey(env, clientIp(req));
+        const rl = await incrRateLimit(env.DB, 'cpn:' + k, 60 * 1000);
+        if (rl.count > 10) {
+          console.log('coupon_rate_limited');
+          return json({ valid: false, reason: 'rate_limited', message: 'יותר מדי ניסיונות. נסו שוב בעוד דקה' }, 429, { ...cors, 'Retry-After': '60' });
+        }
+      } catch (rlErr) { console.error('rate_limit_error', rlErr && rlErr.message ? rlErr.message : String(rlErr)); }
+      let b; try { b = await req.json(); } catch { return json({ error: 'invalid body' }, 400, cors); }
+      const rules = await getRules(env.DB);
+      const pr = priceOrder(b, rules);
+      const v = await validateCoupon(env.DB, env, b.coupon_code, pr.price, couponCustomerKey(b));
+      if (!v.valid) return json({ valid: false, reason: v.reason, message: couponMessage(v.reason) }, 200, cors);
+      return json({ valid: true, code: v.code, subtotal_price: v.subtotal, discount_amount: v.discountAmount, price: v.price, title: v.title }, 200, cors);
+    }
+
     if (path === '/api/orders' && req.method === 'POST') {
       // Part E — IP-based abuse protection (best-effort; never blocks order creation).
       try {
@@ -119,20 +162,62 @@ export default {
         }
       }
 
+      // Optional coupon: validate against the server-computed price (incl. surcharges).
+      // An invalid code REJECTS the order — never silently create at full price; the
+      // customer must not be charged more than the total they were shown.
+      let coupon = null;
+      if (b.coupon_code) {
+        const v = await validateCoupon(env.DB, env, b.coupon_code, pr.price, couponCustomerKey(b));
+        if (!v.valid) return json({ valid: false, error: 'invalid_coupon', reason: v.reason, message: couponMessage(v.reason) }, 400, cors);
+        coupon = v;
+      }
+      // `price` on the order row is always the amount the customer pays; when a coupon
+      // applied, subtotal_price/discount_* record how we got there (migration 008).
+      const finalPrice = coupon ? coupon.price : pr.price;
+      const discountFields = {
+        subtotal_price: coupon ? coupon.subtotal : null,
+        discount_code: coupon ? coupon.code : null,
+        discount_amount: coupon ? coupon.discountAmount : 0,
+        discount_title: coupon ? coupon.title : null,
+      };
+
       // 1. Create the D1 order. For exact-price orders a Shopify Draft Order is created
       //    below (PR4); the customer pays its invoice URL through Shopify + PayPlus. The
       //    Shopify webhook links the order back via _tracking_token (line property) / note.
       const created = await createOrder(env.DB, {
         ...b,
         status: isReview ? 'review' : 'priced',
-        price: pr.price,
+        price: finalPrice,
         review_flag: isReview ? 1 : 0,
         review_reason: isReview ? pr.reasons.join(',') : null,
         payment_status: 'none',
-        payment_mode: 'immediate'
+        payment_mode: 'immediate',
+        ...discountFields
       });
       const token = created.token;
       const finalUrl = trackingUrl(env, token);
+      // Redemption row = what usage limits count. For limited coupons the insert is an
+      // atomic guard (see recordRedemption) that closes the validate→insert TOCTOU race:
+      // if a concurrent order consumed the last use, the guard rejects (recorded: false)
+      // and we strip the coupon from the just-created order (restore full price so the
+      // snapshot stays consistent) and reject the request — never silently charge more
+      // than the customer was shown. A plain D1 hiccup (throw) stays best-effort: it
+      // must not kill an already-created order.
+      if (coupon) {
+        let redemption = { recorded: true };
+        try {
+          redemption = await recordRedemption(env.DB, { orderId: created.id, code: coupon.code, customerKey: couponCustomerKey(b), priceBefore: coupon.subtotal, discountAmount: coupon.discountAmount, priceAfter: coupon.price, usageLimit: coupon.usageLimit, oncePerCustomer: coupon.appliesOncePerCustomer });
+        } catch (e) { console.error('coupon_redemption_error', e && e.message ? e.message : String(e)); }
+        if (!redemption.recorded) {
+          await env.DB.prepare('UPDATE orders SET price = subtotal_price, subtotal_price = NULL, discount_code = NULL, discount_amount = 0, discount_title = NULL WHERE id = ?')
+            .bind(created.id).run();
+          // Which guard lost the race is indistinguishable from one changes=0; pick the
+          // reason from which limit the coupon actually has (usage_limit takes priority).
+          const reason = coupon.usageLimit != null ? 'usage_limit_reached' : 'already_used';
+          console.log('coupon_guard_rejected', { order: created.id, code: coupon.code, reason });
+          return json({ valid: false, error: 'invalid_coupon', reason, message: couponMessage(reason) }, 400, cors);
+        }
+      }
 
       // Set OTP hash to gate the tracking page, but DON'T email the code yet.
       // The code is regenerated and emailed AFTER payment is confirmed (webhook handler).
@@ -143,14 +228,14 @@ export default {
 
       // Notify Eden (optional)
       try {
-        await notifyEmail(env, env.DB, { orderId: created.id, template: 'ops_new_order', recipient: env.OPS_EMAIL, subject: `הזמנה חדשה #${created.id}${isReview ? ' — לבדיקה' : ' — ממתינה לתשלום'}`, html: `${b.name} · ${b.pickup} → ${b.dropoff} · ₪${pr.price}${isReview ? '<br>חריג: ' + pr.reasons : ''}<br><a href="${finalUrl}">${finalUrl}</a>` });
+        await notifyEmail(env, env.DB, { orderId: created.id, template: 'ops_new_order', recipient: env.OPS_EMAIL, subject: `הזמנה חדשה #${created.id}${isReview ? ' — לבדיקה' : ' — ממתינה לתשלום'}`, html: `${b.name} · ${b.pickup} → ${b.dropoff} · ₪${finalPrice}${coupon ? ` (קופון ${coupon.code} — הנחה ₪${coupon.discountAmount})` : ''}${isReview ? '<br>חריג: ' + pr.reasons : ''}<br><a href="${finalUrl}">${finalUrl}</a>` });
       } catch {}
 
       // Review orders: tell the customer what happens next (Eden confirms the price,
       // then a payment link arrives by email). Without this they heard nothing at all
       // until after payment — most would assume the order vanished.
       if (isReview && b.email) {
-        try { await notifyEmail(env, env.DB, { orderId: created.id, template: 'customer_request_received', recipient: b.email, subject: `קיבלנו את הבקשה ✓ — הזמנה #${created.id} ב-EdenMish`, html: requestReceivedHtml({ id: created.id, pickup: b.pickup, dropoff: b.dropoff, price: pr.price }) }); } catch {}
+        try { await notifyEmail(env, env.DB, { orderId: created.id, template: 'customer_request_received', recipient: b.email, subject: `קיבלנו את הבקשה ✓ — הזמנה #${created.id} ב-EdenMish`, html: requestReceivedHtml({ id: created.id, pickup: b.pickup, dropoff: b.dropoff, price: finalPrice }) }); } catch {}
       }
 
       // 2. PR4 — exact-price path: Worker creates a Shopify Draft Order and returns its
@@ -168,21 +253,23 @@ export default {
       const testMode = (env.TEST_MODE === '1' || env.TEST_MODE === 'true') && url.searchParams.get('test') === '1';
       if (testMode) {
         await setOrderStatus(env.DB, created.id, 'paid', { payment_status: 'paid' });
-        try { await recordPayment(env.DB, created.id, { amount: (pr.price || 0) * 100, status: 'paid', payplus_id: 'TEST', paid_at: Date.now() }); } catch (e) {}
+        try { await recordPayment(env.DB, created.id, { amount: (finalPrice || 0) * 100, status: 'paid', payplus_id: 'TEST', paid_at: Date.now() }); } catch (e) {}
         if (b.email) {
           try {
             const otp = genOtp();
             await setEmailAndOtp(env.DB, created.id, b.email, await hashOtp(env, otp), Date.now() + 10 * 60 * 1000);
             await verifyOtp(env.DB, created.id); // test mode: skip the OTP gate → tracking immediately viewable
-            await notifyEmail(env, env.DB, { orderId: created.id, template: 'customer_payment_confirmation', recipient: b.email, subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב (בדיקה)', html: paymentConfirmedHtml({ ...created, ...b, email: b.email, price: pr.price }, finalUrl, otp) });
+            await notifyEmail(env, env.DB, { orderId: created.id, template: 'customer_payment_confirmation', recipient: b.email, subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב (בדיקה)', html: paymentConfirmedHtml({ ...created, ...b, email: b.email, price: finalPrice, ...discountFields }, finalUrl, otp) });
           } catch (e) {}
         }
-        return json({ token, tracking_url: finalUrl, payment_url: null, status: 'paid', price: pr.price, review: false, reasons: [], test: true }, 200, cors);
+        return json({ token, tracking_url: finalUrl, payment_url: null, status: 'paid', price: finalPrice, review: false, reasons: [], test: true }, 200, cors);
       }
       let paymentUrl = null;
       if (!isReview) {
         try {
-          const charge = await createCharge(env, { ...b, id: created.id, token, price: pr.price }, pr.price);
+          // Discount snapshot rides along on the order object so createDraftOrder can
+          // keep the line item at the original subtotal + attach applied_discount.
+          const charge = await createCharge(env, { ...b, id: created.id, token, price: finalPrice, ...discountFields }, finalPrice);
           if (charge && charge.checkoutUrl) {
             paymentUrl = charge.checkoutUrl;
             await setOrderStatus(env.DB, created.id, 'payment_sent', {
@@ -199,7 +286,10 @@ export default {
         token, tracking_url: finalUrl,
         payment_url: paymentUrl,
         status: isReview ? 'review' : (paymentUrl ? 'payment_sent' : 'priced'),
-        price: pr.price,
+        price: finalPrice,
+        subtotal_price: coupon ? coupon.subtotal : undefined,
+        discount_amount: coupon ? coupon.discountAmount : undefined,
+        discount_code: coupon ? coupon.code : undefined,
         review: isReview, reasons: pr.reasons
       }, 200, cors);
     }
@@ -404,6 +494,14 @@ export default {
       const o = await getOrderById(env.DB, id);
       if (!o) return json({ error: 'not found' }, 404);
       const price = Number(b.price) || o.price;
+      // A manual re-price supersedes any coupon: clear the snapshot (otherwise it would
+      // corrupt the new price — draft order line = new price + stale discount) and delete
+      // the redemption row so the freed use can be redeemed again.
+      if (o.discount_code) {
+        await env.DB.prepare('UPDATE orders SET subtotal_price=NULL, discount_code=NULL, discount_amount=0, discount_title=NULL WHERE id=?').bind(id).run();
+        await env.DB.prepare('DELETE FROM coupon_redemptions WHERE order_id=?').bind(id).run();
+        Object.assign(o, { subtotal_price: null, discount_code: null, discount_amount: 0, discount_title: null });
+      }
       const charge = await createCharge(env, { ...o }, price);
       if (charge) {
         await env.DB.prepare('UPDATE orders SET price=?, review_flag=0, review_reason=NULL, payment_url=?, shopify_draft_order_id=?, payment_status=?, payment_mode=?, status=? WHERE id=?')
@@ -485,6 +583,8 @@ export default {
             // duplicate payment row, invalidate the customer's OTP, and re-send both emails.
             if (o.payment_status === 'paid') return json({ received: true });
             await setOrderStatus(env.DB, o.id, 'paid', { payment_status: 'paid', shopify_order_id: parsed.shopifyOrderId });
+            // o.price is the FINAL amount (post-coupon when one applied) — the Draft
+            // Order's applied_discount guarantees Shopify captured exactly this total.
             await recordPayment(env.DB, o.id, { amount: o.price * 100, status: 'paid', payplus_id: String(parsed.shopifyOrderId), paid_at: Date.now() });
             // Use checkout email if the order doesn't have one (customer entered it in Shopify checkout)
             var custEmail = o.email || parsed.email;

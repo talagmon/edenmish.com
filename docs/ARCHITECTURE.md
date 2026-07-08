@@ -59,6 +59,7 @@ Implemented in `worker/src/`:
 - **Status history** — append-only `status_history` on every status change.
 - **GPS pings** — `gps_pings` written from the ops dashboard during live legs.
 - **Shopify webhook handling** — `POST /webhooks/shopify`, HMAC-verified, reconciles `orders/paid`.
+- **Coupon validation & redemption** — codes are *managed* in Shopify Admin, but the Worker validates them, applies the discount to its own computed price, and counts redemptions in D1 (`coupon_redemptions` is authoritative). See `COUPONS.md`.
 - **Future Mesh/J5 webhook handling** — payment boundary already stubbed (`payment_mode`, `authorized_amount`, `settleOrder`).
 
 ---
@@ -102,6 +103,7 @@ the migration is incremental. See `PAYMENT_MODES.md` for the mode definitions an
 ## References
 
 - `PAYMENT_MODES.md` — the five payment modes and processor boundaries.
+- `COUPONS.md` — discount codes: Shopify Admin management, Worker/D1 enforcement.
 - `STATUS_MODEL.md` — current statuses, future normalized model, queue buckets.
 - `ENVIRONMENT.md` — secrets, vars, and Shopify/theme settings.
 - `../worker/README.md` — Worker files, commands, D1, secret/webhook checklists.
