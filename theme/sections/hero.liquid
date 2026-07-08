@@ -23,6 +23,10 @@
     assign media_1 = 'video'
     assign media_count = media_count | plus: 1
   endif
+  if section.settings.image_1 != blank and section.settings.media_type_1 == 'asset_video'
+    assign media_1 = 'asset_video'
+    assign media_count = media_count | plus: 1
+  endif
   if section.settings.image_2 != blank and section.settings.media_type_2 == 'image'
     assign media_2 = 'image'
     assign media_count = media_count | plus: 1
@@ -177,6 +181,15 @@
           class: 'hero__media',
           data-testid: 'hero-desktop-video-1'
       }}
+    </div>
+  {%- endif -%}
+
+  {%- if media_1 == 'asset_video' -%}
+    <div class="{{ media_wrapper_desktop_class }}">
+      <video autoplay muted loop playsinline class="hero__asset-video" poster="{{ section.settings.image_1 | image_url: width: 1200 }}">
+        <source src="{{ 'edenmish-v0.mp4' | asset_url }}" type="video/mp4">
+      </video>
+      <noscript>{{ section.settings.image_1 | image_tag }}</noscript>
     </div>
   {%- endif -%}
 
@@ -803,7 +816,11 @@
         {
           "value": "video",
           "label": "t:options.video"
-        }
+        },
+        {
+          "value": "asset_video",
+          "label": "Asset Video"
+        },
       ],
       "default": "image"
     },
@@ -811,7 +828,7 @@
       "type": "image_picker",
       "id": "image_1",
       "label": "t:settings.image",
-      "visible_if": "{{ section.settings.media_type_1 == 'image' }}"
+      "visible_if": "{{ section.settings.media_type_1 == 'image' or section.settings.media_type_1 == 'asset_video' }}"
     },
     {
       "type": "video",

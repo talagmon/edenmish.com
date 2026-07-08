@@ -4,6 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
 <title>EdenMish | מעקב משלוח</title>
+<meta name="app-version" content="v0.2.0(272015)">
 <meta name="description" content="מעקב חי אחר משלוח EdenMish - הזינו מספר מעקב וקבלו עדכון בזמן אמת."/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -56,6 +57,19 @@
 </button>
 </form>
 <p id="entry-msg" class="hidden mt-4 text-status-alert font-label-bold"></p>
+</div>
+<!-- Video Section -->
+<div class="relative z-10 mt-stack-lg">
+<div class="glass-card rounded-[2rem] overflow-hidden group relative h-[300px] md:h-[480px]">
+<video class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" autoplay muted loop playsinline>
+  <source src="/assets/edenmish-v2.mp4" type="video/mp4">
+</video>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-dim via-transparent to-transparent pointer-events-none"></div>
+<div class="absolute bottom-8 right-8 text-right p-6 glass-card rounded-xl pointer-events-none">
+<div class="text-primary font-bold text-headline-md">מעקב חי</div>
+<div class="text-on-surface-variant text-label-sm uppercase tracking-widest">רואים את השליח בזמן אמת</div>
+</div>
+</div>
 </div>
 </section>
 
@@ -153,6 +167,7 @@
 <div class="flex items-center justify-center gap-2 mt-3 opacity-60">
   <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener"><img src="/assets/se-footer.png" class="w-7 h-7 rounded-full" alt="Six Elements Altiora"></a>
   <span class="text-label-sm">פותח על ידי <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Six Elements Altiora</a> · <a href="https://talagmon.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Tal Agmon</a></span>
+<span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.2.0(272015)</span>
 </div>
 </footer>
 
