@@ -2,7 +2,7 @@
   "name": "edenmish-storefront",
   "version": "0.2.0",
   "private": true,
-  "description": "EdenMish storefront — static frontend (Cloudflare Pages) for v2.edenmish.com. Colocated in the edenmish.com monorepo under storefront/.",
+  "description": "EdenMish storefront \u2014 static frontend (Cloudflare Pages) for v2.edenmish.com. Colocated in the edenmish.com monorepo under storefront/.",
   "scripts": {
     "build": "tailwindcss -i ./src/styles.css -o ./public/assets/styles.css --minify && node scripts/inject-version.js",
     "dev": "tailwindcss -i ./src/styles.css -o ./public/assets/styles.css --watch",
@@ -10,7 +10,7 @@
     "deploy": "wrangler pages deploy public",
     "test": "node --test tests/pricing.test.js tests/frontend.test.js tests/api.test.js",
     "test:api": "API_URL=https://find.edenmish.com node --test tests/api.test.js",
-    "lint": "eslint public/*.html --no-eslintrc --parser-options=ecmaVersion:2022 2>/dev/null; echo \"(inline JS in HTML — use node --check for syntax)\"",
+    "lint": "eslint public/*.html --no-eslintrc --parser-options=ecmaVersion:2022 2>/dev/null; echo \"(inline JS in HTML \u2014 use node --check for syntax)\"",
     "syntax-check": "python3 scripts/syntax-check.py",
     "version:patch": "npm version patch --no-git-tag-version",
     "version:minor": "npm version minor --no-git-tag-version",
@@ -21,6 +21,6 @@
     "@tailwindcss/forms": "^0.5.9",
     "eslint": "^8.57.1",
     "tailwindcss": "^3.4.13",
-    "wrangler": "^4.109.0"
+    "wrangler": "^4.110.0"
   }
 }
