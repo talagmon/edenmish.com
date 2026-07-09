@@ -37,7 +37,7 @@ function isWeekend(yyyymmdd) {
   const m = String(yyyymmdd).match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (!m) return false;
   const day = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay();
-  return day === 5 || day === 6;
+  return day === 6; // Saturday only
 }
 
 function priceOrder(o) {
@@ -132,10 +132,10 @@ describe('Pricing: Surcharges', () => {
     assert.strictEqual(r.price, 50);
   });
 
-  test('Friday ×1.5 multiplier', () => {
+  test('Friday → no weekend multiplier (regular work day in Israel)', () => {
     // 2026-07-03 is a Friday
     const r = std('תל אביב', 'רמת גן', { when_date: '2026-07-03' });
-    assert.strictEqual(r.price, 75); // 50 * 1.5
+    assert.strictEqual(r.price, 50); // regular price, no multiplier
   });
 
   test('Saturday ×1.5 multiplier', () => {
@@ -150,10 +150,10 @@ describe('Pricing: Surcharges', () => {
     assert.strictEqual(r.price, 50);
   });
 
-  test('Medium + evening + Friday combined', () => {
+  test('Medium + evening + Friday (no weekend multiplier)', () => {
     const r = priceOrder({ pickup_city: 'תל אביב', dropoff_city: 'רמת גן', service: 'standard', size: 'medium', when_hour: 20, when_date: '2026-07-03' });
-    // (50 + 15 + 30) * 1.5 = 142.5 → 143
-    assert.strictEqual(r.price, 143);
+    // 50 + 15 + 30 = 95 (Friday is regular day, no ×1.5)
+    assert.strictEqual(r.price, 95);
   });
 });
 

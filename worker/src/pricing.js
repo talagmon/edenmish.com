@@ -41,7 +41,7 @@ function isWeekend(yyyymmdd) {
   const m = String(yyyymmdd).match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (!m) return false;
   const day = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay(); // 5=Fri, 6=Sat
-  return day === 5 || day === 6;
+  return day === 6; // Saturday only (Friday is a regular work day in Israel)
 }
 
 export function priceOrder(o, rules) {

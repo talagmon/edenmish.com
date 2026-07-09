@@ -30,7 +30,7 @@ function isWeekend(yyyymmdd) {
   const m = String(yyyymmdd).match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (!m) return false;
   const day = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay();
-  return day === 5 || day === 6;
+  return day === 6; // Saturday only
 }
 
 const SERVICE_HE = { eco: 'Eco (עד סוף יום)', standard: 'Standard (4 שעות)', flash: 'Flash (90 דקות)' };
