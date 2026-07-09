@@ -399,7 +399,19 @@ const geo = { pickupLat:null, pickupLng:null, pickupCity:null, dropoffLat:null, 
 const distEl = document.getElementById("dist-val");
 // Final price (FINAL_PRICING_SPEC): zone matrix + service level + surcharges.
 const ZONES = { 1:['תל אביב','תל אביב-יפו','תל אביב יפו','רמת גן','גבעתיים','בני ברק'], 2:['הרצליה','רמת השרון','חולון','בת ים','קריית אונו','קרית אונו','גבעת שמואל','אזור','גני תקווה','סביון','אור יהודה'], 3:['ראשון לציון','כפר סבא','רעננה','פתח תקווה','הוד השרון','רמלה','לוד'] };
-const MATRIX = { eco:{1:35,2:55,3:75}, standard:{1:50,2:70,3:115}, flash:{1:85,2:110,3:null} };
+let MATRIX = { eco:{1:35,2:55,3:75}, standard:{1:50,2:70,3:115}, flash:{1:85,2:110,3:null} };
+let SUR_MEDIUM = 15, SUR_EVENING = 30, WEEKEND_MULT = 1.5;
+// Fetch live pricing rules from the server so the client always matches the Worker's D1 source of truth.
+(async function initPricing(){
+  try {
+    const r = await fetch(API + "/api/pricing");
+    if(!r.ok) return;
+    const d = await r.json();
+    const R = { ...d.defaults, ...d.overrides };
+    MATRIX = { eco:{1:R.eco_z1,2:R.eco_z2,3:R.eco_z3}, standard:{1:R.std_z1,2:R.std_z2,3:R.std_z3}, flash:{1:R.flash_z1,2:R.flash_z2,3:null} };
+    SUR_MEDIUM = R.sur_medium; SUR_EVENING = R.sur_evening; WEEKEND_MULT = R.weekend_mult;
+  } catch(e){}
+})();
 function zoneOf(city){ const c=String(city||'').trim(); for(const z of [1,2,3]){ if(ZONES[z].includes(c)) return z; } return null; }
 function isoDate(d){ return d ? (d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate())) : ""; }
 function isWeekend(iso){ if(!iso) return false; const m=String(iso).match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/); if(!m) return false; const day=new Date(Date.UTC(+m[1],+m[2]-1,+m[3])).getUTCDay(); return day===5||day===6; }
@@ -417,12 +429,12 @@ function computeEstimate(){
   const hour = sched.service==="flash" ? new Date().getHours() : (sched.window ? parseInt(sched.window.split(":")[0],10) : -1);
   const wknd = isWeekend(isoDate(sched.date));
   let surch = 0; const labels = [];
-  if(hour>=19 && hour<22){ surch += 30; labels.push("ערב +₪30"); }
-  if(wknd){ labels.push("סופ״ש ×1.5"); }
+  if(hour>=19 && hour<22){ surch += SUR_EVENING; labels.push("ערב +₪"+SUR_EVENING); }
+  if(wknd){ labels.push("סופ״ש ×"+WEEKEND_MULT); }
   const surchRow = document.getElementById("est-surch-row");
   if(surchRow){ if(labels.length){ surchRow.classList.remove("hidden"); set("est-surch-label", labels.join(" · ")); set("est-surch", "₪"+surch); } else { surchRow.classList.add("hidden"); } }
-  let total = base!=null ? base + (size==="medium"?15:0) + surch : null;
-  if(total!=null && wknd){ total = Math.round(total*1.5); } else if(total!=null){ total = Math.round(total); }
+  let total = base!=null ? base + (size==="medium"?SUR_MEDIUM:0) + surch : null;
+  if(total!=null && wknd){ total = Math.round(total*WEEKEND_MULT); } else if(total!=null){ total = Math.round(total); }
   set("price-val", total!=null ? total : "-");
 }
 function loadMapsScript(){

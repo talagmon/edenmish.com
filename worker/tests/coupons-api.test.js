@@ -441,10 +441,10 @@ describe('ops coupon CRUD endpoints', () => {
   });
 });
 
-// ---- createDraftOrder: coupon orders use the final price directly ----
-// The Shopify REST API silently ignores applied_discount on Draft Order creation,
-// so we never inflate + attach a discount — we set the line item to priceNis
-// (the final post-coupon amount) directly.
+// ---- createDraftOrder: coupon orders inflate to subtotal + applied_discount ----
+// When a coupon was applied, the line item keeps the original subtotal and the
+// discount is attached as a Shopify applied_discount (fixed_amount) so the checkout
+// invoice shows the discount breakdown to the customer.
 
 describe('createDraftOrder coupon pricing', () => {
   const SHOPIFY_ENV = { SHOPIFY_SHOP: 'test.myshopify.com', SHOPIFY_ADMIN_TOKEN: 'shpat_test' };
@@ -463,33 +463,35 @@ describe('createDraftOrder coupon pricing', () => {
     service: 'standard', size: 'small', phone: '+972541234567',
   };
 
-  test('coupon order: line item at final price, no applied_discount', async () => {
+  test('coupon order: line item at subtotal, applied_discount for the difference', async () => {
     const captured = captureDraftFetch();
     const order = { ...baseOrder, price: 45, subtotal_price: 50, discount_code: 'SAVE10', discount_amount: 5, discount_title: 'Save 10' };
     const draft = await createDraftOrder(SHOPIFY_ENV, order, 45);
     assert.ok(draft);
     const d = captured.body.draft_order;
-    assert.equal(d.line_items[0].price, '45.00'); // final price, not original subtotal
-    assert.ok(!('applied_discount' in d), 'no applied_discount on Draft Order');
+    assert.equal(d.line_items[0].price, '50.00');
+    assert.ok('applied_discount' in d);
+    assert.equal(d.applied_discount.title, 'SAVE10');
+    assert.equal(d.applied_discount.value_type, 'fixed_amount');
+    assert.equal(d.applied_discount.amount, '5.00');
   });
 
-  test('percentage coupon: line item at post-discount price', async () => {
+  test('percentage coupon: line item at subtotal with applied_discount', async () => {
     const captured = captureDraftFetch();
-    // 10% off ₪85 → Worker rounded to ₪9 off, final ₪76.
     const order = { ...baseOrder, price: 76, subtotal_price: 85, discount_code: 'SAVE10', discount_amount: 9 };
     await createDraftOrder(SHOPIFY_ENV, order, 76);
     const d = captured.body.draft_order;
-    assert.equal(d.line_items[0].price, '76.00');
-    assert.ok(!('applied_discount' in d));
+    assert.equal(d.line_items[0].price, '85.00');
+    assert.equal(d.applied_discount.amount, '9.00');
   });
 
-  test('100% coupon: line item at 0.00', async () => {
+  test('100% coupon: line item at subtotal, applied_discount covers the full amount', async () => {
     const captured = captureDraftFetch();
     const order = { ...baseOrder, price: 0, subtotal_price: 50, discount_code: 'FREE100', discount_amount: 50, discount_title: 'Free delivery' };
     await createDraftOrder(SHOPIFY_ENV, order, 0);
     const d = captured.body.draft_order;
-    assert.equal(d.line_items[0].price, '0.00');
-    assert.ok(!('applied_discount' in d));
+    assert.equal(d.line_items[0].price, '50.00');
+    assert.equal(d.applied_discount.amount, '50.00');
   });
 
   test('non-coupon order: line item is the plain price, no applied_discount', async () => {

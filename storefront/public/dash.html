@@ -22,7 +22,7 @@ var HE = {received:"נתקבלה",priced:"מחושב",review:"בדיקה",paymen
 var LIVE = ["to_pickup","to_dropoff"];
 var NEXT = {paid:"to_pickup",to_pickup:"picked_up",picked_up:"to_dropoff"};
 var NEXTLBL = {paid:"אשר יציאה לאיסוף",to_pickup:"אשר איסוף ✓",picked_up:"אשר יציאה למסירה"};
-var sess = null, orders = [], coupons = [], activeOrder = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, activeFilter = "all", currentView = "queue";
+var sess = localStorage.getItem('ops_sess') || null, orders = [], coupons = [], activeOrder = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, activeFilter = "all", currentView = "queue";
 
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
 function fmt(t){return t?new Date(t).toLocaleString("he-IL",{timeZone:"Asia/Jerusalem",hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"}):"—";}
@@ -33,6 +33,10 @@ async function api(path,opts){
   opts.headers["Content-Type"]="application/json";
   return fetch(API+path,opts);
 }
+
+// On page load, try to restore from localStorage — if valid, skip login.
+if(sess) refresh();
+else loginView();
 
 function loginView(){
   $("app").innerHTML = '<div class="min-h-screen flex items-center justify-center p-gutter-mobile">'+
@@ -49,14 +53,14 @@ function loginView(){
 async function doLogin(){
   var pin = $("pin").value;
   var r = await fetch(API+"/api/ops/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pin:pin})});
-  if(r.ok){sess=(await r.json()).session;await refresh();}
+  if(r.ok){sess=(await r.json()).session;localStorage.setItem('ops_sess',sess);await refresh();}
   else{alert(r.status===429?"יותר מדי ניסיונות":"PIN שגוי");}
 }
-function logout(){sess=null;loginView();}
+function logout(){sess=null;localStorage.removeItem('ops_sess');loginView();}
 
 async function refresh(){
   var r = await api("/api/ops/orders");
-  if(!r.ok){sess=null;return loginView();}
+  if(!r.ok){sess=null;localStorage.removeItem('ops_sess');return loginView();}
   orders = (await r.json()).orders || [];
   if(activeOrder){
     var u = orders.find(function(o){return o.id===activeOrder.id;});
@@ -551,7 +555,7 @@ function stopWatch(){if(watchId!==null){navigator.geolocation.clearWatch(watchId
 
 async function refreshCoupons(){
   var r = await api("/api/ops/coupons");
-  if(!r.ok){sess=null;return loginView();}
+  if(!r.ok){sess=null;localStorage.removeItem('ops_sess');return loginView();}
   coupons = (await r.json()).coupons || [];
   if(currentView==="coupons") renderCoupons();
 }

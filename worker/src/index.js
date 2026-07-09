@@ -1,5 +1,5 @@
 import { createOrder, getOrderByToken, getOrderById, listOrders, setOrderStatus, setOrderRating, getStatusHistory, addGps, latestGps, getGpsTrail, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof, listRecentNotificationFailures, listNotificationsForOrder } from './db.js';
-import { priceOrder } from './pricing.js';
+import { priceOrder, zoneOf } from './pricing.js';
 import { makeSession, checkSession, getCookie, genOtp, hashOtp } from './integrations.js';
 import { createCharge, settleOrder, verifyShopifyWebhook, parseShopifyOrderWebhook } from './payment.js';
 import { trackingHtml, opsHtml } from './pages.js';
@@ -7,6 +7,7 @@ import { corsFor, maskEmail, publicOrderSummary, clientIp, anonKey } from './sec
 import { notifyEmail, notifyWhatsApp } from './notify.js';
 import { normalizeIlPhone } from './validate.js';
 import { validateCoupon, recordRedemption, listCoupons, createCoupon, updateCoupon, deleteCoupon } from './coupons.js';
+import { createInvoice } from './greeninvoice.js';
 
 const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra } });
 const html = (s) => new Response(s, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -53,7 +54,9 @@ const couponMessage = (reason) => COUPON_MESSAGES[reason] || COUPON_MESSAGES.not
 const couponCustomerKey = (b) => normalizeIlPhone(b && b.phone) || (b && b.email ? String(b.email).trim().toLowerCase() : null);
 
 async function isOps(req, env) {
-  const c = getCookie(req, 'ops_sess') || req.headers.get('X-Ops');
+  const xOps = req.headers.get('X-Ops');
+  if (xOps && await checkSession(env, xOps)) return true;
+  const c = getCookie(req, 'ops_sess');
   return await checkSession(env, c);
 }
 
@@ -122,6 +125,25 @@ export default {
       const v = await validateCoupon(env.DB, b.coupon_code, pr.price, couponCustomerKey(b));
       if (!v.valid) return json({ valid: false, reason: v.reason, message: couponMessage(v.reason) }, 200, cors);
       return json({ valid: true, code: v.code, subtotal_price: v.subtotal, discount_amount: v.discountAmount, price: v.price, title: v.title }, 200, cors);
+    }
+
+    // ---- Public pricing rules (zone matrix + surcharges) ----
+    // Lets the booking funnel show accurate prices by reading the same D1 pricing_rules
+    // the server uses, eliminating client/server drift.
+    if (path === '/api/pricing' && req.method === 'GET') {
+      const rules = await getRules(env.DB);
+      return json({
+        zones: { 1: zoneOf('תל אביב'), 2: zoneOf('הרצליה'), 3: zoneOf('פתח תקווה') },
+        defaults: {
+          eco_z1: 35, eco_z2: 55, eco_z3: 75,
+          std_z1: 50, std_z2: 70, std_z3: 115,
+          flash_z1: 85, flash_z2: 110,
+          sur_medium: 15,
+          sur_evening: 30,
+          weekend_mult: 1.5,
+        },
+        overrides: rules || {},
+      }, 200, { ...cors, 'Cache-Control': 'public, max-age=300' });
     }
 
     if (path === '/api/orders' && req.method === 'POST') {
@@ -267,9 +289,9 @@ export default {
       let paymentUrl = null;
       if (!isReview) {
         try {
-          // Discount snapshot (discount_code, etc.) is recorded in D1 and shown on the
-          // booking/success/tracking pages and emails. The Shopify Draft Order line item
-          // uses just the final price (no applied_discount — Shopify REST ignores it).
+          // Discount breakdown (discount_code, etc.) is shown on the Shopify
+          // checkout via applied_discount and in D1 for the booking/success/tracking
+          // pages and emails.
           const charge = await createCharge(env, { ...b, id: created.id, token, price: finalPrice, ...discountFields }, finalPrice);
           if (charge && charge.checkoutUrl) {
             paymentUrl = charge.checkoutUrl;
@@ -426,7 +448,7 @@ export default {
       if (pinOk) {
         if (RL) await resetRateLimit(env.DB, RL);
         const session = await makeSession(env);
-        return json({ session }, 200, { 'Set-Cookie': `ops_sess=${session}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=43200` });
+        return json({ session }, 200, { 'Set-Cookie': `ops_sess=${session}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000` });
       }
       if (RL) {
         const after = await incrRateLimit(env.DB, RL, 10 * 60 * 1000);
@@ -459,6 +481,10 @@ export default {
         const o = await getOrderById(env.DB, id);
         if (o) {
           await recordPayment(env.DB, id, { amount: o.price * 100, status: 'paid', paid_at: Date.now() });
+          // Fire-and-forget: generate GreenInvoice tax invoice (never blocks).
+          createInvoice(env, o).then(inv => {
+            if (inv && inv.url) console.log('invoice_created', { order: o.id, invoice: inv.number, url: inv.url });
+          }).catch(() => {});
           if (o.email) {
             const otp = genOtp();
             await setEmailAndOtp(env.DB, o.id, o.email, await hashOtp(env, otp), Date.now() + 10 * 60 * 1000);
@@ -626,6 +652,10 @@ export default {
             // o.price is the FINAL amount (post-coupon when one applied) — the Draft
             // Order's applied_discount guarantees Shopify captured exactly this total.
             await recordPayment(env.DB, o.id, { amount: o.price * 100, status: 'paid', payplus_id: String(parsed.shopifyOrderId), paid_at: Date.now() });
+            // Fire-and-forget: generate GreenInvoice tax invoice (never blocks).
+            createInvoice(env, o).then(inv => {
+              if (inv && inv.url) console.log('invoice_created', { order: o.id, invoice: inv.number, url: inv.url });
+            }).catch(() => {});
             // Use checkout email if the order doesn't have one (customer entered it in Shopify checkout)
             var custEmail = o.email || parsed.email;
             if (custEmail && env.SENDGRID_API_KEY) {

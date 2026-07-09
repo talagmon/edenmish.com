@@ -9,7 +9,10 @@ const enc = new TextEncoder();
 
 // ---- Shopify Admin API: create a Draft Order at the given price ----
 // The customer pays on the returned invoice_url via Shopify checkout (PayPlus app).
-// `priceNis` is always the FINAL amount (post-coupon when one applied).
+// `priceNis` is the FINAL amount. When a coupon was applied, the order carries
+// `subtotal_price` + `discount_code` + `discount_amount` — we inflate the line-item
+// to the original subtotal and attach an applied_discount so the Shopify checkout
+// shows the discount breakdown to the customer.
 // Requires: env.SHOPIFY_SHOP, env.SHOPIFY_ADMIN_TOKEN.
 export async function createDraftOrder(env, order, priceNis) {
   if (!env.SHOPIFY_SHOP || !env.SHOPIFY_ADMIN_TOKEN) return null;
@@ -19,6 +22,10 @@ export async function createDraftOrder(env, order, priceNis) {
   const SERVICE_HE = { eco: 'Eco (עד סוף יום)', standard: 'Standard (4 שעות)', flash: 'Flash (90 דקות)' };
   const SIZE_HE = { small: 'קטן', medium: 'בינוני' };
   const pkgTitle = 'שליחות — ' + (SERVICE_HE[order.service] || 'שליחות') + (order.size === 'medium' ? ' · עד גודל קופסת נעלים' : '');
+
+  const discountAmount = Math.max(0, Math.round(Number(order.discount_amount) || 0));
+  const hasDiscount = !!(order.discount_code && discountAmount > 0);
+  const lineItemPrice = hasDiscount ? Number(order.subtotal_price) || (Number(priceNis) + discountAmount) : Number(priceNis);
 
   const properties = [
     { name: '_tracking_token', value: order.token },
@@ -35,7 +42,7 @@ export async function createDraftOrder(env, order, priceNis) {
     draft_order: {
       line_items: [{
         title: pkgTitle,
-        price: Number(priceNis).toFixed(2),
+        price: lineItemPrice.toFixed(2),
         quantity: 1,
         requires_shipping: false,
         taxable: false,
@@ -51,6 +58,16 @@ export async function createDraftOrder(env, order, priceNis) {
       }],
     },
   };
+
+  if (hasDiscount) {
+    body.draft_order.applied_discount = {
+      title: order.discount_code,
+      description: 'EdenMish coupon',
+      value_type: 'fixed_amount',
+      value: discountAmount.toFixed(2),
+      amount: discountAmount.toFixed(2),
+    };
+  }
 
   if (order.name || order.phone || (order.email && order.email_verified)) {
     body.draft_order.customer = {};
@@ -171,7 +188,7 @@ async function hmac(secret, msg) {
   return btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/=/g, '');
 }
 export async function makeSession(env) {
-  const payload = btoa(JSON.stringify({ exp: Date.now() + 1000 * 60 * 60 * 12 })).replace(/=/g, '');
+  const payload = btoa(JSON.stringify({ exp: Date.now() + 1000 * 60 * 60 * 24 * 30 })).replace(/=/g, '');
   const sig = await hmac(env.SESSION_SECRET || 'dev', payload);
   return `${payload}.${sig}`;
 }
