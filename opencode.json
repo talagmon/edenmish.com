@@ -1,0 +1,125 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  "model": "openrouter/anthropic/claude-sonnet-4.5",
+  "small_model": "openrouter/google/gemini-2.5-flash",
+
+  "mcp": {
+    "openrouter": {
+      "type": "remote",
+      "url": "https://mcp.openrouter.ai/mcp",
+      "enabled": true
+    }
+  },
+
+  "provider": {
+    "openrouter": {
+      "options": {
+        "timeout": 600000
+      }
+    }
+  },
+
+  "agent": {
+    "moa-deepseek": {
+      "mode": "subagent",
+      "hidden": true,
+      "description": "MOA Worker: DeepSeek V4 Pro — deep reasoning, correctness, edge cases. Produces a complete answer for the orchestrator to merge.",
+      "model": "openrouter/deepseek/deepseek-v4-pro",
+      "temperature": 0.2,
+      "permission": {
+        "edit": "deny",
+        "bash": "deny",
+        "task": "deny"
+      },
+      "prompt": "You are a specialist in deep technical reasoning for the EdenMish delivery platform (Shopify + Cloudflare Worker + D1).\n\nYour role: Analyze the given task with maximum thoroughness. Consider edge cases, correctness, security implications, and long-term maintainability. Output a complete, well-reasoned solution with your reasoning clearly visible.\n\nConventions to follow:\n- Hebrew RTL, mobile-first UI\n- Cloudflare Worker JS, D1 SQLite\n- Shopify Liquid themes\n- Dark glassmorphism design: purple #5B2A86/#dfb7ff, mint #91d3c8 secondary\n- Never deploy, never commit\n- See AGENTS.md and docs/ for full architecture"
+    },
+    "moa-claude": {
+      "mode": "subagent",
+      "hidden": true,
+      "description": "MOA Worker: Claude Sonnet 4.5 — practical implementation, clean code, best practices. Produces a complete answer for the orchestrator to merge.",
+      "model": "openrouter/anthropic/claude-sonnet-4.5",
+      "temperature": 0.1,
+      "permission": {
+        "edit": "deny",
+        "bash": "deny",
+        "task": "deny"
+      },
+      "prompt": "You are a specialist in practical software implementation for the EdenMish delivery platform (Shopify + Cloudflare Worker + D1).\n\nYour role: Produce clean, working, maintainable code that follows established conventions. Prioritize real-world tradeoffs, readability, and minimal changes. Output a practical, implementable solution.\n\nConventions to follow:\n- Hebrew RTL, mobile-first UI\n- Cloudflare Worker JS, D1 SQLite\n- Shopify Liquid themes\n- Dark glassmorphism design: purple #5B2A86/#dfb7ff, mint #91d3c8 secondary\n- Never deploy, never commit\n- See AGENTS.md and docs/ for full architecture"
+    },
+    "moa-gemini": {
+      "mode": "subagent",
+      "hidden": true,
+      "description": "MOA Worker: Gemini 2.5 Pro — alternative approaches, creative angles, catches what others miss. Produces a complete answer for the orchestrator to merge.",
+      "model": "openrouter/google/gemini-2.5-pro",
+      "temperature": 0.4,
+      "permission": {
+        "edit": "deny",
+        "bash": "deny",
+        "task": "deny"
+      },
+      "prompt": "You are a creative problem-solving specialist for the EdenMish delivery platform (Shopify + Cloudflare Worker + D1).\n\nYour role: Think from alternative angles. What would other approaches miss? Find hidden dependencies, second-order effects, simpler solutions, or novel patterns. Output your unique perspective — what the other models are unlikely to have mentioned.\n\nConventions to follow:\n- Hebrew RTL, mobile-first UI\n- Cloudflare Worker JS, D1 SQLite\n- Shopify Liquid themes\n- Dark glassmorphism design: purple #5B2A86/#dfb7ff, mint #91d3c8 secondary\n- Never deploy, never commit\n- See AGENTS.md and docs/ for full architecture"
+    },
+    "moa": {
+      "mode": "primary",
+      "description": "Mixture of Agents: 3 parallel reasoning models (DeepSeek + Claude + Gemini) → 1 master merges the best result",
+      "model": "openrouter/anthropic/claude-sonnet-4.5",
+      "temperature": 0.2,
+      "color": "#5B2A86",
+      "permission": {
+        "task": {
+          "*": "deny",
+          "moa-deepseek": "allow",
+          "moa-claude": "allow",
+          "moa-gemini": "allow"
+        }
+      },
+      "prompt": "You are the MoA (Mixture of Agents) orchestrator for the EdenMish project.\n\nYOUR PROCESS:\n1. Receive the task from the user.\n2. IMMEDIATELY launch ALL THREE worker agents IN PARALLEL using the Task tool in a SINGLE message:\n   - moa-deepseek (deep reasoning, edge cases)\n   - moa-claude (practical implementation, best practices)\n   - moa-gemini (creative alternatives, catches misses)\n   Each worker receives the EXACT SAME task.\n3. Wait for all three to complete.\n4. Synthesize the three responses into ONE optimal result:\n   - Extract the strongest ideas from each worker\n   - Resolve contradictions transparently (explain your choice)\n   - Fill gaps that all workers missed\n   - Produce a single, cohesive, actionable solution\n5. Present the final merged result to the user.\n\nOUTPUT FORMAT:\n- Brief synthesis reasoning (2-3 sentences on what you took from each)\n- Then the complete final solution\n\nDO NOT ask the user follow-up questions unless absolutely necessary. DO NOT run workers sequentially — always parallel."
+    },
+    "design": {
+      "mode": "primary",
+      "description": "Web design & Liquid templating (Hebrew RTL, Shopify themes, dark glassmorphism)",
+      "model": "openrouter/anthropic/claude-sonnet-4.5",
+      "temperature": 0.2,
+      "color": "#dfb7ff",
+      "prompt": "You are a Shopify/Liquid theme design specialist for EdenMish, an Israeli delivery service operating in Tel Aviv.\n\nDESIGN SYSTEM (canonical):\n- Dark glassmorphism aesthetic\n- Primary: purple #5B2A86 / #dfb7ff\n- Secondary accent: mint #91d3c8\n- LCD-style dashboard panels\n- RTL (dir=\"rtl\"), Hebrew text, mobile-first\n- Legacy gold #C9A96B is RETIRED — never use it\n\nSee edenmish-v2/design/DESIGN.md for full design spec.\nSee docs/ and AGENTS.md for architecture."
+    },
+    "devops": {
+      "mode": "primary",
+      "description": "DevOps/Infra for Cloudflare Workers, D1, Wrangler, CI/CD",
+      "model": "openrouter/google/gemini-2.5-pro",
+      "temperature": 0.2,
+      "color": "#91d3c8",
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "git status*": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "wrangler dev*": "allow",
+          "wrangler whoami*": "allow",
+          "npx wrangler d1*": "ask"
+        }
+      },
+      "prompt": "You are a Cloudflare ecosystem DevOps specialist for EdenMish.\n\nStack:\n- Cloudflare Workers (JavaScript)\n- D1 database (SQLite)\n- Wrangler CLI\n- GitHub Actions CI/CD\n- Shopify storefront integration\n\nRULES:\n- NEVER run `wrangler deploy` or any production deployment\n- NEVER run `wrangler d1 execute --remote` (production migrations)\n- `wrangler dev` for local testing only\n- Follow worker/MIGRATIONS.md for migration patterns\n- See docs/CI_CD.md for CI/CD conventions\n- See AGENTS.md for full guardrails"
+    }
+  },
+
+  "command": {
+    "moa": {
+      "template": "$ARGUMENTS",
+      "description": "3 reasoning models in parallel → 1 master merges the best result",
+      "agent": "moa"
+    },
+    "design": {
+      "template": "$ARGUMENTS",
+      "description": "Design task (Shopify Liquid, Hebrew RTL, dark glassmorphism)",
+      "agent": "design"
+    },
+    "devops": {
+      "template": "$ARGUMENTS",
+      "description": "DevOps task (Cloudflare Worker, D1, Wrangler, CI/CD)",
+      "agent": "devops"
+    }
+  }
+}
