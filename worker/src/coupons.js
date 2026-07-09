@@ -1,20 +1,14 @@
-// Coupons — Shopify-defined discount codes, Worker-enforced (migration 008).
+// Coupons — D1-managed discount codes, Worker-enforced (migration 008).
 //
-// Codes are created/edited in Shopify Admin. The Worker syncs each code's
-// definition into the `coupons` D1 table (TTL-based, stale-while-error) and
-// validates + applies the discount server-side. Usage limits are enforced by
-// counting rows in `coupon_redemptions` (per code, and per code+customer_key
-// for once-per-customer).
+// Eden creates/edits codes from the ops dashboard. validateCoupon reads the
+// definition straight from D1 — no external API call, no sync, no TTL.
+// Usage limits are enforced by counting rows in `coupon_redemptions`
+// (per code, and per code+customer_key for once-per-customer).
 //
 // Money units match pricing.js: integer whole shekels (ILS). Percentages are
 // stored 0-100. The discount applies to the FULL computed price (incl.
 // surcharges) and the final price is clamped so it is never negative
 // (a free order — price 0 — is allowed).
-
-import { fetchShopifyDiscountByCode } from './integrations.js';
-
-// How long a synced Shopify definition stays fresh before we re-fetch it.
-const SYNC_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 // Normalized uppercase everywhere: D1 rows, redemptions, order snapshots.
 export function normalizeCode(code) {
@@ -39,29 +33,6 @@ async function getCoupon(db, code) {
   return db.prepare('SELECT * FROM coupons WHERE code = ?').bind(code).first();
 }
 
-async function upsertCoupon(db, c) {
-  await db.prepare(
-    `INSERT INTO coupons (code, shopify_discount_id, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, synced_at, raw_shopify_json)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-     ON CONFLICT(code) DO UPDATE SET
-       shopify_discount_id = excluded.shopify_discount_id,
-       title = excluded.title,
-       value_type = excluded.value_type,
-       value = excluded.value,
-       status = excluded.status,
-       starts_at = excluded.starts_at,
-       ends_at = excluded.ends_at,
-       usage_limit = excluded.usage_limit,
-       applies_once_per_customer = excluded.applies_once_per_customer,
-       synced_at = excluded.synced_at,
-       raw_shopify_json = excluded.raw_shopify_json`
-  ).bind(
-    c.code, c.shopify_discount_id ?? null, c.title ?? null, c.value_type ?? null, c.value ?? null,
-    c.status ?? null, c.starts_at ?? null, c.ends_at ?? null, c.usage_limit ?? null,
-    c.applies_once_per_customer ? 1 : 0, c.synced_at, c.raw_shopify_json ?? null
-  ).run();
-}
-
 async function countRedemptions(db, code, customerKey) {
   let r;
   if (customerKey != null) {
@@ -74,34 +45,17 @@ async function countRedemptions(db, code, customerKey) {
   return (r && Number(r.n)) || 0;
 }
 
-// Validate a code against the Shopify-synced definition + D1 redemption counts.
+// Validate a code against the D1 definition + redemption counts.
 // Returns { valid: true, code, title, valueType, value, subtotal, discountAmount, price }
 // or { valid: false, reason } with reason one of:
 //   'not_found' | 'inactive' | 'not_started' | 'expired' |
-//   'usage_limit_reached' | 'already_used' | 'unsupported'
-export async function validateCoupon(db, env, code, subtotal, customerKey) {
+//   'usage_limit_reached' | 'already_used'
+export async function validateCoupon(db, code, subtotal, customerKey) {
   const norm = normalizeCode(code);
   if (!norm) return { valid: false, reason: 'not_found' };
 
-  let row = await getCoupon(db, norm);
-  const stale = !row || !row.synced_at || Date.now() - row.synced_at > SYNC_TTL_MS;
-  if (stale) {
-    try {
-      const fetched = await fetchShopifyDiscountByCode(env, norm);
-      if (fetched && fetched.unsupported) return { valid: false, reason: 'unsupported' };
-      if (!fetched) return { valid: false, reason: 'not_found' }; // Shopify: no such code
-      row = { ...fetched, code: norm, synced_at: Date.now() };
-      await upsertCoupon(db, row);
-    } catch {
-      // Shopify unreachable/misconfigured → stale-while-error on the cached row,
-      // but not forever: beyond 2× the sync TTL the definition is too old to trust
-      // (Eden may have disabled/edited the code in Shopify since).
-      if (!row) return { valid: false, reason: 'not_found' };
-      if (!row.synced_at || Date.now() - Number(row.synced_at) > 2 * SYNC_TTL_MS) {
-        return { valid: false, reason: 'not_found' };
-      }
-    }
-  }
+  const row = await getCoupon(db, norm);
+  if (!row) return { valid: false, reason: 'not_found' };
 
   const now = Date.now();
   const status = String(row.status || '').toLowerCase();
@@ -134,21 +88,107 @@ export async function validateCoupon(db, env, code, subtotal, customerKey) {
     value: Number(row.value),
     subtotal: sub,
     discountAmount,
-    price: sub - discountAmount, // never negative — computeDiscount clamps to subtotal
-    // Limits ride along so recordRedemption can apply its atomic usage guard.
+    price: sub - discountAmount,
     usageLimit: row.usage_limit != null ? Number(row.usage_limit) : null,
     appliesOncePerCustomer: !!row.applies_once_per_customer,
   };
 }
 
+// ---- CRUD for the ops dashboard ----
+
+export async function listCoupons(db) {
+  const r = await db.prepare(
+    `SELECT c.*, COALESCE(cr.redemptions, 0) AS redemption_count
+     FROM coupons c
+     LEFT JOIN (
+       SELECT code, COUNT(*) AS redemptions
+       FROM coupon_redemptions
+       GROUP BY code
+     ) cr ON cr.code = c.code
+     ORDER BY c.synced_at DESC`
+  ).all();
+  return (r && r.results) ? r.results : [];
+}
+
+export async function createCoupon(db, fields) {
+  const code = normalizeCode(fields.code);
+  if (!code) throw new Error('missing code');
+  if (!fields.value_type || (fields.value_type !== 'percentage' && fields.value_type !== 'fixed_amount')) {
+    throw new Error('invalid value_type');
+  }
+  const existing = await getCoupon(db, code);
+  if (existing) throw new Error('coupon_exists');
+  const value = Number(fields.value);
+  if (!Number.isFinite(value) || value <= 0) throw new Error('invalid value');
+  const now = Date.now();
+  try {
+    await db.prepare(
+      `INSERT INTO coupons (code, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, synced_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`
+    ).bind(
+      code,
+      String(fields.title || '').trim() || null,
+      fields.value_type,
+      value,
+      fields.status || 'active',
+      fields.starts_at ? Number(fields.starts_at) : null,
+      fields.ends_at ? Number(fields.ends_at) : null,
+      fields.usage_limit ? Number(fields.usage_limit) : null,
+      fields.applies_once_per_customer ? 1 : 0,
+      now
+    ).run();
+  } catch (e) {
+    if (e && e.message && /UNIQUE|unique constraint/i.test(e.message)) {
+      throw new Error('coupon_exists');
+    }
+    throw e;
+  }
+  return getCoupon(db, code);
+}
+
+export async function updateCoupon(db, code, fields) {
+  const norm = normalizeCode(code);
+  const row = await getCoupon(db, norm);
+  if (!row) return null;
+  const sets = [];
+  const binds = [];
+  const allowed = ['title', 'value_type', 'value', 'status', 'starts_at', 'ends_at', 'usage_limit', 'applies_once_per_customer'];
+  if (fields.value_type !== undefined && fields.value_type !== 'percentage' && fields.value_type !== 'fixed_amount') {
+    throw new Error('invalid value_type');
+  }
+  for (const f of allowed) {
+    if (fields[f] !== undefined) {
+      sets.push(`${f} = ?`);
+      if (f === 'applies_once_per_customer') binds.push(fields[f] ? 1 : 0);
+      else if (f === 'starts_at' || f === 'ends_at' || f === 'usage_limit') binds.push(fields[f] != null ? Number(fields[f]) : null);
+      else binds.push(fields[f]);
+    }
+  }
+  if (!sets.length) return row;
+  sets.push('synced_at = ?');
+  binds.push(Date.now());
+  binds.push(norm);
+  await db.prepare(`UPDATE coupons SET ${sets.join(', ')} WHERE code = ?`).bind(...binds).run();
+  return getCoupon(db, norm);
+}
+
+export async function deleteCoupon(db, code) {
+  const norm = normalizeCode(code);
+  const row = await getCoupon(db, norm);
+  if (!row) return null;
+  await db.prepare('UPDATE coupons SET status = ?, synced_at = ? WHERE code = ?')
+    .bind('inactive', Date.now(), norm).run();
+  return getCoupon(db, norm);
+}
+
 // One row per successful redemption; usage limits count these rows.
 //
 // TOCTOU guard: validateCoupon's count check and this insert are separate D1
-// statements, so two concurrent orders could both pass validation and exceed a
-// Shopify-defined limit. When the coupon has a usage_limit (and/or is
-// once-per-customer with a known customerKey) the INSERT is made conditional —
-// `INSERT ... SELECT ... WHERE <count guards>` runs atomically in a single
-// statement, so the row only lands if the limits still hold at insert time.
+// statements, so two concurrent orders could both pass validation and exceed the
+// limit. When the coupon has a usage_limit (and/or is once-per-customer with a
+// known customerKey) the INSERT is made conditional — `INSERT ... SELECT ...
+// WHERE <count guards>` runs atomically in a single statement, so the row only
+// lands if the limits still hold at insert time.
 // Returns { recorded: boolean }; recorded === false means the guard rejected it
 // (a concurrent redemption won the race). Coupons with no limits skip the guard
 // entirely (plain unconditional insert).

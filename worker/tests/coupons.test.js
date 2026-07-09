@@ -1,10 +1,12 @@
-// Unit tests for worker/src/coupons.js + fetchShopifyDiscountByCode.
-// Run with: npm test (node --test). No real D1/Shopify — both are mocked.
+// Unit tests for worker/src/coupons.js — D1-only coupons (no Shopify).
+// Run with: npm test (node --test). D1 is mocked.
 
-import { test, describe, afterEach } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeCode, computeDiscount, validateCoupon, recordRedemption } from '../src/coupons.js';
-import { fetchShopifyDiscountByCode } from '../src/integrations.js';
+import {
+  normalizeCode, computeDiscount, validateCoupon, recordRedemption,
+  listCoupons, createCoupon, updateCoupon, deleteCoupon,
+} from '../src/coupons.js';
 
 // ---- mocks ----
 
@@ -34,11 +36,10 @@ function mockDb({ coupon = null, redemptionsTotal = 0, redemptionsByCustomer = 0
   };
 }
 
-// A fresh (non-stale) cached coupon row so validateCoupon never calls Shopify.
-function freshCoupon(overrides = {}) {
+// A D1 coupon row as the ops dashboard would have created it.
+function d1Coupon(overrides = {}) {
   return {
     code: 'SAVE10',
-    shopify_discount_id: 'gid://shopify/DiscountCodeNode/1',
     title: 'Save 10',
     value_type: 'percentage',
     value: 10,
@@ -52,19 +53,8 @@ function freshCoupon(overrides = {}) {
   };
 }
 
-const realFetch = globalThis.fetch;
-afterEach(() => { globalThis.fetch = realFetch; });
-
-function mockShopifyFetch(codeDiscountNodeByCode) {
-  globalThis.fetch = async () => ({
-    ok: true,
-    async json() { return { data: { codeDiscountNodeByCode } }; },
-  });
-}
-
-const SHOPIFY_ENV = { SHOPIFY_SHOP: 'test.myshopify.com', SHOPIFY_ADMIN_TOKEN: 'shpat_test' };
-const NO_ENV = {}; // no Shopify creds → lookup throws → stale-while-error path
-
+// validateCoupon still takes an env arg (unused for lookups) — nothing here
+// touches the network.
 // ---- normalizeCode ----
 
 describe('normalizeCode', () => {
@@ -98,12 +88,12 @@ describe('computeDiscount', () => {
   });
 });
 
-// ---- validateCoupon (fresh cached rows — no Shopify call) ----
+// ---- validateCoupon (reads the D1 row directly) ----
 
 describe('validateCoupon', () => {
   test('valid percentage coupon', async () => {
-    const db = mockDb({ coupon: freshCoupon() });
-    const r = await validateCoupon(db, NO_ENV, 'SAVE10', 85, 'a@b.com');
+    const db = mockDb({ coupon: d1Coupon() });
+    const r = await validateCoupon(db, 'SAVE10', 85, 'a@b.com');
     assert.deepEqual(r, {
       valid: true, code: 'SAVE10', title: 'Save 10', valueType: 'percentage',
       value: 10, subtotal: 85, discountAmount: 9, price: 76,
@@ -112,197 +102,265 @@ describe('validateCoupon', () => {
   });
 
   test('case-insensitive: lowercase input is normalized before lookup', async () => {
-    const db = mockDb({ coupon: freshCoupon() });
-    const r = await validateCoupon(db, NO_ENV, '  save10 ', 100);
+    const db = mockDb({ coupon: d1Coupon() });
+    const r = await validateCoupon(db, '  save10 ', 100);
     assert.equal(r.valid, true);
     assert.equal(r.code, 'SAVE10');
     assert.equal(db.calls.selects[0].args[0], 'SAVE10'); // D1 queried with normalized code
   });
 
   test('fixed discount bigger than price → free order, price 0 (never negative)', async () => {
-    const db = mockDb({ coupon: freshCoupon({ value_type: 'fixed_amount', value: 100 }) });
-    const r = await validateCoupon(db, NO_ENV, 'SAVE10', 50);
+    const db = mockDb({ coupon: d1Coupon({ value_type: 'fixed_amount', value: 100 }) });
+    const r = await validateCoupon(db, 'SAVE10', 50);
     assert.equal(r.valid, true);
     assert.equal(r.discountAmount, 50);
     assert.equal(r.price, 0);
   });
 
   test('expired coupon (ends_at in the past)', async () => {
-    const db = mockDb({ coupon: freshCoupon({ ends_at: Date.now() - 1000 }) });
-    const r = await validateCoupon(db, NO_ENV, 'SAVE10', 85);
+    const db = mockDb({ coupon: d1Coupon({ ends_at: Date.now() - 1000 }) });
+    const r = await validateCoupon(db, 'SAVE10', 85);
     assert.deepEqual(r, { valid: false, reason: 'expired' });
   });
 
   test('not-yet-started coupon (starts_at in the future)', async () => {
-    const db = mockDb({ coupon: freshCoupon({ starts_at: Date.now() + 60_000 }) });
-    const r = await validateCoupon(db, NO_ENV, 'SAVE10', 85);
+    const db = mockDb({ coupon: d1Coupon({ starts_at: Date.now() + 60_000 }) });
+    const r = await validateCoupon(db, 'SAVE10', 85);
     assert.deepEqual(r, { valid: false, reason: 'not_started' });
   });
 
   test('inactive status', async () => {
-    const db = mockDb({ coupon: freshCoupon({ status: 'disabled' }) });
-    const r = await validateCoupon(db, NO_ENV, 'SAVE10', 85);
+    const db = mockDb({ coupon: d1Coupon({ status: 'disabled' }) });
+    const r = await validateCoupon(db, 'SAVE10', 85);
     assert.deepEqual(r, { valid: false, reason: 'inactive' });
   });
 
   test('usage limit reached', async () => {
-    const db = mockDb({ coupon: freshCoupon({ usage_limit: 3 }), redemptionsTotal: 3 });
-    const r = await validateCoupon(db, NO_ENV, 'SAVE10', 85);
+    const db = mockDb({ coupon: d1Coupon({ usage_limit: 3 }), redemptionsTotal: 3 });
+    const r = await validateCoupon(db, 'SAVE10', 85);
     assert.deepEqual(r, { valid: false, reason: 'usage_limit_reached' });
   });
 
   test('usage limit not yet reached → valid', async () => {
-    const db = mockDb({ coupon: freshCoupon({ usage_limit: 3 }), redemptionsTotal: 2 });
-    const r = await validateCoupon(db, NO_ENV, 'SAVE10', 85);
+    const db = mockDb({ coupon: d1Coupon({ usage_limit: 3 }), redemptionsTotal: 2 });
+    const r = await validateCoupon(db, 'SAVE10', 85);
     assert.equal(r.valid, true);
   });
 
   test('once-per-customer already used', async () => {
     const db = mockDb({
-      coupon: freshCoupon({ applies_once_per_customer: 1 }),
+      coupon: d1Coupon({ applies_once_per_customer: 1 }),
       redemptionsByCustomer: 1,
     });
-    const r = await validateCoupon(db, NO_ENV, 'SAVE10', 85, 'a@b.com');
+    const r = await validateCoupon(db, 'SAVE10', 85, 'a@b.com');
     assert.deepEqual(r, { valid: false, reason: 'already_used' });
   });
 
   test('once-per-customer without customerKey does not block', async () => {
     const db = mockDb({
-      coupon: freshCoupon({ applies_once_per_customer: 1 }),
+      coupon: d1Coupon({ applies_once_per_customer: 1 }),
       redemptionsByCustomer: 1,
     });
-    const r = await validateCoupon(db, NO_ENV, 'SAVE10', 85);
+    const r = await validateCoupon(db, 'SAVE10', 85);
     assert.equal(r.valid, true);
   });
 
-  test('unknown value_type in cache → unsupported', async () => {
-    const db = mockDb({ coupon: freshCoupon({ value_type: 'bogus' }) });
-    const r = await validateCoupon(db, NO_ENV, 'SAVE10', 85);
+  test('unknown value_type → unsupported', async () => {
+    const db = mockDb({ coupon: d1Coupon({ value_type: 'bogus' }) });
+    const r = await validateCoupon(db, 'SAVE10', 85);
     assert.deepEqual(r, { valid: false, reason: 'unsupported' });
   });
 
-  test('no cache + Shopify unreachable → not_found', async () => {
+  test('no such code in D1 → not_found', async () => {
     const db = mockDb({ coupon: null });
-    const r = await validateCoupon(db, NO_ENV, 'NOPE', 85);
+    const r = await validateCoupon(db, 'NOPE', 85);
     assert.deepEqual(r, { valid: false, reason: 'not_found' });
   });
 
-  test('stale cache + Shopify unreachable → falls back to cached row (stale-while-error)', async () => {
-    // 15 min old: past the 10-min sync TTL but within the 2×TTL fallback window.
-    const db = mockDb({ coupon: freshCoupon({ synced_at: Date.now() - 15 * 60 * 1000 }) });
-    const r = await validateCoupon(db, NO_ENV, 'SAVE10', 100);
-    assert.equal(r.valid, true);
-    assert.equal(r.discountAmount, 10);
-  });
-
-  test('cache older than 2× the sync TTL + Shopify unreachable → rejected (not_found)', async () => {
-    const db = mockDb({ coupon: freshCoupon({ synced_at: Date.now() - 21 * 60 * 1000 }) });
-    const r = await validateCoupon(db, NO_ENV, 'SAVE10', 100);
+  test('empty/blank code → not_found without a D1 lookup', async () => {
+    const db = mockDb({ coupon: d1Coupon() });
+    const r = await validateCoupon(db, '   ', 85);
     assert.deepEqual(r, { valid: false, reason: 'not_found' });
-  });
-
-  test('stale cache + Shopify lookup → upserts fresh definition into D1', async () => {
-    mockShopifyFetch({
-      id: 'gid://shopify/DiscountCodeNode/2',
-      codeDiscount: {
-        __typename: 'DiscountCodeBasic',
-        title: 'Half off',
-        status: 'ACTIVE',
-        startsAt: null, endsAt: null,
-        usageLimit: null, appliesOncePerCustomer: false,
-        customerGets: { value: { __typename: 'DiscountPercentage', percentage: 0.5 } },
-      },
-    });
-    const db = mockDb({ coupon: null });
-    const r = await validateCoupon(db, SHOPIFY_ENV, 'half', 80);
-    assert.equal(r.valid, true);
-    assert.equal(r.value, 50);
-    assert.equal(r.discountAmount, 40);
-    assert.equal(r.price, 40);
-    const upsert = db.calls.runs.find(c => /INSERT INTO coupons/.test(c.sql));
-    assert.ok(upsert, 'expected an upsert into coupons');
-    assert.equal(upsert.args[0], 'HALF'); // stored normalized uppercase
-  });
-
-  test('Shopify says code does not exist → not_found', async () => {
-    mockShopifyFetch(null);
-    const db = mockDb({ coupon: null });
-    const r = await validateCoupon(db, SHOPIFY_ENV, 'GHOST', 85);
-    assert.deepEqual(r, { valid: false, reason: 'not_found' });
-  });
-
-  test('unsupported Shopify discount type (BxGy) → unsupported', async () => {
-    mockShopifyFetch({
-      id: 'gid://shopify/DiscountCodeNode/3',
-      codeDiscount: { __typename: 'DiscountCodeBxgy', title: 'Buy X get Y' },
-    });
-    const db = mockDb({ coupon: null });
-    const r = await validateCoupon(db, SHOPIFY_ENV, 'BXGY', 85);
-    assert.deepEqual(r, { valid: false, reason: 'unsupported' });
+    assert.equal(db.calls.selects.length, 0);
   });
 });
 
-// ---- fetchShopifyDiscountByCode ----
+// ---- CRUD (ops dashboard) ----
 
-describe('fetchShopifyDiscountByCode', () => {
-  test('converts Shopify 0..1 fraction to 0-100 percent (no float dust)', async () => {
-    mockShopifyFetch({
-      id: 'gid://shopify/DiscountCodeNode/4',
-      codeDiscount: {
-        __typename: 'DiscountCodeBasic',
-        title: '15% off', status: 'ACTIVE',
-        startsAt: '2026-01-01T00:00:00Z', endsAt: null,
-        usageLimit: 100, appliesOncePerCustomer: true,
-        customerGets: { value: { __typename: 'DiscountPercentage', percentage: 0.15 } },
-      },
+// In-memory D1 stub that actually stores coupon rows so create → read → update
+// → soft-delete round-trips work. UPDATEs are applied by parsing the `col = ?`
+// pairs in the SET clause (the last bind is always the code).
+function crudDb({ coupons = [], redemptions = [] } = {}) {
+  const store = new Map(coupons.map(c => [c.code, { ...c }]));
+  return {
+    store, redemptions,
+    prepare(sql) {
+      return {
+        args: [],
+        bind(...args) { this.args = args; return this; },
+        async first() {
+          if (/SELECT \* FROM coupons WHERE code/.test(sql)) return store.get(this.args[0]) || null;
+          if (/FROM coupon_redemptions/.test(sql)) {
+            const code = this.args[0];
+            const byCustomer = /customer_key/.test(sql);
+            const n = redemptions.filter(r => r.code === code && (!byCustomer || r.customer_key === this.args[1])).length;
+            return { n };
+          }
+          return null;
+        },
+        async all() {
+          if (/FROM coupons c/.test(sql)) {
+            const rows = [...store.values()].map(c => ({
+              ...c,
+              redemption_count: redemptions.filter(r => r.code === c.code).length,
+            }));
+            rows.sort((a, b) => (b.synced_at || 0) - (a.synced_at || 0));
+            return { results: rows };
+          }
+          return { results: [] };
+        },
+        async run() {
+          if (/INSERT INTO coupons/.test(sql)) {
+            const [code, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, synced_at] = this.args;
+            store.set(code, { code, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, synced_at });
+          } else if (/UPDATE coupons SET/.test(sql)) {
+            const cols = [...sql.split(' WHERE ')[0].matchAll(/(\w+) = \?/g)].map(m => m[1]);
+            const row = store.get(this.args[this.args.length - 1]);
+            cols.forEach((col, i) => { row[col] = this.args[i]; });
+          }
+          return { meta: { changes: 1 } };
+        },
+      };
+    },
+  };
+}
+
+describe('createCoupon', () => {
+  test('creates a normalized row and returns it (defaults: active, no limits)', async () => {
+    const db = crudDb();
+    const before = Date.now();
+    const c = await createCoupon(db, { code: ' save10 ', title: ' Save 10 ', value_type: 'percentage', value: 10 });
+    assert.equal(c.code, 'SAVE10'); // stored normalized uppercase
+    assert.equal(c.title, 'Save 10');
+    assert.equal(c.value_type, 'percentage');
+    assert.equal(c.value, 10);
+    assert.equal(c.status, 'active');
+    assert.equal(c.starts_at, null);
+    assert.equal(c.ends_at, null);
+    assert.equal(c.usage_limit, null);
+    assert.equal(c.applies_once_per_customer, 0);
+    assert.ok(c.synced_at >= before && c.synced_at <= Date.now());
+    assert.ok(db.store.has('SAVE10'));
+  });
+
+  test('honors optional fields (dates, limit, once-per-customer, status)', async () => {
+    const db = crudDb();
+    const starts = Date.now() + 60_000, ends = Date.now() + 120_000;
+    const c = await createCoupon(db, {
+      code: 'VIP', value_type: 'fixed_amount', value: 20, status: 'scheduled',
+      starts_at: starts, ends_at: ends, usage_limit: 5, applies_once_per_customer: true,
     });
-    const row = await fetchShopifyDiscountByCode(SHOPIFY_ENV, 'save15');
-    assert.equal(row.value_type, 'percentage');
-    assert.equal(row.value, 15); // 0.15 * 100 → exactly 15, not 15.000000000000002
-    assert.equal(row.code, 'SAVE15');
-    assert.equal(row.status, 'active');
-    assert.equal(row.starts_at, Date.parse('2026-01-01T00:00:00Z'));
-    assert.equal(row.ends_at, null);
-    assert.equal(row.usage_limit, 100);
-    assert.equal(row.applies_once_per_customer, 1);
+    assert.equal(c.status, 'scheduled');
+    assert.equal(c.starts_at, starts);
+    assert.equal(c.ends_at, ends);
+    assert.equal(c.usage_limit, 5);
+    assert.equal(c.applies_once_per_customer, 1);
   });
 
-  test('fixed amount in ILS', async () => {
-    mockShopifyFetch({
-      id: 'gid://shopify/DiscountCodeNode/5',
-      codeDiscount: {
-        __typename: 'DiscountCodeBasic',
-        title: '20 NIS off', status: 'ACTIVE',
-        startsAt: null, endsAt: null, usageLimit: null, appliesOncePerCustomer: false,
-        customerGets: { value: { __typename: 'DiscountAmount', amount: { amount: '20.0', currencyCode: 'ILS' } } },
-      },
+  test('duplicate code → throws coupon_exists', async () => {
+    const db = crudDb({ coupons: [d1Coupon()] });
+    await assert.rejects(
+      () => createCoupon(db, { code: 'save10', value_type: 'percentage', value: 5 }),
+      /coupon_exists/
+    );
+  });
+
+  test('rejects missing code, bad value_type, and non-positive value', async () => {
+    const db = crudDb();
+    await assert.rejects(() => createCoupon(db, { code: '  ', value_type: 'percentage', value: 10 }), /missing code/);
+    await assert.rejects(() => createCoupon(db, { code: 'X', value_type: 'bxgy', value: 10 }), /invalid value_type/);
+    await assert.rejects(() => createCoupon(db, { code: 'X', value_type: 'percentage', value: 0 }), /invalid value/);
+    await assert.rejects(() => createCoupon(db, { code: 'X', value_type: 'fixed_amount', value: -5 }), /invalid value/);
+    assert.equal(db.store.size, 0, 'nothing inserted');
+  });
+
+  test('a created coupon validates immediately (no sync step)', async () => {
+    const db = crudDb();
+    await createCoupon(db, { code: 'FRESH', title: 'Fresh', value_type: 'fixed_amount', value: 15 });
+    const r = await validateCoupon(db, 'fresh', 50);
+    assert.equal(r.valid, true);
+    assert.equal(r.discountAmount, 15);
+    assert.equal(r.price, 35);
+  });
+});
+
+describe('updateCoupon', () => {
+  test('updates only the given fields and bumps synced_at', async () => {
+    const db = crudDb({ coupons: [d1Coupon({ synced_at: 1000 })] });
+    const c = await updateCoupon(db, 'save10', { value: 25, usage_limit: 3 });
+    assert.equal(c.value, 25);
+    assert.equal(c.usage_limit, 3);
+    assert.equal(c.title, 'Save 10', 'untouched field preserved');
+    assert.equal(c.status, 'active', 'untouched field preserved');
+    assert.ok(c.synced_at > 1000, 'synced_at bumped');
+  });
+
+  test('normalizes booleans and nullable numbers', async () => {
+    const db = crudDb({ coupons: [d1Coupon({ usage_limit: 5, applies_once_per_customer: 1 })] });
+    const c = await updateCoupon(db, 'SAVE10', { applies_once_per_customer: false, usage_limit: null, ends_at: 123456 });
+    assert.equal(c.applies_once_per_customer, 0);
+    assert.equal(c.usage_limit, null);
+    assert.equal(c.ends_at, 123456);
+  });
+
+  test('unknown code → null', async () => {
+    const db = crudDb();
+    assert.equal(await updateCoupon(db, 'GHOST', { value: 10 }), null);
+  });
+
+  test('no recognized fields → returns the row unchanged (no UPDATE)', async () => {
+    const db = crudDb({ coupons: [d1Coupon({ synced_at: 1000 })] });
+    const c = await updateCoupon(db, 'SAVE10', { bogus: 'x' });
+    assert.equal(c.synced_at, 1000, 'synced_at untouched');
+  });
+});
+
+describe('deleteCoupon', () => {
+  test('soft-delete: row stays, status becomes inactive, code stops validating', async () => {
+    const db = crudDb({ coupons: [d1Coupon()] });
+    const c = await deleteCoupon(db, ' save10 ');
+    assert.equal(c.status, 'inactive');
+    assert.ok(db.store.has('SAVE10'), 'row not removed from D1');
+    const r = await validateCoupon(db, 'SAVE10', 85);
+    assert.deepEqual(r, { valid: false, reason: 'inactive' });
+  });
+
+  test('unknown code → null', async () => {
+    const db = crudDb();
+    assert.equal(await deleteCoupon(db, 'GHOST'), null);
+  });
+});
+
+describe('listCoupons', () => {
+  test('returns all rows with their redemption counts', async () => {
+    const db = crudDb({
+      coupons: [d1Coupon({ synced_at: 2000 }), d1Coupon({ code: 'VIP', title: 'VIP', synced_at: 1000 })],
+      redemptions: [
+        { code: 'SAVE10', customer_key: 'a' },
+        { code: 'SAVE10', customer_key: 'b' },
+      ],
     });
-    const row = await fetchShopifyDiscountByCode(SHOPIFY_ENV, 'NIS20');
-    assert.equal(row.value_type, 'fixed_amount');
-    assert.equal(row.value, 20);
+    const rows = await listCoupons(db);
+    assert.equal(rows.length, 2);
+    const save10 = rows.find(r => r.code === 'SAVE10');
+    const vip = rows.find(r => r.code === 'VIP');
+    assert.equal(save10.redemption_count, 2);
+    assert.equal(vip.redemption_count, 0);
   });
 
-  test('non-Basic discount type → { unsupported: true }', async () => {
-    mockShopifyFetch({
-      id: 'gid://shopify/DiscountCodeNode/6',
-      codeDiscount: { __typename: 'DiscountCodeFreeShipping', title: 'Free shipping' },
-    });
-    const row = await fetchShopifyDiscountByCode(SHOPIFY_ENV, 'FREESHIP');
-    assert.deepEqual(row, { unsupported: true });
-  });
-
-  test('no such code → null', async () => {
-    mockShopifyFetch(null);
-    assert.equal(await fetchShopifyDiscountByCode(SHOPIFY_ENV, 'GHOST'), null);
-  });
-
-  test('missing credentials → throws (caller falls back to cache)', async () => {
-    await assert.rejects(() => fetchShopifyDiscountByCode(NO_ENV, 'X'), /shopify_not_configured/);
-  });
-
-  test('HTTP error → throws', async () => {
-    globalThis.fetch = async () => ({ ok: false, status: 500, async json() { return {}; } });
-    await assert.rejects(() => fetchShopifyDiscountByCode(SHOPIFY_ENV, 'X'), /shopify_http_500/);
+  test('empty table → []', async () => {
+    const db = crudDb();
+    assert.deepEqual(await listCoupons(db), []);
   });
 });
 

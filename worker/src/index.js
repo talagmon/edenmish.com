@@ -6,7 +6,7 @@ import { trackingHtml, opsHtml } from './pages.js';
 import { corsFor, maskEmail, publicOrderSummary, clientIp, anonKey } from './security.js';
 import { notifyEmail, notifyWhatsApp } from './notify.js';
 import { normalizeIlPhone } from './validate.js';
-import { validateCoupon, recordRedemption } from './coupons.js';
+import { validateCoupon, recordRedemption, listCoupons, createCoupon, updateCoupon, deleteCoupon } from './coupons.js';
 
 const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra } });
 const html = (s) => new Response(s, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -119,7 +119,7 @@ export default {
       let b; try { b = await req.json(); } catch { return json({ error: 'invalid body' }, 400, cors); }
       const rules = await getRules(env.DB);
       const pr = priceOrder(b, rules);
-      const v = await validateCoupon(env.DB, env, b.coupon_code, pr.price, couponCustomerKey(b));
+      const v = await validateCoupon(env.DB, b.coupon_code, pr.price, couponCustomerKey(b));
       if (!v.valid) return json({ valid: false, reason: v.reason, message: couponMessage(v.reason) }, 200, cors);
       return json({ valid: true, code: v.code, subtotal_price: v.subtotal, discount_amount: v.discountAmount, price: v.price, title: v.title }, 200, cors);
     }
@@ -167,7 +167,7 @@ export default {
       // customer must not be charged more than the total they were shown.
       let coupon = null;
       if (b.coupon_code) {
-        const v = await validateCoupon(env.DB, env, b.coupon_code, pr.price, couponCustomerKey(b));
+        const v = await validateCoupon(env.DB, b.coupon_code, pr.price, couponCustomerKey(b));
         if (!v.valid) return json({ valid: false, error: 'invalid_coupon', reason: v.reason, message: couponMessage(v.reason) }, 400, cors);
         coupon = v;
       }
@@ -267,8 +267,9 @@ export default {
       let paymentUrl = null;
       if (!isReview) {
         try {
-          // Discount snapshot rides along on the order object so createDraftOrder can
-          // keep the line item at the original subtotal + attach applied_discount.
+          // Discount snapshot (discount_code, etc.) is recorded in D1 and shown on the
+          // booking/success/tracking pages and emails. The Shopify Draft Order line item
+          // uses just the final price (no applied_discount — Shopify REST ignores it).
           const charge = await createCharge(env, { ...b, id: created.id, token, price: finalPrice, ...discountFields }, finalPrice);
           if (charge && charge.checkoutUrl) {
             paymentUrl = charge.checkoutUrl;
@@ -564,6 +565,45 @@ export default {
       const id = Number(path.split('/')[4]);
       const r = await listNotificationsForOrder(env.DB, id);
       return json({ ok: true, notifications: r.results || [] });
+    }
+
+    // ---- Coupon management (ops-only) ----
+    // Coupons live entirely in D1. Eden creates/edits them from the ops dashboard;
+    // they are validated instantly with no external API call.
+    if (onOps && path === '/api/ops/coupons' && req.method === 'GET') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      const coupons = await listCoupons(env.DB);
+      return json({ coupons });
+    }
+    if (onOps && path === '/api/ops/coupons' && req.method === 'POST') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      let b; try { b = await req.json(); } catch { return json({ error: 'bad' }, 400); }
+      if (!b.code || !b.title || !b.value_type || b.value == null) return json({ error: 'missing fields' }, 400);
+      if (!Number.isFinite(Number(b.value)) || Number(b.value) <= 0) return json({ error: 'value must be positive' }, 400);
+      try {
+        const c = await createCoupon(env.DB, b);
+        return json({ ok: true, coupon: c });
+      } catch (err) {
+        if (err.message === 'coupon_exists') return json({ error: 'code already exists' }, 409);
+        throw err;
+      }
+    }
+    if (onOps && path.includes('/api/ops/coupons/') && req.method === 'PUT') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      const code = String(path.split('/')[4]).trim().toUpperCase();
+      if (!code) return json({ error: 'bad code' }, 400);
+      let b; try { b = await req.json(); } catch { b = {}; }
+      const c = await updateCoupon(env.DB, code, b);
+      if (!c) return json({ error: 'not found' }, 404);
+      return json({ ok: true, coupon: c });
+    }
+    if (onOps && path.includes('/api/ops/coupons/') && req.method === 'DELETE') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      const code = String(path.split('/')[4]).trim().toUpperCase();
+      if (!code) return json({ error: 'bad code' }, 400);
+      const c = await deleteCoupon(env.DB, code);
+      if (!c) return json({ error: 'not found' }, 404);
+      return json({ ok: true, coupon: c });
     }
 
     // ---- Shopify webhook (replaces PayPlus webhook) ----
