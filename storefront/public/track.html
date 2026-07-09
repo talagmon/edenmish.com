@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
 <title>EdenMish | מעקב משלוח</title>
-<meta name="app-version" content="v0.2.0(272015)">
+<meta name="app-version" content="v0.2.0(272887)">
 <meta name="description" content="מעקב חי אחר משלוח EdenMish - הזינו מספר מעקב וקבלו עדכון בזמן אמת."/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="/assets/styles.css"/>
 <link rel="icon" href="/assets/favicon.ico"/>
 <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"/>
-<meta name="theme-color" content="#5b2a86"/>
+<meta name="theme-color" content="#8B5CF6"/>
 <style>
   .glow-primary { box-shadow: 0 0 20px rgba(223, 183, 255, 0.2); }
   .status-pulse { animation: tpulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
@@ -21,7 +21,7 @@
   .map-gradient-overlay { background: linear-gradient(to top, #0b1326 0%, transparent 40%); }
   .accent-glow { filter: blur(80px); animation: apulse 4s ease-in-out infinite; }
   @keyframes apulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
-  .otp-input:focus { outline: none; border-color: #dfb7ff; box-shadow: 0 0 15px rgba(223, 183, 255, 0.3); transform: translateY(-2px); }
+  .otp-input:focus { outline: none; border-color: #8B5CF6; box-shadow: 0 0 15px rgba(139, 92, 246, 0.3); transform: translateY(-2px); }
   @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
   .animate-shake { animation: shake .4s ease-in-out; }
 </style>
@@ -52,7 +52,7 @@
 <p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl md:ml-0">הזינו מספר מעקב וקבלו עדכון חי על מיקום השליח וזמן הגעה משוער.</p>
 <form id="entry-form" class="mt-stack-lg max-w-2xl glass-card p-2 rounded-xl flex items-center gap-2 transition-all focus-within:ring-2 focus-within:ring-primary/50">
 <input id="entry-input" class="w-full bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-outline py-3 px-4 font-body-md" placeholder="הזינו מספר מעקב" type="text" dir="ltr"/>
-<button class="bg-primary text-on-primary font-label-bold px-8 py-3 rounded-lg flex items-center gap-2 hover:bg-primary-fixed-dim transition-colors whitespace-nowrap" type="submit">
+<button class="bg-tertiary text-on-tertiary font-label-bold px-8 py-3 rounded-lg flex items-center gap-2 hover:brightness-110 transition-colors whitespace-nowrap" type="submit">
 <span class="material-symbols-outlined">search</span><span>עקבו</span>
 </button>
 </form>
@@ -91,7 +91,7 @@
 <input class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="5"/>
 </div>
 <p id="otp-msg" class="text-status-alert font-label-sm mb-6 min-h-[1em]">&nbsp;</p>
-<button id="otp-submit" class="w-full bg-primary py-4 rounded-lg text-on-primary font-bold text-lg hover:shadow-[0_0_20px_rgba(223,183,255,0.4)] transition-all duration-300 active:scale-95 disabled:opacity-60">המשיכו למעקב</button>
+<button id="otp-submit" class="w-full bg-tertiary py-4 rounded-lg text-on-tertiary font-bold text-lg hover:shadow-[0_0_20px_rgba(210,187,255,0.4)] transition-all duration-300 active:scale-95 disabled:opacity-60">המשיכו למעקב</button>
 <div class="flex flex-col gap-2 mt-6">
 <p class="font-label-sm text-label-sm text-on-surface-variant">לא קיבלתם את הקוד?</p>
 <button id="otp-resend" type="button" class="text-primary font-bold hover:underline transition-all">שלח קוד שוב</button>
@@ -158,16 +158,17 @@
 <a class="hover:text-secondary transition-colors" href="/track.html">מעקב משלוחים</a>
 <a class="hover:text-secondary transition-colors" href="/about.html">אודות</a>
 <a class="hover:text-secondary transition-colors" href="/about.html">צור קשר</a>
-<a class="hover:text-secondary transition-colors" href="#">תקנון</a>
-<a class="hover:text-secondary transition-colors" href="#">מדיניות פרטיות</a>
+<a class="hover:text-secondary transition-colors" href="/terms.html">תקנון</a>
+<a class="hover:text-secondary transition-colors" href="/privacy.html">מדיניות פרטיות</a>
 </div>
 <p class="text-on-surface-variant font-body-md text-body-md opacity-60">© 2025 EdenMish. כל הזכויות שמורות.</p>
+<p class="text-label-sm text-on-surface-variant opacity-50 text-center mt-1">קריניצי 111 ד׳, רמת גן, ישראל</p>
 </div>
 
 <div class="flex items-center justify-center gap-2 mt-3 opacity-60">
   <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener"><img src="/assets/se-footer.png" class="w-7 h-7 rounded-full" alt="Six Elements Altiora"></a>
   <span class="text-label-sm">פותח על ידי <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Six Elements Altiora</a> · <a href="https://talagmon.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Tal Agmon</a></span>
-<span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.2.0(272015)</span>
+<span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.2.0(272887)</span>
 </div>
 </footer>
 
@@ -235,7 +236,7 @@ function renderMap(live, gps, order, trail){
         icon:{ path:google.maps.SymbolPath.CIRCLE, scale:10, fillColor:"#91d3c8", fillOpacity:1, strokeColor:"#fff", strokeWeight:2 } });
       if(order && order.dropoff_lat){
         gDestMarker=new google.maps.Marker({ position:{lat:Number(order.dropoff_lat),lng:Number(order.dropoff_lng)}, map:gMap, title:"יעד מסירה",
-          icon:{ path:google.maps.SymbolPath.CIRCLE, scale:10, fillColor:"#dfb7ff", fillOpacity:1, strokeColor:"#fff", strokeWeight:2 } });
+          icon:{ path:google.maps.SymbolPath.CIRCLE, scale:10, fillColor:"#8B5CF6", fillOpacity:1, strokeColor:"#fff", strokeWeight:2 } });
       }
     } else { gMarker.setPosition(pos); if(live) gMap.panTo(pos); }
     mapEl.classList.remove("hidden"); if(ph) ph.classList.add("hidden");
@@ -247,9 +248,9 @@ function renderMap(live, gps, order, trail){
     }
     // Driving route overlay (roads) + pickup marker
     if(order && order.pickup_lat && order.dropoff_lat){
-      if(!gPickupMarker){ gPickupMarker=new google.maps.Marker({ position:{lat:Number(order.pickup_lat),lng:Number(order.pickup_lng)}, map:gMap, title:"נקודת איסוף", icon:{ path:google.maps.SymbolPath.CIRCLE, scale:8, fillColor:"#5b2a86", fillOpacity:0.5, strokeColor:"#fff", strokeWeight:1.5 } }); }
+      if(!gPickupMarker){ gPickupMarker=new google.maps.Marker({ position:{lat:Number(order.pickup_lat),lng:Number(order.pickup_lng)}, map:gMap, title:"נקודת איסוף", icon:{ path:google.maps.SymbolPath.CIRCLE, scale:8, fillColor:"#8B5CF6", fillOpacity:0.5, strokeColor:"#fff", strokeWeight:1.5 } }); }
       if(google.maps.DirectionsService && !gDirRenderer){
-        gDirRenderer=new google.maps.DirectionsRenderer({ suppressMarkers:true, polylineOptions:{ strokeColor:"#5b2a86", strokeWeight:6, strokeOpacity:0.4 }, map:gMap });
+        gDirRenderer=new google.maps.DirectionsRenderer({ suppressMarkers:true, polylineOptions:{ strokeColor:"#8B5CF6", strokeWeight:6, strokeOpacity:0.4 }, map:gMap });
         var ds=new google.maps.DirectionsService();
         var org=(live&&gps)?pos:{lat:Number(order.pickup_lat),lng:Number(order.pickup_lng)};
         var dest={lat:Number(order.dropoff_lat),lng:Number(order.dropoff_lng)};
@@ -258,7 +259,7 @@ function renderMap(live, gps, order, trail){
           else{
             console.warn("Directions API failed:",st,"— enable Directions API in Google Cloud Console");
             gDirRenderer.setMap(null);
-            new google.maps.Polyline({ path:[org,dest], strokeColor:"#5b2a86", strokeWeight:3, strokeOpacity:0.5, geodesic:true, map:gMap });
+            new google.maps.Polyline({ path:[org,dest], strokeColor:"#8B5CF6", strokeWeight:3, strokeOpacity:0.5, geodesic:true, map:gMap });
           }
         });
       }
@@ -322,7 +323,7 @@ function renderTrack(d){
   if (o.payment_url && o.payment_status !== "paid") {
     const pay = document.createElement("a");
     pay.href = o.payment_url;
-    pay.className = "mt-4 w-full bg-secondary hover:brightness-110 text-on-secondary font-bold py-4 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 shadow-lg shadow-secondary/20";
+    pay.className = "mt-4 w-full bg-tertiary hover:brightness-110 text-on-tertiary font-bold py-4 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 shadow-lg shadow-tertiary/20";
     pay.innerHTML = '<span class="material-symbols-outlined">credit_card</span> לתשלום כעת' + (o.price ? ' — ₪' + o.price : '');
     stepper.appendChild(pay);
   }

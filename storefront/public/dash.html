@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
 <title>מעקב הזמנות | עדן מיש</title>
-<meta name="app-version" content="v0.2.0(272015)">
+<meta name="app-version" content="v0.2.0(272887)">
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="/assets/styles.css"/>
 <link rel="icon" href="/assets/favicon.ico"/>
 <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"/>
-<meta name="theme-color" content="#5b2a86"/>
+<meta name="theme-color" content="#8B5CF6"/>
 </head>
 <body class="bg-surface-dim">
 <div id="app">טוען…</div>
@@ -22,7 +22,7 @@ var HE = {received:"נתקבלה",priced:"מחושב",review:"בדיקה",paymen
 var LIVE = ["to_pickup","to_dropoff"];
 var NEXT = {paid:"to_pickup",to_pickup:"picked_up",picked_up:"to_dropoff"};
 var NEXTLBL = {paid:"אשר יציאה לאיסוף",to_pickup:"אשר איסוף ✓",picked_up:"אשר יציאה למסירה"};
-var sess = null, orders = [], activeOrder = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, activeFilter = "all", currentView = "queue";
+var sess = null, orders = [], coupons = [], activeOrder = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, activeFilter = "all", currentView = "queue";
 
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
 function fmt(t){return t?new Date(t).toLocaleString("he-IL",{timeZone:"Asia/Jerusalem",hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"}):"—";}
@@ -37,12 +37,12 @@ async function api(path,opts){
 function loginView(){
   $("app").innerHTML = '<div class="min-h-screen flex items-center justify-center p-gutter-mobile">'+
     '<div class="glass-card rounded-2xl p-stack-lg max-w-sm w-full text-center">'+
-    '<div class="w-16 h-16 rounded-full bg-primary-container flex items-center justify-center mx-auto mb-stack-md">'+
-    '<span class="material-symbols-outlined text-primary text-4xl">two_wheeler</span></div>'+
+    '<div class="w-16 h-16 rounded-full bg-tertiary flex items-center justify-center mx-auto mb-stack-md">'+
+    '<span class="material-symbols-outlined text-on-tertiary text-4xl">two_wheeler</span></div>'+
     '<h1 class="font-label-bold text-label-bold text-primary mb-1">מעקב הזמנות | עדן מיש</h1>'+
     '<p class="text-body-md text-on-surface-variant mb-stack-lg">מרכז הבקרה</p>'+
-    '<input id="pin" type="password" placeholder="הזן PIN" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-center text-xl mb-stack-md" style="letter-spacing:6px"/>'+
-    '<button class="w-full bg-primary-container text-on-primary-container font-headline-md py-4 rounded-xl active:scale-95" onclick="doLogin()">התחבר</button>'+
+    '<input id="pin" type="password" placeholder="הזן PIN" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-center text-xl mb-stack-md" style="letter-spacing:6px" onkeydown="if(event.key===\'Enter\')doLogin()"/>'+
+    '<button class="w-full bg-primary hover:bg-primary-fixed-dim text-on-primary font-headline-md py-4 rounded-xl shadow-lg shadow-primary/20 active:scale-95 transition-all" onclick="doLogin()">התחבר</button>'+
     '</div></div>';
 }
 
@@ -62,7 +62,7 @@ async function refresh(){
     var u = orders.find(function(o){return o.id===activeOrder.id;});
     if(u){activeOrder=u;return renderDetail(u);}
   }
-  if(currentView==="stats") renderStats(); else renderQueue();
+  if(currentView==="stats") renderStats(); else if(currentView==="coupons") renderCoupons(); else renderQueue();
 }
 
 function renderQueue(){
@@ -113,9 +113,7 @@ function renderQueue(){
     '<button onclick="refresh()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">refresh</span></button>'+
     '<button onclick="logout()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-error"><span class="material-symbols-outlined">logout</span></button>'+
     '</div></div>'+
-    '<div class="flex gap-2 mt-2">'+
-    '<div class="flex bg-surface-container-low rounded-xl p-0.5 flex-1"><button onclick="setView(\'queue\')" class="flex-1 px-3 py-1 rounded-lg text-label-sm '+(currentView==='queue'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">תור</button><button onclick="setView(\'stats\')" class="flex-1 px-3 py-1 rounded-lg text-label-sm '+(currentView==='stats'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">סטטיסטיקה</button></div>'+
-    '</div>'+
+    '<div class="flex gap-2 mt-2">'+viewTabsHtml()+'</div>'+
     '<div class="flex gap-2 mt-2">'+
     kpiCard("סה״כ",counts.all,"primary")+kpiCard("פעילות",counts.active,"secondary")+kpiCard("הכנסה","₪"+revenue,"success-mint")+kpiCard("חריגות",counts.problems+counts.cancelled,(counts.problems+counts.cancelled)>0?"error":"on-surface-variant")+
     '</div>'+
@@ -157,8 +155,15 @@ function attachSwipeHandlers(){
   });
 }
 
+function viewTabsHtml(){
+  return '<div class="flex bg-surface-container-low rounded-xl p-0.5 flex-1">'+
+    '<button onclick="setView(\'queue\')" class="flex-1 px-3 py-1 rounded-lg text-label-sm '+(currentView==='queue'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">תור</button>'+
+    '<button onclick="setView(\'stats\')" class="flex-1 px-3 py-1 rounded-lg text-label-sm '+(currentView==='stats'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">סטטיסטיקה</button>'+
+    '<button onclick="setView(\'coupons\')" class="flex-1 px-3 py-1 rounded-lg text-label-sm '+(currentView==='coupons'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">קופונים</button>'+
+  '</div>';
+}
 function setFilter(f){activeFilter=f;renderQueue();}
-function setView(v){currentView=v;if(v==="stats")renderStats();else renderQueue();}
+function setView(v){currentView=v;if(v==="stats")renderStats();else if(v==="coupons"){renderCoupons();refreshCoupons();}else renderQueue();}
 
 // Delivery deadline (SLA): Flash 90min, Standard 4h, Eco end-of-day from created_at
 function deliveryDeadline(o){
@@ -207,20 +212,20 @@ function renderStats(){
   var sc={};Object.keys(HE).forEach(function(s){sc[s]=0;});orders.forEach(function(o){if(sc[o.status]!=null)sc[o.status]++;});
   var sMax=Math.max.apply(null,Object.values(sc).concat([1]));
   function kpi(l,v,ic,c){return '<div class="glass-card rounded-xl p-3 text-center"><span class="material-symbols-outlined text-'+c+' text-2xl">'+ic+'</span><div class="font-headline-md text-headline-md-mobile text-on-surface mt-1">'+v+'</div><div class="text-label-sm text-on-surface-variant">'+l+'</div></div>';}
-  var bars=days.map(function(k,i){var v=dm[k];var h=dmax>0?Math.max(2,v/dmax*72):0;var x=8+i*38;return '<rect x="'+x+'" y="'+(82-h)+'" width="30" height="'+h+'" fill="#5b2a86" rx="3" opacity="'+(i===6?'1':'0.6')+'"/><text x="'+(x+15)+'" y="'+(78-h)+'" text-anchor="middle" fill="#91d3c8" font-size="10" font-weight="bold">'+(v||'')+'</text><text x="'+(x+15)+'" y="96" text-anchor="middle" fill="#978d9b" font-size="8">'+k+'</text>';}).join('');
+  var bars=days.map(function(k,i){var v=dm[k];var h=dmax>0?Math.max(2,v/dmax*72):0;var x=8+i*38;return '<rect x="'+x+'" y="'+(82-h)+'" width="30" height="'+h+'" fill="#8B5CF6" rx="3" opacity="'+(i===6?'1':'0.6')+'"/><text x="'+(x+15)+'" y="'+(78-h)+'" text-anchor="middle" fill="#91d3c8" font-size="10" font-weight="bold">'+(v||'')+'</text><text x="'+(x+15)+'" y="96" text-anchor="middle" fill="#64748B" font-size="8">'+k+'</text>';}).join('');
   var svcT=svc.eco+svc.standard+svc.flash;
-  var svcC={eco:'#91d3c8',standard:'#dfb7ff',flash:'#ef4444'};
+  var svcC={eco:'#91d3c8',standard:'#8B5CF6',flash:'#F87171'};
   var donut='',off=0,C=2*Math.PI*34;
   if(svcT>0){['eco','standard','flash'].forEach(function(s){if(svc[s]===0)return;var len=svc[s]/svcT*C;donut+='<circle cx="50" cy="50" r="34" fill="none" stroke="'+svcC[s]+'" stroke-width="14" stroke-dasharray="'+len+' '+(C-len)+'" stroke-dashoffset="-'+off+'" transform="rotate(-90 50 50)"/>';off+=len;});}
   var sBars=Object.entries(sc).filter(function(e){return e[1]>0;}).sort(function(a,b){return b[1]-a[1];}).map(function(e){var p=e[1]/sMax*100;return '<div class="flex items-center gap-2"><span class="text-label-sm text-on-surface-variant w-20 truncate">'+HE[e[0]]+'</span><div class="flex-1 bg-surface-container-low rounded-full h-4 overflow-hidden"><div class="h-full bg-primary-container rounded-full" style="width:'+p+'%"></div></div><span class="text-label-bold text-on-surface w-5 text-center">'+e[1]+'</span></div>';}).join('');
-  var hdr='<div class="flex bg-surface-container-low rounded-xl p-0.5 flex-1"><button onclick="setView(\'queue\')" class="flex-1 px-3 py-1 rounded-lg text-label-sm '+(currentView==='queue'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">תור</button><button onclick="setView(\'stats\')" class="flex-1 px-3 py-1 rounded-lg text-label-sm '+(currentView==='stats'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">סטטיסטיקה</button></div>';
+  var hdr=viewTabsHtml();
   $("app").innerHTML=
     '<div class="sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm"><div class="flex items-center justify-between gap-stack-sm"><strong class="font-label-bold text-label-bold text-primary truncate">מעקב הזמנות | עדן מיש</strong><div class="flex gap-2 shrink-0"><button onclick="refresh()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">refresh</span></button><button onclick="logout()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-error"><span class="material-symbols-outlined">logout</span></button></div></div><div class="flex gap-2 mt-2">'+hdr+'</div></div>'+
     '<div class="px-gutter-mobile py-stack-sm max-w-lg mx-auto space-y-3 pb-24">'+
-    '<div class="grid grid-cols-2 gap-3">'+kpi('אחוז הצלחה',sr+'%','verified','#91d3c8')+kpi('זמן ממוצע',at>0?at+' דק\'':'—','schedule','#dfb7ff')+kpi('דירוג ממוצע',ar,'star','#fbbf24')+kpi('הכנסה','₪'+rev,'payments','#91d3c8')+'</div>'+
+    '<div class="grid grid-cols-2 gap-3">'+kpi('אחוז הצלחה',sr+'%','verified','#91d3c8')+kpi('זמן ממוצע',at>0?at+' דק\'':'—','schedule','#8B5CF6')+kpi('דירוג ממוצע',ar,'star','#fbbf24')+kpi('הכנסה','₪'+rev,'payments','#91d3c8')+'</div>'+
     '<div class="glass-card rounded-2xl p-stack-md"><h3 class="font-headline-md text-on-surface mb-3">הזמנות ליום</h3><svg viewBox="0 0 280 100" class="w-full">'+bars+'</svg></div>'+
     '<div class="grid grid-cols-1 md:grid-cols-2 gap-3">'+
-    '<div class="glass-card rounded-2xl p-stack-md text-center"><h3 class="font-headline-md text-on-surface mb-2">פילוח שירות</h3>'+(svcT>0?'<svg viewBox="0 0 100 100" class="w-28 h-28 mx-auto">'+donut+'<text x="50" y="48" text-anchor="middle" fill="#dae2fd" font-size="18" font-weight="bold">'+svcT+'</text><text x="50" y="62" text-anchor="middle" fill="#cec3d2" font-size="8">סה"כ</text></svg><div class="flex justify-center gap-3 mt-2 text-label-sm"><span class="text-secondary">Eco '+svc.eco+'</span><span class="text-primary">Std '+svc.standard+'</span><span class="text-error">Flash '+svc.flash+'</span></div>':'<div class="py-8 text-on-surface-variant">אין נתונים</div>')+'</div>'+
+    '<div class="glass-card rounded-2xl p-stack-md text-center"><h3 class="font-headline-md text-on-surface mb-2">פילוח שירות</h3>'+(svcT>0?'<svg viewBox="0 0 100 100" class="w-28 h-28 mx-auto">'+donut+'<text x="50" y="48" text-anchor="middle" fill="#F8FAFC" font-size="18" font-weight="bold">'+svcT+'</text><text x="50" y="62" text-anchor="middle" fill="#94A3B8" font-size="8">סה"כ</text></svg><div class="flex justify-center gap-3 mt-2 text-label-sm"><span class="text-secondary">Eco '+svc.eco+'</span><span class="text-primary">Std '+svc.standard+'</span><span class="text-error">Flash '+svc.flash+'</span></div>':'<div class="py-8 text-on-surface-variant">אין נתונים</div>')+'</div>'+
     '<div class="glass-card rounded-2xl p-stack-md"><h3 class="font-headline-md text-on-surface mb-3">פילוח סטטוס</h3><div class="space-y-1.5">'+(sBars||'<div class="text-on-surface-variant text-center py-4">אין נתונים</div>')+'</div></div>'+
     '</div>'+
     '<div class="glass-card rounded-2xl p-stack-md"><div class="grid grid-cols-3 gap-2 text-center"><div><div class="font-headline-md text-secondary">'+delivered.length+'</div><div class="text-label-sm text-on-surface-variant">נמסרו</div></div><div><div class="font-headline-md text-error">'+failed.length+'</div><div class="text-label-sm text-on-surface-variant">נכשלו/בוטלו</div></div><div><div class="font-headline-md text-primary">'+orders.length+'</div><div class="text-label-sm text-on-surface-variant">סה"כ הזמנות</div></div></div></div>'+
@@ -359,9 +364,9 @@ function timelineHtml(o){
     var active = i === cur;
     var isLast = i === STEPS.length-1;
     var nodeColor, icon, labelColor, bg;
-    if(problem && active){ nodeColor="#ef4444"; icon="close"; labelColor="#ef4444"; bg="rgba(239,68,68,.12)"; }
+    if(problem && active){ nodeColor="#F87171"; icon="close"; labelColor="#F87171"; bg="rgba(248,113,113,.12)"; }
     else if(done){ nodeColor="#91d3c8"; icon="check"; labelColor="#91d3c8"; bg="rgba(145,211,200,.12)"; }
-    else if(active){ nodeColor="#dfb7ff"; icon=st.icon; labelColor="#dfb7ff"; bg="rgba(223,183,255,.14)"; }
+    else if(active){ nodeColor="#8B5CF6"; icon=st.icon; labelColor="#8B5CF6"; bg="rgba(139,92,246,.14)"; }
     else { nodeColor="#5a5a5a"; icon=st.icon; labelColor="#7a7a7a"; bg="rgba(255,255,255,.03)"; }
     h += '<div style="width:52px;flex:none;display:flex;flex-direction:column;align-items:center">';
     h += '<div style="height:10px">'+(active&&!problem?'<span style="display:inline-block;width:8px;height:8px;background:#91d3c8;border-radius:9999px;animation:pulse 1.5s infinite"></span>':'')+'</div>';
@@ -436,13 +441,13 @@ function actionsHtml(o){
     if(o.payment_url) h += '<button onclick="copyPay(\''+esc(o.payment_url)+'\')" class="w-full glass-card border border-primary/30 text-primary font-label-bold py-4 rounded-xl flex items-center justify-center gap-2"><span class="material-symbols-outlined">link</span> העתק קישור תשלום</button>';
     h += '<button onclick="markPaid('+id+')" class="w-full glass-card text-on-surface font-label-bold py-4 rounded-xl">סמן כשולם ידנית</button>';
   } else if(s==="paid"){
-    h += '<button onclick="setStatus('+id+',\'to_pickup\')" class="w-full bg-primary text-on-primary py-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-lg shadow-xl shadow-primary/20 active:scale-95"><span class="material-symbols-outlined text-[28px]">two_wheeler</span>'+NEXTLBL.paid+'</button>';
+    h += '<button onclick="setStatus('+id+',\'to_pickup\')" class="w-full bg-tertiary text-on-tertiary py-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-lg shadow-xl shadow-tertiary/20 active:scale-95"><span class="material-symbols-outlined text-[28px]">two_wheeler</span>'+NEXTLBL.paid+'</button>';
   } else if(s==="to_pickup"){
     h += '<button onclick="setStatus('+id+',\'picked_up\')" class="w-full bg-secondary text-on-secondary py-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-lg shadow-xl shadow-secondary/20 active:scale-95"><span class="material-symbols-outlined text-[28px]">task_alt</span>'+NEXTLBL.to_pickup+'</button>';
   } else if(s==="picked_up"){
-    h += '<button onclick="setStatus('+id+',\'to_dropoff\')" class="w-full bg-primary text-on-primary py-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-lg shadow-xl shadow-primary/20 active:scale-95"><span class="material-symbols-outlined text-[28px]">two_wheeler</span>'+NEXTLBL.picked_up+'</button>';
+    h += '<button onclick="setStatus('+id+',\'to_dropoff\')" class="w-full bg-tertiary text-on-tertiary py-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-lg shadow-xl shadow-tertiary/20 active:scale-95"><span class="material-symbols-outlined text-[28px]">two_wheeler</span>'+NEXTLBL.picked_up+'</button>';
   } else if(s==="to_dropoff"){
-    h += '<button onclick="showPod('+id+')" class="w-full bg-primary text-on-primary py-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-lg shadow-xl shadow-primary/20 active:scale-95"><span class="material-symbols-outlined text-[28px]">photo_camera</span> הוכחת מסירה</button>';
+    h += '<button onclick="showPod('+id+')" class="w-full bg-tertiary text-on-tertiary py-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-lg shadow-xl shadow-tertiary/20 active:scale-95"><span class="material-symbols-outlined text-[28px]">photo_camera</span> הוכחת מסירה</button>';
   } else if(s==="delivered"){
     h += '<div class="glass-card rounded-xl p-4 text-center"><span class="material-symbols-outlined text-success-mint text-4xl">verified</span><p class="text-success-mint font-bold mt-2">המשלוח נמסר ✓</p></div>';
   }
@@ -479,7 +484,7 @@ function showPod(id){
     '<canvas id="pod-sig" class="absolute inset-0 w-full h-full" style="touch-action:none"></canvas>'+
     '<button onclick="clearSig()" class="absolute top-2 left-2 text-label-sm bg-surface-variant/50 text-on-surface-variant px-2 py-1 rounded z-10">נקה</button>'+
     '<span class="absolute inset-0 flex items-center justify-center pointer-events-none"><span class="material-symbols-outlined text-6xl text-on-surface-variant/20">edit</span></span></div>'+
-    '<button id="pod-submit" onclick="submitPod('+id+')" class="w-full bg-primary text-on-primary font-headline-md py-4 rounded-xl shadow-xl shadow-primary/10 active:scale-95">אשר מסירה וסגור משימה</button>'+
+    '<button id="pod-submit" onclick="submitPod('+id+')" class="w-full bg-tertiary text-on-tertiary font-headline-md py-4 rounded-xl shadow-xl shadow-tertiary/10 active:scale-95">אשר מסירה וסגור משימה</button>'+
     '</div></div>';
 
   requestAnimationFrame(function(){setTimeout(initSig,50);});
@@ -496,7 +501,7 @@ function initSig(){
   var dpr=devicePixelRatio||1;
   c.width=c.clientWidth*dpr;c.height=c.clientHeight*dpr;
   sigCtx=c.getContext("2d");sigCtx.scale(dpr,dpr);
-  sigCtx.lineWidth=2.5;sigCtx.lineCap="round";sigCtx.strokeStyle="#dfb7ff";
+  sigCtx.lineWidth=2.5;sigCtx.lineCap="round";sigCtx.strokeStyle="#8B5CF6";
   function pt(e){var r=c.getBoundingClientRect();return{x:(e.clientX||(e.touches&&e.touches[0]?e.touches[0].clientX:0))-r.left,y:(e.clientY||(e.touches&&e.touches[0]?e.touches[0].clientY:0))-r.top};}
   function dn(e){sigDrawing=true;var p=pt(e);sigCtx.beginPath();sigCtx.moveTo(p.x,p.y);}
   function mv(e){if(!sigDrawing)return;var p=pt(e);sigCtx.lineTo(p.x,p.y);sigCtx.stroke();sigCtx.beginPath();sigCtx.moveTo(p.x,p.y);sigHas=true;}
@@ -543,6 +548,149 @@ function startWatch(id){
   },function(){},{enableHighAccuracy:true,maximumAge:5000});
 }
 function stopWatch(){if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null;}}
+
+async function refreshCoupons(){
+  var r = await api("/api/ops/coupons");
+  if(!r.ok){sess=null;return loginView();}
+  coupons = (await r.json()).coupons || [];
+  if(currentView==="coupons") renderCoupons();
+}
+
+function renderCoupons(){
+  var now = Date.now();
+  function statusBadge(c){
+    var st = c.status;
+    if(st==="active") return '<span class="bg-success-mint/15 text-success-mint font-label-bold text-label-sm px-2 py-0.5 rounded-full">פעיל</span>';
+    if(st==="inactive") return '<span class="bg-error/15 text-error font-label-bold text-label-sm px-2 py-0.5 rounded-full">מושבת</span>';
+    if(st==="scheduled") return '<span class="bg-alert-amber/15 text-alert-amber font-label-bold text-label-sm px-2 py-0.5 rounded-full">מתוזמן</span>';
+    return '<span class="bg-surface-container-high text-on-surface-variant font-label-bold text-label-sm px-2 py-0.5 rounded-full">'+esc(st)+'</span>';
+  }
+  function usage(c){
+    return (c.redemption_count||0)+' / '+(c.usage_limit!=null?c.usage_limit:'ללא הגבלה');
+  }
+  function typeLabel(t){ return t==='percentage'?'אחוז %':'סכום קבוע ₪'; }
+  var rows = coupons.map(function(c){
+    return '<tr class="border-b border-outline-variant/20">'+
+      '<td class="p-2 font-mono text-label-sm text-primary" dir="ltr">'+esc(c.code)+'</td>'+
+      '<td class="p-2 text-label-sm text-on-surface">'+esc(c.title||"—")+'</td>'+
+      '<td class="p-2 text-label-sm text-on-surface">'+typeLabel(c.value_type)+'</td>'+
+      '<td class="p-2 text-label-sm text-on-surface font-bold">'+(c.value_type==='percentage'?c.value+'%':'₪'+c.value)+'</td>'+
+      '<td class="p-2">'+statusBadge(c)+'</td>'+
+      '<td class="p-2 text-label-sm text-on-surface-variant">'+usage(c)+'</td>'+
+      '<td class="p-2 text-label-sm text-on-surface-variant">'+(c.starts_at?fmt(c.starts_at):'—')+'</td>'+
+      '<td class="p-2 text-label-sm text-on-surface-variant">'+(c.ends_at?fmt(c.ends_at):'—')+'</td>'+
+      '<td class="p-2">'+
+        '<div class="flex gap-1">'+
+          '<button onclick="showCouponForm(\''+esc(c.code)+'\')" class="glass-card p-1.5 rounded-lg text-primary" title="עריכה"><span class="material-symbols-outlined text-[18px]">edit</span></button>'+
+          '<button onclick="deleteCoupon(\''+esc(c.code)+'\')" class="glass-card p-1.5 rounded-lg text-error" title="מחיקה"><span class="material-symbols-outlined text-[18px]">delete</span></button>'+
+        '</div>'+
+      '</td>'+
+    '</tr>';
+  }).join('');
+
+  var table = '<div class="glass-card rounded-2xl p-stack-sm overflow-x-auto">'+
+    '<table class="w-full text-right min-w-[680px]">'+
+    '<thead class="bg-surface-container-low/60 text-on-surface-variant text-label-sm font-label-bold">'+
+      '<tr><th class="p-2">קוד</th><th class="p-2">כותרת</th><th class="p-2">סוג</th><th class="p-2">ערך</th><th class="p-2">סטטוס</th><th class="p-2">מימוש</th><th class="p-2">התחלה</th><th class="p-2">סיום</th><th class="p-2">פעולות</th></tr>'+
+    '</thead>'+
+    '<tbody>'+(rows||'<tr><td colspan="9" class="p-6 text-center text-on-surface-variant">אין קופונים</td></tr>')+'</tbody>'+
+    '</table></div>';
+
+  var hdr = viewTabsHtml();
+  $("app").innerHTML =
+    '<div class="sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm">'+
+    '<div class="flex items-center justify-between gap-stack-sm">'+
+    '<div class="flex items-center gap-2 min-w-0"><strong class="font-label-bold text-label-bold text-primary truncate">מעקב הזמנות | עדן מיש</strong></div>'+
+    '<div class="flex gap-2 shrink-0">'+
+    '<button onclick="refresh()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">refresh</span></button>'+
+    '<button onclick="logout()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-error"><span class="material-symbols-outlined">logout</span></button>'+
+    '</div></div>'+
+    '<div class="flex gap-2 mt-2">'+hdr+'</div>'+
+    '</div>'+
+    '<div class="px-gutter-mobile py-stack-sm max-w-3xl mx-auto space-y-3 pb-24">'+
+    '<div class="flex items-center justify-between">'+
+      '<h2 class="font-headline-md text-headline-md-mobile text-on-surface">קופונים</h2>'+
+      '<button onclick="showCouponForm()" class="bg-tertiary text-on-tertiary font-label-bold px-4 py-2 rounded-xl active:scale-95 flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">add</span>קופון חדש</button>'+
+    '</div>'+
+    table+
+    '</div>';
+}
+
+var editingCouponCode = null;
+function showCouponForm(code){
+  editingCouponCode = code || null;
+  var c = code ? coupons.find(function(x){return x.code===code;}) : null;
+  var html =
+    '<div class="coupon-form-overlay fixed inset-0 z-[100] bg-background/95 backdrop-blur-xl p-6 overflow-y-auto">'+
+    '<div class="glass-card rounded-2xl p-stack-lg max-w-md mx-auto space-y-stack-md">'+
+    '<div class="flex justify-between items-center"><h3 class="font-headline-md text-primary">'+(c?'עריכת קופון':'קופון חדש')+'</h3>'+
+    '<button onclick="cancelCouponForm()" class="text-on-surface-variant hover:text-error p-2"><span class="material-symbols-outlined">close</span></button></div>'+
+    '<div class="space-y-3">'+
+    '<div><label class="text-label-sm text-on-surface-variant block mb-1">קוד קופון</label><input id="c-code" type="text" placeholder="WELCOME10" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-left font-mono" dir="ltr" value="'+(c?esc(c.code):'')+'" '+(!c?'oninput="this.value=this.value.toUpperCase()"':'readonly="readonly"')+'/></div>'+
+    '<div><label class="text-label-sm text-on-surface-variant block mb-1">כותרת</label><input id="c-title" type="text" placeholder="שם תצוגה" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-right" value="'+(c?esc(c.title||''):'')+'"/></div>'+
+    '<div class="flex gap-3">'+
+      '<label class="flex-1 flex items-center gap-2 glass-card rounded-xl p-3 cursor-pointer '+(c&&c.value_type==='percentage'?'ring-1 ring-secondary':'')+'"><input type="radio" name="c-type" value="percentage" '+(c&&c.value_type==='percentage'?'checked':'')+' class="accent-secondary"/><span class="text-label-sm text-on-surface">אחוז %</span></label>'+
+      '<label class="flex-1 flex items-center gap-2 glass-card rounded-xl p-3 cursor-pointer '+(c&&c.value_type==='fixed_amount'?'ring-1 ring-secondary':'')+'"><input type="radio" name="c-type" value="fixed_amount" '+(c&&c.value_type==='fixed_amount'?'checked':'')+' class="accent-secondary"/><span class="text-label-sm text-on-surface">סכום קבוע ₪</span></label>'+
+    '</div>'+
+    '<div><label class="text-label-sm text-on-surface-variant block mb-1">ערך</label><input id="c-value" type="number" min="0" placeholder="10" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-right" value="'+(c?esc((c.value||0).toString()):'')+'"/></div>'+
+    '<div class="grid grid-cols-2 gap-3">'+
+      '<div><label class="text-label-sm text-on-surface-variant block mb-1">התחלה (אופציונלי)</label><input id="c-starts" type="datetime-local" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-right" dir="ltr" value="'+(c&&c.starts_at?toDatetimeLocal(c.starts_at):'')+'"/></div>'+
+      '<div><label class="text-label-sm text-on-surface-variant block mb-1">סיום (אופציונלי)</label><input id="c-ends" type="datetime-local" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-right" dir="ltr" value="'+(c&&c.ends_at?toDatetimeLocal(c.ends_at):'')+'"/></div>'+
+    '</div>'+
+    '<div class="grid grid-cols-2 gap-3">'+
+      '<div><label class="text-label-sm text-on-surface-variant block mb-1">מגבלת שימוש (אופציונלי)</label><input id="c-limit" type="number" min="1" placeholder="ללא הגבלה" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-right" value="'+(c&&c.usage_limit!=null?esc(c.usage_limit.toString()):'')+'"/></div>'+
+      '<div class="flex items-center gap-2 glass-card rounded-xl p-3 mt-5"><input id="c-once" type="checkbox" '+(c&&c.applies_once_per_customer?'checked':'')+' class="accent-secondary"/><label for="c-once" class="text-label-sm text-on-surface">הזן קוד פר לקוח</label></div>'+
+    '</div>'+
+    '<div><label class="text-label-sm text-on-surface-variant block mb-1">סטטוס</label><select id="c-status" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3">'+
+      '<option value="active" '+(c&&c.status==='active'?'selected':'')+'>פעיל</option>'+
+      '<option value="inactive" '+(c&&c.status==='inactive'?'selected':'')+'>מושבת</option>'+
+      '<option value="scheduled" '+(c&&c.status==='scheduled'?'selected':'')+'>מתוזמן</option>'+
+    '</select></div>'+
+    '</div>'+
+    '<button id="c-submit" onclick="submitCoupon('+(c?"'"+esc(c.code)+"'":'null')+')" class="w-full bg-tertiary text-on-tertiary font-headline-md py-4 rounded-xl shadow-xl shadow-tertiary/10 active:scale-95">'+(c?'שמור שינויים':'צור קופון')+'</button>'+
+    '</div></div>';
+  var tmp = document.createElement("div"); tmp.innerHTML = html; document.body.appendChild(tmp.firstElementChild);
+}
+function cancelCouponForm(){ var m=document.querySelector('.coupon-form-overlay'); if(m)m.remove(); editingCouponCode=null; }
+function toDatetimeLocal(ts){ var d=new Date(ts); var pad=function(n){return n<10?'0'+n:n;}; return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes()); }
+function submitCoupon(code){
+  var btn = document.getElementById("c-submit"); if(btn) btn.disabled = true;
+  var body = {
+    code: (document.getElementById("c-code").value||"").trim().toUpperCase(),
+    title: (document.getElementById("c-title").value||"").trim(),
+    value_type: document.querySelector('input[name="c-type"]:checked')?document.querySelector('input[name="c-type"]:checked').value:'percentage',
+    value: Number(document.getElementById("c-value").value)||0,
+    status: document.getElementById("c-status").value,
+    applies_once_per_customer: !!document.getElementById("c-once").checked
+  };
+  var st = document.getElementById("c-starts").value;
+  var en = document.getElementById("c-ends").value;
+  var lim = document.getElementById("c-limit").value;
+  if(st) body.starts_at = Date.parse(st);
+  if(en) body.ends_at = Date.parse(en);
+  if(lim!=='') body.usage_limit = Number(lim);
+  if(!body.code) return alert("הזן קוד קופון"), btn.disabled=false;
+  if(!body.title) return alert("הזן כותרת"), btn.disabled=false;
+  if(body.value<0) return alert("הזן ערך תקין"), btn.disabled=false;
+  var url = code ? "/api/ops/coupons/"+code : "/api/ops/coupons";
+  var method = code ? "PUT" : "POST";
+  if(code) delete body.code;
+  api(url,{method:method,body:JSON.stringify(body)}).then(async function(r){
+    if(!r.ok){
+      var msg = "שגיאה בשמירה";
+      try { var j = await r.json(); if (j && j.error) msg = msg + ": " + j.error; } catch {}
+      alert(msg);
+      if(btn)btn.disabled=false; return;
+    }
+    cancelCouponForm(); refreshCoupons();
+  }).catch(function(err){ alert("שגיאת רשת ("+(err&&err.message||"")+")"); if(btn)btn.disabled=false; });
+}
+async function deleteCoupon(code){
+  if(!confirm("האם למחוק את הקופון "+code+"?")) return;
+  var r = await api("/api/ops/coupons/"+code,{method:"DELETE"});
+  if(r.ok){ refreshCoupons(); }
+  else { alert("שגיאה במחיקה"); }
+}
 
 loginView();
 setInterval(function(){if(sess)refresh();},20000);

@@ -136,13 +136,15 @@ SELECT name FROM pragma_table_info('orders') WHERE name='rating';
 
 ### 008_coupons.sql
 
-**Introduced by:** Coupons PR (step 1) — D1 schema for Shopify-defined discount codes
+**Introduced by:** Coupons PR (step 1) — D1 schema for discount codes
 
 **Purpose:**
 - Adds coupon snapshot columns to `orders`: `subtotal_price`, `discount_code`,
   `discount_amount`, `discount_title`.
-- Adds the `coupons` table — synced snapshot of Shopify Admin discount codes
-  (percentage / fixed_amount, usage_limit, once-per-customer).
+- Adds the `coupons` table — the coupon definitions (percentage / fixed_amount,
+  usage_limit, once-per-customer). Originally a synced snapshot of Shopify
+  Admin discounts; coupons are now managed D1-only from the ops dashboard
+  (the `shopify_discount_id` / `raw_shopify_json` columns are unused legacy).
 - Adds the `coupon_redemptions` table — one row per redemption, used by the Worker
   to enforce usage limits via D1 counts.
 

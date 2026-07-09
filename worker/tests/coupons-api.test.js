@@ -1,7 +1,8 @@
-// Integration-style tests for the coupon API wiring (PR: coupons step 3):
+// Integration-style tests for the coupon API wiring:
 //   POST /api/coupons/validate  — happy path, invalid reasons, per-IP rate limit
 //   POST /api/orders            — coupon snapshot + redemption / 400 on invalid / unchanged without coupon
-//   createDraftOrder            — applied_discount only for coupon orders; total == final price
+//   GET/POST/PUT/DELETE /api/ops/coupons — ops CRUD (D1-only coupon management)
+//   createDraftOrder            — coupon orders use final price; no applied_discount
 // Run with: npm test (node --test). No real D1/Shopify — both are mocked.
 
 import { test, describe, afterEach } from 'node:test';
@@ -11,16 +12,18 @@ import { createDraftOrder, makeSession } from '../src/integrations.js';
 
 // ---- mocks ----
 
-// D1 stub that covers every table the /api/coupons/validate and /api/orders
-// paths touch: rate_limits (real counting so throttling behaves), coupons
-// (pre-seeded fresh rows so validateCoupon never calls Shopify),
-// coupon_redemptions, orders (INSERT ... RETURNING id, token), status_history,
-// notifications, pricing_rules (empty → pricing defaults).
+// D1 stub that covers every table the coupon endpoints and /api/orders touch:
+// rate_limits (real counting so throttling behaves), coupons (a live in-memory
+// store so the ops CRUD endpoints round-trip: INSERT/UPDATE land and later
+// SELECTs see them), coupon_redemptions, orders (INSERT ... RETURNING id,
+// token), status_history, notifications, pricing_rules (empty → pricing
+// defaults).
 // `raceRedemptions: true` simulates a lost TOCTOU race: the COUNT pre-checks
 // (validateCoupon) under-report 0 — as if a concurrent order landed between the
 // check and the insert — while the conditional INSERT guard sees the real rows.
 function apiDb({ coupon = null, raceRedemptions = false, orderRow = null } = {}) {
-  const state = { rateLimits: new Map(), orders: [], redemptions: [], runs: [], nextOrderId: 1 };
+  const state = { rateLimits: new Map(), coupons: new Map(), orders: [], redemptions: [], runs: [], nextOrderId: 1 };
+  if (coupon) state.coupons.set(coupon.code, { ...coupon });
   return {
     state,
     prepare(sql) {
@@ -29,7 +32,7 @@ function apiDb({ coupon = null, raceRedemptions = false, orderRow = null } = {})
         bind(...args) { this.args = args; return this; },
         async first() {
           if (/FROM rate_limits/.test(sql)) return state.rateLimits.get(this.args[0]) || null;
-          if (/FROM coupons/.test(sql)) return coupon && coupon.code === this.args[0] ? coupon : null;
+          if (/FROM coupons/.test(sql)) return state.coupons.get(this.args[0]) || null;
           if (/FROM coupon_redemptions/.test(sql)) {
             if (raceRedemptions) return { n: 0 };
             const code = this.args[0];
@@ -46,8 +49,28 @@ function apiDb({ coupon = null, raceRedemptions = false, orderRow = null } = {})
           if (/INSERT INTO notifications/.test(sql)) return { id: 1 };
           return null;
         },
-        async all() { return { results: [] }; },
+        async all() {
+          if (/FROM coupons c/.test(sql)) {
+            const results = [...state.coupons.values()].map(c => ({
+              ...c,
+              redemption_count: state.redemptions.filter(r => r.code === c.code).length,
+            }));
+            return { results };
+          }
+          return { results: [] };
+        },
         async run() {
+          if (/INSERT INTO coupons/.test(sql)) {
+            const [code, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, synced_at] = this.args;
+            state.coupons.set(code, { code, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, synced_at });
+            return { meta: { changes: 1 } };
+          }
+          if (/UPDATE coupons SET/.test(sql)) {
+            const cols = [...sql.split(' WHERE ')[0].matchAll(/(\w+) = \?/g)].map(m => m[1]);
+            const row = state.coupons.get(this.args[this.args.length - 1]);
+            if (row) cols.forEach((col, i) => { row[col] = this.args[i]; });
+            return { meta: { changes: row ? 1 : 0 } };
+          }
           if (/INSERT INTO rate_limits/.test(sql)) {
             const [key, count, windowStart, lastAt, lockedUntil] = this.args;
             state.rateLimits.set(key, { count, window_start: windowStart, last_at: lastAt, locked_until: lockedUntil });
@@ -77,11 +100,10 @@ function apiDb({ coupon = null, raceRedemptions = false, orderRow = null } = {})
   };
 }
 
-// Fresh (non-stale) cached coupon so validateCoupon never needs Shopify.
+// A D1 coupon row as the ops dashboard would have created it.
 function freshCoupon(overrides = {}) {
   return {
     code: 'SAVE10',
-    shopify_discount_id: 'gid://shopify/DiscountCodeNode/1',
     title: 'Save 10',
     value_type: 'percentage',
     value: 10,
@@ -308,9 +330,123 @@ describe('POST /api/orders with coupon', () => {
   });
 });
 
-// ---- createDraftOrder: applied_discount ----
+// ---- ops coupon CRUD: GET/POST/PUT/DELETE /api/ops/coupons ----
 
-describe('createDraftOrder applied_discount', () => {
+describe('ops coupon CRUD endpoints', () => {
+  // Session-authenticated ops request (SESSION_SECRET defaults to 'dev' on both sides).
+  async function opsReq(method, path, body) {
+    const session = await makeSession({});
+    return new Request('https://find.edenmish.com' + path, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'X-Ops': session },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  }
+
+  test('all four endpoints reject requests without an ops session (401)', async () => {
+    const db = apiDb({ coupon: freshCoupon() });
+    const reqs = [
+      new Request('https://find.edenmish.com/api/ops/coupons'),
+      new Request('https://find.edenmish.com/api/ops/coupons', { method: 'POST', body: '{}' }),
+      new Request('https://find.edenmish.com/api/ops/coupons/SAVE10', { method: 'PUT', body: '{}' }),
+      new Request('https://find.edenmish.com/api/ops/coupons/SAVE10', { method: 'DELETE' }),
+    ];
+    for (const req of reqs) {
+      const res = await worker.fetch(req, envFor(db));
+      assert.equal(res.status, 401);
+      assert.deepEqual(await res.json(), { error: 'unauthorized' });
+    }
+    assert.ok(db.state.coupons.has('SAVE10'), 'nothing was modified');
+  });
+
+  test('POST creates a coupon; GET lists it with redemption_count', async () => {
+    const db = apiDb();
+    let res = await worker.fetch(await opsReq('POST', '/api/ops/coupons', {
+      code: ' new15 ', title: '15% off', value_type: 'percentage', value: 15,
+    }), envFor(db));
+    assert.equal(res.status, 200);
+    const created = await res.json();
+    assert.equal(created.ok, true);
+    assert.equal(created.coupon.code, 'NEW15'); // normalized uppercase
+    assert.equal(created.coupon.status, 'active');
+
+    db.state.redemptions.push({ order_id: 1, code: 'NEW15', customer_key: 'x' });
+    res = await worker.fetch(await opsReq('GET', '/api/ops/coupons'), envFor(db));
+    assert.equal(res.status, 200);
+    const { coupons } = await res.json();
+    assert.equal(coupons.length, 1);
+    assert.equal(coupons[0].code, 'NEW15');
+    assert.equal(coupons[0].redemption_count, 1);
+  });
+
+  test('POST with missing fields → 400; duplicate code → 409', async () => {
+    const db = apiDb({ coupon: freshCoupon() });
+    let res = await worker.fetch(await opsReq('POST', '/api/ops/coupons', { code: 'X', value_type: 'percentage' }), envFor(db));
+    assert.equal(res.status, 400);
+    assert.deepEqual(await res.json(), { error: 'missing fields' });
+
+    res = await worker.fetch(await opsReq('POST', '/api/ops/coupons', {
+      code: 'save10', title: 'dup', value_type: 'percentage', value: 5,
+    }), envFor(db));
+    assert.equal(res.status, 409);
+    assert.deepEqual(await res.json(), { error: 'code already exists' });
+    assert.equal(db.state.coupons.get('SAVE10').value, 10, 'existing row untouched');
+  });
+
+  test('PUT updates fields on an existing coupon; unknown code → 404', async () => {
+    const db = apiDb({ coupon: freshCoupon() });
+    let res = await worker.fetch(await opsReq('PUT', '/api/ops/coupons/save10', { value: 25, usage_limit: 3 }), envFor(db));
+    assert.equal(res.status, 200);
+    const d = await res.json();
+    assert.equal(d.ok, true);
+    assert.equal(d.coupon.value, 25);
+    assert.equal(d.coupon.usage_limit, 3);
+    assert.equal(d.coupon.title, 'Save 10', 'untouched field preserved');
+
+    res = await worker.fetch(await opsReq('PUT', '/api/ops/coupons/GHOST', { value: 1 }), envFor(db));
+    assert.equal(res.status, 404);
+  });
+
+  test('DELETE soft-deletes: status → inactive, row kept, code stops validating', async () => {
+    const db = apiDb({ coupon: freshCoupon() });
+    let res = await worker.fetch(await opsReq('DELETE', '/api/ops/coupons/SAVE10'), envFor(db));
+    assert.equal(res.status, 200);
+    const d = await res.json();
+    assert.equal(d.ok, true);
+    assert.equal(d.coupon.status, 'inactive');
+    assert.ok(db.state.coupons.has('SAVE10'), 'row not removed from D1');
+
+    // The public validate endpoint now rejects it.
+    res = await worker.fetch(post('/api/coupons/validate', { ...ORDER_BODY, coupon_code: 'SAVE10' }, nextIp()), envFor(db));
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { valid: false, reason: 'inactive', message: 'הקופון אינו פעיל' });
+
+    res = await worker.fetch(await opsReq('DELETE', '/api/ops/coupons/GHOST'), envFor(db));
+    assert.equal(res.status, 404);
+  });
+
+  test('D1-only end-to-end: ops-created coupon is instantly redeemable on the funnel', async () => {
+    const db = apiDb();
+    let res = await worker.fetch(await opsReq('POST', '/api/ops/coupons', {
+      code: 'LAUNCH', title: 'Launch', value_type: 'fixed_amount', value: 20,
+    }), envFor(db));
+    assert.equal(res.status, 200);
+
+    // No sync/TTL: the very next validate call sees the new code.
+    res = await worker.fetch(post('/api/coupons/validate', { ...ORDER_BODY, coupon_code: 'launch' }, nextIp()), envFor(db));
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), {
+      valid: true, code: 'LAUNCH', subtotal_price: 50, discount_amount: 20, price: 30, title: 'Launch',
+    });
+  });
+});
+
+// ---- createDraftOrder: coupon orders use the final price directly ----
+// The Shopify REST API silently ignores applied_discount on Draft Order creation,
+// so we never inflate + attach a discount — we set the line item to priceNis
+// (the final post-coupon amount) directly.
+
+describe('createDraftOrder coupon pricing', () => {
   const SHOPIFY_ENV = { SHOPIFY_SHOP: 'test.myshopify.com', SHOPIFY_ADMIN_TOKEN: 'shpat_test' };
 
   function captureDraftFetch() {
@@ -327,60 +463,41 @@ describe('createDraftOrder applied_discount', () => {
     service: 'standard', size: 'small', phone: '+972541234567',
   };
 
-  test('coupon order: line item at original subtotal + fixed_amount applied_discount; total == final price', async () => {
+  test('coupon order: line item at final price, no applied_discount', async () => {
     const captured = captureDraftFetch();
     const order = { ...baseOrder, price: 45, subtotal_price: 50, discount_code: 'SAVE10', discount_amount: 5, discount_title: 'Save 10' };
     const draft = await createDraftOrder(SHOPIFY_ENV, order, 45);
     assert.ok(draft);
     const d = captured.body.draft_order;
-    assert.equal(d.line_items[0].price, '50.00'); // ORIGINAL subtotal
-    assert.deepEqual(d.applied_discount, {
-      title: 'SAVE10',
-      description: 'EdenMish coupon',
-      value_type: 'fixed_amount',
-      value: '5.00', // canonical Shopify decimal format, same as the line-item price
-      amount: '5.00',
-    });
-    // Shopify total = line price − applied_discount = the Worker's final price
-    assert.equal(Number(d.line_items[0].price) - Number(d.applied_discount.amount), 45);
+    assert.equal(d.line_items[0].price, '45.00'); // final price, not original subtotal
+    assert.ok(!('applied_discount' in d), 'no applied_discount on Draft Order');
   });
 
-  test('percentage coupon still lands as fixed_amount (no rounding drift)', async () => {
+  test('percentage coupon: line item at post-discount price', async () => {
     const captured = captureDraftFetch();
     // 10% off ₪85 → Worker rounded to ₪9 off, final ₪76.
     const order = { ...baseOrder, price: 76, subtotal_price: 85, discount_code: 'SAVE10', discount_amount: 9 };
     await createDraftOrder(SHOPIFY_ENV, order, 76);
     const d = captured.body.draft_order;
-    assert.equal(d.applied_discount.value_type, 'fixed_amount');
-    assert.equal(d.line_items[0].price, '85.00');
-    assert.equal(Number(d.line_items[0].price) - Number(d.applied_discount.amount), 76);
+    assert.equal(d.line_items[0].price, '76.00');
+    assert.ok(!('applied_discount' in d));
   });
 
-  test('100% coupon: Draft Order payload totals 0.00 (line item minus applied_discount)', async () => {
-    // NOTE: whether Shopify accepts a zero-total Draft Order invoice through the
-    // PayPlus checkout needs live verification — see docs/COUPONS.md.
+  test('100% coupon: line item at 0.00', async () => {
     const captured = captureDraftFetch();
     const order = { ...baseOrder, price: 0, subtotal_price: 50, discount_code: 'FREE100', discount_amount: 50, discount_title: 'Free delivery' };
     await createDraftOrder(SHOPIFY_ENV, order, 0);
     const d = captured.body.draft_order;
-    assert.equal(d.line_items[0].price, '50.00');
-    assert.equal(d.applied_discount.amount, '50.00');
-    assert.equal((Number(d.line_items[0].price) - Number(d.applied_discount.amount)).toFixed(2), '0.00');
+    assert.equal(d.line_items[0].price, '0.00');
+    assert.ok(!('applied_discount' in d));
   });
 
-  test('non-coupon order: payload has no applied_discount and line item is the plain price', async () => {
+  test('non-coupon order: line item is the plain price, no applied_discount', async () => {
     const captured = captureDraftFetch();
     await createDraftOrder(SHOPIFY_ENV, { ...baseOrder, price: 50 }, 50);
     const d = captured.body.draft_order;
     assert.equal(d.line_items[0].price, '50.00');
     assert.ok(!('applied_discount' in d), 'no applied_discount for non-coupon orders');
-  });
-
-  test('discount_amount 0 is treated as no discount', async () => {
-    const captured = captureDraftFetch();
-    await createDraftOrder(SHOPIFY_ENV, { ...baseOrder, price: 50, discount_code: 'SAVE10', discount_amount: 0 }, 50);
-    assert.ok(!('applied_discount' in captured.body.draft_order));
-    assert.equal(captured.body.draft_order.line_items[0].price, '50.00');
   });
 });
 
