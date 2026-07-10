@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
 <title>מעקב הזמנות | עדן מיש</title>
-<meta name="app-version" content="v0.2.0(274162)">
+<meta name="app-version" content="v0.2.0(274272)">
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
@@ -22,7 +22,7 @@ var HE = {received:"נתקבלה",priced:"מחושב",review:"בדיקה",paymen
 var LIVE = ["to_pickup","to_dropoff"];
 var NEXT = {paid:"to_pickup",to_pickup:"picked_up",picked_up:"to_dropoff"};
 var NEXTLBL = {paid:"אשר יציאה לאיסוף",to_pickup:"אשר איסוף ✓",picked_up:"אשר יציאה למסירה"};
-var sess = localStorage.getItem('ops_sess') || null, orders = [], coupons = [], activeOrder = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, activeFilter = "all", currentView = "queue";
+var sess = localStorage.getItem('ops_sess') || null, orders = [], coupons = [], activeOrder = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, activeFilter = "active", currentView = "queue";
 
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
 function fmt(t){return t?new Date(t).toLocaleString("he-IL",{timeZone:"Asia/Jerusalem",hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"}):"—";}
@@ -79,7 +79,7 @@ function renderQueue(){
     problems: orders.filter(function(o){return ["failed","refund_pending"].includes(o.status);}).length
   };
   var revenue = orders.filter(function(o){return o.payment_status==='paid';}).reduce(function(s,o){return s+(o.price||0);},0);
-  var urgentCount = orders.filter(function(o){return o.urgent||o.review_flag;}).length;
+  var urgentCount = orders.filter(function(o){return (o.urgent||o.review_flag) && !["delivered","cancelled","failed"].includes(o.status);}).length;
 
   var filtered = orders;
   if(activeFilter==="inbox") filtered = orders.filter(function(o){return ["received","priced","review","payment_sent"].includes(o.status);});
