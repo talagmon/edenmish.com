@@ -501,14 +501,15 @@ export default {
         if (o) {
           await settleOrder(env, o);
           // Fire invoice on delivery — await so we can return result to ops dashboard.
-          let invResult = null;
+          let invResult = null, invError = null;
           try {
             invResult = await createInvoice(env, o);
             if (invResult && invResult.url) {
               console.log('invoice_created', { order: o.id, invoice: invResult.number, url: invResult.url });
               await env.DB.prepare('UPDATE orders SET invoice_number=?, invoice_url=? WHERE id=?').bind(invResult.number, invResult.url, o.id).run();
-            } else console.log('invoice_null', { order: o.id });
-          } catch(e) { console.log('invoice_failed', { order: o.id, error: e.message }); }
+            } else { invError = 'createInvoice returned null'; console.log('invoice_null', { order: o.id }); }
+          } catch(e) { invError = e.message; console.log('invoice_failed', { order: o.id, error: e.message }); }
+          if (invError) await env.DB.prepare('UPDATE orders SET invoice_url=? WHERE id=?').bind('ERROR: '+invError, o.id).run();
           if (o.email) {
             try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_delivery_summary', recipient: o.email, subject: 'המשלוח מ-EdenMish נמסר ✓', html: deliverySummaryHtml(env, o) }); } catch {}
           }
