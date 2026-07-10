@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
 <title>EdenMish | הזמנת משלוח חדש</title>
-<meta name="app-version" content="v0.2.0(273976)">
+<meta name="app-version" content="v0.2.0(273987)">
 <meta name="description" content="הזמנת שליח EdenMish בגוש דן - מילוי פרטי המשלוח וקבלת הצעת מחיר."/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -296,6 +296,7 @@
 <span class="material-symbols-outlined text-4xl mb-2 text-on-surface-variant peer-checked:text-secondary">schedule</span>
 <h4 class="font-label-bold text-on-surface">חסכוני</h4>
 <p class="text-label-sm text-on-surface-variant">מסירה עד סוף היום</p>
+<p class="text-label-sm text-on-surface-variant opacity-60">איסוף בשעות הבוקר בלבד (עד 13:00)</p>
 <p class="text-primary font-label-bold mt-2">החל מ₪35</p>
 </div>
 </label>
@@ -387,7 +388,7 @@
 <div class="flex items-center justify-center gap-2 mt-3 opacity-60">
   <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener"><img src="/assets/se-footer.png" class="w-7 h-7 rounded-full" alt="Six Elements Altiora"></a>
   <span class="text-label-sm">פותח על ידי <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Six Elements Altiora</a> · <a href="https://talagmon.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Tal Agmon</a></span>
-<span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.2.0(273976)</span>
+<span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.2.0(273987)</span>
 </div>
 </footer>
 <script>
@@ -417,7 +418,7 @@ let pricingReady = false;
 })();
 function zoneOf(city){ const c=String(city||'').trim(); for(const z of [1,2,3]){ if(ZONES[z].includes(c)) return z; } return null; }
 function isoDate(d){ return d ? (d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate())) : ""; }
-function isWeekend(iso){ if(!iso) return false; const m=String(iso).match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/); if(!m) return false; const day=new Date(Date.UTC(+m[1],+m[2]-1,+m[3])).getUTCDay(); return day===5||day===6; }
+function isWeekend(iso){ if(!iso) return false; const m=String(iso).match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/); if(!m) return false; const day=new Date(Date.UTC(+m[1],+m[2]-1,+m[3])).getUTCDay(); return day===6; } // Saturday only (Friday is a regular work day in Israel)
 function computeEstimate(){
   const service = (document.querySelector('input[name="service"]:checked')||{}).value || "standard";
   const size = (document.querySelector('input[name="size"]:checked')||{}).value || "small";
@@ -433,11 +434,16 @@ function computeEstimate(){
   const wknd = isWeekend(isoDate(sched.date));
   let surch = 0; const labels = [];
   if(hour>=19 && hour<22){ surch += SUR_EVENING; labels.push("ערב +₪"+SUR_EVENING); }
-  if(wknd){ labels.push("סופ״ש ×"+WEEKEND_MULT); }
   const surchRow = document.getElementById("est-surch-row");
-  if(surchRow){ if(labels.length){ surchRow.classList.remove("hidden"); set("est-surch-label", labels.join(" · ")); set("est-surch", "₪"+surch); } else { surchRow.classList.add("hidden"); } }
   let total = base!=null ? base + (size==="medium"?SUR_MEDIUM:0) + surch : null;
-  if(total!=null && wknd){ total = Math.round(total*WEEKEND_MULT); } else if(total!=null){ total = Math.round(total); }
+  if(total!=null && wknd){
+    const beforeWknd = total;
+    total = Math.round(total*WEEKEND_MULT);
+    const wkndExtra = total - beforeWknd;
+    labels.push("סופ״ש ×"+WEEKEND_MULT+" (+₪"+wkndExtra+")");
+    surch += wkndExtra;
+  } else if(total!=null){ total = Math.round(total); }
+  if(surchRow){ if(labels.length){ surchRow.classList.remove("hidden"); set("est-surch-label", labels.join(" · ")); set("est-surch", "₪"+surch); } else { surchRow.classList.add("hidden"); } }
   set("price-val", total!=null ? total : "-");
 }
 function loadMapsScript(){
@@ -657,6 +663,7 @@ function genWindows(service, dateType){
   const day = sched.day; if (day == null) return [];
   const h = schedHours(day); if (!h) return [];
   let startH = h.start, endH = h.end;
+  if (service === 'eco') endH = Math.min(endH, 13);
   if (dateType === "today") { const curH = new Date().getHours(); startH = Math.max(startH, curH + 3); }
   const WIN = 3, wins = [];
   for (let hh = startH; hh + WIN <= endH; hh++) wins.push(pad2(hh) + ":00-" + pad2(hh + WIN) + ":00");
@@ -877,7 +884,7 @@ function showEmailSuggestion(suggestedEmail) {
 function hideEmailSuggestion() { emailSuggestBox.hidden = true; }
 if (emailSuggestBox) {
   document.getElementById("email-suggest-accept").addEventListener("click", () => {
-    if (emailState.suggested) { emailInput.value = emailState.suggested; emailState.resolved = true; }
+    if (emailState.suggested) { emailInput.value = emailState.suggested; emailInput.dispatchEvent(new Event('input',{bubbles:true})); emailState.resolved = true; }
     hideEmailSuggestion();
   });
   document.getElementById("email-suggest-keep").addEventListener("click", () => { emailState.resolved = true; hideEmailSuggestion(); });
