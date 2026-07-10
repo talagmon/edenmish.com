@@ -89,11 +89,43 @@ If a PR adds or changes a D1 migration:
   explicitly asked.
 - **Do not run `wrangler deploy`** unless explicitly asked.
 
-## 8. CI/CD
+## 8. CI/CD & branch workflow
 
-- **Never add production auto-deploy on push.** Production deploy must remain
-  `workflow_dispatch` + `production` environment approval.
-- **Theme PRs should get preview deployments** via the `shopify-preview.yml` workflow.
+### Branch strategy (never bypass this)
+
+```
+main     → edenmish.com (production)       [protected — PR required]
+develop  → staging.edenmish.com (staging)  [integration testing]
+feat/*   → auto-preview URL per branch      [isolated testing]
+```
+
+### How to work (agents must follow this)
+
+1. **Create a feature branch from `develop`:**
+   ```bash
+   git checkout develop
+   git checkout -b fix/description   # or feat/description
+   ```
+2. **Commit with conventional messages:**
+   - `fix: ...` → patch version bump on release
+   - `feat: ...` → minor version bump on release
+3. **Push and open a PR to `develop`** — never directly to `main`.
+4. **Cloudflare Pages** auto-deploys a preview at `<branch>.edenmish-v2.pages.dev`.
+5. **CI** (`ci.yml`) runs syntax checks on Worker + Storefront JS on every PR.
+6. **After PR merged to `develop`** → `staging.edenmish.com` is updated automatically.
+7. **Deploy to production is manual** (operator merges `develop` → `main`).
+
+### Deploy rules
+
+- **Never deploy to production.** No `wrangler deploy`, no `npm run deploy`, no
+  `shopify theme push` unless the task explicitly asks.
+- **Local testing only:** `wrangler dev`, `npm run serve`, syntax checks.
+- **Production deploy** remains manual via `workflow_dispatch` in
+  `production-deploy.yml` with environment approval.
+- **Never add production auto-deploy on push.**
+- **Theme PRs should get preview deployments** via `shopify-preview.yml`.
 - **Do not put secrets in workflow files.** Use GitHub repository secrets.
-- **If a workflow adds new secrets or vars**, update `docs/CI_CD.md` to document them.
-- **CI checks** (`ci.yml`) must never require production secrets.
+- **If a workflow adds new secrets or vars**, update `docs/CI_CD.md`.
+- **CI checks** must never require production secrets.
+- **Syntax check before every PR:** `cd storefront && npm run syntax-check` and
+  `cd worker && for f in src/*.js; do node --check "$f"; done`.
