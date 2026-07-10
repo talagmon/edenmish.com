@@ -94,9 +94,9 @@ If a PR adds or changes a D1 migration:
 ### Branch strategy (never bypass this)
 
 ```
-main     → edenmish.com (production)                    [protected — PR required]
-develop  → develop.edenmish-v2.pages.dev (staging)      [integration testing]
-feat/*   → <branch>.edenmish-v2.pages.dev (preview)     [isolated testing]
+main     → edenmish.com (production)       [protected — PR required]
+develop  → staging.edenmish.com (staging)  [integration testing]
+feat/*   → <branch>.edenmish-staging.pages.dev (preview) [isolated testing]
 ```
 
 ### How to work (agents must follow this)
@@ -110,9 +110,9 @@ feat/*   → <branch>.edenmish-v2.pages.dev (preview)     [isolated testing]
    - `fix: ...` → patch version bump on release
    - `feat: ...` → minor version bump on release
 3. **Push and open a PR to `develop`** — never directly to `main`.
-4. **Cloudflare Pages** auto-deploys a preview at `<branch>.edenmish-v2.pages.dev`.
+4. **Cloudflare Pages** auto-deploys a preview at `<branch>.edenmish-staging.pages.dev`.
 5. **CI** (`ci.yml`) runs syntax checks on Worker + Storefront JS on every PR.
-6. **After PR merged to `develop`** → `develop.edenmish-v2.pages.dev` is updated automatically.
+6. **After PR merged to `develop`** → `staging.edenmish.com` is updated automatically.
 7. **Deploy to production is manual** (operator merges `develop` → `main`).
 
 ### Deploy rules

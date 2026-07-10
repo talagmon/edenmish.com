@@ -276,23 +276,26 @@ git push origin "v$(./scripts/current_version.sh)"
 
 ## Staging environment setup
 
-### Enable preview deployments
+Staging uses a **separate Cloudflare Pages project** to ensure 100% isolation from production.
 
-Cloudflare Pages auto-deploys every branch to `<branch>.edenmish-v2.pages.dev`.
-To enable this for non-production branches:
+| Project Name | GitHub Branch | Custom Domain | Environment |
+| :--- | :--- | :--- | :--- |
+| `edenmish-v2` (existing) | `main` | `edenmish.com` | **Production** |
+| `edenmish-staging` (new) | `develop` | `staging.edenmish.com` | **Staging** |
 
-1. Cloudflare Dashboard → Pages → `edenmish-v2` → Settings → Builds & deployments
-2. Under "Preview deployments", ensure it's set to **"All branches"** (not "None")
-3. Save
+### How to create the staging project:
 
-After setup:
-- `main` → `edenmish.com` (production, via custom domains)
-- `develop` → `develop.edenmish-v2.pages.dev` (staging)
-- `feat/*` → `feat-*.edenmish-v2.pages.dev` (preview)
-
-**Do NOT change the production branch** — it must stay on `main`. Custom domains
-(`edenmish.com`, `dash.edenmish.com`, etc.) are tied to the production branch
-project-wide. Changing it would break all live domains.
+1. Cloudflare Dashboard → Pages → Create application → Connect to Git
+2. Repository: `talagmon/edenmish.com`
+3. Project name: `edenmish-staging`
+4. Production branch: `develop`
+5. Build settings:
+   - Framework preset: `None`
+   - Build command: `npm run build`
+   - Build output directory: `storefront/public`
+   - Root directory: `storefront`
+6. Save and Deploy
+7. After first deploy, add `staging.edenmish.com` as a custom domain.
 
 ### Staging Worker
 
