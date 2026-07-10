@@ -55,7 +55,7 @@ export async function setOrderRating(DB, orderId, rating) {
   await DB.prepare(`UPDATE orders SET rating = ? WHERE id = ?`).bind(rating, orderId).run();
 }
 
-export async function listOrders(DB, limit = 100) {
+export async function listOrders(DB, limit = 500) {
   return DB.prepare(`SELECT * FROM orders ORDER BY id DESC LIMIT ?`).bind(limit).all();
 }
 
