@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
 <title>EdenMish | הזמנת משלוח חדש</title>
-<meta name="app-version" content="v0.2.0(272887)">
+<meta name="app-version" content="v0.2.0(273452)">
 <meta name="description" content="הזמנת שליח EdenMish בגוש דן - מילוי פרטי המשלוח וקבלת הצעת מחיר."/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -388,7 +388,7 @@
 <div class="flex items-center justify-center gap-2 mt-3 opacity-60">
   <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener"><img src="/assets/se-footer.png" class="w-7 h-7 rounded-full" alt="Six Elements Altiora"></a>
   <span class="text-label-sm">פותח על ידי <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Six Elements Altiora</a> · <a href="https://talagmon.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Tal Agmon</a></span>
-<span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.2.0(272887)</span>
+<span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.2.0(273452)</span>
 </div>
 </footer>
 <script>
@@ -402,6 +402,7 @@ const distEl = document.getElementById("dist-val");
 const ZONES = { 1:['תל אביב','תל אביב-יפו','תל אביב יפו','רמת גן','גבעתיים','בני ברק'], 2:['הרצליה','רמת השרון','חולון','בת ים','קריית אונו','קרית אונו','גבעת שמואל','אזור','גני תקווה','סביון','אור יהודה'], 3:['ראשון לציון','כפר סבא','רעננה','פתח תקווה','הוד השרון','רמלה','לוד'] };
 let MATRIX = { eco:{1:35,2:55,3:75}, standard:{1:50,2:70,3:115}, flash:{1:85,2:110,3:null} };
 let SUR_MEDIUM = 15, SUR_EVENING = 30, WEEKEND_MULT = 1.5;
+let pricingReady = false;
 // Fetch live pricing rules from the server so the client always matches the Worker's D1 source of truth.
 (async function initPricing(){
   try {
@@ -411,6 +412,8 @@ let SUR_MEDIUM = 15, SUR_EVENING = 30, WEEKEND_MULT = 1.5;
     const R = { ...d.defaults, ...d.overrides };
     MATRIX = { eco:{1:R.eco_z1,2:R.eco_z2,3:R.eco_z3}, standard:{1:R.std_z1,2:R.std_z2,3:R.std_z3}, flash:{1:R.flash_z1,2:R.flash_z2,3:null} };
     SUR_MEDIUM = R.sur_medium; SUR_EVENING = R.sur_evening; WEEKEND_MULT = R.weekend_mult;
+    pricingReady = true;
+    computeEstimate(); // Re-compute with live pricing if address is already selected
   } catch(e){}
 })();
 function zoneOf(city){ const c=String(city||'').trim(); for(const z of [1,2,3]){ if(ZONES[z].includes(c)) return z; } return null; }
@@ -668,7 +671,6 @@ function genWindows(service, dateType){
 }
 function noWindowsMsg(dateType){
   if (sched.day === 6) return "בשבת ובחגים השירות אינו פעיל - בחרו יום אחר.";
-  if (sched.service === 'eco' && schedHours(sched.day)) return "שירות חסכוני זמין לאיסוף בשעות הבוקר בלבד (עד 13:00) - בחרו יום אחר.";
   const h = schedHours(sched.day);
   if (dateType === "today" && h) return "לא נותרו חלונות זמן להיום (שעות הפעילות עד " + pad2(h.end) + ":00) - בחרו יום אחר.";
   return "אין חלונות זמן זמינים בתאריך זה - בחרו יום אחר.";
