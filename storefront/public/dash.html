@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
 <title>מעקב הזמנות | עדן מיש</title>
-<meta name="app-version" content="v0.2.0(272887)">
+<meta name="app-version" content="v0.2.0(274023)">
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
@@ -95,8 +95,8 @@ function renderQueue(){
     if(da!==db) return da-db;
     return b.id-a.id;
   });
-  if(activeFilter==="all") sorted = sorted.slice(0,50);
-  if(activeFilter==="done") sorted = sorted.slice(0,20);
+  if(activeFilter==="all") sorted = sorted.slice(0,200);
+  if(activeFilter==="done") sorted = sorted.slice(0,100);
   var cards = sorted.map(queueCard).join("");
 
   function kpiCard(label,val,color){

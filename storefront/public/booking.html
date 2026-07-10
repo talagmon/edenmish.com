@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
 <title>EdenMish | הזמנת משלוח חדש</title>
-<meta name="app-version" content="v0.2.0(273997)">
+<meta name="app-version" content="v0.2.0(274023)">
 <meta name="description" content="הזמנת שליח EdenMish בגוש דן - מילוי פרטי המשלוח וקבלת הצעת מחיר."/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -68,6 +68,7 @@
 </div>
 <span class="material-symbols-outlined text-secondary text-4xl">payments</span>
 </div>
+<div id="price-note" class="text-center mb-stack-md"><p class="text-label-sm text-on-surface-variant opacity-70">המחיר המוצג הוא הערכה התחלתית — המחיר המדויק יתעדכן לאחר בחירת כתובות האיסוף והיעד</p></div>
 <!-- Coupon UI -->
 <div id="coupon-section" class="mt-stack-md pt-stack-sm border-t border-glass-border">
   <button type="button" id="coupon-toggle" class="text-label-bold text-primary hover:text-secondary transition-colors w-full text-center">
@@ -388,7 +389,7 @@
 <div class="flex items-center justify-center gap-2 mt-3 opacity-60">
   <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener"><img src="/assets/se-footer.png" class="w-7 h-7 rounded-full" alt="Six Elements Altiora"></a>
   <span class="text-label-sm">פותח על ידי <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Six Elements Altiora</a> · <a href="https://talagmon.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Tal Agmon</a></span>
-<span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.2.0(273997)</span>
+<span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.2.0(274023)</span>
 </div>
 </footer>
 <script>
@@ -430,6 +431,8 @@ function computeEstimate(){
   if(service==="flash" && zone===3) base = null;
   const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
   set("est-zone", zone ? ("אזור "+zone) : "החל מ-");
+  const priceNote = document.getElementById("price-note");
+  if (priceNote) priceNote.hidden = !!zone;
   const sizeRow = document.getElementById("est-size-row"); if(sizeRow) sizeRow.classList.toggle("hidden", size!=="medium");
   set("est-base", base!=null ? "₪"+base : "-");
   const hour = sched.service==="flash" ? new Date().getHours() : (sched.window ? parseInt(sched.window.split(":")[0],10) : -1);
@@ -674,6 +677,9 @@ function genWindows(service, dateType){
 function noWindowsMsg(dateType){
   if (sched.day === 6) return "בשבת ובחגים השירות אינו פעיל - בחרו יום אחר.";
   const h = schedHours(sched.day);
+  if (sched.service === 'eco' && dateType === 'today' && h) {
+    return "שירות חסכוני זמין לאיסוף בשעות הבוקר בלבד (עד 13:00). להיום לא נותרו חלונות בוקר — בחרו יום אחר.";
+  }
   if (dateType === "today" && h) return "לא נותרו חלונות זמן להיום (שעות הפעילות עד " + pad2(h.end) + ":00) - בחרו יום אחר.";
   return "אין חלונות זמן זמינים בתאריך זה - בחרו יום אחר.";
 }
