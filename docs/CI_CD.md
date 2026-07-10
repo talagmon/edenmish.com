@@ -276,22 +276,23 @@ git push origin "v$(./scripts/current_version.sh)"
 
 ## Staging environment setup
 
-### Cloudflare Pages branch deploys
+### Enable preview deployments
 
-The `edenmish-v2` Pages project automatically creates preview deployments for
-every branch. These are accessible at `<branch>.edenmish-v2.pages.dev`.
+Cloudflare Pages auto-deploys every branch to `<branch>.edenmish-v2.pages.dev`.
+To enable this for non-production branches:
 
-### Add staging.edenmish.com custom domain
-
-1. Go to Cloudflare Dashboard → Pages → `edenmish-v2` → Custom domains
-2. Add `staging.edenmish.com`
-3. In the production branch dropdown, select `develop`
-4. Cloudflare will provision the DNS record automatically
+1. Cloudflare Dashboard → Pages → `edenmish-v2` → Settings → Builds & deployments
+2. Under "Preview deployments", ensure it's set to **"All branches"** (not "None")
+3. Save
 
 After setup:
-- `main` → `edenmish.com` (production)
-- `develop` → `staging.edenmish.com` (staging)
+- `main` → `edenmish.com` (production, via custom domains)
+- `develop` → `develop.edenmish-v2.pages.dev` (staging)
 - `feat/*` → `feat-*.edenmish-v2.pages.dev` (preview)
+
+**Do NOT change the production branch** — it must stay on `main`. Custom domains
+(`edenmish.com`, `dash.edenmish.com`, etc.) are tied to the production branch
+project-wide. Changing it would break all live domains.
 
 ### Staging Worker
 
