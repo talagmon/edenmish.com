@@ -272,3 +272,44 @@ git push origin "v$(./scripts/current_version.sh)"
 - **Production environment requires approval** (GitHub environment protection rule).
 - **Theme live publish defaults to `false`** — you must explicitly opt in.
 - **No secrets in workflow files.** All credentials are GitHub repository secrets.
+
+
+## Staging environment setup
+
+### Cloudflare Pages branch deploys
+
+The `edenmish-v2` Pages project automatically creates preview deployments for
+every branch. These are accessible at `<branch>.edenmish-v2.pages.dev`.
+
+### Add staging.edenmish.com custom domain
+
+1. Go to Cloudflare Dashboard → Pages → `edenmish-v2` → Custom domains
+2. Add `staging.edenmish.com`
+3. In the production branch dropdown, select `develop`
+4. Cloudflare will provision the DNS record automatically
+
+After setup:
+- `main` → `edenmish.com` (production)
+- `develop` → `staging.edenmish.com` (staging)
+- `feat/*` → `feat-*.edenmish-v2.pages.dev` (preview)
+
+### Staging Worker
+
+Worker changes are tested locally with `wrangler dev`. The staging storefront
+points to the production Worker API (`find.edenmish.com`) — there is no
+separate staging Worker because Worker changes are rare and easily tested locally.
+
+### Conventional commits for versioning
+
+Before merging `develop` → `main`, bump the version:
+
+```bash
+git checkout main
+git merge develop
+npm version patch   # for fixes (0.2.0 → 0.2.1)
+npm version minor   # for features (0.2.0 → 0.3.0)
+git push origin main --follow-tags
+```
+
+The `scripts/inject-version.js` script auto-stamps `package.json` version into
+HTML metadata on every build.
