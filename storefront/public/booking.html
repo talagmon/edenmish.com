@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
 <title>EdenMish | הזמנת משלוח חדש</title>
-<meta name="app-version" content="v0.2.0(273987)">
+<meta name="app-version" content="v0.2.0(273997)">
 <meta name="description" content="הזמנת שליח EdenMish בגוש דן - מילוי פרטי המשלוח וקבלת הצעת מחיר."/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -388,7 +388,7 @@
 <div class="flex items-center justify-center gap-2 mt-3 opacity-60">
   <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener"><img src="/assets/se-footer.png" class="w-7 h-7 rounded-full" alt="Six Elements Altiora"></a>
   <span class="text-label-sm">פותח על ידי <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Six Elements Altiora</a> · <a href="https://talagmon.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Tal Agmon</a></span>
-<span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.2.0(273987)</span>
+<span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.2.0(273997)</span>
 </div>
 </footer>
 <script>
@@ -424,10 +424,12 @@ function computeEstimate(){
   const size = (document.querySelector('input[name="size"]:checked')||{}).value || "small";
   const pz = zoneOf(geo.pickupCity), dz = zoneOf(geo.dropoffCity);
   const zone = (pz && dz) ? Math.max(pz,dz) : null;
-  let base = (zone && MATRIX[service]) ? MATRIX[service][zone] : null;
+  // Default to zone-1 (minimum) when no address is selected yet, so the price
+  // updates immediately when the user picks a service. Refines when address is chosen.
+  let base = zone ? (MATRIX[service] ? MATRIX[service][zone] : null) : (MATRIX[service] ? MATRIX[service][1] : null);
   if(service==="flash" && zone===3) base = null;
   const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
-  set("est-zone", zone ? ("אזור "+zone) : "-");
+  set("est-zone", zone ? ("אזור "+zone) : "החל מ-");
   const sizeRow = document.getElementById("est-size-row"); if(sizeRow) sizeRow.classList.toggle("hidden", size!=="medium");
   set("est-base", base!=null ? "₪"+base : "-");
   const hour = sched.service==="flash" ? new Date().getHours() : (sched.window ? parseInt(sched.window.split(":")[0],10) : -1);
