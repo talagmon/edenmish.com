@@ -39,6 +39,7 @@ const SERVICE_HE = { eco: 'Eco (עד סוף יום)', standard: 'Standard (4 ש�
 // Never throws — invoice failure must not block order processing.
 export async function createInvoice(env, order) {
   try {
+    console.log('gi_start', { id: order.id, hasApiKey: !!env.GREENINVOICE_API_KEY, hasSecret: !!env.GREENINVOICE_SECRET_KEY, price: order.price, email: order.email });
     const name = (order.name || 'לקוח').trim();
     const email = (order.email || '').trim();
     const phone = (order.phone || '').trim();
@@ -166,8 +167,10 @@ export async function createInvoice(env, order) {
       ].filter(Boolean).join(' · '),
     };
 
+    console.log('gi_sending', { id: order.id, docType: doc.type, client: doc.client.name, items: doc.income.length, total: computedTotal });
     const result = await giRequest(env, 'POST', '/documents', doc);
-    if (!result) return null;
+    if (!result) { console.log('gi_api_failed', { id: order.id }); return null; }
+    console.log('gi_success', { id: order.id, number: result.number, url: result.url?.he || result.url?.orig });
 
     return {
       id: result.id,
