@@ -7,10 +7,10 @@ name: Storefront
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths: ['storefront/**']
   pull_request:
-    branches: [main]
+    branches: [main, develop]
     paths: ['storefront/**']
 
 jobs:
