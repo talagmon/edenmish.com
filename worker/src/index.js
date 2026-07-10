@@ -483,7 +483,10 @@ export default {
           await recordPayment(env.DB, id, { amount: o.price * 100, status: 'paid', paid_at: Date.now() });
           // Fire-and-forget: generate GreenInvoice tax invoice (never blocks).
           createInvoice(env, o).then(inv => {
-            if (inv && inv.url) console.log('invoice_created', { order: o.id, invoice: inv.number, url: inv.url });
+            if (inv && inv.url) {
+              console.log('invoice_created', { order: o.id, invoice: inv.number, url: inv.url });
+              env.DB.prepare('UPDATE orders SET invoice_number=?, invoice_url=? WHERE id=?').bind(inv.number, inv.url, o.id).run();
+            }
           }).catch(e => console.log('invoice_failed', { order: o.id, error: e.message }));
           if (o.email) {
             const otp = genOtp();
@@ -501,8 +504,10 @@ export default {
           let invResult = null;
           try {
             invResult = await createInvoice(env, o);
-            if (invResult && invResult.url) console.log('invoice_created', { order: o.id, invoice: invResult.number, url: invResult.url });
-            else console.log('invoice_null', { order: o.id });
+            if (invResult && invResult.url) {
+              console.log('invoice_created', { order: o.id, invoice: invResult.number, url: invResult.url });
+              await env.DB.prepare('UPDATE orders SET invoice_number=?, invoice_url=? WHERE id=?').bind(invResult.number, invResult.url, o.id).run();
+            } else console.log('invoice_null', { order: o.id });
           } catch(e) { console.log('invoice_failed', { order: o.id, error: e.message }); }
           if (o.email) {
             try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_delivery_summary', recipient: o.email, subject: 'המשלוח מ-EdenMish נמסר ✓', html: deliverySummaryHtml(env, o) }); } catch {}
