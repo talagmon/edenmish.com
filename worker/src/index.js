@@ -484,7 +484,7 @@ export default {
           // Fire-and-forget: generate GreenInvoice tax invoice (never blocks).
           createInvoice(env, o).then(inv => {
             if (inv && inv.url) console.log('invoice_created', { order: o.id, invoice: inv.number, url: inv.url });
-          }).catch(() => {});
+          }).catch(e => console.log('invoice_failed', { order: o.id, error: e.message }));
           if (o.email) {
             const otp = genOtp();
             await setEmailAndOtp(env.DB, o.id, o.email, await hashOtp(env, otp), Date.now() + 10 * 60 * 1000);
@@ -497,6 +497,10 @@ export default {
         const o = await getOrderById(env.DB, id);
         if (o) {
           await settleOrder(env, o);
+          // Fire invoice on delivery as well (not just on paid) — covers direct-to-delivered flows.
+          createInvoice(env, o).then(inv => {
+            if (inv && inv.url) console.log('invoice_created', { order: o.id, invoice: inv.number, url: inv.url });
+          }).catch(e => console.log('invoice_failed', { order: o.id, error: e.message }));
           if (o.email) {
             try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_delivery_summary', recipient: o.email, subject: 'המשלוח מ-EdenMish נמסר ✓', html: deliverySummaryHtml(env, o) }); } catch {}
           }
@@ -655,7 +659,7 @@ export default {
             // Fire-and-forget: generate GreenInvoice tax invoice (never blocks).
             createInvoice(env, o).then(inv => {
               if (inv && inv.url) console.log('invoice_created', { order: o.id, invoice: inv.number, url: inv.url });
-            }).catch(() => {});
+            }).catch(e => console.log('invoice_failed', { order: o.id, error: e.message }));
             // Use checkout email if the order doesn't have one (customer entered it in Shopify checkout)
             var custEmail = o.email || parsed.email;
             if (custEmail && env.SENDGRID_API_KEY) {
