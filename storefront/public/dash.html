@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
 <title>מעקב הזמנות | עדן מיש</title>
-<meta name="app-version" content="v0.2.0(274044)">
+<meta name="app-version" content="v0.2.0(274056)">
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
@@ -434,6 +434,10 @@ function renderDetail(o){
   if(isLive && watchId===null) startWatch(o.id);
 }
 
+function overrideStatus(id){
+  var sel = document.getElementById('override-status-'+id).value;
+  if(confirm('לשנות סטטוס ל-'+sel+'?')) setStatus(id,sel);
+}
 function actionsHtml(o){
   var s=o.status, id=o.id;
   var h = '<div class="space-y-3 mt-2">';
@@ -464,7 +468,7 @@ function actionsHtml(o){
     h += '<option value="'+st+'"'+(st===s?' selected':'')+'>'+(HE[st]||st)+'</option>';
   }
   h += '</select>';
-  h += '<button onclick="var sel=document.getElementById('override-status-'+id+'').value;if(confirm('לשנות סטטוס ל-'+sel+'?'))setStatus('+id+',sel)" class="bg-error/20 text-error font-label-bold px-4 py-2 rounded-lg text-sm whitespace-nowrap">עדכן סטטוס</button>';
+  h += '<button onclick="overrideStatus('+id+')" class="bg-error/20 text-error font-label-bold px-4 py-2 rounded-lg text-sm whitespace-nowrap">עדכן סטטוס</button>';
   h += '</div></details>';
   h += '</div>';
   return h;
