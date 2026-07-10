@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
 <title>מעקב הזמנות | עדן מיש</title>
-<meta name="app-version" content="v0.2.0(274023)">
+<meta name="app-version" content="v0.2.0(274044)">
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
@@ -455,6 +455,17 @@ function actionsHtml(o){
   } else if(s==="delivered"){
     h += '<div class="glass-card rounded-xl p-4 text-center"><span class="material-symbols-outlined text-success-mint text-4xl">verified</span><p class="text-success-mint font-bold mt-2">המשלוח נמסר ✓</p></div>';
   }
+  // Manual status override — allows ops to fix stuck orders or re-trigger events (e.g. GreenInvoice)
+  h += '<details class="mt-3"><summary class="text-label-sm text-on-surface-variant opacity-50 cursor-pointer hover:opacity-80">פעולות מתקדמות</summary>';
+  h += '<div class="flex gap-2 mt-2"><select id="override-status-'+id+'" class="flex-1 bg-surface-container-lowest border border-outline-variant text-on-surface rounded-lg p-2 text-sm">';
+  var allStatuses = ["received","priced","review","payment_sent","paid","to_pickup","picked_up","to_dropoff","delivered","cancelled","failed"];
+  for(var i=0;i<allStatuses.length;i++){
+    var st=allStatuses[i];
+    h += '<option value="'+st+'"'+(st===s?' selected':'')+'>'+(HE[st]||st)+'</option>';
+  }
+  h += '</select>';
+  h += '<button onclick="var sel=document.getElementById('override-status-'+id+'').value;if(confirm('לשנות סטטוס ל-'+sel+'?'))setStatus('+id+',sel)" class="bg-error/20 text-error font-label-bold px-4 py-2 rounded-lg text-sm whitespace-nowrap">עדכן סטטוס</button>';
+  h += '</div></details>';
   h += '</div>';
   return h;
 }
