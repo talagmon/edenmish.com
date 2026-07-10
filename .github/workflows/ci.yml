@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 permissions:
   contents: read
@@ -42,6 +42,58 @@ jobs:
         continue-on-error: true
         # Theme check may surface pre-existing warnings; it should not block PRs.
         # Only new offenses introduced by the PR should be reviewed manually.
+
+
+  storefront-checks:
+    name: Storefront syntax checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax check booking form JS
+        run: |
+          python3 -c "
+import re
+with open('storefront/public/booking.html') as f:
+    content = f.read()
+    scripts = re.findall(r'<script>(.*?)</script>', content, re.DOTALL)
+    if scripts:
+        with open('/tmp/booking-script.js', 'w') as out:
+            out.write(scripts[0])
+"
+          node --check /tmp/booking-script.js || exit 1
+          echo '✅ booking.html'
+      - name: Syntax check dashboard JS
+        run: |
+          python3 -c "
+import re
+with open('storefront/public/dash.html') as f:
+    content = f.read()
+    scripts = re.findall(r'<script>(.*?)</script>', content, re.DOTALL)
+    if scripts:
+        with open('/tmp/dash-script.js', 'w') as out:
+            out.write(scripts[0])
+"
+          node --check /tmp/dash-script.js || exit 1
+          echo '✅ dash.html'
+      - name: Syntax check other HTML pages
+        run: |
+          cd storefront/public
+          for f in success.html track.html delivered.html; do
+            python3 -c "
+import re
+with open('$f') as fh:
+    c = fh.read()
+    s = re.findall(r'<script>(.*?)</script>', c, re.DOTALL)
+    if s:
+        with open('/tmp/script.js', 'w') as out:
+            out.write(s[0])
+"
+            node --check /tmp/script.js || exit 1
+            echo "✅ $f"
+          done
 
   version-check:
     name: Version metadata sanity
