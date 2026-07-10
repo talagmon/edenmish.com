@@ -7,7 +7,7 @@ import { zoneOf } from './pricing.js';
 const API_BASE = 'https://api.greeninvoice.co.il/api/v1';
 
 async function giRequest(env, method, path, body) {
-  if (!env.GREENINVOICE_API_KEY || !env.GREENINVOICE_SECRET_KEY) return null;
+  if (!env.GREENINVOICE_API_KEY || !env.GREENINVOICE_SECRET_KEY) throw new Error('Missing GREENINVOICE_API_KEY or GREENINVOICE_SECRET_KEY');
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers: {
@@ -19,8 +19,9 @@ async function giRequest(env, method, path, body) {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
+    const msg = 'GI API ' + res.status + ': ' + text.slice(0, 200);
     console.error('greeninvoice_error', { status: res.status, body: text.slice(0, 500) });
-    return null;
+    throw new Error(msg);
   }
   return res.json();
 }
@@ -38,7 +39,6 @@ const SERVICE_HE = { eco: 'Eco (עד סוף יום)', standard: 'Standard (4 ש�
 // Create a receipt with full price breakdown. Returns { id, number, url } or null.
 // Never throws — invoice failure must not block order processing.
 export async function createInvoice(env, order) {
-  try {
     console.log('gi_start', { id: order.id, hasApiKey: !!env.GREENINVOICE_API_KEY, hasSecret: !!env.GREENINVOICE_SECRET_KEY, price: order.price, email: order.email });
     const name = (order.name || 'לקוח').trim();
     const email = (order.email || '').trim();
@@ -177,10 +177,6 @@ export async function createInvoice(env, order) {
       number: result.number,
       url: result.url?.he || result.url?.orig || null,
     };
-  } catch (e) {
-    console.error('greeninvoice_create_error', e && e.message ? e.message : String(e));
-    return null;
-  }
 }
 
 // Fetch an existing invoice by ID (for status checks or re-sending).
