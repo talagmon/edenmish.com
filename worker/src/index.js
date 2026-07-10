@@ -274,7 +274,7 @@ export default {
       // `wrangler secret put TEST_MODE` in prod.
       const testMode = (env.TEST_MODE === '1' || env.TEST_MODE === 'true') && url.searchParams.get('test') === '1';
       if (testMode) {
-        await setOrderStatus(env.DB, created.id, 'paid', { payment_status: 'paid' });
+        await setOrderStatus(env.DB, created.id, 'priced', { payment_status: 'paid' });
         try { await recordPayment(env.DB, created.id, { amount: (finalPrice || 0) * 100, status: 'paid', payplus_id: 'TEST', paid_at: Date.now() }); } catch (e) {}
         if (b.email) {
           try {
@@ -284,7 +284,7 @@ export default {
             await notifyEmail(env, env.DB, { orderId: created.id, template: 'customer_payment_confirmation', recipient: b.email, subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב (בדיקה)', html: paymentConfirmedHtml({ ...created, ...b, email: b.email, price: finalPrice, ...discountFields }, finalUrl, otp) });
           } catch (e) {}
         }
-        return json({ token, tracking_url: finalUrl, payment_url: null, status: 'paid', price: finalPrice, review: false, reasons: [], test: true }, 200, cors);
+        return json({ token, tracking_url: finalUrl, payment_url: null, status: 'priced', price: finalPrice, review: false, reasons: [], test: true }, 200, cors);
       }
       let paymentUrl = null;
       if (!isReview) {
