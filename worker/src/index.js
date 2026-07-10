@@ -7,7 +7,6 @@ import { corsFor, maskEmail, publicOrderSummary, clientIp, anonKey } from './sec
 import { notifyEmail, notifyWhatsApp } from './notify.js';
 import { normalizeIlPhone } from './validate.js';
 import { validateCoupon, recordRedemption, listCoupons, createCoupon, updateCoupon, deleteCoupon } from './coupons.js';
-import { createInvoice } from './greeninvoice.js';
 
 const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra } });
 const html = (s) => new Response(s, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -481,13 +480,7 @@ export default {
         const o = await getOrderById(env.DB, id);
         if (o) {
           await recordPayment(env.DB, id, { amount: o.price * 100, status: 'paid', paid_at: Date.now() });
-          // Fire-and-forget: generate GreenInvoice tax invoice (never blocks).
-          createInvoice(env, o).then(inv => {
-            if (inv && inv.url) {
-              console.log('invoice_created', { order: o.id, invoice: inv.number, url: inv.url });
-              env.DB.prepare('UPDATE orders SET invoice_number=?, invoice_url=? WHERE id=?').bind(inv.number, inv.url, o.id).run();
-            }
-          }).catch(e => console.log('invoice_failed', { order: o.id, error: e.message }));
+
           if (o.email) {
             const otp = genOtp();
             await setEmailAndOtp(env.DB, o.id, o.email, await hashOtp(env, otp), Date.now() + 10 * 60 * 1000);
@@ -500,16 +493,7 @@ export default {
         const o = await getOrderById(env.DB, id);
         if (o) {
           await settleOrder(env, o);
-          // Fire invoice on delivery — await so we can return result to ops dashboard.
-          let invResult = null, invError = null;
-          try {
-            invResult = await createInvoice(env, o);
-            if (invResult && invResult.url) {
-              console.log('invoice_created', { order: o.id, invoice: invResult.number, url: invResult.url });
-              await env.DB.prepare('UPDATE orders SET invoice_number=?, invoice_url=? WHERE id=?').bind(invResult.number, invResult.url, o.id).run();
-            } else { invError = 'createInvoice returned null'; console.log('invoice_null', { order: o.id }); }
-          } catch(e) { invError = e.message; console.log('invoice_failed', { order: o.id, error: e.message }); }
-          if (invError) await env.DB.prepare('UPDATE orders SET invoice_url=? WHERE id=?').bind('ERROR: '+invError, o.id).run();
+
           if (o.email) {
             try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_delivery_summary', recipient: o.email, subject: 'המשלוח מ-EdenMish נמסר ✓', html: deliverySummaryHtml(env, o) }); } catch {}
           }
@@ -666,10 +650,7 @@ export default {
             // o.price is the FINAL amount (post-coupon when one applied) — the Draft
             // Order's applied_discount guarantees Shopify captured exactly this total.
             await recordPayment(env.DB, o.id, { amount: o.price * 100, status: 'paid', payplus_id: String(parsed.shopifyOrderId), paid_at: Date.now() });
-            // Fire-and-forget: generate GreenInvoice tax invoice (never blocks).
-            createInvoice(env, o).then(inv => {
-              if (inv && inv.url) console.log('invoice_created', { order: o.id, invoice: inv.number, url: inv.url });
-            }).catch(e => console.log('invoice_failed', { order: o.id, error: e.message }));
+
             // Use checkout email if the order doesn't have one (customer entered it in Shopify checkout)
             var custEmail = o.email || parsed.email;
             if (custEmail && env.SENDGRID_API_KEY) {
