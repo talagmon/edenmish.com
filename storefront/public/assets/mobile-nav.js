@@ -1,8 +1,3 @@
-// Lock viewport: block pinch-zoom for an app-like fixed layout (iOS Safari ignores
-// user-scalable=no, so we also intercept gesturestart + multi-touch).
-document.addEventListener('gesturestart', function (e) { e.preventDefault(); }, { passive: false });
-document.addEventListener('touchmove', function (e) { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
-
 // Auto-builds a mobile hamburger menu from each page's existing desktop nav.
 (function () {
   var headerEl = document.querySelector('header') || document.querySelector('nav.fixed');

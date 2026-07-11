@@ -2,7 +2,7 @@
 <html class="dark" dir="rtl" lang="he">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <title>EdenMish | מעקב משלוח</title>
 <meta name="app-version" content="v0.2.0(274272)">
 <meta name="description" content="מעקב חי אחר משלוח EdenMish - הזינו מספר מעקב וקבלו עדכון בזמן אמת."/>
@@ -51,7 +51,8 @@
 <h1 class="font-display-lg text-headline-lg-mobile md:text-display-lg mb-stack-sm text-primary">איפה החבילה שלך?</h1>
 <p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl md:ml-0">הזינו מספר מעקב וקבלו עדכון חי על מיקום השליח וזמן הגעה משוער.</p>
 <form id="entry-form" class="mt-stack-lg max-w-2xl glass-card p-2 rounded-xl flex items-center gap-2 transition-all focus-within:ring-2 focus-within:ring-primary/50">
-<input id="entry-input" class="w-full bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-outline py-3 px-4 font-body-md" placeholder="הזינו מספר מעקב" type="text" dir="ltr"/>
+<label for="entry-input" class="sr-only">מספר מעקב</label>
+<input id="entry-input" class="w-full bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-outline py-3 px-4 font-body-md" placeholder="הזינו מספר מעקב" type="text" dir="ltr" autocomplete="off"/>
 <button class="bg-tertiary text-on-tertiary font-label-bold px-8 py-3 rounded-lg flex items-center gap-2 hover:brightness-110 transition-colors whitespace-nowrap" type="submit">
 <span class="material-symbols-outlined">search</span><span>עקבו</span>
 </button>
@@ -83,12 +84,12 @@
 <h1 class="font-headline-lg text-headline-lg text-on-surface mb-4">אימות זהות</h1>
 <p class="font-body-md text-body-md text-on-surface-variant mb-10 max-w-[320px] mx-auto">שלחנו קוד בן 6 ספרות למייל / לטלפון המקושר למשלוח.</p>
 <div id="otp-container" class="flex flex-row-reverse justify-center gap-2 md:gap-3 mb-6">
-<input class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="0"/>
-<input class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="1"/>
-<input class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="2"/>
-<input class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="3"/>
-<input class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="4"/>
-<input class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="5"/>
+<input aria-label="ספרה 1" autocomplete="one-time-code" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="0"/>
+<input aria-label="ספרה 2" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="1"/>
+<input aria-label="ספרה 3" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="2"/>
+<input aria-label="ספרה 4" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="3"/>
+<input aria-label="ספרה 5" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="4"/>
+<input aria-label="ספרה 6" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="5"/>
 </div>
 <p id="otp-msg" class="text-status-alert font-label-sm mb-6 min-h-[1em]">&nbsp;</p>
 <button id="otp-submit" class="w-full bg-tertiary py-4 rounded-lg text-on-tertiary font-bold text-lg hover:shadow-[0_0_20px_rgba(210,187,255,0.4)] transition-all duration-300 active:scale-95 disabled:opacity-60">המשיכו למעקב</button>
@@ -269,7 +270,7 @@ function renderMap(live, gps, order, trail){
   }
 }
 function startLivePoll(){
-  if(gPoll) return;
+  if(gPoll || document.hidden) return;
   gPoll=setInterval(async ()=>{
     try{
       const r=await fetch(API+"/api/orders/"+encodeURIComponent(token));
@@ -283,6 +284,8 @@ function startLivePoll(){
     }catch(e){}
   }, 5000);
 }
+function stopLivePoll(){ if(gPoll){ clearInterval(gPoll); gPoll=null; } }
+document.addEventListener("visibilitychange", function(){ if(document.hidden) stopLivePoll(); else if(token) startLivePoll(); });
 loadMapsForTrack();
 
 function renderTrack(d){
@@ -385,8 +388,8 @@ function renderTrack(d){
       const pc = document.createElement("div");
       pc.className = "glass-card rounded-2xl p-stack-md mb-stack-md";
       let phtml = '<div class="flex items-center gap-2 mb-stack-sm"><span class="material-symbols-outlined text-success-mint">verified</span><h3 class="font-headline-md text-success-mint">אישור מסירה</h3></div>';
-      if(proof.photo_url) phtml += '<img src="' + proof.photo_url + '" alt="הוכחת מסירה" class="w-full rounded-xl mb-3" style="max-height:300px;object-fit:cover">';
-      if(proof.signature) phtml += '<div class="mb-3"><p class="text-label-sm text-on-surface-variant mb-1">חתימת הלקוח</p><img src="' + proof.signature + '" alt="חתימה" class="rounded-lg" style="max-height:100px;background:rgba(255,255,255,.04)"></div>';
+      if(proof.photo_url) phtml += '<img src="' + esc(proof.photo_url) + '" alt="הוכחת מסירה" class="w-full rounded-xl mb-3" style="max-height:300px;object-fit:cover">';
+      if(proof.signature) phtml += '<div class="mb-3"><p class="text-label-sm text-on-surface-variant mb-1">חתימת הלקוח</p><img src="' + esc(proof.signature) + '" alt="חתימה" class="rounded-lg" style="max-height:100px;background:rgba(255,255,255,.04)"></div>';
       if(proof.receiver_name) phtml += '<p class="text-body-md"><span class="text-on-surface-variant">התקבל על ידי:</span> <b class="text-on-surface">' + esc(proof.receiver_name) + '</b></p>';
       if(proof.delivery_note) phtml += '<p class="text-label-sm text-on-surface-variant mt-1">' + esc(proof.delivery_note) + '</p>';
       pc.innerHTML = phtml;
