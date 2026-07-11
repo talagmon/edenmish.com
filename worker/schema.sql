@@ -7,11 +7,13 @@ CREATE TABLE IF NOT EXISTS orders (
   name TEXT, phone TEXT, customer_type TEXT,
   pickup TEXT, pickup_detail TEXT, pickup_lat REAL, pickup_lng REAL, pickup_city TEXT,
   dropoff TEXT, dropoff_detail TEXT, dropoff_lat REAL, dropoff_lng REAL, dropoff_city TEXT,
-  when_text TEXT, package TEXT, urgent INTEGER DEFAULT 0, notes TEXT,
+  when_text TEXT, when_date TEXT, when_hour INTEGER,
+  service TEXT, size TEXT, package TEXT, urgent INTEGER DEFAULT 0, notes TEXT,
   distance_km REAL,
   price INTEGER, currency TEXT DEFAULT 'ILS',
   review_flag INTEGER DEFAULT 0, review_reason TEXT,
   payment_url TEXT, payment_status TEXT DEFAULT 'none', payment_id TEXT,
+  invoice_number TEXT, invoice_url TEXT,
   -- Path 1 (Shopify Draft Orders + PayPlus app) + future Mesh/J5 pre-auth:
   shopify_draft_order_id INTEGER,   -- Shopify draft order (carries our dynamic price)
   shopify_order_id INTEGER,         -- real Shopify order after checkout completes

@@ -8,7 +8,7 @@ Reference for every D1 migration and how to apply it.
 
 - Run migrations **after merging** the PR that introduced them and **before relying on the feature** in production.
 - Run migrations in **numeric order** (003 → 004 → 005 → …).
-- Migrations are designed to be **idempotent** (`CREATE TABLE IF NOT EXISTS`), so re-running them is safe — but always confirm before running in production.
+- Table-creation migrations are idempotent, but `ALTER TABLE … ADD COLUMN` migrations are not. Run each numbered migration exactly once and verify before continuing.
 - **Do not run `schema.sql` on an existing production DB.** It is for fresh-DB setup only.
 - For a **fresh DB**, use `schema.sql` only (it already includes every current table).
 - For an **existing production DB**, run only the numbered migrations that have not yet been applied.
@@ -164,6 +164,42 @@ SELECT name FROM pragma_table_info('orders') WHERE name IN ('subtotal_price','di
 
 ---
 
+### 009_invoice_tracking.sql
+
+**Purpose:** Adds invoice reference fields to `orders` for invoice metadata returned by
+the payment provider boundary.
+
+**Command:**
+```bash
+wrangler d1 execute edenmish --remote --file=./migrations/009_invoice_tracking.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM pragma_table_info('orders') WHERE name IN ('invoice_number','invoice_url');
+```
+
+---
+
+### 010_order_service_schedule.sql
+
+**Purpose:** Persists the service level, package size, booking date, and booking hour
+already accepted by the order API. These fields drive ops SLA deadlines, service
+analytics, and customer tracking details.
+
+**Command:**
+```bash
+wrangler d1 execute edenmish --remote --file=./migrations/010_order_service_schedule.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM pragma_table_info('orders')
+WHERE name IN ('service','size','when_date','when_hour');
+```
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -176,6 +212,8 @@ SELECT name FROM pragma_table_info('orders') WHERE name IN ('subtotal_price','di
 - [ ] Run `006_pod_signature.sql` if not already applied.
 - [ ] Run `007_order_rating.sql` if not already applied.
 - [ ] Run `008_coupons.sql` if not already applied.
+- [ ] Run `009_invoice_tracking.sql` if not already applied.
+- [ ] Run `010_order_service_schedule.sql` after merge and before deploying the Worker.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).
@@ -206,7 +244,7 @@ it in this PR.
 The following are **planned** but not yet implemented. See `docs/DATA_MODEL_V2.md` for
 the full design.
 
-- `009_data_model_v2_tables.sql` — adds `customers`, `stops`, `route_plans`,
+- A future data-model migration — adds `customers`, `stops`, `route_plans`,
   `route_stops`, `status_events`, `applied_migrations` (additive, no destructive changes).
 - Backfill + read/write-path migration will follow in separate PRs (PR13–PR15 per the plan).
 

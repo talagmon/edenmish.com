@@ -129,6 +129,9 @@ const ORDER_BODY = {
   dropoff_city: 'רמת גן',
   service: 'standard',
   size: 'small',
+  when_text: '10:00-12:00 · 12/07',
+  when_date: '2026-07-12',
+  when_hour: 10,
 };
 
 // Distinct IPs per test — the /api/orders per-IP limit (>5 per 10 min) and the
@@ -151,9 +154,8 @@ const envFor = (db) => ({ DB: db });
 const realFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = realFetch; });
 
-// createOrder bind positions (see db.js): 20=price, 27=subtotal_price,
-// 28=discount_code, 29=discount_amount, 30=discount_title.
-const IDX = { price: 20, subtotal_price: 27, discount_code: 28, discount_amount: 29, discount_title: 30 };
+// createOrder bind positions (see db.js), including persisted schedule/service fields.
+const IDX = { price: 24, subtotal_price: 31, discount_code: 32, discount_amount: 33, discount_title: 34 };
 
 // ---- POST /api/coupons/validate ----
 
@@ -245,12 +247,18 @@ describe('POST /api/orders with coupon', () => {
 
     // Order row snapshot
     assert.equal(db.state.orders.length, 1);
-    const args = db.state.orders[0].args;
+    const inserted = db.state.orders[0];
+    const args = inserted.args;
+    assert.equal((inserted.sql.match(/\?/g) || []).length, args.length, 'INSERT placeholders must match bound values');
     assert.equal(args[IDX.price], 45);
     assert.equal(args[IDX.subtotal_price], 50);
     assert.equal(args[IDX.discount_code], 'SAVE10');
     assert.equal(args[IDX.discount_amount], 5);
     assert.equal(args[IDX.discount_title], 'Save 10');
+    assert.equal(args[16], ORDER_BODY.when_date);
+    assert.equal(args[17], ORDER_BODY.when_hour);
+    assert.equal(args[18], ORDER_BODY.service);
+    assert.equal(args[19], ORDER_BODY.size);
 
     // Redemption recorded with the order id + phone as customer key (E.164)
     assert.equal(db.state.redemptions.length, 1);
