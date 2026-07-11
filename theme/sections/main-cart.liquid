@@ -25,10 +25,10 @@
         style="{% render 'spacing-style', settings: section.settings %}"
       >
         <div class="cart-page__title">
-          {%- content_for 'block', id: 'cart-page-title', type: '_cart-title', force_empty: true %}
+          {%- content_for 'block', id: 'cart-page-title-empty', type: '_cart-title', force_empty: true %}
         </div>
         <div class="cart-page__items">
-          {%- content_for 'block', id: 'cart-page-items', type: '_cart-products', force_empty: true %}
+          {%- content_for 'block', id: 'cart-page-items-empty', type: '_cart-products', force_empty: true %}
         </div>
         {{ cart_page_more_blocks_content }}
       </div>

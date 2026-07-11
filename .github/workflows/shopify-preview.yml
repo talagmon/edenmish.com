@@ -23,7 +23,7 @@ jobs:
         with:
           node-version: '22'
       - name: Install Shopify CLI
-        run: npm install -g @shopify/cli@latest
+        run: npm install -g @shopify/cli@4.4.0
       - name: Inject theme version
         run: |
           chmod +x scripts/*.sh

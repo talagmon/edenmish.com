@@ -46,6 +46,7 @@ function apiDb({ coupon = null, raceRedemptions = false, orderRow = null } = {})
             return { id, token: this.args[0] };
           }
           if (/SELECT \* FROM orders WHERE id/.test(sql)) return orderRow;
+          if (/SELECT \* FROM orders WHERE LOWER\(token\)/.test(sql)) return orderRow;
           if (/INSERT INTO notifications/.test(sql)) return { id: 1 };
           return null;
         },
@@ -60,6 +61,11 @@ function apiDb({ coupon = null, raceRedemptions = false, orderRow = null } = {})
           return { results: [] };
         },
         async run() {
+          if (/UPDATE orders SET status = \?/.test(sql) && orderRow) {
+            orderRow.status = this.args[0];
+            const columns = [...sql.matchAll(/(\w+) = \?/g)].map(m => m[1]);
+            columns.forEach((column, index) => { orderRow[column] = this.args[index]; });
+          }
           if (/INSERT INTO coupons/.test(sql)) {
             const [code, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, synced_at] = this.args;
             state.coupons.set(code, { code, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, synced_at });
@@ -129,6 +135,9 @@ const ORDER_BODY = {
   dropoff_city: 'רמת גן',
   service: 'standard',
   size: 'small',
+  when_text: '10:00-12:00 · 12/07',
+  when_date: '2026-07-12',
+  when_hour: 10,
 };
 
 // Distinct IPs per test — the /api/orders per-IP limit (>5 per 10 min) and the
@@ -144,16 +153,34 @@ function post(path, body, ip) {
   });
 }
 
+async function opsPost(path, body) {
+  const session = await makeSession({ SESSION_SECRET: 'test-secret' });
+  return new Request('https://ops.edenmish.com' + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Ops': session },
+    body: JSON.stringify(body),
+  });
+}
+
+async function shopifyWebhook(body, secret = 'webhook-secret') {
+  const raw = JSON.stringify(body);
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(raw));
+  const hmac = btoa(String.fromCharCode(...new Uint8Array(sig)));
+  return new Request('https://find.edenmish.com/webhooks/shopify', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Shopify-Hmac-SHA256': hmac }, body: raw,
+  });
+}
+
 // No Shopify/SendGrid creds → createCharge returns null, emails are skipped,
 // ensureWebhook no-ops. Nothing in these tests touches the network.
-const envFor = (db) => ({ DB: db });
+const envFor = (db) => ({ DB: db, SESSION_SECRET: 'test-secret' });
 
 const realFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = realFetch; });
 
-// createOrder bind positions (see db.js): 20=price, 27=subtotal_price,
-// 28=discount_code, 29=discount_amount, 30=discount_title.
-const IDX = { price: 20, subtotal_price: 27, discount_code: 28, discount_amount: 29, discount_title: 30 };
+// createOrder bind positions (see db.js), including persisted schedule/service fields.
+const IDX = { price: 24, subtotal_price: 31, discount_code: 32, discount_amount: 33, discount_title: 34 };
 
 // ---- POST /api/coupons/validate ----
 
@@ -245,12 +272,18 @@ describe('POST /api/orders with coupon', () => {
 
     // Order row snapshot
     assert.equal(db.state.orders.length, 1);
-    const args = db.state.orders[0].args;
+    const inserted = db.state.orders[0];
+    const args = inserted.args;
+    assert.equal((inserted.sql.match(/\?/g) || []).length, args.length, 'INSERT placeholders must match bound values');
     assert.equal(args[IDX.price], 45);
     assert.equal(args[IDX.subtotal_price], 50);
     assert.equal(args[IDX.discount_code], 'SAVE10');
     assert.equal(args[IDX.discount_amount], 5);
     assert.equal(args[IDX.discount_title], 'Save 10');
+    assert.equal(args[16], ORDER_BODY.when_date);
+    assert.equal(args[17], ORDER_BODY.when_hour);
+    assert.equal(args[18], ORDER_BODY.service);
+    assert.equal(args[19], ORDER_BODY.size);
 
     // Redemption recorded with the order id + phone as customer key (E.164)
     assert.equal(db.state.redemptions.length, 1);
@@ -328,14 +361,27 @@ describe('POST /api/orders with coupon', () => {
     assert.equal(args[IDX.discount_title], null);
     assert.equal(db.state.redemptions.length, 0);
   });
+
+  test('rejects unsupported enums and oversized public input before insertion', async () => {
+    for (const body of [
+      { ...ORDER_BODY, service: 'teleport' },
+      { ...ORDER_BODY, name: 'x'.repeat(121) },
+      { ...ORDER_BODY, pickup_lat: 200, pickup_lng: 34.8 },
+    ]) {
+      const db = apiDb();
+      const res = await worker.fetch(post('/api/orders', body, nextIp()), envFor(db));
+      assert.equal(res.status, 400);
+      assert.equal(db.state.orders.length, 0);
+    }
+  });
 });
 
 // ---- ops coupon CRUD: GET/POST/PUT/DELETE /api/ops/coupons ----
 
 describe('ops coupon CRUD endpoints', () => {
-  // Session-authenticated ops request (SESSION_SECRET defaults to 'dev' on both sides).
+  // Session-authenticated ops request using an explicit test-only secret.
   async function opsReq(method, path, body) {
-    const session = await makeSession({});
+    const session = await makeSession({ SESSION_SECRET: 'test-secret' });
     return new Request('https://find.edenmish.com' + path, {
       method,
       headers: { 'Content-Type': 'application/json', 'X-Ops': session },
@@ -513,7 +559,7 @@ describe('POST /api/ops/orders/:id/approve on a couponed order', () => {
       pickup: 'א', dropoff: 'ב', email: null,
     };
     const db = apiDb({ orderRow });
-    const session = await makeSession({}); // SESSION_SECRET defaults to 'dev' on both sides
+    const session = await makeSession({ SESSION_SECRET: 'test-secret' });
     const res = await worker.fetch(new Request('https://find.edenmish.com/api/ops/orders/5/approve', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Ops': session },
@@ -534,5 +580,64 @@ describe('POST /api/ops/orders/:id/approve on a couponed order', () => {
     const reprice = db.state.runs.find(c => /UPDATE orders SET price=\?, review_flag=0/.test(c.sql));
     assert.ok(reprice, 'expected the re-price UPDATE');
     assert.equal(reprice.args[0], 60);
+  });
+});
+
+describe('order lifecycle hardening', () => {
+  test('delivered status is successful and idempotent', async () => {
+    const orderRow = { id: 7, token: 'tok7', status: 'to_dropoff', price: 50, payment_mode: 'immediate', email: null };
+    const db = apiDb({ orderRow });
+    let res = await worker.fetch(await opsPost('/api/ops/orders/7/status', { status: 'delivered' }), envFor(db));
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { ok: true, settlement: { settled: true, noop: true } });
+    assert.equal(orderRow.status, 'delivered');
+
+    res = await worker.fetch(await opsPost('/api/ops/orders/7/status', { status: 'delivered' }), envFor(db));
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { ok: true, unchanged: true });
+  });
+
+  test('rejects unknown and backward status transitions', async () => {
+    const orderRow = { id: 8, token: 'tok8', status: 'paid', price: 50 };
+    const db = apiDb({ orderRow });
+    for (const status of ['made_up', 'received']) {
+      const res = await worker.fetch(await opsPost('/api/ops/orders/8/status', { status }), envFor(db));
+      assert.equal(res.status, 409);
+      assert.equal((await res.json()).error, 'invalid transition');
+    }
+  });
+});
+
+describe('Shopify payment reconciliation', () => {
+  const baseOrder = {
+    id: 9, token: 'abcdef1234567890abcdef', status: 'payment_sent', payment_status: 'link_sent',
+    price: 50, currency: 'ILS', shopify_draft_order_id: 123, email: null,
+  };
+  const payload = {
+    id: 999, draft_order_id: 123, financial_status: 'paid', total_price: '50.00', currency: 'ILS',
+    line_items: [{ properties: [{ name: '_tracking_token', value: baseOrder.token }] }],
+  };
+
+  test('records the actual amount only when amount, currency, and draft match', async () => {
+    const db = apiDb({ orderRow: { ...baseOrder } });
+    const req = await shopifyWebhook(payload);
+    const res = await worker.fetch(req, { DB: db, SHOPIFY_WEBHOOK_SECRET: 'webhook-secret' });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).received, true);
+    const payment = db.state.runs.find(c => /INSERT INTO payments/.test(c.sql));
+    assert.ok(payment);
+    assert.equal(payment.args[1], 5000);
+  });
+
+  test('quarantines a paid webhook whose amount does not match', async () => {
+    const db = apiDb({ orderRow: { ...baseOrder } });
+    const req = await shopifyWebhook({ ...payload, total_price: '1.00' });
+    const res = await worker.fetch(req, { DB: db, SHOPIFY_WEBHOOK_SECRET: 'webhook-secret' });
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { received: true, reconciled: false });
+    const mismatch = db.state.runs.find(c => /payment_status=\?/.test(c.sql) && c.args[0] === 'mismatch');
+    assert.ok(mismatch);
+    assert.equal(mismatch.args[2], 'payment_mismatch');
+    assert.ok(!db.state.runs.some(c => /INSERT INTO payments/.test(c.sql)));
   });
 });

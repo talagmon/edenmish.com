@@ -26,10 +26,10 @@ Thumbs.db
 .playwright-mcp/
 .wrangler/
 .dev.vars
+worker/wrangler.staging.generated.toml
 
 # Build outputs / tool caches
 dist/
 build/
 .cache/
 .vite/
-

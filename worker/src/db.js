@@ -8,16 +8,17 @@ export async function createOrder(DB, o) {
        token, status, name, phone, customer_type,
        pickup, pickup_detail, pickup_lat, pickup_lng, pickup_city,
        dropoff, dropoff_detail, dropoff_lat, dropoff_lng, dropoff_city,
-       when_text, package, urgent, notes, distance_km,
+       when_text, when_date, when_hour, service, size, package, urgent, notes, distance_km,
        price, currency, review_flag, review_reason, payment_url, payment_status, created_at,
        subtotal_price, discount_code, discount_amount, discount_title
-     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
      RETURNING id, token`
   ).bind(
     token, o.status ?? 'received', o.name ?? null, o.phone ?? null, o.customer_type ?? null,
     o.pickup ?? null, o.pickup_detail ?? null, o.pickup_lat ?? null, o.pickup_lng ?? null, o.pickup_city ?? null,
     o.dropoff ?? null, o.dropoff_detail ?? null, o.dropoff_lat ?? null, o.dropoff_lng ?? null, o.dropoff_city ?? null,
-    o.when_text ?? null, o.package ?? null, o.urgent ? 1 : 0, o.notes ?? null, o.distance_km ?? null,
+    o.when_text ?? null, o.when_date ?? null, o.when_hour ?? null,
+    o.service ?? null, o.size ?? null, o.package ?? null, o.urgent ? 1 : 0, o.notes ?? null, o.distance_km ?? null,
     o.price ?? null, 'ILS', o.review_flag ? 1 : 0, o.review_reason ?? null, o.payment_url ?? null, o.payment_status ?? 'none', now,
     // Coupon snapshot (migration 008): NULL/0 when no coupon — identical to the old row shape.
     o.subtotal_price ?? null, o.discount_code ?? null, o.discount_amount ?? 0, o.discount_title ?? null
@@ -65,12 +66,21 @@ export async function getStatusHistory(DB, orderId) {
 
 export async function addGps(DB, orderId, lat, lng) {
   await DB.prepare(`INSERT INTO gps_pings (order_id, lat, lng, at) VALUES (?,?,?,?)`).bind(orderId, lat, lng, Date.now()).run();
+  // Bound per-order storage. One thousand five-second samples preserve roughly
+  // 83 minutes of full-resolution history without allowing indefinite D1 growth.
+  await DB.prepare(`DELETE FROM gps_pings
+    WHERE order_id = ? AND id NOT IN (
+      SELECT id FROM gps_pings WHERE order_id = ? ORDER BY at DESC LIMIT 1000
+    )`).bind(orderId, orderId).run();
 }
 export async function latestGps(DB, orderId) {
   return DB.prepare(`SELECT lat, lng, at FROM gps_pings WHERE order_id = ? ORDER BY at DESC LIMIT 1`).bind(orderId).first();
 }
-export async function getGpsTrail(DB, orderId) {
-  const r = await DB.prepare(`SELECT lat, lng, at FROM gps_pings WHERE order_id = ? ORDER BY at ASC`).bind(orderId).all();
+export async function getGpsTrail(DB, orderId, limit = 500) {
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 500, 1000));
+  const r = await DB.prepare(`SELECT lat, lng, at FROM (
+    SELECT lat, lng, at FROM gps_pings WHERE order_id = ? ORDER BY at DESC LIMIT ?
+  ) ORDER BY at ASC`).bind(orderId, safeLimit).all();
   return r.results || [];
 }
 

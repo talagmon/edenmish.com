@@ -30,6 +30,10 @@ It is a **single Worker** that routes by hostname (`find.` vs `ops.`).
 | `ops.edenmish.com` | Ops API (session-gated) | `/api/ops/login`, `/api/ops/orders`, `…/status`, `…/gps`, `…/approve` |
 | (any) | Shopify webhook | `POST /webhooks/shopify` |
 
+Staging uses separate hosts and a separate D1 database:
+`find-staging.edenmish.com`, `ops-staging.edenmish.com`, and
+`edenmish-staging`. It never shares production orders or credentials.
+
 `find.edenmish.com/` (root) redirects to the Shopify booking site (`BOOKING_URL`).
 
 ## Main files (`src/`)
@@ -68,6 +72,12 @@ wrangler deploy        # publishes to find.edenmish.com + ops.edenmish.com (cust
 Account and D1 IDs are configured in `wrangler.toml` (`[[d1_databases]]`,
 `routes`). `account_id` is read from the `CLOUDFLARE_ACCOUNT_ID` env var.
 
+The staging deployment uses `wrangler.staging.toml` as a template. Render it
+with `scripts/render-staging-config.mjs`; the generated config is gitignored.
+GitHub Actions deploys it through `.github/workflows/staging-worker.yml` after
+the one-time staging D1 and environment-secret setup documented in
+`../docs/CI_CD.md`.
+
 ## D1 setup
 
 ```bash
@@ -80,9 +90,9 @@ Database name: `edenmish`. Binding: `DB`.
 ### Schema and migrations
 
 `schema.sql` is the **fresh-DB source of truth** — it defines every current table.
-The numbered migrations (`003`–`008`) add tables/columns that were introduced after the
+The numbered migrations (`003`–`010`) add tables/columns that were introduced after the
 initial schema. Tables are idempotent (`CREATE TABLE IF NOT EXISTS`); `ALTER TABLE …
-ADD COLUMN` migrations (`006`–`008`) must run only on DBs that predate their columns.
+ADD COLUMN` migrations (`006`–`010`) must run only on DBs that predate their columns.
 
 - **Fresh DB:** run `npm run db:init` (schema.sql only).
 - **Existing production DB:** run numbered migrations in order — see **`MIGRATIONS.md`**
@@ -95,14 +105,14 @@ Current tables: `orders`, `status_history`, `gps_pings`, `payments`, `pricing_ru
 
 ## Secret checklist
 
-All secrets are set via `wrangler secret put <NAME>`. They **no-op cleanly** if
-unset (code checks for their presence). See `../docs/ENVIRONMENT.md` for the
-full list and placeholders.
+All secrets are set via `wrangler secret put <NAME>`. Optional integrations no-op
+if unset, while sessions and OTP creation fail closed without `SESSION_SECRET`.
+See `../docs/ENVIRONMENT.md` for the full list and placeholders.
 
 | Secret | Required for | Notes |
 |---|---|---|
 | `OPS_PIN` | ops dashboard login | shared PIN today |
-| `SESSION_SECRET` | signed ops cookie + OTP hashing | falls back to `'dev'` if unset (do NOT leave as `dev` in prod) |
+| `SESSION_SECRET` | signed ops cookie + OTP hashing | mandatory; auth/order OTP flows fail closed if unset |
 | `MAPS_KEY` | tracking page live map (injected into HTML) | Google Maps JS key |
 | `SHOPIFY_ADMIN_TOKEN` | creating Draft Orders (`shpat_…`) | Worker-side charge |
 | `SHOPIFY_WEBHOOK_SECRET` | verifying `orders/paid` webhook | webhook fails closed (401) if unset |
@@ -141,16 +151,18 @@ cd worker
 See **`MIGRATIONS.md`** for the full reference (purpose, verification queries, order).
 
 ```bash
-wrangler d1 execute edenmish --file=./migrations/003_rate_limits.sql
-wrangler d1 execute edenmish --file=./migrations/004_delivery_proofs.sql
-wrangler d1 execute edenmish --file=./migrations/005_notifications.sql
-wrangler d1 execute edenmish --file=./migrations/006_pod_signature.sql
-wrangler d1 execute edenmish --file=./migrations/007_order_rating.sql
-wrangler d1 execute edenmish --file=./migrations/008_coupons.sql
+wrangler d1 execute edenmish --remote --file=./migrations/003_rate_limits.sql
+wrangler d1 execute edenmish --remote --file=./migrations/004_delivery_proofs.sql
+wrangler d1 execute edenmish --remote --file=./migrations/005_notifications.sql
+wrangler d1 execute edenmish --remote --file=./migrations/006_pod_signature.sql
+wrangler d1 execute edenmish --remote --file=./migrations/007_order_rating.sql
+wrangler d1 execute edenmish --remote --file=./migrations/008_coupons.sql
+wrangler d1 execute edenmish --remote --file=./migrations/009_invoice_tracking.sql
+wrangler d1 execute edenmish --remote --file=./migrations/010_order_service_schedule.sql
 ```
 
-> Run only migrations that have not already been applied. They are idempotent, but
-> always confirm before running in production.
+> Run only migrations that have not already been applied. Several `ALTER TABLE`
+> migrations are not idempotent and will fail if repeated.
 
 ### 3. Required Worker secrets
 
@@ -181,10 +193,10 @@ Set in `wrangler.toml [vars]` (non-secret):
 | `OPS_EMAIL` | Eden's ops alert address |
 | `SHOPIFY_SHOP` | `edenmish.myshopify.com` |
 | `SHOPIFY_API_VERSION` | `2026-04` |
-| `ALLOWED_ORIGINS` | `https://edenmish.com,https://www.edenmish.com` |
+| `ALLOWED_ORIGINS` | `https://edenmish.com,https://www.edenmish.com,https://v2.edenmish.com,https://dash.edenmish.com,https://edenmish-v2.pages.dev` |
 
-> `ALLOWED_ORIGINS` controls CORS. If unset, CORS falls back to `*` (open).
-> Shopify theme-preview domains may need to be added during testing.
+> `ALLOWED_ORIGINS` controls CORS and is required for the credentialed ops cookie.
+> Shopify theme-preview domains may need to be added temporarily during testing.
 
 ### 5. Shopify webhook
 

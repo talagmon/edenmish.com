@@ -38,9 +38,14 @@ jobs:
             echo "::error::Migration confirmation required. Type 'I ran required migrations' in the workflow input."
             echo ""
             echo "Required production migrations (run manually before deploying):"
-            echo "  wrangler d1 execute edenmish --file=./migrations/003_rate_limits.sql"
-            echo "  wrangler d1 execute edenmish --file=./migrations/004_delivery_proofs.sql"
-            echo "  wrangler d1 execute edenmish --file=./migrations/005_notifications.sql"
+            echo "  wrangler d1 execute edenmish --remote --file=./migrations/003_rate_limits.sql"
+            echo "  wrangler d1 execute edenmish --remote --file=./migrations/004_delivery_proofs.sql"
+            echo "  wrangler d1 execute edenmish --remote --file=./migrations/005_notifications.sql"
+            echo "  wrangler d1 execute edenmish --remote --file=./migrations/006_pod_signature.sql"
+            echo "  wrangler d1 execute edenmish --remote --file=./migrations/007_order_rating.sql"
+            echo "  wrangler d1 execute edenmish --remote --file=./migrations/008_coupons.sql"
+            echo "  wrangler d1 execute edenmish --remote --file=./migrations/009_invoice_tracking.sql"
+            echo "  wrangler d1 execute edenmish --remote --file=./migrations/010_order_service_schedule.sql"
             echo ""
             echo "See worker/MIGRATIONS.md for verification queries."
             exit 1
@@ -90,13 +95,13 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           cd worker
-          npm install
+          npm ci
           npx wrangler deploy
           echo "✅ Worker deployed to find.edenmish.com + ops.edenmish.com"
 
       - name: Install Shopify CLI
         if: ${{ inputs.deploy_theme }}
-        run: npm install -g @shopify/cli@latest
+        run: npm install -g @shopify/cli@4.4.0
 
       - name: Push unpublished theme
         if: ${{ inputs.deploy_theme }}
@@ -110,7 +115,11 @@ jobs:
         if: ${{ inputs.deploy_theme && inputs.publish_theme }}
         run: |
           echo "::warning::Publishing theme LIVE. This cannot be undone from this workflow."
+          # Merchant settings in the live theme editor are production data. Keep
+          # preview pushes complete, but never overwrite those files on a live push.
           shopify theme push --path theme --live \
+            --ignore "config/settings_data.json" \
+            --ignore "templates/*.json" \
             --store "${{ secrets.SHOPIFY_STORE }}" \
             --password "${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}"
           echo "✅ Theme published LIVE on edenmish.com"

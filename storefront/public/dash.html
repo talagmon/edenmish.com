@@ -2,7 +2,7 @@
 <html class="dark" dir="rtl" lang="he">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <title>מעקב הזמנות | עדן מיש</title>
 <meta name="app-version" content="v0.2.0(274272)">
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -16,27 +16,41 @@
 </head>
 <body class="bg-surface-dim">
 <div id="app">טוען…</div>
+<script src="/assets/api-origin.js"></script>
 <script>
-var API = "https://ops.edenmish.com";
+var API = window.EDEN_API.ops;
 var HE = {received:"נתקבלה",priced:"מחושב",review:"בדיקה",payment_sent:"תשלום נשלח",paid:"שולם",to_pickup:"בדרך לאיסוף",picked_up:"נאסף",to_dropoff:"בדרך למסירה",delivered:"נמסר",failed:"נכשל",cancelled:"בוטל"};
 var LIVE = ["to_pickup","to_dropoff"];
 var NEXT = {paid:"to_pickup",to_pickup:"picked_up",picked_up:"to_dropoff"};
 var NEXTLBL = {paid:"אשר יציאה לאיסוף",to_pickup:"אשר איסוף ✓",picked_up:"אשר יציאה למסירה"};
-var sess = localStorage.getItem('ops_sess') || null, orders = [], coupons = [], activeOrder = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, activeFilter = "active", currentView = "queue";
+var orders = [], coupons = [], activeOrder = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, gpsOrderId = null, gpsState = "idle", activeFilter = "active", currentView = "queue";
 
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
 function fmt(t){return t?new Date(t).toLocaleString("he-IL",{timeZone:"Asia/Jerusalem",hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"}):"—";}
 function $(id){return document.getElementById(id);}
+function showTransientError(message){
+  var el=$("ops-network-error");
+  if(!el){el=document.createElement("div");el.id="ops-network-error";el.setAttribute("role","alert");el.className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] bg-error text-white px-4 py-3 rounded-xl shadow-xl max-w-[90vw]";document.body.appendChild(el);}
+  el.textContent=message;el.hidden=false;clearTimeout(el._timer);el._timer=setTimeout(function(){el.hidden=true;},5000);
+}
+function connectionErrorView(){
+  $("app").innerHTML = '<div class="min-h-screen flex items-center justify-center p-gutter-mobile">'+
+    '<div class="glass-card rounded-2xl p-stack-lg max-w-sm w-full text-center" role="alert">'+
+    '<span class="material-symbols-outlined text-error text-5xl mb-stack-sm">cloud_off</span>'+
+    '<h1 class="font-headline-md text-headline-md text-primary mb-stack-sm">לא ניתן להתחבר למרכז הבקרה</h1>'+
+    '<p class="text-body-md text-on-surface-variant mb-stack-lg">סביבת השרת אינה זמינה כרגע. לא בוצע שום שינוי בהזמנות.</p>'+
+    '<button class="w-full bg-primary text-on-primary font-headline-md py-3 rounded-xl" onclick="refresh()">נסו שוב</button>'+
+    '</div></div>';
+}
 async function api(path,opts){
   opts=opts||{};opts.headers=opts.headers||{};
-  if(sess)opts.headers["X-Ops"]=sess;
   opts.headers["Content-Type"]="application/json";
+  opts.credentials="include";
   return fetch(API+path,opts);
 }
 
-// On page load, try to restore from localStorage — if valid, skip login.
-if(sess) refresh();
-else loginView();
+// The session is held only in an HttpOnly cookie. JavaScript never receives or
+// persists the bearer credential; the initial refresh at the end probes it.
 
 function loginView(){
   $("app").innerHTML = '<div class="min-h-screen flex items-center justify-center p-gutter-mobile">'+
@@ -52,15 +66,19 @@ function loginView(){
 
 async function doLogin(){
   var pin = $("pin").value;
-  var r = await fetch(API+"/api/ops/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pin:pin})});
-  if(r.ok){sess=(await r.json()).session;localStorage.setItem('ops_sess',sess);await refresh();}
-  else{alert(r.status===429?"יותר מדי ניסיונות":"PIN שגוי");}
+  try{
+    var r = await fetch(API+"/api/ops/login",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({pin:pin})});
+    if(r.ok){await refresh();}
+    else{alert(r.status===429?"יותר מדי ניסיונות":"PIN שגוי");}
+  }catch(e){connectionErrorView();}
 }
-function logout(){sess=null;localStorage.removeItem('ops_sess');loginView();}
+async function logout(){try{await api("/api/ops/logout",{method:"POST"});}finally{stopWatch();loginView();}}
 
 async function refresh(){
-  var r = await api("/api/ops/orders");
-  if(!r.ok){sess=null;localStorage.removeItem('ops_sess');return loginView();}
+  var r;
+  try{r = await api("/api/ops/orders");}catch(e){return connectionErrorView();}
+  if(r.status===401) return loginView();
+  if(!r.ok) return showTransientError("לא ניתן לרענן כרגע. בדקו את החיבור ונסו שוב.");
   orders = (await r.json()).orders || [];
   if(activeOrder){
     var u = orders.find(function(o){return o.id===activeOrder.id;});
@@ -332,9 +350,7 @@ function swipeTransitionEnd(e){
   }
 }
 function cancelOrder(id){
-  api("/api/ops/orders/"+id+"/status",{method:"POST",body:JSON.stringify({status:"cancelled"})}).then(function(){
-    refresh();
-  }).catch(function(){ alert("שגיאה בביטול ההזמנה"); refresh(); });
+  setStatus(id,"cancelled");
 }
 
 function openOrder(id){
@@ -431,7 +447,6 @@ function renderDetail(o){
     actionsHtml(o)+
     '</main>';
 
-  if(isLive && watchId===null) startWatch(o.id);
 }
 
 function overrideStatus(id){
@@ -441,6 +456,7 @@ function overrideStatus(id){
 function actionsHtml(o){
   var s=o.status, id=o.id;
   var h = '<div class="space-y-3 mt-2">';
+  if(LIVE.includes(s)) h += gpsControlHtml(id);
   if(s==="review"||s==="priced"||s==="received"){
     h += '<div class="flex gap-2"><input type="number" min="1" id="price-'+id+'" value="'+(o.price||"")+'" placeholder="₪" class="flex-1 bg-surface-container-lowest border border-outline-variant text-on-surface rounded-lg p-3 text-center text-lg"/>';
     h += '<button onclick="approveInline('+id+')" class="bg-secondary text-on-secondary font-label-bold px-4 py-3 rounded-lg whitespace-nowrap">אישור מחיר ←</button></div>';
@@ -492,8 +508,15 @@ async function approveInline(id){
   } else {alert("שגיאה");}
 }
 function copyPay(url){if(navigator.clipboard)navigator.clipboard.writeText(url).catch(function(){});}
-async function markPaid(id){if(!confirm("לסמן כשולם ידנית?"))return;await api("/api/ops/orders/"+id+"/status",{method:"POST",body:JSON.stringify({status:"paid"})});refresh();}
-async function setStatus(id,st){await api("/api/ops/orders/"+id+"/status",{method:"POST",body:JSON.stringify({status:st})});if(st==="to_pickup"||st==="to_dropoff")startWatch(id);refresh();}
+async function markPaid(id){if(!confirm("לסמן כשולם ידנית?"))return;await setStatus(id,"paid");}
+async function setStatus(id,st){
+  try{
+    var r=await api("/api/ops/orders/"+id+"/status",{method:"POST",body:JSON.stringify({status:st})});
+    if(!r.ok){var d=await r.json().catch(function(){return{};});throw new Error(d.error||"status_update_failed");}
+    if(["picked_up","delivered","failed","cancelled"].includes(st))stopWatch();
+    await refresh();
+  }catch(e){showTransientError("לא הצלחנו לעדכן את ההזמנה. נסו שוב.");}
+}
 
 function showPod(id){
   $("app").innerHTML =
@@ -565,19 +588,51 @@ async function submitPod(id){
   }
 }
 
-function startWatch(id){
-  if(watchId!==null)return;
-  if(!navigator.geolocation)return;
-  watchId=navigator.geolocation.watchPosition(function(p){
-    var c=p.coords;
-    api("/api/ops/orders/"+id+"/gps",{method:"POST",body:JSON.stringify({lat:c.latitude,lng:c.longitude})});
-  },function(){},{enableHighAccuracy:true,maximumAge:5000});
+function gpsControlHtml(id){
+  var state=gpsOrderId===id?gpsState:"idle";
+  var sharing=watchId!==null&&state==="active";
+  var requesting=state==="requesting";
+  var status=sharing?"שיתוף המיקום פעיל":requesting?"ממתין לאישור מיקום":state==="denied"?"הרשאת המיקום נדחתה":state==="error"?"המיקום אינו זמין כרגע":"שיתוף המיקום כבוי";
+  var icon=sharing?"location_on":requesting?"progress_activity":"location_off";
+  var label=sharing||requesting?"הפסקת שיתוף מיקום":"התחלת שיתוף מיקום";
+  var tone=sharing?"text-success-mint":state==="denied"||state==="error"?"text-error":"text-on-surface-variant";
+  return '<div id="gps-control-'+id+'" class="glass-card rounded-xl p-3 border border-outline-variant/30">'+
+    '<div class="flex items-center justify-between gap-3 mb-2"><div class="flex items-center gap-2 '+tone+'"><span class="material-symbols-outlined">'+icon+'</span><span id="gps-status-'+id+'" aria-live="polite" class="font-label-bold text-label-sm">'+status+'</span></div></div>'+
+    '<button type="button" onclick="toggleGps('+id+')" class="w-full '+(sharing||requesting?'bg-error/15 text-error':'bg-secondary/15 text-secondary')+' font-label-bold py-3 rounded-xl">'+label+'</button></div>';
 }
-function stopWatch(){if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null;}}
+function updateGpsControl(id){
+  var el=$("gps-control-"+id);if(el)el.outerHTML=gpsControlHtml(id);
+}
+function toggleGps(id){
+  if((watchId!==null||gpsState==="requesting")&&gpsOrderId===id)stopWatch();else startWatch(id);
+}
+function startWatch(id){
+  if(!navigator.geolocation){gpsState="error";gpsOrderId=id;updateGpsControl(id);showTransientError("שירותי מיקום אינם זמינים במכשיר הזה.");return;}
+  if(watchId!==null)stopWatch();
+  gpsOrderId=id;gpsState="requesting";updateGpsControl(id);
+  try{
+    watchId=navigator.geolocation.watchPosition(function(p){
+      gpsState="active";updateGpsControl(id);
+      var c=p.coords;
+      api("/api/ops/orders/"+id+"/gps",{method:"POST",body:JSON.stringify({lat:c.latitude,lng:c.longitude})}).catch(function(){});
+    },function(err){
+      if(watchId!==null)navigator.geolocation.clearWatch(watchId);
+      watchId=null;gpsState=err&&err.code===1?"denied":"error";updateGpsControl(id);
+      showTransientError(gpsState==="denied"?"הרשאת המיקום נדחתה. ניתן לנסות שוב מהכפתור.":"לא הצלחנו לקבל מיקום. בדקו את שירותי המיקום ונסו שוב.");
+    },{enableHighAccuracy:true,maximumAge:5000,timeout:15000});
+  }catch(e){watchId=null;gpsState="error";updateGpsControl(id);showTransientError("לא הצלחנו להפעיל שיתוף מיקום.");}
+}
+function stopWatch(){
+  var id=gpsOrderId;
+  if(watchId!==null)navigator.geolocation.clearWatch(watchId);
+  watchId=null;gpsOrderId=null;gpsState="idle";
+  if(id!=null)updateGpsControl(id);
+}
 
 async function refreshCoupons(){
   var r = await api("/api/ops/coupons");
-  if(!r.ok){sess=null;localStorage.removeItem('ops_sess');return loginView();}
+  if(r.status===401) return loginView();
+  if(!r.ok) return showTransientError("לא ניתן לטעון קופונים כרגע.");
   coupons = (await r.json()).coupons || [];
   if(currentView==="coupons") renderCoupons();
 }
@@ -718,8 +773,8 @@ async function deleteCoupon(code){
   else { alert("שגיאה במחיקה"); }
 }
 
-loginView();
-setInterval(function(){if(sess)refresh();},20000);
+refresh();
+setInterval(function(){if(!(document.activeElement&&document.activeElement.tagName==="INPUT"))refresh();},20000);
 </script>
 </body>
 </html>

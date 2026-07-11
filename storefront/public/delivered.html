@@ -28,8 +28,9 @@
     <p class="mt-2">טוען פרטי משלוח…</p>
   </div>
 </div>
+<script src="/assets/api-origin.js"></script>
 <script>
-const API = "https://find.edenmish.com";
+const API = window.EDEN_API.find;
 const WHATSAPP = "972534058498";
 const MAILTO = "support@edenmish.com";
 const $ = id => document.getElementById(id);
@@ -165,7 +166,7 @@ function renderRating(o){
   return '<div id="rating-card" class="glass-card rounded-xl p-stack-lg text-center shimmer-bg border border-secondary/20">'+
     '<h3 class="font-headline-md text-headline-md text-secondary mb-stack-md">דרג את השירות שלנו</h3>'+
     '<div id="stars" class="flex justify-center gap-stack-sm mb-stack-sm">'+
-      [1,2,3,4,5].map(n => '<span class="material-symbols-outlined star text-secondary-fixed-dim text-[32px]" data-n="'+n+'">star</span>').join('')+
+      [1,2,3,4,5].map(n => '<button type="button" class="material-symbols-outlined star text-secondary-fixed-dim text-[32px] rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary" data-n="'+n+'" aria-label="דירוג '+n+' מתוך 5">star</button>').join('')+
     '</div>'+
     '<p id="rating-msg" class="text-label-sm text-on-surface-variant min-h-[1em]">הדירוג שלך עוזר לנו להשתפר</p>'+
   '</div>';

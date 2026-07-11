@@ -23,13 +23,13 @@ describe('Frontend: Pages exist', () => {
   }
 });
 
-describe('Frontend: RTL + viewport', () => {
+describe('Frontend: RTL + accessible viewport', () => {
   for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'success.html', 'error.html']) {
-    test(`${page} is RTL Hebrew with locked viewport`, () => {
+    test(`${page} is RTL Hebrew and allows browser zoom`, () => {
       const h = readPage(page);
       assertContains(h, 'dir="rtl"', `${page} RTL`);
       assertContains(h, 'lang="he"', `${page} Hebrew`);
-      assertContains(h, 'user-scalable=no', `${page} viewport locked`);
+      assert.ok(!h.includes('user-scalable=no'), `${page} must not disable browser zoom`);
     });
   }
 });
@@ -153,6 +153,64 @@ describe('Frontend: Tracking page', () => {
   });
 });
 
+describe('Frontend: Security and accessibility hardening', () => {
+  test('ops dashboard uses cookie credentials instead of localStorage bearer tokens', () => {
+    const html = readPage('dash.html');
+    assert.ok(!html.includes("localStorage.getItem('ops_sess')"));
+    assert.ok(!html.includes('X-Ops'));
+    assertContains(html, 'credentials="include"');
+  });
+
+  test('static responses define a restrictive Content Security Policy', () => {
+    const headers = readFileSync(join(PUB, '_headers'), 'utf8');
+    assertContains(headers, 'Content-Security-Policy:');
+    assertContains(headers, "object-src 'none'");
+    assertContains(headers, "base-uri 'self'");
+  });
+
+  test('delivery rating is keyboard-operable', () => {
+    const html = readPage('delivered.html');
+    assertContains(html, '<button type="button" class="material-symbols-outlined star');
+    assertContains(html, 'aria-label="דירוג ');
+  });
+
+  test('FAQ controls expose keyboard and expanded state', () => {
+    const html = readPage('about.html');
+    assertContains(html, 'role="button"');
+    assertContains(html, 'tabindex="0"');
+    assertContains(html, 'aria-expanded=');
+  });
+
+  test('staging and preview pages use isolated Worker origins', () => {
+    const routing = readFileSync(join(PUB, 'assets', 'api-origin.js'), 'utf8');
+    assertContains(routing, "host === 'staging.edenmish.com'");
+    assertContains(routing, "host.endsWith('.pages.dev')");
+    assertContains(routing, 'https://find-staging.edenmish.com');
+    assertContains(routing, 'https://ops-staging.edenmish.com');
+    for (const page of ['booking.html', 'track.html', 'delivered.html', 'dash.html']) {
+      assertContains(readPage(page), '/assets/api-origin.js', `${page} shared API routing`);
+    }
+  });
+
+  test('ops dashboard renders a retryable connection error instead of hanging', () => {
+    const html = readPage('dash.html');
+    assertContains(html, 'function connectionErrorView()');
+    assertContains(html, 'לא ניתן להתחבר למרכז הבקרה');
+    assertContains(html, 'onclick="refresh()"');
+    assertContains(html, 'catch(e){return connectionErrorView();}');
+  });
+
+  test('ops dashboard requests GPS only from an explicit start/stop control', () => {
+    const html = readPage('dash.html');
+    assertContains(html, 'התחלת שיתוף מיקום');
+    assertContains(html, 'הפסקת שיתוף מיקום');
+    assertContains(html, 'aria-live="polite"');
+    assertContains(html, 'function toggleGps(id)');
+    assert.ok(!html.includes('if(isLive && watchId===null) startWatch(o.id)'), 'detail rendering must not request location');
+    assert.ok(!html.includes('if(st==="to_pickup"||st==="to_dropoff")startWatch(id)'), 'status changes must not request location');
+  });
+});
+
 describe('Frontend: Legal pages', () => {
   test('Terms page has עוסק פטור + number', () => {
     const h = readPage('terms.html');
@@ -175,10 +233,10 @@ describe('Frontend: Legal pages', () => {
 });
 
 describe('Frontend: Mobile nav', () => {
-  test('mobile-nav.js exists and has zoom lock', () => {
+  test('mobile-nav.js exists and does not block zoom gestures', () => {
     const js = readFileSync(join(PUB, 'assets', 'mobile-nav.js'), 'utf8');
-    assertContains(js, 'gesturestart', 'iOS zoom lock');
-    assertContains(js, 'touches.length > 1', 'pinch zoom lock');
+    assert.ok(!js.includes('gesturestart'), 'must not block iOS zoom');
+    assert.ok(!js.includes('touches.length > 1'), 'must not block pinch zoom');
     assertContains(js, 'burger', 'hamburger builder');
     assertContains(js, 'עוסק פטור', 'legal footer line');
   });

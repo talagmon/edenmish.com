@@ -12,8 +12,17 @@ export function corsFor(req, env) {
     return { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': methods, 'Access-Control-Allow-Headers': hdrs };
   }
   const origin = req.headers.get('origin') || '';
-  if (origin && configured.includes(origin)) {
-    return { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': methods, 'Access-Control-Allow-Headers': hdrs, 'Vary': 'Origin' };
+  const allowed = configured.some((rule) => {
+    if (rule === origin) return true;
+    if (!rule.startsWith('https://*.')) return false;
+    try {
+      const url = new URL(origin);
+      const suffix = rule.slice('https://*'.length);
+      return url.protocol === 'https:' && url.port === '' && url.hostname.endsWith(suffix) && url.hostname.length > suffix.length;
+    } catch { return false; }
+  });
+  if (origin && allowed) {
+    return { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Credentials': 'true', 'Access-Control-Allow-Methods': methods, 'Access-Control-Allow-Headers': hdrs, 'Vary': 'Origin' };
   }
   // Origin not on the allowlist: omit ACAO so the browser blocks the cross-origin read.
   return { 'Access-Control-Allow-Methods': methods, 'Access-Control-Allow-Headers': hdrs, 'Vary': 'Origin' };
@@ -51,10 +60,11 @@ export function clientIp(req) {
 // Non-reversible per-IP key for rate limiting (PR5 patch). HMAC-SHA256(IP) keyed by
 // SESSION_SECRET (same secret used for OTP/session HMAC). The raw IP is never stored in
 // D1 or logged — only this hash appears in rate_limits keys ("ord:<hash>", "ordd:<hash>").
-// Deterministic: the same IP + secret always produce the same hash. Falls back to the
-// 'dev' secret locally only (SESSION_SECRET is required in production).
+// Deterministic: the same IP + secret always produce the same hash. Authentication
+// and rate-limit hashing fail closed when SESSION_SECRET is missing.
 export async function anonKey(env, ip) {
-  const secret = env.SESSION_SECRET || 'dev';
+  if (!env.SESSION_SECRET) throw new Error('SESSION_SECRET is required');
+  const secret = env.SESSION_SECRET;
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode('rl:' + ip));
   return [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, '0')).join('');
