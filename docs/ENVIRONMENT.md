@@ -54,6 +54,23 @@ These are safe to keep in the repo (non-secret configuration):
 
 > Optional future var: `PAYMENT_MODE` (`immediate` today, `preauth` for Mesh later).
 
+## Staging Worker isolation
+
+The staging storefront never calls the production Worker. Shared routing in
+`storefront/public/assets/api-origin.js` maps staging and Cloudflare Pages preview
+hosts to `find-staging.edenmish.com` / `ops-staging.edenmish.com`.
+
+The GitHub `staging` environment contains only:
+
+| Name | Type | Purpose |
+|---|---|---|
+| `STAGING_D1_DATABASE_ID` | environment variable | Binds the separate `edenmish-staging` D1 database |
+| `STAGING_OPS_PIN` | environment secret | Staging-only dashboard PIN |
+| `STAGING_SESSION_SECRET` | environment secret | Staging-only cookie/OTP signing key |
+
+Never copy production Shopify, payment, webhook, email, or customer-data
+credentials into the staging Worker. See `CI_CD.md` for one-time setup.
+
 ---
 
 ## Shopify theme settings (admin → Themes → Customize → "EdenMish Funnel")

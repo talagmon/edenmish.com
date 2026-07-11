@@ -1,0 +1,24 @@
+name = "edenmish-ops-staging"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+routes = [
+  { pattern = "find-staging.edenmish.com", custom_domain = true },
+  { pattern = "ops-staging.edenmish.com", custom_domain = true }
+]
+
+[vars]
+BRAND = "EdenMish Staging"
+BOOKING_URL = "https://staging.edenmish.com"
+STOREFRONT_BASE = "https://staging.edenmish.com"
+WHATSAPP_NUMBER = "972534058498"
+OPS_EMAIL = "eden@edenmish.com"
+ALLOWED_ORIGINS = "https://staging.edenmish.com,https://edenmish-staging.pages.dev,https://*.edenmish-staging.pages.dev,https://edenmish-v2.pages.dev,https://*.edenmish-v2.pages.dev"
+
+[secrets]
+required = ["OPS_PIN", "SESSION_SECRET"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "edenmish-staging"
+database_id = "__STAGING_D1_DATABASE_ID__"

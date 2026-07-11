@@ -16,8 +16,9 @@
 </head>
 <body class="bg-surface-dim">
 <div id="app">טוען…</div>
+<script src="/assets/api-origin.js"></script>
 <script>
-var API = "https://ops.edenmish.com";
+var API = window.EDEN_API.ops;
 var HE = {received:"נתקבלה",priced:"מחושב",review:"בדיקה",payment_sent:"תשלום נשלח",paid:"שולם",to_pickup:"בדרך לאיסוף",picked_up:"נאסף",to_dropoff:"בדרך למסירה",delivered:"נמסר",failed:"נכשל",cancelled:"בוטל"};
 var LIVE = ["to_pickup","to_dropoff"];
 var NEXT = {paid:"to_pickup",to_pickup:"picked_up",picked_up:"to_dropoff"};
@@ -31,6 +32,15 @@ function showTransientError(message){
   var el=$("ops-network-error");
   if(!el){el=document.createElement("div");el.id="ops-network-error";el.setAttribute("role","alert");el.className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] bg-error text-white px-4 py-3 rounded-xl shadow-xl max-w-[90vw]";document.body.appendChild(el);}
   el.textContent=message;el.hidden=false;clearTimeout(el._timer);el._timer=setTimeout(function(){el.hidden=true;},5000);
+}
+function connectionErrorView(){
+  $("app").innerHTML = '<div class="min-h-screen flex items-center justify-center p-gutter-mobile">'+
+    '<div class="glass-card rounded-2xl p-stack-lg max-w-sm w-full text-center" role="alert">'+
+    '<span class="material-symbols-outlined text-error text-5xl mb-stack-sm">cloud_off</span>'+
+    '<h1 class="font-headline-md text-headline-md text-primary mb-stack-sm">לא ניתן להתחבר למרכז הבקרה</h1>'+
+    '<p class="text-body-md text-on-surface-variant mb-stack-lg">סביבת השרת אינה זמינה כרגע. לא בוצע שום שינוי בהזמנות.</p>'+
+    '<button class="w-full bg-primary text-on-primary font-headline-md py-3 rounded-xl" onclick="refresh()">נסו שוב</button>'+
+    '</div></div>';
 }
 async function api(path,opts){
   opts=opts||{};opts.headers=opts.headers||{};
@@ -56,14 +66,17 @@ function loginView(){
 
 async function doLogin(){
   var pin = $("pin").value;
-  var r = await fetch(API+"/api/ops/login",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({pin:pin})});
-  if(r.ok){await refresh();}
-  else{alert(r.status===429?"יותר מדי ניסיונות":"PIN שגוי");}
+  try{
+    var r = await fetch(API+"/api/ops/login",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({pin:pin})});
+    if(r.ok){await refresh();}
+    else{alert(r.status===429?"יותר מדי ניסיונות":"PIN שגוי");}
+  }catch(e){connectionErrorView();}
 }
 async function logout(){try{await api("/api/ops/logout",{method:"POST"});}finally{stopWatch();loginView();}}
 
 async function refresh(){
-  var r = await api("/api/ops/orders");
+  var r;
+  try{r = await api("/api/ops/orders");}catch(e){return connectionErrorView();}
   if(r.status===401) return loginView();
   if(!r.ok) return showTransientError("לא ניתן לרענן כרגע. בדקו את החיבור ונסו שוב.");
   orders = (await r.json()).orders || [];

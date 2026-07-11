@@ -392,9 +392,10 @@
 <span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.2.0(274272)</span>
 </div>
 </footer>
+<script src="/assets/api-origin.js"></script>
 <script>
 // Existing Worker backend (sibling repo). Public order endpoint only.
-const API = "https://find.edenmish.com";
+const API = window.EDEN_API.find;
 
 // ---- Google Maps: address autocomplete + drive distance → exact pricing ----
 const geo = { pickupLat:null, pickupLng:null, pickupCity:null, dropoffLat:null, dropoffLng:null, dropoffCity:null, distanceKm:null };

@@ -72,6 +72,31 @@ and gated by environment approval.
 
 ---
 
+### `staging-worker.yml` — isolated staging Worker
+
+**Trigger:** pushes to `develop` that change `worker/**`, or manual
+`workflow_dispatch`.
+
+**Behavior:**
+- runs the full Worker test suite;
+- renders `worker/wrangler.staging.toml` with the staging D1 database ID from
+  the GitHub `staging` environment;
+- deploys `edenmish-ops-staging` to `find-staging.edenmish.com` and
+  `ops-staging.edenmish.com` with staging-only auth secrets;
+- verifies `/health` and the credentialed CORS origin for
+  `staging.edenmish.com`.
+
+It never binds the production `edenmish` D1 database and does not receive
+Shopify, payment, email, or webhook credentials.
+
+**Environment:** `staging`.
+
+**Required configuration:** `STAGING_D1_DATABASE_ID` environment variable;
+`STAGING_OPS_PIN` and `STAGING_SESSION_SECRET` environment secrets; shared
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets.
+
+---
+
 ### `shopify-preview.yml` — Shopify theme preview
 
 **Trigger:** `pull_request` to `main`, only when `theme/**` files change.
@@ -162,6 +187,7 @@ Create these in **GitHub → Settings → Environments**:
 | Environment | Purpose | Protection rules |
 |---|---|---|
 | `preview` | Theme preview pushes | None required |
+| `staging` | Isolated staging Worker | Optional approval; keep secrets separate from production |
 | `production` | Production deploy | **Required reviewers** (add yourself) |
 
 ### Secrets
@@ -172,8 +198,12 @@ Add in **GitHub → Settings → Secrets and variables → Actions**:
 |---|---|---|
 | `SHOPIFY_CLI_THEME_TOKEN` | preview + production | `shptka_…` (from Shopify Theme Access app) |
 | `SHOPIFY_STORE` | preview + production | `r013gt-fc.myshopify.com` (canonical domain — `edenmish.myshopify.com` is an alias that the Theme Access proxy rejects with 401) |
-| `CLOUDFLARE_API_TOKEN` | production only | Cloudflare API token with Workers edit permission |
-| `CLOUDFLARE_ACCOUNT_ID` | production only | `2dd658a7839937523c0cca09eadce085` |
+| `CLOUDFLARE_API_TOKEN` | staging + production | Cloudflare API token with Workers and D1 edit permission |
+| `CLOUDFLARE_ACCOUNT_ID` | staging + production | Cloudflare account ID |
+| `STAGING_OPS_PIN` | staging only | A staging-only PIN; never reuse the production PIN |
+| `STAGING_SESSION_SECRET` | staging only | A unique random staging session secret |
+
+Add `STAGING_D1_DATABASE_ID` as a variable on the GitHub `staging` environment.
 
 > Do not put real values in workflow files or docs. These are GitHub repository secrets only.
 
@@ -304,9 +334,36 @@ Staging uses a **separate Cloudflare Pages project** to ensure 100% isolation fr
 
 ### Staging Worker
 
-Worker changes are tested locally with `wrangler dev`. The staging storefront
-points to the production Worker API (`find.edenmish.com`) — there is no
-separate staging Worker because Worker changes are rare and easily tested locally.
+The staging storefront uses an isolated Worker and D1 database:
+
+| Surface | Staging host |
+|---|---|
+| Public order/tracking API | `find-staging.edenmish.com` |
+| Ops API | `ops-staging.edenmish.com` |
+| D1 | `edenmish-staging` |
+
+One-time setup, before merging the staging-worker PR:
+
+```bash
+cd worker
+npx wrangler d1 create edenmish-staging
+
+# Use the returned UUID locally and save the same UUID as the GitHub staging
+# environment variable STAGING_D1_DATABASE_ID.
+STAGING_D1_DATABASE_ID=<returned-uuid> node scripts/render-staging-config.mjs
+npx wrangler d1 execute edenmish-staging --remote \
+  --config wrangler.staging.generated.toml --file=./schema.sql
+```
+
+Then create the GitHub `staging` environment and add:
+
+- variable: `STAGING_D1_DATABASE_ID`
+- secrets: `STAGING_OPS_PIN`, `STAGING_SESSION_SECRET`
+- repository secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
+
+Run **Actions → Staging Worker → Run workflow** once. Subsequent Worker changes
+merged to `develop` deploy automatically. Do not add production Shopify,
+payment, webhook, email, or customer data credentials to the staging Worker.
 
 ### Conventional commits for versioning
 
