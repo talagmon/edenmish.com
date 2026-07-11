@@ -30,6 +30,10 @@ It is a **single Worker** that routes by hostname (`find.` vs `ops.`).
 | `ops.edenmish.com` | Ops API (session-gated) | `/api/ops/login`, `/api/ops/orders`, `…/status`, `…/gps`, `…/approve` |
 | (any) | Shopify webhook | `POST /webhooks/shopify` |
 
+Staging uses separate hosts and a separate D1 database:
+`find-staging.edenmish.com`, `ops-staging.edenmish.com`, and
+`edenmish-staging`. It never shares production orders or credentials.
+
 `find.edenmish.com/` (root) redirects to the Shopify booking site (`BOOKING_URL`).
 
 ## Main files (`src/`)
@@ -67,6 +71,12 @@ wrangler deploy        # publishes to find.edenmish.com + ops.edenmish.com (cust
 
 Account and D1 IDs are configured in `wrangler.toml` (`[[d1_databases]]`,
 `routes`). `account_id` is read from the `CLOUDFLARE_ACCOUNT_ID` env var.
+
+The staging deployment uses `wrangler.staging.toml` as a template. Render it
+with `scripts/render-staging-config.mjs`; the generated config is gitignored.
+GitHub Actions deploys it through `.github/workflows/staging-worker.yml` after
+the one-time staging D1 and environment-secret setup documented in
+`../docs/CI_CD.md`.
 
 ## D1 setup
 

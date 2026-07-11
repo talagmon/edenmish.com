@@ -12,7 +12,16 @@ export function corsFor(req, env) {
     return { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': methods, 'Access-Control-Allow-Headers': hdrs };
   }
   const origin = req.headers.get('origin') || '';
-  if (origin && configured.includes(origin)) {
+  const allowed = configured.some((rule) => {
+    if (rule === origin) return true;
+    if (!rule.startsWith('https://*.')) return false;
+    try {
+      const url = new URL(origin);
+      const suffix = rule.slice('https://*'.length);
+      return url.protocol === 'https:' && url.port === '' && url.hostname.endsWith(suffix) && url.hostname.length > suffix.length;
+    } catch { return false; }
+  });
+  if (origin && allowed) {
     return { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Credentials': 'true', 'Access-Control-Allow-Methods': methods, 'Access-Control-Allow-Headers': hdrs, 'Vary': 'Origin' };
   }
   // Origin not on the allowlist: omit ACAO so the browser blocks the cross-origin read.

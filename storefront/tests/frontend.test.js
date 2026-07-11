@@ -180,6 +180,25 @@ describe('Frontend: Security and accessibility hardening', () => {
     assertContains(html, 'tabindex="0"');
     assertContains(html, 'aria-expanded=');
   });
+
+  test('staging and preview pages use isolated Worker origins', () => {
+    const routing = readFileSync(join(PUB, 'assets', 'api-origin.js'), 'utf8');
+    assertContains(routing, "host === 'staging.edenmish.com'");
+    assertContains(routing, "host.endsWith('.pages.dev')");
+    assertContains(routing, 'https://find-staging.edenmish.com');
+    assertContains(routing, 'https://ops-staging.edenmish.com');
+    for (const page of ['booking.html', 'track.html', 'delivered.html', 'dash.html']) {
+      assertContains(readPage(page), '/assets/api-origin.js', `${page} shared API routing`);
+    }
+  });
+
+  test('ops dashboard renders a retryable connection error instead of hanging', () => {
+    const html = readPage('dash.html');
+    assertContains(html, 'function connectionErrorView()');
+    assertContains(html, 'לא ניתן להתחבר למרכז הבקרה');
+    assertContains(html, 'onclick="refresh()"');
+    assertContains(html, 'catch(e){return connectionErrorView();}');
+  });
 });
 
 describe('Frontend: Legal pages', () => {

@@ -173,8 +173,9 @@
 </div>
 </footer>
 
+<script src="/assets/api-origin.js"></script>
 <script>
-const API = "https://find.edenmish.com";
+const API = window.EDEN_API.find;
 // Customer-visible lifecycle (from the Worker's status model, STATUS_META).
 const FLOW = [
   ["received","נתקבלה הבקשה"],

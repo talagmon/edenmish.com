@@ -111,13 +111,17 @@ export default {
     }
     const host = (req.headers.get('host') || '').toLowerCase();
     const path = url.pathname;
-    const onFind = host.startsWith('find.');
-    const onOps = host.startsWith('ops.') || path.startsWith('/api/ops/');
+    const onFind = host.startsWith('find.') || host.startsWith('find-');
+    const onOps = host.startsWith('ops.') || host.startsWith('ops-') || path.startsWith('/api/ops/');
     const cors = corsFor(req, env);
     // Shadow json() to always include CORS headers (enables cross-origin ops dashboard)
     const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...cors, ...extra } });
 
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
+
+    if (path === '/health' && req.method === 'GET') {
+      return json({ ok: true, service: 'edenmish-worker' });
+    }
 
     // Ensure Shopify orders/paid webhook is registered (once per isolate, never blocks on failure)
     try { await ensureWebhook(env); } catch (e) {}

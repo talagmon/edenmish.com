@@ -1,0 +1,72 @@
+name: Staging Worker
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [develop]
+    paths:
+      - 'worker/**'
+      - '.github/workflows/staging-worker.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-worker
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Test and deploy isolated staging Worker
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      STAGING_D1_DATABASE_ID: ${{ vars.STAGING_D1_DATABASE_ID }}
+      STAGING_OPS_PIN: ${{ secrets.STAGING_OPS_PIN }}
+      STAGING_SESSION_SECRET: ${{ secrets.STAGING_SESSION_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate staging configuration
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::Missing CLOUDFLARE_API_TOKEN"; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "::error::Missing CLOUDFLARE_ACCOUNT_ID"; exit 1; }
+          test -n "$STAGING_D1_DATABASE_ID" || { echo "::error::Missing STAGING_D1_DATABASE_ID environment variable"; exit 1; }
+          test -n "$STAGING_OPS_PIN" || { echo "::error::Missing STAGING_OPS_PIN"; exit 1; }
+          test -n "$STAGING_SESSION_SECRET" || { echo "::error::Missing STAGING_SESSION_SECRET"; exit 1; }
+      - name: Install and test Worker
+        working-directory: worker
+        run: npm ci && npm test
+      - name: Render isolated staging configuration
+        working-directory: worker
+        run: node scripts/render-staging-config.mjs
+      - name: Prepare staging secrets
+        run: |
+          node --input-type=module -e 'import { writeFileSync } from "node:fs"; writeFileSync("/tmp/edenmish-staging-secrets.json", JSON.stringify({ OPS_PIN: process.env.STAGING_OPS_PIN, SESSION_SECRET: process.env.STAGING_SESSION_SECRET }), { mode: 0o600 });'
+      - name: Deploy staging Worker
+        working-directory: worker
+        run: npx wrangler deploy --config wrangler.staging.generated.toml --secrets-file /tmp/edenmish-staging-secrets.json
+      - name: Remove temporary secret file
+        if: always()
+        run: rm -f /tmp/edenmish-staging-secrets.json
+      - name: Verify staging Worker and CORS
+        run: |
+          ready=0
+          for attempt in {1..12}; do
+            if curl --fail --silent --show-error https://ops-staging.edenmish.com/health; then
+              ready=1
+              break
+            fi
+            echo "Waiting for staging custom domain (attempt $attempt/12)..."
+            sleep 5
+          done
+          test "$ready" = "1" || { echo "::error::Staging Worker health check failed"; exit 1; }
+          curl --fail --silent --show-error \
+            -H 'Origin: https://staging.edenmish.com' \
+            -D /tmp/staging-headers.txt \
+            https://ops-staging.edenmish.com/health >/dev/null
+          grep -qi '^access-control-allow-origin: https://staging.edenmish.com' /tmp/staging-headers.txt
