@@ -129,3 +129,20 @@ feat/*   → <branch>.edenmish-staging.pages.dev (preview) [isolated testing]
 - **CI checks** must never require production secrets.
 - **Syntax check before every PR:** `cd storefront && npm run syntax-check` and
   `cd worker && for f in src/*.js; do node --check "$f"; done`.
+
+## 9. Theme settings vs. theme code
+
+- **The live Shopify theme editor is the source of truth for production merchant
+  settings.** These values are stored in `config/settings_data.json` and
+  `templates/*.json`; repository copies may contain defaults or stale values.
+- **Never include those files in a push to the live theme.** Live pushes must pass
+  `--ignore "config/settings_data.json" --ignore "templates/*.json"`, as enforced
+  by `production-deploy.yml`. Prefer `--only <path>` for a single-file change.
+- **Preview and unpublished-theme pushes must remain complete.** They may include
+  the JSON files because a new preview theme needs its templates and settings to
+  render correctly and cannot overwrite the existing live theme.
+- **Do not add a global `theme/.shopifyignore` for these paths.** Shopify CLI
+  applies it to preview/unpublished pushes too, which would produce incomplete
+  preview themes.
+- Recover any lost setting from its authoritative admin or secret store, then
+  restore it through Shopify's theme editor. Never copy secret values into git.
