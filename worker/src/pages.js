@@ -246,7 +246,7 @@ const LIVE=['to_pickup','to_dropoff'];
 const NSTAT={pending:'ממתין',sent:'נשלח',failed:'נכשל',skipped:'דולג'};
 const NCHAN={email:'אימייל',whatsapp_future:'וואטסאפ',sms_future:'SMS',system:'מערכת'};
 const NTPL={ops_new_order:'הזמנה חדשה לעדן',customer_otp:'קוד אימות',customer_payment_confirmation:'אישור תשלום',ops_payment_received:'תשלום התקבל',customer_delivery_summary:'סיכום מסירה',customer_request_received:'אישור קבלת בקשה',customer_payment_link:'קישור תשלום ללקוח'};
-let orders=[], activeId=null, watchId=null, doneOpen=false, notifOrderId=null, notifs=[];
+let orders=[], activeId=null, watchId=null, gpsOrderId=null, gpsState='idle', doneOpen=false, notifOrderId=null, notifs=[];
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function maskRecip(s){if(!s)return '';s=String(s);var at=s.indexOf('@');return at<1?s:(s[0]+'•••@'+s.slice(at+1));}
 function bucketOf(s){return QOF[s]||'inbox';}
@@ -273,7 +273,6 @@ function render(fails){
   var toolbar='<div class="glass-card" style="border-radius:16px;padding:16px;margin:0 0 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px"><div><div style="display:flex;align-items:center;gap:8px"><span class="material-symbols-outlined" style="font-size:22px;color:#91d3c8">two_wheeler</span><strong style="color:#dfb7ff;font-size:1.1rem;font-family:Hanken Grotesk,sans-serif">EdenMish Ops</strong><span class="vstamp" title="גרסה">'+versionString()+'</span></div><div style="color:#cec3d2;font-size:.75rem;margin-top:2px">מרכז הבקרה: תל אביב וגוש דן</div></div><div style="display:flex;gap:8px"><div class="glass-card" style="padding:6px 14px;border-radius:12px;text-align:center"><div style="color:#91d3c8;font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700">פעילות</div><div style="color:#dae2fd;font-size:1.2rem;font-weight:700">'+active+'</div></div><div class="glass-card" style="padding:6px 14px;border-radius:12px;text-align:center"><div style="color:#dfb7ff;font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700">בתור</div><div style="color:#dae2fd;font-size:1.2rem;font-weight:700">'+pending+'</div></div><div class="glass-card" style="padding:6px 14px;border-radius:12px;text-align:center"><div style="color:#34D399;font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700">הושלם</div><div style="color:#dae2fd;font-size:1.2rem;font-weight:700">'+done+'</div></div></div><div style="display:flex;gap:6px"><button class="btn sm alt" data-act="refresh" title="רענן"><span class="material-symbols-outlined" style="font-size:18px">refresh</span></button><button class="btn sm danger" data-act="logout" title="התנתק"><span class="material-symbols-outlined" style="font-size:18px">logout</span></button></div></div>';
   var fp=(fails&&fails.length)?'<div class="qbucket"><div class="qhead"><span class="qhead-label" style="color:#C0392B">בעיות בשליחת הודעות</span><span class="qhead-count">'+fails.length+'</span></div><div class="qcards">'+fails.map(function(f){return '<div class="ocard" style="border-color:rgba(192,57,43,.3)"><div class="ocard-top"><span class="badge" style="background:#C0392B">'+esc(f.channel||'email')+'</span><b>'+(f.order_id?'#'+f.order_id:'—')+'</b><span class="muted" style="margin-inline-start:auto;font-size:.72rem">'+fmt(f.created_at)+'</span></div><div class="muted">'+esc(f.template||'')+(f.recipient?' · '+esc(maskRecip(f.recipient)):'')+'</div><div class="stale" style="margin-top:4px">'+esc(f.error||'שגיאה לא ידועה')+'</div></div>';}).join('')+'</div></div>':'';
   document.getElementById('app').innerHTML=toolbar+sections+fp;
-  startGpsForActive();
 }
 function card(o){
   var s=o.status,id=o.id,isLive=LIVE.indexOf(s)>=0,isActive=o.id===activeId;
@@ -293,6 +292,7 @@ function card(o){
 }
 function actions(o){
   var s=o.status,id=o.id,h='<div class="ocard-actions">';
+  if(LIVE.indexOf(s)>=0)h+=gpsControlHtml(id);
   if(s==='review'||s==='priced'||s==='received'){
     h+='<div class="inline-price"><input type="number" inputmode="numeric" min="1" id="price-'+id+'" value="'+(o.price||'')+'" placeholder="מחיר ₪"><button class="btn sm go" data-act="approve" data-id="'+id+'">אישור מחיר ושליחת קישור תשלום</button></div>';
     if(o.review_flag)h+='<div class="stale" style="width:100%">חריג: '+esc(o.review_reason||'')+'</div>';
@@ -328,7 +328,7 @@ async function approveInline(id){
   }catch(e){if(btn){btn.disabled=false;btn.textContent=btn.dataset.label||'אישור מחיר';}alert('שגיאה באישור המחיר. נסו שוב.');}
 }
 function copyPay(url){if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(url).catch(function(){});}else{var t=document.createElement('textarea');t.value=url;document.body.appendChild(t);t.select();try{document.execCommand('copy');}catch(e){}document.body.removeChild(t);}}
-async function setStatus(id,st){try{var r=await api('/api/ops/orders/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:st})});if(!r.ok)throw 0;if(st==='to_pickup'||st==='to_dropoff'){activeId=id;startWatch(id);}if(st==='picked_up'||st==='delivered'||st==='failed'||st==='cancelled')stopWatch();refresh();}catch(e){alert('לא הצלחנו לעדכן את ההזמנה. נסו שוב.');}}
+async function setStatus(id,st){try{var r=await api('/api/ops/orders/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:st})});if(!r.ok)throw 0;if(st==='picked_up'||st==='delivered'||st==='failed'||st==='cancelled')stopWatch();refresh();}catch(e){alert('לא הצלחנו לעדכן את ההזמנה. נסו שוב.');}}
 async function advance(id,cur){if(NEXT[cur])await setStatus(id,NEXT[cur]);}
 async function markPaid(id){if(!confirm('לסמן כשולם ידנית?'))return;await setStatus(id,'paid');}
 var podOrderId=null,sigCtx=null,sigDrawing=false,sigHas=false;
@@ -366,9 +366,11 @@ async function submitPod(){
   }catch(e){btn.disabled=false;btn.textContent=orig;alert('שגיאה בשמירת הוכחת המסירה. נסו שוב.');}
 }
 function toggleDone(){doneOpen=!doneOpen;render();}
-function startGpsForActive(){var o=orders.find(function(x){return x.id===activeId;});if(o&&(o.status==='to_pickup'||o.status==='to_dropoff'))startWatch(o.id);}
-function startWatch(id){if(watchId!==null)return;if(!navigator.geolocation)return;watchId=navigator.geolocation.watchPosition(function(p){var c=p.coords;api('/api/ops/orders/'+id+'/gps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lat:c.latitude,lng:c.longitude})});},function(){},{enableHighAccuracy:true,maximumAge:5000});}
-function stopWatch(){if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null;}}
+function gpsControlHtml(id){var state=gpsOrderId===id?gpsState:'idle',sharing=watchId!==null&&state==='active',requesting=state==='requesting',status=sharing?'מיקום פעיל':requesting?'ממתין לאישור':state==='denied'?'ההרשאה נדחתה':state==='error'?'המיקום אינו זמין':'מיקום כבוי',label=sharing||requesting?'הפסקת שיתוף מיקום':'התחלת שיתוף מיקום';return '<div id="gps-control-'+id+'" style="width:100%"><span id="gps-status-'+id+'" aria-live="polite" class="muted" style="display:block;margin-bottom:5px">'+status+'</span><button class="btn sm '+(sharing||requesting?'danger':'alt')+'" data-act="gps" data-id="'+id+'">'+label+'</button></div>';}
+function updateGpsControl(id){var el=document.getElementById('gps-control-'+id);if(el)el.outerHTML=gpsControlHtml(id);}
+function toggleGps(id){if((watchId!==null||gpsState==='requesting')&&gpsOrderId===id)stopWatch();else startWatch(id);}
+function startWatch(id){if(!navigator.geolocation){gpsOrderId=id;gpsState='error';updateGpsControl(id);alert('שירותי מיקום אינם זמינים במכשיר הזה.');return;}if(watchId!==null)stopWatch();gpsOrderId=id;gpsState='requesting';updateGpsControl(id);try{watchId=navigator.geolocation.watchPosition(function(p){gpsState='active';updateGpsControl(id);var c=p.coords;api('/api/ops/orders/'+id+'/gps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lat:c.latitude,lng:c.longitude})}).catch(function(){});},function(err){if(watchId!==null)navigator.geolocation.clearWatch(watchId);watchId=null;gpsState=err&&err.code===1?'denied':'error';updateGpsControl(id);alert(gpsState==='denied'?'הרשאת המיקום נדחתה. ניתן לנסות שוב מהכפתור.':'לא הצלחנו לקבל מיקום. בדקו את שירותי המיקום ונסו שוב.');},{enableHighAccuracy:true,maximumAge:5000,timeout:15000});}catch(e){watchId=null;gpsState='error';updateGpsControl(id);alert('לא הצלחנו להפעיל שיתוף מיקום.');}}
+function stopWatch(){var id=gpsOrderId;if(watchId!==null)navigator.geolocation.clearWatch(watchId);watchId=null;gpsOrderId=null;gpsState='idle';if(id!=null)updateGpsControl(id);}
 document.getElementById('app').addEventListener('click',function(e){
   var b=e.target.closest('[data-act]');if(!b)return;
   var act=b.getAttribute('data-act'),id=Number(b.getAttribute('data-id'));e.preventDefault();
@@ -383,6 +385,7 @@ document.getElementById('app').addEventListener('click',function(e){
   else if(act==='logout')logout();
   else if(act==='toggledone')toggleDone();
   else if(act==='notifs'){notifOrderId=(notifOrderId===id)?null:id;refresh();}
+  else if(act==='gps')toggleGps(id);
 });
 refresh();
 setInterval(function(){if(!(document.activeElement&&document.activeElement.tagName==='INPUT'))refresh();},15000);
