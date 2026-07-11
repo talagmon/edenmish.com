@@ -1,0 +1,17 @@
+flowchart TD
+    A["Feature or fix branch from develop"] --> B["Pull request to develop"]
+    B --> C["CI checks"]
+    B --> D["Cloudflare Pages branch preview"]
+    C --> E["Merge to develop"]
+    D --> E
+    E --> F["staging.edenmish.com"]
+    E --> G["Staging Worker when worker files change"]
+    F --> H["Integration smoke test"]
+    G --> H
+    H --> I["Pull request from develop to main"]
+    I --> J["Merge to main"]
+    J --> K["Storefront Pages deploy when storefront files change"]
+    J --> L["Automatic release tag from conventional commits"]
+    J --> M["Manual production-deploy workflow"]
+    M --> N["GitHub production environment approval"]
+    N --> O["Production Worker and optional Shopify theme"]
