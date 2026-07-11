@@ -238,11 +238,16 @@ git push origin "v$(./scripts/current_version.sh)"
 ## Production deployment sequence
 
 ```
-1. Merge PR(s) into main
+1. Merge feature PR(s) into develop, validate staging, then manually merge develop into main
 2. Run D1 migrations manually (see worker/MIGRATIONS.md):
-     wrangler d1 execute edenmish --file=./migrations/003_rate_limits.sql
-     wrangler d1 execute edenmish --file=./migrations/004_delivery_proofs.sql
-     wrangler d1 execute edenmish --file=./migrations/005_notifications.sql
+     wrangler d1 execute edenmish --remote --file=./migrations/003_rate_limits.sql
+     wrangler d1 execute edenmish --remote --file=./migrations/004_delivery_proofs.sql
+     wrangler d1 execute edenmish --remote --file=./migrations/005_notifications.sql
+     wrangler d1 execute edenmish --remote --file=./migrations/006_pod_signature.sql
+     wrangler d1 execute edenmish --remote --file=./migrations/007_order_rating.sql
+     wrangler d1 execute edenmish --remote --file=./migrations/008_coupons.sql
+     wrangler d1 execute edenmish --remote --file=./migrations/009_invoice_tracking.sql
+     wrangler d1 execute edenmish --remote --file=./migrations/010_order_service_schedule.sql
 3. Go to GitHub → Actions → "Production deploy" → Run workflow
      - confirm_migrations_ran = "I ran required migrations"
      - deploy_worker = true

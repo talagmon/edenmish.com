@@ -80,9 +80,9 @@ Database name: `edenmish`. Binding: `DB`.
 ### Schema and migrations
 
 `schema.sql` is the **fresh-DB source of truth** — it defines every current table.
-The numbered migrations (`003`–`008`) add tables/columns that were introduced after the
+The numbered migrations (`003`–`010`) add tables/columns that were introduced after the
 initial schema. Tables are idempotent (`CREATE TABLE IF NOT EXISTS`); `ALTER TABLE …
-ADD COLUMN` migrations (`006`–`008`) must run only on DBs that predate their columns.
+ADD COLUMN` migrations (`006`–`010`) must run only on DBs that predate their columns.
 
 - **Fresh DB:** run `npm run db:init` (schema.sql only).
 - **Existing production DB:** run numbered migrations in order — see **`MIGRATIONS.md`**
@@ -141,16 +141,18 @@ cd worker
 See **`MIGRATIONS.md`** for the full reference (purpose, verification queries, order).
 
 ```bash
-wrangler d1 execute edenmish --file=./migrations/003_rate_limits.sql
-wrangler d1 execute edenmish --file=./migrations/004_delivery_proofs.sql
-wrangler d1 execute edenmish --file=./migrations/005_notifications.sql
-wrangler d1 execute edenmish --file=./migrations/006_pod_signature.sql
-wrangler d1 execute edenmish --file=./migrations/007_order_rating.sql
-wrangler d1 execute edenmish --file=./migrations/008_coupons.sql
+wrangler d1 execute edenmish --remote --file=./migrations/003_rate_limits.sql
+wrangler d1 execute edenmish --remote --file=./migrations/004_delivery_proofs.sql
+wrangler d1 execute edenmish --remote --file=./migrations/005_notifications.sql
+wrangler d1 execute edenmish --remote --file=./migrations/006_pod_signature.sql
+wrangler d1 execute edenmish --remote --file=./migrations/007_order_rating.sql
+wrangler d1 execute edenmish --remote --file=./migrations/008_coupons.sql
+wrangler d1 execute edenmish --remote --file=./migrations/009_invoice_tracking.sql
+wrangler d1 execute edenmish --remote --file=./migrations/010_order_service_schedule.sql
 ```
 
-> Run only migrations that have not already been applied. They are idempotent, but
-> always confirm before running in production.
+> Run only migrations that have not already been applied. Several `ALTER TABLE`
+> migrations are not idempotent and will fail if repeated.
 
 ### 3. Required Worker secrets
 
