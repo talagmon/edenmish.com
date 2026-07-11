@@ -199,6 +199,16 @@ describe('Frontend: Security and accessibility hardening', () => {
     assertContains(html, 'onclick="refresh()"');
     assertContains(html, 'catch(e){return connectionErrorView();}');
   });
+
+  test('ops dashboard requests GPS only from an explicit start/stop control', () => {
+    const html = readPage('dash.html');
+    assertContains(html, 'התחלת שיתוף מיקום');
+    assertContains(html, 'הפסקת שיתוף מיקום');
+    assertContains(html, 'aria-live="polite"');
+    assertContains(html, 'function toggleGps(id)');
+    assert.ok(!html.includes('if(isLive && watchId===null) startWatch(o.id)'), 'detail rendering must not request location');
+    assert.ok(!html.includes('if(st==="to_pickup"||st==="to_dropoff")startWatch(id)'), 'status changes must not request location');
+  });
 });
 
 describe('Frontend: Legal pages', () => {

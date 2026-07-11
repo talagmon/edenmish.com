@@ -23,7 +23,7 @@ var HE = {received:"נתקבלה",priced:"מחושב",review:"בדיקה",paymen
 var LIVE = ["to_pickup","to_dropoff"];
 var NEXT = {paid:"to_pickup",to_pickup:"picked_up",picked_up:"to_dropoff"};
 var NEXTLBL = {paid:"אשר יציאה לאיסוף",to_pickup:"אשר איסוף ✓",picked_up:"אשר יציאה למסירה"};
-var orders = [], coupons = [], activeOrder = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, activeFilter = "active", currentView = "queue";
+var orders = [], coupons = [], activeOrder = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, gpsOrderId = null, gpsState = "idle", activeFilter = "active", currentView = "queue";
 
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
 function fmt(t){return t?new Date(t).toLocaleString("he-IL",{timeZone:"Asia/Jerusalem",hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"}):"—";}
@@ -447,7 +447,6 @@ function renderDetail(o){
     actionsHtml(o)+
     '</main>';
 
-  if(isLive && watchId===null) startWatch(o.id);
 }
 
 function overrideStatus(id){
@@ -457,6 +456,7 @@ function overrideStatus(id){
 function actionsHtml(o){
   var s=o.status, id=o.id;
   var h = '<div class="space-y-3 mt-2">';
+  if(LIVE.includes(s)) h += gpsControlHtml(id);
   if(s==="review"||s==="priced"||s==="received"){
     h += '<div class="flex gap-2"><input type="number" min="1" id="price-'+id+'" value="'+(o.price||"")+'" placeholder="₪" class="flex-1 bg-surface-container-lowest border border-outline-variant text-on-surface rounded-lg p-3 text-center text-lg"/>';
     h += '<button onclick="approveInline('+id+')" class="bg-secondary text-on-secondary font-label-bold px-4 py-3 rounded-lg whitespace-nowrap">אישור מחיר ←</button></div>';
@@ -513,7 +513,6 @@ async function setStatus(id,st){
   try{
     var r=await api("/api/ops/orders/"+id+"/status",{method:"POST",body:JSON.stringify({status:st})});
     if(!r.ok){var d=await r.json().catch(function(){return{};});throw new Error(d.error||"status_update_failed");}
-    if(st==="to_pickup"||st==="to_dropoff")startWatch(id);
     if(["picked_up","delivered","failed","cancelled"].includes(st))stopWatch();
     await refresh();
   }catch(e){showTransientError("לא הצלחנו לעדכן את ההזמנה. נסו שוב.");}
@@ -589,15 +588,46 @@ async function submitPod(id){
   }
 }
 
-function startWatch(id){
-  if(watchId!==null)return;
-  if(!navigator.geolocation)return;
-  watchId=navigator.geolocation.watchPosition(function(p){
-    var c=p.coords;
-    api("/api/ops/orders/"+id+"/gps",{method:"POST",body:JSON.stringify({lat:c.latitude,lng:c.longitude})});
-  },function(){},{enableHighAccuracy:true,maximumAge:5000});
+function gpsControlHtml(id){
+  var state=gpsOrderId===id?gpsState:"idle";
+  var sharing=watchId!==null&&state==="active";
+  var requesting=state==="requesting";
+  var status=sharing?"שיתוף המיקום פעיל":requesting?"ממתין לאישור מיקום":state==="denied"?"הרשאת המיקום נדחתה":state==="error"?"המיקום אינו זמין כרגע":"שיתוף המיקום כבוי";
+  var icon=sharing?"location_on":requesting?"progress_activity":"location_off";
+  var label=sharing||requesting?"הפסקת שיתוף מיקום":"התחלת שיתוף מיקום";
+  var tone=sharing?"text-success-mint":state==="denied"||state==="error"?"text-error":"text-on-surface-variant";
+  return '<div id="gps-control-'+id+'" class="glass-card rounded-xl p-3 border border-outline-variant/30">'+
+    '<div class="flex items-center justify-between gap-3 mb-2"><div class="flex items-center gap-2 '+tone+'"><span class="material-symbols-outlined">'+icon+'</span><span id="gps-status-'+id+'" aria-live="polite" class="font-label-bold text-label-sm">'+status+'</span></div></div>'+
+    '<button type="button" onclick="toggleGps('+id+')" class="w-full '+(sharing||requesting?'bg-error/15 text-error':'bg-secondary/15 text-secondary')+' font-label-bold py-3 rounded-xl">'+label+'</button></div>';
 }
-function stopWatch(){if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null;}}
+function updateGpsControl(id){
+  var el=$("gps-control-"+id);if(el)el.outerHTML=gpsControlHtml(id);
+}
+function toggleGps(id){
+  if((watchId!==null||gpsState==="requesting")&&gpsOrderId===id)stopWatch();else startWatch(id);
+}
+function startWatch(id){
+  if(!navigator.geolocation){gpsState="error";gpsOrderId=id;updateGpsControl(id);showTransientError("שירותי מיקום אינם זמינים במכשיר הזה.");return;}
+  if(watchId!==null)stopWatch();
+  gpsOrderId=id;gpsState="requesting";updateGpsControl(id);
+  try{
+    watchId=navigator.geolocation.watchPosition(function(p){
+      gpsState="active";updateGpsControl(id);
+      var c=p.coords;
+      api("/api/ops/orders/"+id+"/gps",{method:"POST",body:JSON.stringify({lat:c.latitude,lng:c.longitude})}).catch(function(){});
+    },function(err){
+      if(watchId!==null)navigator.geolocation.clearWatch(watchId);
+      watchId=null;gpsState=err&&err.code===1?"denied":"error";updateGpsControl(id);
+      showTransientError(gpsState==="denied"?"הרשאת המיקום נדחתה. ניתן לנסות שוב מהכפתור.":"לא הצלחנו לקבל מיקום. בדקו את שירותי המיקום ונסו שוב.");
+    },{enableHighAccuracy:true,maximumAge:5000,timeout:15000});
+  }catch(e){watchId=null;gpsState="error";updateGpsControl(id);showTransientError("לא הצלחנו להפעיל שיתוף מיקום.");}
+}
+function stopWatch(){
+  var id=gpsOrderId;
+  if(watchId!==null)navigator.geolocation.clearWatch(watchId);
+  watchId=null;gpsOrderId=null;gpsState="idle";
+  if(id!=null)updateGpsControl(id);
+}
 
 async function refreshCoupons(){
   var r = await api("/api/ops/coupons");
