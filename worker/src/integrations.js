@@ -137,9 +137,11 @@ export function parseShopifyOrderWebhook(body) {
   return {
     token,
     shopifyOrderId: o.id || null,
+    draftOrderId: o.draft_order_id || null,
     paid,
     financial_status: o.financial_status || null,
     total: o.total_price || null,
+    currency: o.currency || o.presentment_currency || null,
     email: o.email || (o.customer && o.customer.email) || null,
     customerName: (o.customer && (o.customer.first_name + ' ' + o.customer.last_name).trim()) || o.email || null,
     raw: o,
@@ -179,7 +181,19 @@ export async function sendWhatsApp(env, { to, body }) {
 
 // ---- OTP helpers ----
 export function genOtp() { return String(Math.floor(100000 + Math.random() * 900000)); }
-export async function hashOtp(env, code) { return hmac(env.SESSION_SECRET || 'dev', 'otp:' + code); }
+export async function hashOtp(env, code) {
+  if (!env.SESSION_SECRET) throw new Error('SESSION_SECRET is required');
+  return hmac(env.SESSION_SECRET, 'otp:' + code);
+}
+
+export function timingSafeEqual(a, b) {
+  const left = String(a || '');
+  const right = String(b || '');
+  if (left.length !== right.length) return false;
+  let diff = 0;
+  for (let i = 0; i < left.length; i++) diff |= left.charCodeAt(i) ^ right.charCodeAt(i);
+  return diff === 0;
+}
 
 // ---- Ops auth (signed cookie) ----
 async function hmac(secret, msg) {
@@ -188,16 +202,17 @@ async function hmac(secret, msg) {
   return btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/=/g, '');
 }
 export async function makeSession(env) {
-  const payload = btoa(JSON.stringify({ exp: Date.now() + 1000 * 60 * 60 * 24 * 30 })).replace(/=/g, '');
-  const sig = await hmac(env.SESSION_SECRET || 'dev', payload);
+  if (!env.SESSION_SECRET) throw new Error('SESSION_SECRET is required');
+  const payload = btoa(JSON.stringify({ exp: Date.now() + 1000 * 60 * 60 * 8 })).replace(/=/g, '');
+  const sig = await hmac(env.SESSION_SECRET, payload);
   return `${payload}.${sig}`;
 }
 export async function checkSession(env, cookie) {
-  if (!cookie) return false;
+  if (!cookie || !env.SESSION_SECRET) return false;
   const [payload, sig] = cookie.split('.');
   if (!payload || !sig) return false;
-  const expect = await hmac(env.SESSION_SECRET || 'dev', payload);
-  if (expect !== sig) return false;
+  const expect = await hmac(env.SESSION_SECRET, payload);
+  if (!timingSafeEqual(expect, sig)) return false;
   try { return JSON.parse(atob(payload)).exp > Date.now(); } catch { return false; }
 }
 export function getCookie(req, name) {

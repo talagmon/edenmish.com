@@ -153,6 +153,22 @@ describe('Frontend: Tracking page', () => {
   });
 });
 
+describe('Frontend: Ops security hardening', () => {
+  test('dashboard uses cookie credentials instead of localStorage bearer tokens', () => {
+    const html = readPage('dash.html');
+    assert.ok(!html.includes("localStorage.getItem('ops_sess')"));
+    assert.ok(!html.includes('X-Ops'));
+    assertContains(html, 'credentials="include"');
+  });
+
+  test('static responses define a restrictive Content Security Policy', () => {
+    const headers = readFileSync(join(PUB, '_headers'), 'utf8');
+    assertContains(headers, 'Content-Security-Policy:');
+    assertContains(headers, "object-src 'none'");
+    assertContains(headers, "base-uri 'self'");
+  });
+});
+
 describe('Frontend: Legal pages', () => {
   test('Terms page has עוסק פטור + number', () => {
     const h = readPage('terms.html');

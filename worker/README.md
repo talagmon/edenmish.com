@@ -95,14 +95,14 @@ Current tables: `orders`, `status_history`, `gps_pings`, `payments`, `pricing_ru
 
 ## Secret checklist
 
-All secrets are set via `wrangler secret put <NAME>`. They **no-op cleanly** if
-unset (code checks for their presence). See `../docs/ENVIRONMENT.md` for the
-full list and placeholders.
+All secrets are set via `wrangler secret put <NAME>`. Optional integrations no-op
+if unset, while sessions and OTP creation fail closed without `SESSION_SECRET`.
+See `../docs/ENVIRONMENT.md` for the full list and placeholders.
 
 | Secret | Required for | Notes |
 |---|---|---|
 | `OPS_PIN` | ops dashboard login | shared PIN today |
-| `SESSION_SECRET` | signed ops cookie + OTP hashing | falls back to `'dev'` if unset (do NOT leave as `dev` in prod) |
+| `SESSION_SECRET` | signed ops cookie + OTP hashing | mandatory; auth/order OTP flows fail closed if unset |
 | `MAPS_KEY` | tracking page live map (injected into HTML) | Google Maps JS key |
 | `SHOPIFY_ADMIN_TOKEN` | creating Draft Orders (`shpat_…`) | Worker-side charge |
 | `SHOPIFY_WEBHOOK_SECRET` | verifying `orders/paid` webhook | webhook fails closed (401) if unset |
@@ -183,10 +183,10 @@ Set in `wrangler.toml [vars]` (non-secret):
 | `OPS_EMAIL` | Eden's ops alert address |
 | `SHOPIFY_SHOP` | `edenmish.myshopify.com` |
 | `SHOPIFY_API_VERSION` | `2026-04` |
-| `ALLOWED_ORIGINS` | `https://edenmish.com,https://www.edenmish.com` |
+| `ALLOWED_ORIGINS` | `https://edenmish.com,https://www.edenmish.com,https://v2.edenmish.com,https://dash.edenmish.com,https://edenmish-v2.pages.dev` |
 
-> `ALLOWED_ORIGINS` controls CORS. If unset, CORS falls back to `*` (open).
-> Shopify theme-preview domains may need to be added during testing.
+> `ALLOWED_ORIGINS` controls CORS and is required for the credentialed ops cookie.
+> Shopify theme-preview domains may need to be added temporarily during testing.
 
 ### 5. Shopify webhook
 

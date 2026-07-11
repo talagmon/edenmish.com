@@ -246,16 +246,16 @@ const LIVE=['to_pickup','to_dropoff'];
 const NSTAT={pending:'ממתין',sent:'נשלח',failed:'נכשל',skipped:'דולג'};
 const NCHAN={email:'אימייל',whatsapp_future:'וואטסאפ',sms_future:'SMS',system:'מערכת'};
 const NTPL={ops_new_order:'הזמנה חדשה לעדן',customer_otp:'קוד אימות',customer_payment_confirmation:'אישור תשלום',ops_payment_received:'תשלום התקבל',customer_delivery_summary:'סיכום מסירה',customer_request_received:'אישור קבלת בקשה',customer_payment_link:'קישור תשלום ללקוח'};
-let sess=null, orders=[], activeId=null, watchId=null, doneOpen=false, notifOrderId=null, notifs=[];
+let orders=[], activeId=null, watchId=null, doneOpen=false, notifOrderId=null, notifs=[];
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function maskRecip(s){if(!s)return '';s=String(s);var at=s.indexOf('@');return at<1?s:(s[0]+'•••@'+s.slice(at+1));}
 function bucketOf(s){return QOF[s]||'inbox';}
 function fmt(t){return t?new Date(t).toLocaleString('he-IL'):'—';}
-async function api(path,opts){opts=opts||{};opts.headers=opts.headers||{};if(sess)opts.headers['X-Ops']=sess;return await fetch(path,opts);}
+async function api(path,opts){opts=opts||{};opts.headers=opts.headers||{};opts.credentials='include';return await fetch(path,opts);}
 function loginHtml(){document.getElementById('app').innerHTML='<div style="display:flex;align-items:center;justify-content:center;min-height:80vh;padding:20px"><div class="glass-card" style="max-width:360px;border-radius:20px;padding:32px;text-align:center"><div style="width:64px;height:64px;border-radius:50%;background:#5b2a86;display:flex;align-items:center;justify-content:center;margin:0 auto 16px"><span class="material-symbols-outlined" style="font-size:32px;color:#dfb7ff">two_wheeler</span></div><h2 style="color:#dfb7ff;font-size:1.3rem;margin-bottom:6px;font-family:Hanken Grotesk,sans-serif;font-weight:700">EdenMish Ops</h2><p class="muted" style="margin-bottom:20px;font-size:.85rem">מרכז הבקרה - גוש דן</p><input id="pin" type="password" placeholder="הזן PIN" style="text-align:center;font-size:1.2rem;letter-spacing:6px;margin-bottom:16px;background:rgba(13,8,20,.6);border:1px solid rgba(255,255,255,.14);color:#dae2fd;border-radius:10px;padding:14px;width:100%"><button class="btn" style="width:100%" onclick="doLogin()">התחבר</button></div></div>';}
-async function doLogin(){const pin=document.getElementById('pin').value;const r=await fetch('/api/ops/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});if(r.ok){sess=(await r.json()).session;refresh();}else{alert(r.status===429?'יותר מדי ניסיונות שגויים — נסו שוב בעוד 15 דקות':'PIN שגוי');}}
-function logout(){sess=null;stopWatch();loginHtml();}
-async function refresh(){const r=await api('/api/ops/orders');if(!r.ok){sess=null;stopWatch();return loginHtml();}orders=(await r.json()).orders||[];var fails=[];try{var fr=await api('/api/ops/notifications/failures');if(fr.ok)fails=(await fr.json()).failures||[];}catch(e){}notifs=[];if(notifOrderId){try{var nr=await api('/api/ops/orders/'+notifOrderId+'/notifications');if(nr.ok)notifs=(await nr.json()).notifications||[];}catch(e){}}render(fails);}
+async function doLogin(){const pin=document.getElementById('pin').value;const r=await fetch('/api/ops/login',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});if(r.ok){refresh();}else{alert(r.status===429?'יותר מדי ניסיונות שגויים — נסו שוב בעוד 15 דקות':'PIN שגוי');}}
+async function logout(){try{await api('/api/ops/logout',{method:'POST'});}finally{stopWatch();loginHtml();}}
+async function refresh(){const r=await api('/api/ops/orders');if(!r.ok){stopWatch();return loginHtml();}orders=(await r.json()).orders||[];var fails=[];try{var fr=await api('/api/ops/notifications/failures');if(fr.ok)fails=(await fr.json()).failures||[];}catch(e){}notifs=[];if(notifOrderId){try{var nr=await api('/api/ops/orders/'+notifOrderId+'/notifications');if(nr.ok)notifs=(await nr.json()).notifications||[];}catch(e){}}render(fails);}
 function render(fails){
   var byB={};QL.forEach(function(q){byB[q.bucket]=[];});
   orders.forEach(function(o){var b=bucketOf(o.status);(byB[b]=byB[b]||[]).push(o);});
@@ -328,9 +328,9 @@ async function approveInline(id){
   }catch(e){if(btn){btn.disabled=false;btn.textContent=btn.dataset.label||'אישור מחיר';}alert('שגיאה באישור המחיר. נסו שוב.');}
 }
 function copyPay(url){if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(url).catch(function(){});}else{var t=document.createElement('textarea');t.value=url;document.body.appendChild(t);t.select();try{document.execCommand('copy');}catch(e){}document.body.removeChild(t);}}
-async function setStatus(id,st){await api('/api/ops/orders/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:st})});if(st==='to_pickup'||st==='to_dropoff'){activeId=id;startWatch(id);}if(st==='picked_up'||st==='delivered'||st==='failed'||st==='cancelled')stopWatch();refresh();}
+async function setStatus(id,st){try{var r=await api('/api/ops/orders/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:st})});if(!r.ok)throw 0;if(st==='to_pickup'||st==='to_dropoff'){activeId=id;startWatch(id);}if(st==='picked_up'||st==='delivered'||st==='failed'||st==='cancelled')stopWatch();refresh();}catch(e){alert('לא הצלחנו לעדכן את ההזמנה. נסו שוב.');}}
 async function advance(id,cur){if(NEXT[cur])await setStatus(id,NEXT[cur]);}
-async function markPaid(id){if(!confirm('לסמן כשולם ידנית?'))return;await api('/api/ops/orders/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'paid'})});refresh();}
+async function markPaid(id){if(!confirm('לסמן כשולם ידנית?'))return;await setStatus(id,'paid');}
 var podOrderId=null,sigCtx=null,sigDrawing=false,sigHas=false;
 function showPod(id){podOrderId=id;var p=document.getElementById('pod');p.hidden=false;document.getElementById('pod-recv').value='';document.getElementById('pod-note').value='';document.getElementById('pod-photo').value='';document.getElementById('pod-photo-ph').innerHTML='📸 לחצו לצלם את החבילה ביעד';clearSig();initSig();}
 function hidePod(){document.getElementById('pod').hidden=true;}
@@ -367,7 +367,7 @@ async function submitPod(){
 }
 function toggleDone(){doneOpen=!doneOpen;render();}
 function startGpsForActive(){var o=orders.find(function(x){return x.id===activeId;});if(o&&(o.status==='to_pickup'||o.status==='to_dropoff'))startWatch(o.id);}
-function startWatch(id){if(watchId!==null)return;if(!navigator.geolocation)return;watchId=navigator.geolocation.watchPosition(function(p){var c=p.coords;fetch('/api/ops/orders/'+id+'/gps',{method:'POST',headers:{'Content-Type':'application/json','X-Ops':sess},body:JSON.stringify({lat:c.latitude,lng:c.longitude})});},function(){},{enableHighAccuracy:true,maximumAge:5000});}
+function startWatch(id){if(watchId!==null)return;if(!navigator.geolocation)return;watchId=navigator.geolocation.watchPosition(function(p){var c=p.coords;api('/api/ops/orders/'+id+'/gps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lat:c.latitude,lng:c.longitude})});},function(){},{enableHighAccuracy:true,maximumAge:5000});}
 function stopWatch(){if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null;}}
 document.getElementById('app').addEventListener('click',function(e){
   var b=e.target.closest('[data-act]');if(!b)return;
@@ -384,7 +384,7 @@ document.getElementById('app').addEventListener('click',function(e){
   else if(act==='toggledone')toggleDone();
   else if(act==='notifs'){notifOrderId=(notifOrderId===id)?null:id;refresh();}
 });
-loginHtml();
-setInterval(function(){if(sess&&!(document.activeElement&&document.activeElement.tagName==='INPUT'))refresh();},15000);
+refresh();
+setInterval(function(){if(!(document.activeElement&&document.activeElement.tagName==='INPUT'))refresh();},15000);
 </script></body></html>`;
 }

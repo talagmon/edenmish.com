@@ -46,7 +46,7 @@ export const QUEUE_BUCKETS = Object.freeze({
 // isLiveGps = the tracking map + ops GPS broadcast run while the order has this
 //   status (today: to_pickup, to_dropoff).
 //
-// nextStatuses = descriptive allowed forward transitions (not enforced yet).
+// nextStatuses = allowed forward transitions enforced by the ops status endpoint.
 
 export const STATUS_META = {
   [STATUS.RECEIVED]: {
