@@ -501,11 +501,18 @@ function loadMapsScript(){
   }).catch(()=>{});
 }
 function addressInput(which){return document.getElementById(which==="pickup"?"f-pickup-addr":"f-dropoff-addr");}
-function clearAddressSelection(which){
-  const input=addressInput(which);if(input)input.value="";
+function resetAddressGeo(which){
   geo[which+"Lat"]=null;geo[which+"Lng"]=null;geo[which+"City"]=null;geo.distanceKm=null;
   if(distEl)distEl.textContent="-";
   computeEstimate();
+}
+function clearAddressSelection(which){
+  const input=addressInput(which);if(input)input.value="";
+  resetAddressGeo(which);
+}
+function syncTypedAddress(which,widget){
+  const input=addressInput(which);if(input)input.value=(widget&&typeof widget.value==="string"?widget.value:"").trim();
+  resetAddressGeo(which);
 }
 window.__initAutocomplete = async function(){
   try {
@@ -526,9 +533,19 @@ window.__initAutocomplete = async function(){
       widget.setAttribute("aria-label",which==="pickup"?"כתובת איסוף":"כתובת יעד");
       const label=input.parentElement.querySelector("label");
       let selecting=false;
-      widget.addEventListener("input",()=>{if(!selecting)clearAddressSelection(which);});
+      let fallbackActivated=false;
+      widget.addEventListener("input",()=>{if(!selecting)syncTypedAddress(which,widget);});
       widget.addEventListener("focusin",()=>{if(label)label.classList.replace("text-on-surface-variant","text-primary");});
       widget.addEventListener("focusout",()=>{if(label)label.classList.replace("text-primary","text-on-surface-variant");});
+      widget.addEventListener("gmp-error",()=>{
+        if(fallbackActivated)return;fallbackActivated=true;
+        input.value=(typeof widget.value==="string"?widget.value:input.value).trim();
+        resetAddressGeo(which);mount.hidden=true;input.hidden=false;input.required=true;
+        if(label)label.htmlFor=input.id;
+        placesAutocompleteReady=false;
+        console.warn("EdenMish Places request failed; using plain address field for",which);
+        showError("שירות הצעות הכתובת אינו זמין כרגע. ניתן להמשיך עם כתובת מלאה שהוקלדה ידנית.");
+      });
       widget.addEventListener("gmp-select",async({placePrediction})=>{
         selecting=true;
         try{
@@ -551,7 +568,7 @@ window.__initAutocomplete = async function(){
           else{geo.dropoffLat=lat;geo.dropoffLng=lng;geo.dropoffCity=city;}
           computeEstimate();
           maybeDistance();
-        }catch(e){console.warn("EdenMish place selection failed:",e);clearAddressSelection(which);showError("לא הצלחנו לקרוא את הכתובת שנבחרה. נסו לבחור אותה שוב מהרשימה.");}
+        }catch(e){console.warn("EdenMish place selection failed:",e);syncTypedAddress(which,widget);showError("לא הצלחנו לקרוא את ההצעה שנבחרה. ניתן לנסות שוב או להמשיך עם כתובת מלאה שהוקלדה ידנית.");}
         finally{selecting=false;}
       });
       return {which,input,mount,widget,label};
@@ -1066,13 +1083,9 @@ form.addEventListener("submit", async (e) => {
   if (!pickupAddress) return showError("נא למלא כתובת איסוף.");
   if (!dropoffAddress) return showError("נא למלא כתובת יעד.");
 
-  // Require selecting both addresses from the autocomplete dropdown (when Maps is
-  // loaded) so coordinates + a real city are sent → exact pricing, no manual review.
-  // If Maps failed to load, we fall through (order becomes review) rather than block.
-  if (placesAutocompleteReady) {
-    if (geo.pickupLat == null) return showError("נא לבחור כתובת איסוף מהרשימה (הקלידו ובחרו הצעה).");
-    if (geo.dropoffLat == null) return showError("נא לבחור כתובת יעד מהרשימה (הקלידו ובחרו הצעה).");
-  }
+  // A selected prediction supplies coordinates for an exact quote. A complete
+  // manually typed address remains valid and is sent without coordinates so the
+  // Worker can route it through the existing review path instead of blocking checkout.
   if (service === "flash") {
     if (!flashAvailableNow()) return showError("שירות מהיר זמין לשיגור מיידי בשעות הפעילות בלבד (א׳-ה׳ 09:00-20:00 · ו׳ 08:00-13:00). בחרו רגיל או חסכוני, או חזרו בשעות הפעילות.");
   } else if (!sched.window) {
