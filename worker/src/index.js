@@ -1,5 +1,5 @@
 import { createOrder, getOrderByToken, getOrderById, listOrders, setOrderStatus, setOrderRating, getStatusHistory, addGps, latestGps, getGpsTrail, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof, listRecentNotificationFailures, listNotificationsForOrder, createCancellationRequest, listCancellationRequests, runRetentionCleanup } from './db.js';
-import { priceOrder, zoneOf } from './pricing.js';
+import { priceOrder, ZONE_CITIES, DEFAULT_PRICING_RULES } from './pricing.js';
 import { makeSession, checkSession, getCookie, genOtp, hashOtp, timingSafeEqual } from './integrations.js';
 import { createCharge, settleOrder, verifyShopifyWebhook, parseShopifyOrderWebhook } from './payment.js';
 import { trackingHtml, opsHtml } from './pages.js';
@@ -127,6 +127,35 @@ const couponMessage = (reason) => COUPON_MESSAGES[reason] || COUPON_MESSAGES.not
 // Phone (E.164-normalized) preferred — it's required on orders; email is the fallback.
 const couponCustomerKey = (b) => normalizeIlPhone(b && b.phone) || (b && b.email ? String(b.email).trim().toLowerCase() : null);
 
+// One pricing boundary for quotes, coupon validation, and order creation. Every
+// caller reads the current D1 rules and executes the same pricing engine.
+async function authoritativeQuote(env, input) {
+  return priceOrder(input, await getRules(env.DB));
+}
+
+function normalizeQuoteInput(input) {
+  const b = { ...(input || {}) };
+  const rawHour = b.when_hour;
+  b.service = String(b.service || '').trim().toLowerCase();
+  b.size = String(b.size || '').trim().toLowerCase();
+  b.pickup_city = String(b.pickup_city || '').trim().slice(0, 100);
+  b.dropoff_city = String(b.dropoff_city || '').trim().slice(0, 100);
+  b.when_date = String(b.when_date || '').trim();
+  b.when_hour = rawHour == null || rawHour === '' ? NaN : Number(rawHour);
+  return b;
+}
+
+function quoteInputError(b) {
+  if (!b.pickup_city || !b.dropoff_city) return 'missing_cities';
+  if (!['eco', 'standard', 'flash'].includes(b.service)) return 'invalid_service';
+  if (!['small', 'medium'].includes(b.size)) return 'invalid_size';
+  const m = b.when_date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m || !Number.isInteger(b.when_hour) || b.when_hour < 0 || b.when_hour > 23) return 'invalid_schedule';
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  if (d.getUTCFullYear() !== +m[1] || d.getUTCMonth() !== +m[2] - 1 || d.getUTCDate() !== +m[3]) return 'invalid_schedule';
+  return null;
+}
+
 async function isOps(req, env) {
   const xOps = req.headers.get('X-Ops');
   if (xOps && await checkSession(env, xOps)) return true;
@@ -198,28 +227,43 @@ export default {
         }
       } catch (rlErr) { console.error('rate_limit_error', rlErr && rlErr.message ? rlErr.message : String(rlErr)); }
       let b; try { b = await readJson(req); } catch (e) { return json({ error: e.message }, e.status || 400, cors); }
-      const rules = await getRules(env.DB);
-      const pr = priceOrder(b, rules);
+      const pr = await authoritativeQuote(env, b);
       const v = await validateCoupon(env.DB, b.coupon_code, pr.price, couponCustomerKey(b));
       if (!v.valid) return json({ valid: false, reason: v.reason, message: couponMessage(v.reason) }, 200, cors);
       return json({ valid: true, code: v.code, subtotal_price: v.subtotal, discount_amount: v.discountAmount, price: v.price, title: v.title }, 200, cors);
     }
 
-    // ---- Public pricing rules (zone matrix + surcharges) ----
-    // Lets the booking funnel show accurate prices by reading the same D1 pricing_rules
-    // the server uses, eliminating client/server drift.
+    // ---- Authoritative public quote ----
+    // GET supports simple integrations; the booking funnel uses POST so customer
+    // route details do not end up in URLs or intermediary logs.
+    if (path === '/api/quote' && ['GET', 'POST'].includes(req.method)) {
+      try {
+        const k = await anonKey(env, clientIp(req));
+        const rl = await incrRateLimit(env.DB, 'quote:' + k, 60 * 1000);
+        if (rl.count > 60) return json({ error: 'rate_limited' }, 429, { ...cors, 'Retry-After': '60' });
+      } catch (rlErr) { console.error('rate_limit_error', rlErr && rlErr.message ? rlErr.message : String(rlErr)); }
+
+      let raw;
+      if (req.method === 'GET') raw = Object.fromEntries(url.searchParams.entries());
+      else {
+        try { raw = await readJson(req); } catch (e) { return json({ error: e.message }, e.status || 400, cors); }
+      }
+      const b = normalizeQuoteInput(raw);
+      const inputError = quoteInputError(b);
+      if (inputError) return json({ error: inputError }, 400, cors);
+
+      const quote = await authoritativeQuote(env, b);
+      return json({ ...quote, available: !quote.review, currency: 'ILS' }, 200, cors);
+    }
+
+    // ---- Backward-compatible public pricing config ----
+    // New funnel code uses /api/quote. Keep this endpoint for integrations that need
+    // the canonical city-zone map and current D1 overrides.
     if (path === '/api/pricing' && req.method === 'GET') {
       const rules = await getRules(env.DB);
       return json({
-        zones: { 1: zoneOf('תל אביב'), 2: zoneOf('הרצליה'), 3: zoneOf('פתח תקווה') },
-        defaults: {
-          eco_z1: 35, eco_z2: 55, eco_z3: 75,
-          std_z1: 50, std_z2: 70, std_z3: 115,
-          flash_z1: 85, flash_z2: 110,
-          sur_medium: 15,
-          sur_evening: 30,
-          weekend_mult: 1.5,
-        },
+        zones: ZONE_CITIES,
+        defaults: DEFAULT_PRICING_RULES,
         overrides: rules || {},
       }, 200, { ...cors, 'Cache-Control': 'public, max-age=300' });
     }
@@ -314,8 +358,7 @@ export default {
         }
       }
 
-      const rules = await getRules(env.DB);
-      const pr = priceOrder(b, rules);
+      const pr = await authoritativeQuote(env, b);
       const isReview = pr.review;
 
       // Server-side hard gates: reject out-of-zone, Flash Zone 3, outside business hours.

@@ -1,68 +1,12 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { priceOrder, zoneOf } from '../../worker/src/pricing.js';
 
 // ============================================================
 // PRICING ENGINE TESTS
-// Replicates the FINAL_PRICING_SPEC zone-matrix pricing logic
-// (mirrors worker/src/pricing.js) so it can be tested in CI
-// without the Worker runtime.
+// The storefront suite imports the Worker's pricing source of truth directly.
+// It must never carry a second copy of zones, rates, or surcharge arithmetic.
 // ============================================================
-
-const ZONE_CITIES = {
-  1: ['תל אביב', 'תל אביב-יפו', 'תל אביב יפו', 'רמת גן', 'גבעתיים', 'בני ברק'],
-  2: ['הרצליה', 'רמת השרון', 'חולון', 'בת ים', 'קריית אונו', 'קרית אונו', 'גבעת שמואל', 'אזור', 'גני תקווה', 'סביון', 'אור יהודה'],
-  3: ['ראשון לציון', 'כפר סבא', 'רעננה', 'פתח תקווה', 'הוד השרון', 'רמלה', 'לוד']
-};
-
-const MATRIX = {
-  eco:      { 1: 35,  2: 55,  3: 75 },
-  standard: { 1: 50,  2: 70,  3: 115 },
-  flash:    { 1: 85,  2: 110, 3: null }
-};
-
-const SUR_MEDIUM = 15;
-const SUR_EVENING = 30;
-const WEEKEND_MULT = 1.5;
-
-function zoneOf(city) {
-  const c = String(city ?? '').trim();
-  for (const z of [1, 2, 3]) if (ZONE_CITIES[z].includes(c)) return z;
-  return null;
-}
-
-function isWeekend(yyyymmdd) {
-  if (!yyyymmdd) return false;
-  const m = String(yyyymmdd).match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (!m) return false;
-  const day = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay();
-  return day === 6; // Saturday only
-}
-
-function priceOrder(o) {
-  const reasons = [];
-  const pz = zoneOf(o.pickup_city);
-  const dz = zoneOf(o.dropoff_city);
-  if (pz == null || dz == null) reasons.push('out_of_zone');
-  const zone = (pz && dz) ? Math.max(pz, dz) : null;
-  const service = (o.service || 'standard').toLowerCase();
-  const size = (o.size || 'small').toLowerCase();
-
-  let base = null;
-  if (zone) {
-    if (service === 'eco') base = MATRIX.eco[zone];
-    else if (service === 'flash') base = zone === 3 ? null : MATRIX.flash[zone];
-    else base = MATRIX.standard[zone];
-  }
-  if (service === 'flash' && zone === 3) reasons.push('flash_unavailable_z3');
-  let price = base != null ? base : MATRIX.standard[1];
-  if (size === 'medium') price += SUR_MEDIUM;
-  const hour = Number(o.when_hour);
-  if (hour >= 19 && hour < 22) price += SUR_EVENING;
-  price = isWeekend(o.when_date) ? Math.round(price * WEEKEND_MULT) : Math.round(price);
-  return { price, zone, service, size, base, review: reasons.length > 0, reasons };
-}
 
 // --- Helpers ---
 const std = (pickup, dropoff, opts = {}) =>

@@ -157,7 +157,22 @@ describe('Frontend: Booking form', () => {
 
   test('Has area gate (Gush-Dan bounds)', () => {
     assertContains(html, 'inGushDanBounds', 'coordinate gate');
-    assertContains(html, 'EDEN_ZONES', 'city zone list');
+    assert.ok(!html.includes('const EDEN_ZONES'), 'the funnel must not duplicate the Worker city-zone list');
+    assert.ok(!html.includes('const ZONES'), 'the funnel must not duplicate pricing zones');
+  });
+
+  test('Uses the Worker quote as the authoritative price with a bounded fallback', () => {
+    assertContains(html, '/api/quote', 'authoritative quote endpoint');
+    assertContains(html, 'requestAuthoritativeQuote', 'debounced quote request');
+    assertContains(html, 'sequence!==quoteState.sequence', 'stale response guard');
+    assertContains(html, 'renderAuthoritativeQuote', 'server quote renderer');
+    assertContains(html, 'activeQuote&&!activeQuote.available', 'server unavailable-route submission gate');
+    assertContains(html, 'FALLBACK_BASE', 'offline starting-price fallback');
+    assertContains(html, 'הערכת מינימום בלבד', 'fallback disclosure');
+    assertContains(html, 'geo[which+"Lat"]=null', 'edited-address stale quote invalidation');
+    assertContains(html, 'id="price-val"', 'live price value');
+    assertContains(html, 'aria-live="polite"', 'accessible price updates');
+    assert.ok(!html.includes('/api/pricing'), 'the funnel no longer reconstructs exact prices from raw rules');
   });
 
   test('Has scheduling (business hours)', () => {
