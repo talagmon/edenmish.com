@@ -73,7 +73,7 @@ function trackingEtaHelpers() {
   const html = readPage('track.html');
   const source = html.split('// ---- ETA helpers ----')[1].split('// ---- Live Google Map')[0];
   const context = {};
-  runInNewContext(`${source}\nglobalThis.__eta = { routeDestination, etaCopy, routeRefreshDue };`, context);
+  runInNewContext(`${source}\nglobalThis.__eta = { routeDestination, etaCopy, formatEtaDuration, routeRefreshDue };`, context);
   return context.__eta;
 }
 
@@ -314,6 +314,9 @@ describe('Frontend: Tracking page', () => {
     assert.equal(helpers.etaCopy('to_pickup', '12 דקות'), 'זמן משוער להגעה לאיסוף: 12 דקות');
     assert.equal(helpers.etaCopy('to_dropoff', '8 דקות'), 'זמן משוער להגעה למסירה: 8 דקות');
     assert.equal(helpers.etaCopy('picked_up', '8 דקות'), '');
+    assert.equal(helpers.formatEtaDuration(1), 'דקה');
+    assert.equal(helpers.formatEtaDuration(60001), '2 דקות');
+    assert.equal(helpers.formatEtaDuration(null), '');
   });
 
   test('ETA route refresh is throttled for one minute but refreshes on leg changes', () => {
@@ -328,7 +331,14 @@ describe('Frontend: Tracking page', () => {
     assertContains(html, 'id="eta-hint"');
     assertContains(html, 'id="map-status"');
     assertContains(html, 'aria-live="polite"');
-    assertContains(html, 'duration_in_traffic||leg.duration');
+    assertContains(html, 'google.maps.importLibrary("routes")', 'dynamic Routes library import');
+    assertContains(html, 'Route.computeRoutes', 'new Route class request');
+    assertContains(html, 'routingPreference:"TRAFFIC_AWARE"', 'traffic-aware ETA');
+    assertContains(html, 'fields:["path","durationMillis"]', 'minimal route fields');
+    assertContains(html, 'route.createPolylines', 'new route polyline rendering');
+    assertContains(html, 'using straight-line fallback', 'route failure fallback');
+    assert.ok(!html.includes('google.maps.DirectionsService'), 'tracking must not use the legacy directions service');
+    assert.ok(!html.includes('google.maps.DirectionsRenderer'), 'tracking must not use the legacy directions renderer');
   });
 
   test('OTP cells expose numeric and one-time-code input semantics', () => {
