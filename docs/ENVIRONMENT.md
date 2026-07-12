@@ -77,17 +77,25 @@ credentials into the staging Worker. See `CI_CD.md` for one-time setup.
 
 | Secret | Purpose | Required Google services |
 |---|---|---|
-| `MAPS_KEY` | Returned by the server-side `/maps-key` function for booking address autocomplete and customer maps | Maps JavaScript API and **Places API (New)** |
+| `MAPS_KEY` | Returned by the server-side `/maps-key` function for booking address autocomplete, route distance, and customer maps | Maps JavaScript API, **Places API (New)**, and **Routes API** |
 
 The canonical booking page uses `PlaceAutocompleteElement`, `gmp-select`, and
-`Place.fetchFields()`. Enable Places API (New) in the same Google Cloud project
-before releasing the migration, and restrict the browser key to the EdenMish
-production, staging, and approved preview origins. If the new Places library
-cannot initialize, the form keeps both plain address inputs visible; no key or
-configuration value is embedded in git.
+`Place.fetchFields()` for addresses, plus the Maps JavaScript Routes library's
+`RouteMatrix.computeRouteMatrix()` for driving distance. Enable Places API (New)
+and Routes API in the same Google Cloud project before releasing these features,
+and add both services to the browser key's API restrictions. Restrict that key to
+the EdenMish production, staging, and approved preview origins. If address or
+route services are unavailable, the booking page retains the plain-address and
+bounded quote fallbacks; no key or configuration value is embedded in git.
+
+Do not remove legacy Places API, Directions API, or Distance Matrix API key
+permissions until their remaining tracking-page and Shopify-theme consumers have
+been migrated and verified in their own PRs.
 
 Google references: [Autocomplete migration guide](https://developers.google.com/maps/documentation/javascript/legacy/places-migration-autocomplete)
-and [Place Autocomplete Widget](https://developers.google.com/maps/documentation/javascript/place-autocomplete-new).
+and [Place Autocomplete Widget](https://developers.google.com/maps/documentation/javascript/place-autocomplete-new),
+plus [Get started with Routes](https://developers.google.com/maps/documentation/javascript/routes/start)
+and [Route Matrix](https://developers.google.com/maps/documentation/javascript/routes/get-a-route-matrix).
 
 ---
 
