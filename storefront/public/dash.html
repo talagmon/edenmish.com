@@ -21,6 +21,7 @@
 var API = window.EDEN_API.ops;
 var HE = {received:"נתקבלה",priced:"מחושב",review:"בדיקה",payment_sent:"תשלום נשלח",paid:"שולם",to_pickup:"בדרך לאיסוף",picked_up:"נאסף",to_dropoff:"בדרך למסירה",delivered:"נמסר",failed:"נכשל",cancelled:"בוטל"};
 var LIVE = ["to_pickup","to_dropoff"];
+var ACTIVE = ["paid","to_pickup","picked_up","to_dropoff"];
 var NEXT = {paid:"to_pickup",to_pickup:"picked_up",picked_up:"to_dropoff"};
 var NEXTLBL = {paid:"אשר יציאה לאיסוף",to_pickup:"אשר איסוף ✓",picked_up:"אשר יציאה למסירה"};
 var orders = [], coupons = [], activeOrder = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, gpsOrderId = null, gpsState = "idle", activeFilter = "active", currentView = "queue";
@@ -74,6 +75,44 @@ async function doLogin(){
 }
 async function logout(){try{await api("/api/ops/logout",{method:"POST"});}finally{stopWatch();loginView();}}
 
+// ---- Ops queue helpers ----
+var STALE_PAYMENT_MS = 60*60*1000;
+var ISRAEL_DAY_FORMAT = new Intl.DateTimeFormat("en-US", {timeZone:"Asia/Jerusalem",year:"numeric",month:"2-digit",day:"2-digit"});
+function israelDateKey(timestamp){
+  var parts=ISRAEL_DAY_FORMAT.formatToParts(new Date(Number(timestamp)));
+  var values={};parts.forEach(function(part){if(part.type!=="literal")values[part.type]=part.value;});
+  return values.year+"-"+values.month+"-"+values.day;
+}
+function isActiveOrder(o){return ACTIVE.includes(o.status);}
+function dailyOpsSummary(items,now){
+  var today=israelDateKey(now);
+  var deliveredToday=items.filter(function(o){return o.status==="delivered"&&o.delivered_at&&israelDateKey(o.delivered_at)===today;});
+  var stalePayment=items.filter(function(o){
+    return ["priced","payment_sent"].includes(o.status)&&o.payment_status!=="paid"&&Number(o.created_at)>0&&Number(o.created_at)<=now-STALE_PAYMENT_MS;
+  });
+  return {
+    delivered:deliveredToday.length,
+    revenue:deliveredToday.reduce(function(sum,o){return sum+(Number(o.price)||0);},0),
+    stalePayment:stalePayment.length
+  };
+}
+function scheduleSortKey(o){
+  var match=String(o.when_date||"").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!match)return Infinity;
+  var rawHour=o.when_hour;
+  var hour=rawHour!==null&&rawHour!==undefined&&String(rawHour).trim()!==""?Number(rawHour):23;
+  if(!Number.isFinite(hour))hour=23;
+  return Date.UTC(Number(match[1]),Number(match[2])-1,Number(match[3]),Math.max(0,Math.min(23,hour)));
+}
+function compareQueueOrders(a,b,scheduleFirst){
+  var pa=(a.urgent||a.review_flag)?0:1,pb=(b.urgent||b.review_flag)?0:1;
+  if(pa!==pb)return pa-pb;
+  if(scheduleFirst){var sa=scheduleSortKey(a),sb=scheduleSortKey(b);if(sa!==sb)return sa-sb;}
+  var da=deliveryDeadline(a)||Infinity,db=deliveryDeadline(b)||Infinity;
+  if(da!==db)return da-db;
+  return Number(b.id||0)-Number(a.id||0);
+}
+
 async function refresh(){
   var r;
   try{r = await api("/api/ops/orders");}catch(e){return connectionErrorView();}
@@ -91,34 +130,32 @@ function renderQueue(){
   var counts = {
     all: orders.length,
     inbox: orders.filter(function(o){return ["received","priced","review","payment_sent"].includes(o.status);}).length,
-    active: orders.filter(function(o){return ["paid"].concat(LIVE).includes(o.status);}).length,
+    active: orders.filter(isActiveOrder).length,
     done: orders.filter(function(o){return o.status==="delivered";}).length,
     cancelled: orders.filter(function(o){return o.status==="cancelled";}).length,
     problems: orders.filter(function(o){return ["failed","refund_pending"].includes(o.status);}).length
   };
   var revenue = orders.filter(function(o){return o.payment_status==='paid';}).reduce(function(s,o){return s+(o.price||0);},0);
+  var daily = dailyOpsSummary(orders,Date.now());
   var urgentCount = orders.filter(function(o){return (o.urgent||o.review_flag) && !["delivered","cancelled","failed"].includes(o.status);}).length;
 
   var filtered = orders;
   if(activeFilter==="inbox") filtered = orders.filter(function(o){return ["received","priced","review","payment_sent"].includes(o.status);});
-  else if(activeFilter==="active") filtered = orders.filter(function(o){return ["paid"].concat(LIVE).includes(o.status);});
+  else if(activeFilter==="active") filtered = orders.filter(isActiveOrder);
   else if(activeFilter==="done") filtered = orders.filter(function(o){return o.status==="delivered";});
   else if(activeFilter==="cancelled") filtered = orders.filter(function(o){return o.status==="cancelled";});
   else if(activeFilter==="problems") filtered = orders.filter(function(o){return ["failed","refund_pending"].includes(o.status);});
 
-  var sorted = filtered.sort(function(a,b){
-    var pa=(a.urgent||a.review_flag)?0:1, pb=(b.urgent||b.review_flag)?0:1;
-    if(pa!==pb) return pa-pb;
-    var da=deliveryDeadline(a)||Infinity, db=deliveryDeadline(b)||Infinity;
-    if(da!==db) return da-db;
-    return b.id-a.id;
-  });
+  var sorted = filtered.slice().sort(function(a,b){return compareQueueOrders(a,b,activeFilter==="active");});
   if(activeFilter==="all") sorted = sorted.slice(0,200);
   if(activeFilter==="done") sorted = sorted.slice(0,100);
   var cards = sorted.map(queueCard).join("");
 
   function kpiCard(label,val,color){
     return '<div class="glass-card flex-1 rounded-xl p-2 text-center min-w-0"><div class="text-label-sm text-on-surface-variant truncate">'+label+'</div><div class="font-headline-md text-headline-md-mobile mt-0.5 text-'+color+' truncate">'+val+'</div></div>';
+  }
+  function dailyCard(label,val,icon,tone){
+    return '<div class="glass-card rounded-xl p-2 min-w-0 flex items-center gap-2"><span class="material-symbols-outlined text-'+tone+' text-xl">'+icon+'</span><div class="min-w-0"><div class="font-label-bold text-'+tone+' truncate">'+val+'</div><div class="text-label-sm text-on-surface-variant truncate">'+label+'</div></div></div>';
   }
   function tabBtn(key,label,count){
     var isActive = activeFilter===key;
@@ -136,6 +173,9 @@ function renderQueue(){
     '<button onclick="logout()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-error"><span class="material-symbols-outlined">logout</span></button>'+
     '</div></div>'+
     '<div class="flex gap-2 mt-2">'+viewTabsHtml()+'</div>'+
+    '<div class="grid grid-cols-3 gap-2 mt-2">'+
+    dailyCard("מסירות היום",daily.delivered,"task_alt","secondary")+dailyCard("הכנסה היום","₪"+daily.revenue,"payments","success-mint")+dailyCard("ממתינות מעל שעה",daily.stalePayment,"schedule",daily.stalePayment>0?"error":"on-surface-variant")+
+    '</div>'+
     '<div class="flex gap-2 mt-2">'+
     kpiCard("סה״כ",counts.all,"primary")+kpiCard("פעילות",counts.active,"secondary")+kpiCard("הכנסה","₪"+revenue,"success-mint")+kpiCard("חריגות",counts.problems+counts.cancelled,(counts.problems+counts.cancelled)>0?"error":"on-surface-variant")+
     '</div>'+
