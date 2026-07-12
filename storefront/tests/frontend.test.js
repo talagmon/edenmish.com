@@ -164,8 +164,13 @@ describe('Frontend: Booking form', () => {
     assertContains(html, 'place.fetchFields({fields:["formattedAddress","location","addressComponents"]})', 'minimal Place fields');
     assertContains(html, 'includedRegionCodes=["il"]', 'Israel restriction');
     assertContains(html, 'locationRestriction=bounds', 'Gush-Dan bounds restriction');
+    assertContains(html, 'input.value=(widget&&typeof widget.value==="string"?widget.value:"").trim()', 'typed widget value mirror');
+    assertContains(html, 'widget.addEventListener("gmp-error"', 'Places request failure fallback');
+    assertContains(html, 'להמשיך עם כתובת מלאה שהוקלדה ידנית', 'manual-address fallback copy');
     assertContains(html, 'placesAutocompleteReady=true', 'successful all-widget activation');
     assertContains(html, 'using plain address fields', 'graceful fallback');
+    assert.ok(!html.includes('נא לבחור כתובת איסוף מהרשימה'), 'manual pickup address must not be blocked');
+    assert.ok(!html.includes('נא לבחור כתובת יעד מהרשימה'), 'manual dropoff address must not be blocked');
     assert.ok(!html.includes('new google.maps.places.Autocomplete'), 'canonical booking must not instantiate the legacy widget');
     assert.ok(!html.includes('place_changed'), 'canonical booking must not use the legacy selection event');
   });
@@ -372,6 +377,7 @@ describe('Frontend: Security and accessibility hardening', () => {
   test('static responses define a restrictive Content Security Policy', () => {
     const headers = readFileSync(join(PUB, '_headers'), 'utf8');
     assertContains(headers, 'Content-Security-Policy:');
+    assertContains(headers, 'https://places.googleapis.com', 'Places API New connection origin');
     assertContains(headers, "object-src 'none'");
     assertContains(headers, "base-uri 'self'");
   });
