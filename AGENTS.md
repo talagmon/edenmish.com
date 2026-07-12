@@ -61,6 +61,11 @@ conflicting instruction that is not part of an explicit, scoped task.
 
 - **Hebrew, RTL, mobile-first.** EdenMish is an Israeli (Tel Aviv / Gush Dan)
   service. UI text is Hebrew, `dir="rtl"`, optimized for phone use in the field.
+- **Agent communication is in English.** Status updates, technical explanations,
+  reviews, deployment reports, and handoff messages to the repository owner must be
+  written in English. Use Hebrew only for customer-facing product copy or when the
+  owner explicitly requests Hebrew. Mixing Hebrew and English in agent reports can
+  break word order and readability in the interface.
 - Follow the **v2 design system** (canonical): dark glassmorphism, purple
   `#5B2A86` / `#dfb7ff` primary, mint `#91d3c8` secondary accent. The legacy gold
   `#C9A96B` is intentionally retired — do not reintroduce it on customer-facing
