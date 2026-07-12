@@ -81,21 +81,26 @@ credentials into the staging Worker. See `CI_CD.md` for one-time setup.
 
 The canonical booking page uses `PlaceAutocompleteElement`, `gmp-select`, and
 `Place.fetchFields()` for addresses, plus the Maps JavaScript Routes library's
-`RouteMatrix.computeRouteMatrix()` for driving distance. Enable Places API (New)
-and Routes API in the same Google Cloud project before releasing these features,
-and add both services to the browser key's API restrictions. Restrict that key to
-the EdenMish production, staging, and approved preview origins. If address or
-route services are unavailable, the booking page retains the plain-address and
-bounded quote fallbacks; no key or configuration value is embedded in git.
+`RouteMatrix.computeRouteMatrix()` for driving distance. The customer tracking
+page uses the same Routes library's `Route.computeRoutes()` for its road overlay
+and traffic-aware ETA. Enable Places API (New) and Routes API in the same Google
+Cloud project before releasing these features, and add both services to the
+browser key's API restrictions. Restrict that key to the EdenMish production,
+staging, and approved preview origins. If address or route services are
+unavailable, the pages retain their plain-address, bounded-quote, and
+straight-line route fallbacks; no key or configuration value is embedded in git.
 
-Do not remove legacy Places API, Directions API, or Distance Matrix API key
-permissions until their remaining tracking-page and Shopify-theme consumers have
-been migrated and verified in their own PRs.
+Do not remove legacy Places API or Distance Matrix API key permissions until the
+remaining Shopify-theme consumers have been migrated and verified in their own
+PR. Directions API is no longer required by repository code after the tracking
+Route migration, but removing its key permission remains a separate operator
+change after staging verification.
 
 Google references: [Autocomplete migration guide](https://developers.google.com/maps/documentation/javascript/legacy/places-migration-autocomplete)
 and [Place Autocomplete Widget](https://developers.google.com/maps/documentation/javascript/place-autocomplete-new),
 plus [Get started with Routes](https://developers.google.com/maps/documentation/javascript/routes/start)
-and [Route Matrix](https://developers.google.com/maps/documentation/javascript/routes/get-a-route-matrix).
+and [Route Matrix](https://developers.google.com/maps/documentation/javascript/routes/get-a-route-matrix),
+and [Route migration](https://developers.google.com/maps/documentation/javascript/routes/routes-js-migration).
 
 ---
 

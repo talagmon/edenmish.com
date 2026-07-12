@@ -241,25 +241,72 @@ function etaCopy(status,duration){
   if(status === "to_dropoff") return "זמן משוער להגעה למסירה: " + duration;
   return "";
 }
+function formatEtaDuration(durationMillis){
+  const millis=Number(durationMillis);
+  if(!Number.isFinite(millis)||millis<=0)return "";
+  const minutes=Math.max(1,Math.ceil(millis/60000));
+  return minutes===1?"דקה":minutes+" דקות";
+}
 function routeRefreshDue(status,now,previousStatus,previousAt){
   return status !== previousStatus || !previousAt || now - previousAt >= ROUTE_REFRESH_MS;
 }
 
 // ---- Live Google Map (loaded via /maps-key) ----
-let gMap=null, gMarker=null, gDestMarker=null, gTrailLine=null, gDirRenderer=null, gDirService=null, gFallbackLine=null, gPickupMarker=null, gPoll=null, lastStatus=null, mapsRequested=false, lastRouteAt=0, lastRouteStatus=null;
+let gMap=null, gMarker=null, gDestMarker=null, gTrailLine=null, gRoutePolylines=[], gRouteLibraryPromise=null, gRouteSequence=0, gFallbackLine=null, gPickupMarker=null, gPoll=null, lastStatus=null, mapsRequested=false, lastRouteAt=0, lastRouteStatus=null;
 function loadMapsForTrack(){
   if(mapsRequested || (window.google && google.maps)) return;
   mapsRequested=true;
   fetch("/maps-key").then(r=>r.json()).then(d=>{
     const key=d&&d.key; if(!key) return;
     const s=document.createElement("script");
-    s.src="https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(key)+"&language=iw&region=il&callback=__trackMapReady";
+    s.src="https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(key)+"&loading=async&language=iw&region=il&v=weekly&callback=__trackMapReady";
     s.async=true; s.onerror=()=>{ mapsRequested=false; }; document.head.appendChild(s);
   }).catch(()=>{ mapsRequested=false; });
 }
 window.__trackMapReady = function(){
   if(window.__lastTrack){ const o=__lastTrack.order||{}; renderMap(["to_pickup","to_dropoff"].includes(o.status), __lastTrack.gps||null, o, __lastTrack.gpsTrail||null); }
 };
+function clearRoutePolylines(){
+  gRoutePolylines.forEach(function(polyline){polyline.setMap(null);});
+  gRoutePolylines=[];
+}
+function loadRouteLibrary(){
+  if(!gRouteLibraryPromise){
+    gRouteLibraryPromise=google.maps.importLibrary("routes").then(function(library){
+      if(!library.Route)throw new Error("route_class_unavailable");
+      return library.Route;
+    }).catch(function(error){gRouteLibraryPromise=null;throw error;});
+  }
+  return gRouteLibraryPromise;
+}
+function showRouteFallback(org,dest,eta){
+  clearRoutePolylines();
+  if(eta){eta.textContent="";eta.classList.add("hidden");}
+  if(!gFallbackLine)gFallbackLine=new google.maps.Polyline({path:[org,dest],strokeColor:"#8B5CF6",strokeWeight:3,strokeOpacity:0.5,geodesic:true,map:gMap});
+  else{gFallbackLine.setPath([org,dest]);gFallbackLine.setMap(gMap);}
+}
+async function refreshLiveRoute(org,dest,routeStatus,eta){
+  const sequence=++gRouteSequence;
+  try{
+    const Route=await loadRouteLibrary();
+    const result=await Route.computeRoutes({
+      origin:org,destination:dest,travelMode:"DRIVING",routingPreference:"TRAFFIC_AWARE",
+      fields:["path","durationMillis"]
+    });
+    if(sequence!==gRouteSequence||routeStatus!==lastStatus)return;
+    const route=result&&result.routes&&result.routes[0];
+    if(!route)throw new Error("route_not_found");
+    clearRoutePolylines();
+    gRoutePolylines=route.createPolylines({polylineOptions:{strokeColor:"#8B5CF6",strokeWeight:6,strokeOpacity:0.4}});
+    gRoutePolylines.forEach(function(polyline){polyline.setMap(gMap);});
+    if(gFallbackLine){gFallbackLine.setMap(null);gFallbackLine=null;}
+    if(eta){eta.textContent=etaCopy(routeStatus,formatEtaDuration(route.durationMillis));eta.classList.toggle("hidden",!eta.textContent);}
+  }catch(error){
+    if(sequence!==gRouteSequence||routeStatus!==lastStatus)return;
+    console.warn("Routes API failed; using straight-line fallback:",error);
+    showRouteFallback(org,dest,eta);
+  }
+}
 function renderMap(live, gps, order, trail){
   const ph=$("map-placeholder"), mapEl=$("map"), mapStatus=$("map-status"), eta=$("eta-hint");
   const hasGps = gps && gps.lat != null;
@@ -289,34 +336,15 @@ function renderMap(live, gps, order, trail){
     // Driving route overlay (roads) + pickup marker
     if(order && order.pickup_lat && order.dropoff_lat){
       if(!gPickupMarker){ gPickupMarker=new google.maps.Marker({ position:{lat:Number(order.pickup_lat),lng:Number(order.pickup_lng)}, map:gMap, title:"נקודת איסוף", icon:{ path:google.maps.SymbolPath.CIRCLE, scale:8, fillColor:"#8B5CF6", fillOpacity:0.5, strokeColor:"#fff", strokeWeight:1.5 } }); }
-      if(google.maps.DirectionsService && live){
-        if(!gDirRenderer) gDirRenderer=new google.maps.DirectionsRenderer({ suppressMarkers:true, polylineOptions:{ strokeColor:"#8B5CF6", strokeWeight:6, strokeOpacity:0.4 }, map:gMap });
-        if(!gDirService) gDirService=new google.maps.DirectionsService();
+      if(live){
         var org=pos;
         var dest=routeDestination(order);
         var routeNow=Date.now();
         var routeStatus=order.status;
-        if(!dest && eta){eta.textContent="";eta.classList.add("hidden");}
+        if(!dest){gRouteSequence++;clearRoutePolylines();if(eta){eta.textContent="";eta.classList.add("hidden");}}
         if(dest && routeRefreshDue(routeStatus,routeNow,lastRouteStatus,lastRouteAt)){
           lastRouteAt=routeNow;lastRouteStatus=routeStatus;
-          var routeRequest={origin:org,destination:dest,travelMode:"DRIVING"};
-          if(google.maps.TrafficModel) routeRequest.drivingOptions={departureTime:new Date(),trafficModel:google.maps.TrafficModel.BEST_GUESS};
-          gDirService.route(routeRequest,function(res,st){
-            if(routeStatus!==lastStatus)return;
-            if(st==="OK"){
-              gDirRenderer.setMap(gMap);gDirRenderer.setDirections(res);
-              if(gFallbackLine){gFallbackLine.setMap(null);gFallbackLine=null;}
-              var leg=res&&res.routes&&res.routes[0]&&res.routes[0].legs&&res.routes[0].legs[0];
-              var duration=leg&&(leg.duration_in_traffic||leg.duration);
-              if(eta){eta.textContent=etaCopy(routeStatus,duration&&duration.text);eta.classList.toggle("hidden",!eta.textContent);}
-            }else{
-              console.warn("Directions API failed:",st,"— enable Directions API in Google Cloud Console");
-              if(eta){eta.textContent="";eta.classList.add("hidden");}
-              gDirRenderer.setMap(null);
-              if(!gFallbackLine)gFallbackLine=new google.maps.Polyline({path:[org,dest],strokeColor:"#8B5CF6",strokeWeight:3,strokeOpacity:0.5,geodesic:true,map:gMap});
-              else{gFallbackLine.setPath([org,dest]);gFallbackLine.setMap(gMap);}
-            }
-          });
+          refreshLiveRoute(org,dest,routeStatus,eta);
         }
       }
     }
