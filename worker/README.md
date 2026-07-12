@@ -25,7 +25,7 @@ It is a **single Worker** that routes by hostname (`find.` vs `ops.`).
 | Host | Purpose | Entry |
 |---|---|---|
 | `find.edenmish.com` | Customer-facing tracking page | `GET /t/:token` → `pages.js#trackingHtml` |
-| `find.edenmish.com` | Public order API | `POST /api/orders`, `GET /api/orders/:token`, `/verify-otp`, `/resend-otp` |
+| `find.edenmish.com` | Public order API | `GET/POST /api/quote`, `POST /api/orders`, `GET /api/orders/:token`, `/verify-otp`, `/resend-otp` |
 | `ops.edenmish.com` | Ops/driver dashboard | `GET /` → `pages.js#opsHtml` |
 | `ops.edenmish.com` | Ops API (session-gated) | `/api/ops/login`, `/api/ops/orders`, `…/status`, `…/gps`, `…/approve` |
 | (any) | Shopify webhook | `POST /webhooks/shopify` |
@@ -42,7 +42,7 @@ Staging uses separate hosts and a separate D1 database:
 |---|---|
 | `index.js` | Request router + endpoint handlers (create order, tracking, ops, webhook). Host-based routing. |
 | `db.js` | D1 data access: `createOrder`, `setOrderStatus`, `getOrderByToken/Id`, `listOrders`, `getStatusHistory`, `addGps`/`latestGps`, `recordPayment`, `getRules`, `setEmailAndOtp`/`verifyOtp`, rate-limit helpers, delivery-proof helpers, notification-audit helpers. |
-| `pricing.js` | Automatic pricing + exception detection (`priceOrder`). Gush-Dan zone allow-list, km/urgency rules. |
+| `pricing.js` | Automatic pricing + exception detection (`priceOrder`). Canonical Gush-Dan zones, service matrix, and surcharge breakdown. |
 | `payment.js` | **Clean payment boundary.** `createCharge()` / `settleOrder()`. `immediate` mode today; `preauth` (Mesh) stubbed for the future. |
 | `integrations.js` | Shopify Admin API (`createDraftOrder`), Shopify webhook HMAC verify (`verifyShopifyWebhook`), webhook parser (`parseShopifyOrderWebhook`), SendGrid email (`sendEmail`), OTP helpers, ops session (signed cookie). |
 | `pages.js` | Server-rendered HTML for the tracking page (`trackingHtml`) and ops dashboard (`opsHtml`). |

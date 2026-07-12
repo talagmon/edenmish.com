@@ -51,7 +51,7 @@ Shopify is the **storefront and the trusted checkout/payment shell**.
 Implemented in `worker/src/`:
 
 - **Order creation** — `POST /api/orders` → `createOrder` writes the `orders` row.
-- **Pricing result** — `pricing.js#priceOrder` computes price + review flags; stored on the order.
+- **Pricing and quotes** — `pricing.js#priceOrder` is the single calculation source for `GET/POST /api/quote`, coupon validation, and order creation. It reads current D1 `pricing_rules`; the funnel keeps only a disclosed minimum-price fallback for temporary network failure.
 - **Payment mode selection** — `payment.js` chooses `immediate` (today) vs `preauth` (future Mesh).
 - **Tracking token** — 22-hex unguessable token, generated on order creation.
 - **Customer tracking page** — `find.edenmish.com/t/:token`, OTP-gated, live map.

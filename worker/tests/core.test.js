@@ -19,6 +19,14 @@ describe('priceOrder', () => {
     assert.deepEqual(result, {
       price: 70, zone: 2, service: 'standard', size: 'small', base: 70,
       review: false, reasons: [],
+      breakdown: {
+        base: 70,
+        medium_surcharge: 0,
+        evening_surcharge: 0,
+        weekend_multiplier: 1,
+        weekend_surcharge: 0,
+        total: 70,
+      },
     });
   });
 
@@ -31,6 +39,14 @@ describe('priceOrder', () => {
     assert.equal(result.base, 50);
     assert.equal(result.price, 143, '(₪50 + ₪15 + ₪30) × 1.5 rounds to ₪143');
     assert.equal(result.review, false);
+    assert.deepEqual(result.breakdown, {
+      base: 50,
+      medium_surcharge: 15,
+      evening_surcharge: 30,
+      weekend_multiplier: 1.5,
+      weekend_surcharge: 48,
+      total: 143,
+    });
   });
 
   test('keeps Friday at the weekday price', () => {
