@@ -18,3 +18,29 @@ export function normalizeIlPhone(raw) {
   if (!/^[1-9]\d{7,8}$/.test(digits)) return null;
   return '+972' + digits;
 }
+
+// Israeli identity-number checksum. Input is normalized to nine digits.
+export function validIsraeliId(raw) {
+  const value = String(raw == null ? '' : raw).trim();
+  if (!value || /[^\d\s.-]/.test(value)) return false;
+  const normalized = value.replace(/\D/g, '');
+  if (!normalized || normalized.length > 9) return false;
+  const digits = normalized.padStart(9, '0');
+  if (/^0{9}$/.test(digits)) return false;
+  const sum = digits.split('').reduce((total, digit, index) => {
+    let value = Number(digit) * (index % 2 === 0 ? 1 : 2);
+    if (value > 9) value -= 9;
+    return total + value;
+  }, 0);
+  return sum % 10 === 0;
+}
+
+// Authoritative pickup-hours gate for public orders. The storefront uses the
+// same hours to present choices, but callers must not be able to bypass them.
+export function scheduleError(service, day, hour) {
+  if (day === 6) return 'closed_saturday';
+  const hours = day === 5 ? { start: 8, end: 13 } : { start: 9, end: 20 };
+  const end = service === 'eco' ? Math.min(hours.end, 13) : hours.end;
+  if (hour < hours.start || hour >= end) return 'outside_hours';
+  return null;
+}

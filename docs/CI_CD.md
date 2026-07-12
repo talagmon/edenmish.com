@@ -289,6 +289,7 @@ git push origin "v$(./scripts/current_version.sh)"
      wrangler d1 execute edenmish --remote --file=./migrations/008_coupons.sql
      wrangler d1 execute edenmish --remote --file=./migrations/009_invoice_tracking.sql
      wrangler d1 execute edenmish --remote --file=./migrations/010_order_service_schedule.sql
+     wrangler d1 execute edenmish --remote --file=./migrations/011_cancellation_requests.sql
 3. Go to GitHub → Actions → "Production deploy" → Run workflow
      - confirm_migrations_ran = "I ran required migrations"
      - deploy_worker = true

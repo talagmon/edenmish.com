@@ -16,7 +16,7 @@ function assertContains(html, needle, label) {
 }
 
 describe('Frontend: Pages exist', () => {
-  for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'success.html', 'error.html', 'terms.html', 'privacy.html', 'refund.html']) {
+  for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'success.html', 'error.html', 'terms.html', 'privacy.html', 'refund.html', 'accessibility.html', 'cancel.html']) {
     test(`${page} exists`, () => {
       assert.ok(existsSync(join(PUB, page)), `${page} not found in public/`);
     });
@@ -24,7 +24,7 @@ describe('Frontend: Pages exist', () => {
 });
 
 describe('Frontend: RTL + accessible viewport', () => {
-  for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'success.html', 'error.html']) {
+  for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'success.html', 'error.html', 'accessibility.html', 'cancel.html']) {
     test(`${page} is RTL Hebrew and allows browser zoom`, () => {
       const h = readPage(page);
       assertContains(h, 'dir="rtl"', `${page} RTL`);
@@ -38,7 +38,7 @@ describe('Frontend: Stylesheet + fonts', () => {
   test('Compiled CSS exists', () => {
     assert.ok(existsSync(join(PUB, 'assets', 'styles.css')), 'assets/styles.css missing');
   });
-  for (const page of ['index.html', 'booking.html', 'track.html', 'about.html']) {
+  for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'accessibility.html']) {
     test(`${page} links stylesheet + Hanken Grotesk`, () => {
       const h = readPage(page);
       assertContains(h, '/assets/styles.css');
@@ -68,11 +68,14 @@ describe('Frontend: Booking form', () => {
     assertContains(html, 'הוראות מיוחדות', 'instructions heading');
   });
 
-  test('Has terms checkbox with consent', () => {
+  test('Has terms acceptance separated from operational notifications', () => {
     assertContains(html, 'id="agree-terms"', 'terms checkbox');
     assertContains(html, 'תקנון', 'terms link');
     assertContains(html, 'מדיניות פרטיות', 'privacy link');
-    assertContains(html, 'WhatsApp', 'WhatsApp consent');
+    assertContains(html, 'אין חובה חוקית למסור', 'privacy collection notice');
+    assertContains(html, 'לא יישלח דיוור שיווקי מכוח אישור זה', 'no bundled marketing consent');
+    assert.ok(!html.includes('הנני מסכים/ה לקבל עדכונים'), 'transaction acceptance must not be bundled with communications consent');
+    assertContains(html, 'EdenMish אינה שומרת פרטי כרטיס אשראי', 'accurate hosted-payment disclosure');
   });
 
   test('Has Maps key loader', () => {
@@ -88,12 +91,15 @@ describe('Frontend: Booking form', () => {
   test('Has scheduling (business hours)', () => {
     assertContains(html, 'schedHours', 'business hours function');
     assertContains(html, 'genWindows', 'window generation');
+    assertContains(html, 'הזמנה לאותו היום עד 09:00 כולל', 'same-day Eco cutoff');
   });
 
   test('Sends when_date + when_hour + notes in payload', () => {
     assertContains(html, 'when_date:', 'payload when_date');
     assertContains(html, 'when_hour:', 'payload when_hour');
     assertContains(html, 'notes:', 'payload notes');
+    assertContains(html, 'service === "eco" ? "חסכוני"', 'Hebrew service label');
+    assertContains(html, '"מיידי · עכשיו"', 'Hebrew immediate schedule label');
   });
 
   test('Flash is present-moment only (immediate dispatch)', () => {
@@ -151,6 +157,12 @@ describe('Frontend: Tracking page', () => {
   test('Uses Asia/Jerusalem timezone', () => {
     assertContains(html, 'Asia/Jerusalem', 'Israel timezone');
   });
+
+  test('Displays service names in Hebrew', () => {
+    assertContains(html, 'eco: "חסכוני"');
+    assertContains(html, 'standard: "רגיל"');
+    assertContains(html, 'flash: "מהיר"');
+  });
 });
 
 describe('Frontend: Security and accessibility hardening', () => {
@@ -179,6 +191,11 @@ describe('Frontend: Security and accessibility hardening', () => {
     assertContains(html, 'role="button"');
     assertContains(html, 'tabindex="0"');
     assertContains(html, 'aria-expanded=');
+    assertContains(html, 'עד מתי אפשר להזמין משלוח חסכוני לאותו היום?', 'Eco FAQ question');
+    assertContains(html, 'עד 09:00 כולל', 'Eco FAQ same-day cutoff');
+    assertContains(html, 'האיסוף מתבצע עד 13:00', 'Eco FAQ pickup cutoff');
+    assertContains(html, 'המסירה עד סוף אותו היום', 'Eco FAQ delivery SLA');
+    assert.ok(!html.includes('(Eco)'), 'customer FAQ must not expose English service labels');
   });
 
   test('staging and preview pages use isolated Worker origins', () => {
@@ -212,23 +229,69 @@ describe('Frontend: Security and accessibility hardening', () => {
 });
 
 describe('Frontend: Legal pages', () => {
+  const businessAddress = 'קריניצי 111, רמת גן, ישראל';
+
   test('Terms page has עוסק פטור + number', () => {
     const h = readPage('terms.html');
     assertContains(h, 'עוסק פטור');
     assertContains(h, '211568928', 'exempt dealer number');
+    assertContains(h, 'מתקבלת עד 09:00 כולל', 'same-day Eco policy');
+    assertContains(h, 'האיסוף יתבצע עד 13:00', 'Eco pickup cutoff');
+    assertContains(h, businessAddress, 'business address');
   });
 
   test('Privacy page exists with sections', () => {
     const h = readPage('privacy.html');
     assertContains(h, 'מדיניות פרטיות');
     assertContains(h, 'עוסק פטור');
+    assertContains(h, businessAddress, 'business address');
+    assertContains(h, 'אין חובה חוקית למסור מידע אישי', 'section 11 collection disclosure');
+    assertContains(h, 'Cloudflare', 'actual processor disclosure');
+    assertContains(h, 'סעיפים 13–14', 'access and correction rights');
+    assert.ok(!h.includes('לקבלו בפורמט נייד'), 'must not promise unsupported portability rights');
   });
 
-  test('Refund page has cancellation tiers', () => {
+  test('Refund page states statutory cancellation rights', () => {
     const h = readPage('refund.html');
     assertContains(h, 'מדיניות ביטול');
-    assertContains(h, '50%', '50% tier');
-    assertContains(h, '14 ימי עסקים', 'refund window');
+    assertContains(h, '5% ממחיר העסקה או 100 ₪', 'statutory fee cap');
+    assertContains(h, 'בתוך 14 ימים', 'statutory refund window');
+    assertContains(h, 'שני ימים שאינם ימי מנוחה', 'service cancellation timing');
+    assertContains(h, 'href="/cancel.html"', 'online cancellation method');
+    assertContains(h, businessAddress, 'business address');
+  });
+
+  test('Customer pages use the standardized business address', () => {
+    for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'terms.html', 'privacy.html', 'refund.html', 'accessibility.html', 'cancel.html']) {
+      const h = readPage(page);
+      assertContains(h, businessAddress, `${page} business address`);
+      assert.ok(!h.includes('קריניצי 111 ד׳'), `${page} must not use the old address variant`);
+    }
+  });
+
+  test('Online cancellation form is prominent and privacy-minimizing', () => {
+    const h = readPage('cancel.html');
+    assertContains(readPage('index.html'), 'href="/cancel.html"', 'homepage cancellation link');
+    assertContains(h, 'id="cancel-form"', 'online cancellation form');
+    assertContains(h, '/api/cancellations', 'durable cancellation endpoint');
+    assertContains(h, 'רק ארבע הספרות האחרונות', 'D1 identity minimization notice');
+    assertContains(h, 'מספר אסמכתא', 'submission reference');
+  });
+
+  test('Accessibility declaration is transparent and contactable', () => {
+    const h = readPage('accessibility.html');
+    assertContains(h, 'הצהרת נגישות');
+    assertContains(h, 'לא עבר בשלב זה אישור רשמי', 'no unsupported certification claim');
+    assertContains(h, 'קבלת שירות בדרך חלופית', 'accessible alternative');
+    assertContains(h, 'איש קשר לענייני נגישות: עדן אריאלי', 'accessibility contact');
+    assertContains(h, businessAddress, 'business address');
+  });
+
+  test('Terms and customer footers link to the accessibility declaration', () => {
+    assertContains(readPage('terms.html'), 'href="/accessibility.html">הצהרת הנגישות</a>', 'Terms accessibility clause');
+    for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'terms.html', 'privacy.html', 'refund.html', 'error.html', 'delivered.html']) {
+      assertContains(readPage(page), 'href="/accessibility.html"', `${page} accessibility link`);
+    }
   });
 });
 

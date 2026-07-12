@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="/assets/styles.css"/>
+<script src="/assets/scheduling.js"></script>
 <link rel="icon" href="/assets/favicon.ico"/>
 <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"/>
 <meta name="theme-color" content="#8B5CF6"/>
@@ -298,6 +299,7 @@
 <h4 class="font-label-bold text-on-surface">חסכוני</h4>
 <p class="text-label-sm text-on-surface-variant">מסירה עד סוף היום</p>
 <p class="text-label-sm text-on-surface-variant opacity-60">איסוף בשעות הבוקר בלבד (עד 13:00)</p>
+<p class="text-label-sm text-secondary mt-1">הזמנה לאותו היום עד 09:00 כולל</p>
 <p class="text-primary font-label-bold mt-2">החל מ₪35</p>
 </div>
 </label>
@@ -345,21 +347,26 @@
 </div>
 <textarea name="notes" rows="3" class="w-full bg-surface-container-low border-b-2 border-outline-variant rounded-t-lg p-3 text-on-surface text-right transition-all" placeholder="לדוגמה: קומה 3 ללא מעלית · להשאיר בדלת · להתקשר לפני הגעה · פריט שביר"></textarea>
 </section>
-<!-- Step 8: Terms + notification consent -->
+<!-- Step 8: Terms + privacy notice -->
 <section class="glass-panel rounded-xl p-stack-md">
+<div class="mb-4 rounded-lg border border-outline-variant bg-surface-container-low p-3 text-label-sm text-on-surface-variant leading-relaxed">
+<strong class="text-on-surface">הודעה בדבר איסוף מידע:</strong>
+המידע נמסר לעדן אריאלי (EdenMish), קריניצי 111, רמת גן. אין חובה חוקית למסור אותו, אך השדות המסומנים נדרשים ליצירת ההזמנה, לתמחור, לביצוע המשלוח, לתשלום, לעדכוני שירות, לאבטחה ולטיפול בפניות; ללא המידע לא נוכל לספק את השירות. המידע עשוי להימסר לשליח ולספקי תשתית, מפות, תשלום ותקשורת, בארץ ומחוץ לישראל, רק לצורך השירות ובהתאם ל<a href="/privacy.html" class="text-primary underline">מדיניות הפרטיות</a>. ניתן לבקש לעיין במידע ולתקנו באמצעות <a href="mailto:eden@edenmish.com" class="text-primary underline">eden@edenmish.com</a>.
+</div>
 <label class="flex items-start gap-3 cursor-pointer">
 <input type="checkbox" id="agree-terms" required class="mt-1 w-5 h-5 accent-[#8B5CF6] cursor-pointer"/>
 <span class="text-label-sm text-on-surface-variant leading-relaxed">
-קראתי ואני מאשר/ת את <a href="/terms.html" class="text-primary underline">תקנון השירות</a>, <a href="/privacy.html" class="text-primary underline">מדיניות הפרטיות</a> ו<a href="/refund.html" class="text-primary underline">מדיניות הביטול</a>. הנני מסכים/ה לקבל עדכונים בדוא"ל, ב-WhatsApp וב-SMS בנוגע למשלוח שלי.
+קראתי ואני מאשר/ת את <a href="/terms.html" class="text-primary underline">תקנון השירות</a>, <a href="/privacy.html" class="text-primary underline">מדיניות הפרטיות</a> ו<a href="/refund.html" class="text-primary underline">מדיניות הביטול</a>.
 </span>
 </label>
+<p class="mt-3 text-label-sm text-on-surface-variant">עדכונים תפעוליים הנחוצים לביצוע ההזמנה עשויים להישלח בדוא״ל, ב‑WhatsApp או ב‑SMS. לא יישלח דיוור שיווקי מכוח אישור זה.</p>
 </section>
 <!-- Error + Submit -->
 <div id="form-error" class="hidden bg-error-container/30 border border-error/40 text-error rounded-lg p-stack-sm text-label-bold text-center"></div>
 <div class="flex flex-col md:flex-row justify-between items-center gap-stack-md pt-stack-sm">
 <div class="flex items-center gap-2 text-on-surface-variant">
 <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">lock</span>
-<span class="text-label-sm">התשלום מאובטח ומוצפן בתקן PCI-DSS</span>
+<span class="text-label-sm">התשלום מתבצע בסביבה המאובטחת של Shopify ו‑PayPlus. EdenMish אינה שומרת פרטי כרטיס אשראי.</span>
 </div>
 <button id="submit-btn" type="submit" class="w-full md:w-auto bg-tertiary text-on-tertiary px-12 py-4 rounded-xl font-headline-md hover:bg-tertiary-container hover:text-on-tertiary-container transition-all shadow-[0_0_20px_rgba(210,187,255,0.3)] active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed">
 אישור והזמנת שליח
@@ -381,9 +388,10 @@
 <a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/about.html">צור קשר</a>
 <a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/terms.html">תקנון</a>
                 <a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/privacy.html">מדיניות פרטיות</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/accessibility.html">נגישות</a>
 </div>
 <p class="font-body-md text-body-md text-on-surface-variant">© 2025 EdenMish. כל הזכויות שמורות.</p>
-<p class="text-label-sm text-on-surface-variant opacity-50 text-center mt-1">קריניצי 111 ד׳, רמת גן, ישראל</p>
+<p class="text-label-sm text-on-surface-variant opacity-50 text-center mt-1">קריניצי 111, רמת גן, ישראל</p>
 </div>
 
 <div class="flex items-center justify-center gap-2 mt-3 opacity-60">
@@ -658,22 +666,14 @@ const EDEN_ZONES = ['תל אביב','תל אביב-יפו','תל אביב יפו
 // dropdown; this reliably rejects out-of-area selections (e.g. far-out localities).
 function inGushDanBounds(lat,lng){ return lat>=31.90 && lat<=32.20 && lng>=34.70 && lng<=34.95; }
 const DAY_NAMES = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
-const WD_HOURS = { start: 9, end: 20 };
-const FRI_HOURS = { start: 8, end: 13 };
 // Flash is present-moment only: last immediate order this many minutes before close.
 const FLASH_LAST_ORDER_BUFFER_MIN = 0;
 const sched = { service: "standard", dateType: "", day: null, date: null, window: "" };
 function pad2(n){ return (n < 10 ? "0" : "") + n; }
-function schedHours(day){ if (day === 6) return null; if (day === 5) return FRI_HOURS; return WD_HOURS; }
+function schedHours(day){ return window.EdenScheduling.businessHours(day); }
 function genWindows(service, dateType){
   const day = sched.day; if (day == null) return [];
-  const h = schedHours(day); if (!h) return [];
-  let startH = h.start, endH = h.end;
-  if (service === 'eco') endH = Math.min(endH, 13);
-  if (dateType === "today") { const curH = new Date().getHours(); startH = Math.max(startH, curH + 3); }
-  const WIN = 3, wins = [];
-  for (let hh = startH; hh + WIN <= endH; hh++) wins.push(pad2(hh) + ":00-" + pad2(hh + WIN) + ":00");
-  return wins;
+  return window.EdenScheduling.generatePickupWindows({ service, dateType, day });
 }
 function noWindowsMsg(dateType){
   if (sched.day === 6) return "בשבת ובחגים השירות אינו פעיל - בחרו יום אחר.";
@@ -1007,10 +1007,10 @@ form.addEventListener("submit", async (e) => {
   } else if (!sched.window) {
     return showError("נא לבחור מועד לאיסוף (תאריך וחלון זמן).");
   }
-  if (!document.getElementById("agree-terms").checked) return showError("נא לאשר את התקנון והסכמה לקבלת עדכונים.");
+  if (!document.getElementById("agree-terms").checked) return showError("נא לאשר את התקנון והמדיניות.");
 
   const hour = service === "flash" ? new Date().getHours() : (sched.window ? parseInt(sched.window.split(":")[0], 10) : -1);
-  const svcLabel = service === "eco" ? "Eco" : service === "flash" ? "Flash" : "Standard";
+  const svcLabel = service === "eco" ? "חסכוני" : service === "flash" ? "מהיר" : "רגיל";
   const sizeLabel = size === "medium" ? "בינוני" : "קטן";
   const payload = {
     name, phone, email,
@@ -1021,7 +1021,7 @@ form.addEventListener("submit", async (e) => {
     dropoff: combineAddr(dropoffAddress, fd.get("dropoff_floor"), fd.get("dropoff_apt"), fd.get("dropoff_contact")),
     pickup_city: geo.pickupCity || cityOf(pickupAddress),
     dropoff_city: geo.dropoffCity || cityOf(dropoffAddress),
-    when_text: service === "flash" ? "מיידי · עכשיו (Flash)" : (sched.window + (sched.date ? (" · " + pad2(sched.date.getDate()) + "/" + pad2(sched.date.getMonth() + 1)) : "")),
+    when_text: service === "flash" ? "מיידי · עכשיו" : (sched.window + (sched.date ? (" · " + pad2(sched.date.getDate()) + "/" + pad2(sched.date.getMonth() + 1)) : "")),
     when_date: service === "flash" ? isoDate(new Date()) : isoDate(sched.date),
     when_hour: hour,
     asap: service === "flash" ? 1 : 0,

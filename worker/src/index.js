@@ -1,11 +1,11 @@
-import { createOrder, getOrderByToken, getOrderById, listOrders, setOrderStatus, setOrderRating, getStatusHistory, addGps, latestGps, getGpsTrail, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof, listRecentNotificationFailures, listNotificationsForOrder } from './db.js';
+import { createOrder, getOrderByToken, getOrderById, listOrders, setOrderStatus, setOrderRating, getStatusHistory, addGps, latestGps, getGpsTrail, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof, listRecentNotificationFailures, listNotificationsForOrder, createCancellationRequest, listCancellationRequests, runRetentionCleanup } from './db.js';
 import { priceOrder, zoneOf } from './pricing.js';
 import { makeSession, checkSession, getCookie, genOtp, hashOtp, timingSafeEqual } from './integrations.js';
 import { createCharge, settleOrder, verifyShopifyWebhook, parseShopifyOrderWebhook } from './payment.js';
 import { trackingHtml, opsHtml } from './pages.js';
 import { corsFor, maskEmail, publicOrderSummary, clientIp, anonKey } from './security.js';
 import { notifyEmail, notifyWhatsApp } from './notify.js';
-import { normalizeIlPhone } from './validate.js';
+import { normalizeIlPhone, scheduleError, validIsraeliId } from './validate.js';
 import { validateCoupon, recordRedemption, listCoupons, createCoupon, updateCoupon, deleteCoupon } from './coupons.js';
 import { getStatusMeta, getNextStatuses, isTerminalStatus } from './status.js';
 
@@ -37,7 +37,7 @@ const storefrontUrl = (env, path) => storefrontBase(env) + (path || '');
 const trackingUrl = (env, token) => storefrontUrl(env, `/track.html?t=${token}`);
 // Business contact line for customer emails — the EdenMish business number only,
 // never a private number. Single definition so the templates can't drift apart.
-const SUPPORT_LINE = '<p style="color:#777;font-size:13px;margin-top:14px">לשאלות: eden@edenmish.com · 053-405-8498</p>';
+const SUPPORT_LINE = '<p style="color:#777;font-size:13px;margin-top:14px">לשאלות: eden@edenmish.com · 053-405-8498<br>כתובת העסק למשלוח הודעות: קריניצי 111, רמת גן, ישראל</p>';
 // Coupon line for customer emails (migration 008 snapshot) — mint accent per the v2
 // palette. Renders nothing when no discount applied, so non-coupon emails are unchanged.
 const discountLineHtml = (o) => (o && o.discount_code && Number(o.discount_amount) > 0)
@@ -45,14 +45,20 @@ const discountLineHtml = (o) => (o && o.discount_code && Number(o.discount_amoun
   : '';
 const otpEmailHtml = (otp, url) => `<div dir="rtl" style="font-family:sans-serif;font-size:16px;line-height:1.6">הקוד שלך לאימות הכתובת ב-EdenMish:<div style="font-size:34px;font-weight:800;letter-spacing:6px;color:#5B2A86">${otp}</div>הקוד תקף 10 דקות.${url ? '<div style="margin-top:16px;padding-top:12px;border-top:1px solid #eee"><a href="' + url + '" style="display:inline-block;background:#5B2A86;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:700">מעקב המשלוח שלך ←</a></div>' : ''}</div>`;
 const deliverySummaryHtml = (env, o) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px;margin:0 auto;background:#0b1326;color:#dae2fd;padding:32px 24px;border-radius:16px"><h1 style="color:#dfb7ff;font-size:26px;margin:0 0 8px">המשלוח נמסר בהצלחה! ✓</h1><p style="color:#cec3d2;margin:0 0 20px;font-size:15px">תודה שבחרתם ב-EdenMish. המשלוח הגיע ליעד.</p><div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:16px;margin-bottom:16px"><div style="margin-bottom:10px"><span style="color:#91d3c8;font-size:12px;display:block">איסוף</span><b style="font-size:16px">${escHtml(o.pickup)}</b></div><div style="margin-bottom:10px"><span style="color:#dfb7ff;font-size:12px;display:block">מסירה</span><b style="font-size:16px">${escHtml(o.dropoff)}</b></div><div><span style="color:#cec3d2;font-size:12px">מחיר </span><b style="color:#91d3c8;font-size:20px">₪${escHtml(o.price)}</b>${discountLineHtml(o)}</div></div><div style="text-align:center;margin:20px 0"><p style="color:#91d3c8;font-size:14px;margin:0 0 10px">איך היה השירות? נשמח לדירוג ⭐</p><a href="${storefrontUrl(env, '/delivered.html?t=' + encodeURIComponent(o.token || ''))}" style="display:inline-block;background:#5b2a86;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700">צפו בהוכחת המסירה ודרגו אותנו ←</a></div>${o.shopify_order_id ? '<div style="text-align:center;margin:12px 0;padding:12px;background:rgba(255,255,255,.04);border-radius:8px"><p style="color:#cec3d2;font-size:13px;margin:0">📄 החשבונית נשלחה אליכם במייל נפרד (דרך PayPlus).<br>לצפייה חוזרת: <a href="https://edenmish.myshopify.com/account/orders/' + encodeURIComponent(o.shopify_order_id) + '" style="color:#dfb7ff">הזמנת Shopify #' + escHtml(o.shopify_order_id) + '</a></p></div>' : ''}${SUPPORT_LINE}</div>`;
-const paymentConfirmedHtml = (o, url, otp) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px;margin:0 auto;background:#0b1326;color:#dae2fd;padding:32px 24px;border-radius:16px"><h1 style="color:#dfb7ff;font-size:26px;margin:0 0 8px">התשלום התקבל ✓</h1><p style="color:#cec3d2;margin:0 0 20px;font-size:15px">תודה שבחרתם ב-EdenMish! ההזמנה מאושרת.</p><div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:16px;margin-bottom:16px"><div style="margin-bottom:10px"><span style="color:#cec3d2;font-size:12px">מס׳ הזמנה </span><b>#${o.id || ''}</b></div><div><span style="color:#cec3d2;font-size:12px">מחיר </span><b style="color:#91d3c8;font-size:20px">₪${o.price || ''}</b>${discountLineHtml(o)}</div></div><div style="margin:18px 0;padding:16px;background:rgba(91,42,134,.2);border:1px solid rgba(91,42,134,.3);border-radius:10px;text-align:center"><p style="margin:0 0 6px;font-size:14px;color:#cec3d2">קוד האימות למעקב המשלוח:</p><div style="font-size:32px;font-weight:800;letter-spacing:6px;color:#dfb7ff">${otp || '—'}</div></div><div style="text-align:center"><a href="${url}" style="display:inline-block;background:#5b2a86;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px">מעקב המשלוח שלי ←</a></div>${SUPPORT_LINE}</div>`;
+const paymentConfirmedHtml = (env, o, url, otp) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px;margin:0 auto;background:#0b1326;color:#dae2fd;padding:32px 24px;border-radius:16px"><h1 style="color:#dfb7ff;font-size:26px;margin:0 0 8px">התשלום התקבל ✓</h1><p style="color:#cec3d2;margin:0 0 20px;font-size:15px">תודה שבחרתם ב-EdenMish! ההזמנה מאושרת.</p><div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:16px;margin-bottom:16px"><div style="margin-bottom:10px"><span style="color:#cec3d2;font-size:12px">מס׳ הזמנה </span><b>#${o.id || ''}</b></div><div><span style="color:#cec3d2;font-size:12px">מחיר </span><b style="color:#91d3c8;font-size:20px">₪${o.price || ''}</b>${discountLineHtml(o)}</div></div><div style="margin:18px 0;padding:16px;background:rgba(91,42,134,.2);border:1px solid rgba(91,42,134,.3);border-radius:10px;text-align:center"><p style="margin:0 0 6px;font-size:14px;color:#cec3d2">קוד האימות למעקב המשלוח:</p><div style="font-size:32px;font-weight:800;letter-spacing:6px;color:#dfb7ff">${otp || '—'}</div></div><div style="text-align:center"><a href="${url}" style="display:inline-block;background:#5b2a86;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px">מעקב המשלוח שלי ←</a></div>${transactionDisclosureHtml(env, o)}${SUPPORT_LINE}</div>`;
 const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const serviceHebrew = (service) => ({ eco: 'חסכוני', standard: 'רגיל', flash: 'מהיר' }[service] || service || '—');
+const transactionDisclosureHtml = (env, o) => {
+  const schedule = [o.when_date, o.when_hour].filter(Boolean).map(escHtml).join(' · ') || escHtml(o.when_text || 'בתיאום');
+  const priceLabel = o.price_is_estimate ? 'מחיר משוער, לפני אישור' : 'מחיר סופי';
+  return `<div style="margin-top:20px;padding:14px;border:1px solid rgba(255,255,255,.15);border-radius:10px;font-size:13px;color:#cec3d2"><b style="color:#dae2fd">פרטי העסקה והעוסק</b><br>עדן אריאלי / EdenMish · עוסק פטור 211568928<br>קריניצי 111, רמת גן, ישראל · 053-405-8498 · eden@edenmish.com<br>שירות: ${escHtml(serviceHebrew(o.service))} · מועד: ${schedule}${o.package ? `<br>תכולה: ${escHtml(o.package)}` : ''}${o.pickup ? `<br>איסוף: ${escHtml(o.pickup)}` : ''}${o.dropoff ? `<br>מסירה: ${escHtml(o.dropoff)}` : ''}${o.price != null ? `<br>${priceLabel}: ₪${escHtml(o.price)} (עוסק פטור — ללא מע״מ)` : ''}<br><br>לביטול עסקה בהתאם לדין ולמדיניות: <a href="${storefrontUrl(env, '/cancel.html')}" style="color:#dfb7ff">טופס ביטול מקוון</a> · <a href="${storefrontUrl(env, '/refund.html')}" style="color:#dfb7ff">מדיניות ביטול</a> · <a href="${storefrontUrl(env, '/terms.html')}" style="color:#dfb7ff">תקנון</a></div>`;
+};
 // Review-flagged orders: immediate confirmation so the customer knows what happens next
 // (previously they got zero contact until after payment — a funnel dead end).
-const requestReceivedHtml = (o) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px"><h2 style="color:#5B2A86;margin:0 0 8px">קיבלנו את הבקשה ✓</h2><p>עדן בודק את המסלול ויאשר את המחיר בהקדם. ברגע שהמחיר מאושר, יישלח אליכם למייל זה קישור לתשלום מאובטח.</p><table style="border-collapse:collapse;font-size:15px"><tr><td style="padding:5px 14px;color:#777">מס׳ הזמנה</td><td style="padding:5px 0">${o.id || ''}</td></tr><tr><td style="padding:5px 14px;color:#777">איסוף</td><td style="padding:5px 0">${escHtml(o.pickup)}</td></tr><tr><td style="padding:5px 14px;color:#777">מסירה</td><td style="padding:5px 0">${escHtml(o.dropoff)}</td></tr>${o.price ? `<tr><td style="padding:5px 14px;color:#777">מחיר משוער</td><td style="padding:5px 0;font-weight:700;color:#91d3c8">₪${o.price}</td></tr>` : ''}</table><p style="color:#777;font-size:13px;margin-top:10px">לאחר התשלום יישלח קישור מעקב חי וקוד אימות למייל.</p>${SUPPORT_LINE}</div>`;
+const requestReceivedHtml = (env, o) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px"><h2 style="color:#5B2A86;margin:0 0 8px">קיבלנו את הבקשה ✓</h2><p>עדן בודק את המסלול ויאשר את המחיר בהקדם. ברגע שהמחיר מאושר, יישלח אליכם למייל זה קישור לתשלום מאובטח.</p><table style="border-collapse:collapse;font-size:15px"><tr><td style="padding:5px 14px;color:#777">מס׳ הזמנה</td><td style="padding:5px 0">${o.id || ''}</td></tr><tr><td style="padding:5px 14px;color:#777">איסוף</td><td style="padding:5px 0">${escHtml(o.pickup)}</td></tr><tr><td style="padding:5px 14px;color:#777">מסירה</td><td style="padding:5px 0">${escHtml(o.dropoff)}</td></tr>${o.price ? `<tr><td style="padding:5px 14px;color:#777">מחיר משוער</td><td style="padding:5px 0;font-weight:700;color:#91d3c8">₪${o.price}</td></tr>` : ''}</table><p style="color:#777;font-size:13px;margin-top:10px">לאחר התשלום יישלח קישור מעקב חי וקוד אימות למייל.</p>${transactionDisclosureHtml(env, o)}${SUPPORT_LINE}</div>`;
 // Sent by /approve: the confirmed price + Shopify checkout link (previously the link was
 // only copied to Eden's clipboard and the customer was never notified).
-const paymentLinkHtml = (o, url) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px"><h2 style="color:#5B2A86;margin:0 0 8px">המחיר אושר ✓</h2><p>הזמנה #${o.id || ''} מוכנה לתשלום.</p><table style="border-collapse:collapse;font-size:15px"><tr><td style="padding:5px 14px;color:#777">איסוף</td><td style="padding:5px 0">${escHtml(o.pickup)}</td></tr><tr><td style="padding:5px 14px;color:#777">מסירה</td><td style="padding:5px 0">${escHtml(o.dropoff)}</td></tr><tr><td style="padding:5px 14px;color:#777">מחיר</td><td style="padding:5px 0;font-weight:700;color:#91d3c8;font-size:18px">₪${o.price || ''}</td></tr></table><div style="text-align:center;margin:18px 0"><a href="${url}" style="display:inline-block;background:#5B2A86;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px">לתשלום מאובטח ←</a></div><p style="color:#777;font-size:13px">תשלום באשראי / ביט / Apple Pay דרך Shopify. לאחר התשלום יישלח קישור מעקב חי וקוד אימות למייל.</p>${SUPPORT_LINE}</div>`;
+const paymentLinkHtml = (env, o, url) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px"><h2 style="color:#5B2A86;margin:0 0 8px">המחיר אושר ✓</h2><p>הזמנה #${o.id || ''} מוכנה לתשלום.</p><table style="border-collapse:collapse;font-size:15px"><tr><td style="padding:5px 14px;color:#777">איסוף</td><td style="padding:5px 0">${escHtml(o.pickup)}</td></tr><tr><td style="padding:5px 14px;color:#777">מסירה</td><td style="padding:5px 0">${escHtml(o.dropoff)}</td></tr><tr><td style="padding:5px 14px;color:#777">מחיר</td><td style="padding:5px 0;font-weight:700;color:#91d3c8;font-size:18px">₪${o.price || ''}</td></tr></table><div style="text-align:center;margin:18px 0"><a href="${url}" style="display:inline-block;background:#5B2A86;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px">לתשלום מאובטח ←</a></div><p style="color:#777;font-size:13px">התשלום מתבצע בסביבה המאובטחת של Shopify ו‑PayPlus. EdenMish אינה שומרת פרטי כרטיס אשראי. לאחר התשלום יישלח קישור מעקב חי וקוד אימות למייל.</p>${transactionDisclosureHtml(env, o)}${SUPPORT_LINE}</div>`;
 
 // Safe customer-facing Hebrew per validateCoupon rejection reason. Never expose the
 // raw reason string alone — the UI shows `message`; `reason` is for programmatic use.
@@ -167,6 +173,50 @@ export default {
       }, 200, { ...cors, 'Cache-Control': 'public, max-age=300' });
     }
 
+    // Dedicated online cancellation notice (§14ט). The D1 row is authoritative
+    // even if the best-effort ops email is temporarily unavailable.
+    if (path === '/api/cancellations' && req.method === 'POST') {
+      try {
+        const key = await anonKey(env, clientIp(req));
+        const rl = await incrRateLimit(env.DB, 'cancel:' + key, 24 * 60 * 60 * 1000);
+        if (rl.count > 5) return json({ error: 'rate_limited' }, 429, { ...cors, 'Retry-After': '86400' });
+      } catch (rlErr) { console.error('rate_limit_error', rlErr && rlErr.message ? rlErr.message : String(rlErr)); }
+
+      let b; try { b = await readJson(req); } catch (e) { return json({ error: e.message }, e.status || 400, cors); }
+      const orderNumber = String(b.order_number || '').trim().slice(0, 80);
+      const customerName = String(b.customer_name || '').trim().slice(0, 120);
+      const identityDigits = String(b.identity_number || '').replace(/\D/g, '');
+      const email = String(b.email || '').trim().toLowerCase().slice(0, 254);
+      const phone = b.phone ? normalizeIlPhone(b.phone) : null;
+      const reason = String(b.reason || '').trim().slice(0, 1000) || null;
+      if (!orderNumber || !customerName || !identityDigits) return json({ error: 'missing_fields' }, 400, cors);
+      if (!validIsraeliId(identityDigits)) return json({ error: 'invalid_identity' }, 400, cors);
+      if (!email && !phone) return json({ error: 'missing_contact' }, 400, cors);
+      if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: 'invalid_email' }, 400, cors);
+      if (b.phone && !phone) return json({ error: 'invalid_phone' }, 400, cors);
+
+      const created = await createCancellationRequest(env.DB, {
+        order_number: orderNumber,
+        customer_name: customerName,
+        identity_last4: identityDigits.slice(-4),
+        email: email || null,
+        phone,
+        reason,
+      });
+
+      try {
+        await notifyEmail(env, env.DB, {
+          orderId: null,
+          template: 'ops_cancellation_request',
+          recipient: env.OPS_EMAIL,
+          subject: `בקשת ביטול מקוונת #${created.id} · הזמנה ${orderNumber}`,
+          html: `<div dir="rtl" style="font-family:sans-serif;line-height:1.7"><h2>בקשת ביטול עסקה</h2><p><b>אסמכתא:</b> ${created.id}<br><b>הזמנה:</b> ${escHtml(orderNumber)}<br><b>שם:</b> ${escHtml(customerName)}<br><b>מספר זהות:</b> ${escHtml(identityDigits)}<br><b>דוא״ל:</b> ${escHtml(email || '—')}<br><b>טלפון:</b> ${escHtml(phone || '—')}</p>${reason ? `<p><b>פירוט:</b><br>${escHtml(reason)}</p>` : ''}<p>מועד קבלה: ${new Date(created.created_at).toISOString()}</p></div>`,
+        });
+      } catch (e) { console.error('cancellation_notice_email_failed'); }
+
+      return json({ ok: true, reference: created.id, received_at: created.created_at }, 201, cors);
+    }
+
     if (path === '/api/orders' && req.method === 'POST') {
       // Part E — IP-based abuse protection (best-effort; never blocks order creation).
       try {
@@ -221,9 +271,8 @@ export default {
       if (pr.reasons.includes('out_of_zone')) return json({ error: 'out_of_zone' }, 400, cors);
       if (pr.reasons.includes('flash_unavailable_z3')) return json({ error: 'flash_unavailable_z3' }, 400, cors);
       const day = date.getUTCDay();
-      if (day === 6) return json({ error: 'closed_saturday' }, 400, cors);
-      const hrs = day === 5 ? { s: 8, e: 13 } : { s: 9, e: 20 };
-      if (hour < hrs.s || hour >= hrs.e) return json({ error: 'outside_hours' }, 400, cors);
+      const invalidSchedule = scheduleError(b.service, day, hour);
+      if (invalidSchedule) return json({ error: invalidSchedule }, 400, cors);
 
       // Optional coupon: validate against the server-computed price (incl. surcharges).
       // An invalid code REJECTS the order — never silently create at full price; the
@@ -298,7 +347,7 @@ export default {
       // then a payment link arrives by email). Without this they heard nothing at all
       // until after payment — most would assume the order vanished.
       if (isReview && b.email) {
-        try { await notifyEmail(env, env.DB, { orderId: created.id, template: 'customer_request_received', recipient: b.email, subject: `קיבלנו את הבקשה ✓ — הזמנה #${created.id} ב-EdenMish`, html: requestReceivedHtml({ id: created.id, pickup: b.pickup, dropoff: b.dropoff, price: finalPrice }) }); } catch {}
+        try { await notifyEmail(env, env.DB, { orderId: created.id, template: 'customer_request_received', recipient: b.email, subject: `קיבלנו את הבקשה ✓ — הזמנה #${created.id} ב-EdenMish`, html: requestReceivedHtml(env, { ...b, id: created.id, price: finalPrice, price_is_estimate: true }) }); } catch {}
       }
 
       // 2. PR4 — exact-price path: Worker creates a Shopify Draft Order and returns its
@@ -322,7 +371,7 @@ export default {
             const otp = genOtp();
             await setEmailAndOtp(env.DB, created.id, b.email, await hashOtp(env, otp), Date.now() + 10 * 60 * 1000);
             await verifyOtp(env.DB, created.id); // test mode: skip the OTP gate → tracking immediately viewable
-            await notifyEmail(env, env.DB, { orderId: created.id, template: 'customer_payment_confirmation', recipient: b.email, subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב (בדיקה)', html: paymentConfirmedHtml({ ...created, ...b, email: b.email, price: finalPrice, ...discountFields }, finalUrl, otp) });
+            await notifyEmail(env, env.DB, { orderId: created.id, template: 'customer_payment_confirmation', recipient: b.email, subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב (בדיקה)', html: paymentConfirmedHtml(env, { ...created, ...b, email: b.email, price: finalPrice, ...discountFields }, finalUrl, otp) });
           } catch (e) {}
         }
         return json({ token, tracking_url: finalUrl, payment_url: null, status: 'priced', price: finalPrice, review: false, reasons: [], test: true }, 200, cors);
@@ -535,7 +584,7 @@ export default {
           if (o.email) {
             const otp = genOtp();
             await setEmailAndOtp(env.DB, o.id, o.email, await hashOtp(env, otp), Date.now() + 10 * 60 * 1000);
-            try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_payment_confirmation', recipient: o.email, subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב', html: paymentConfirmedHtml({ ...o, email: o.email }, trackingUrl(env, o.token), otp) }); } catch {}
+            try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_payment_confirmation', recipient: o.email, subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב', html: paymentConfirmedHtml(env, { ...o, email: o.email }, trackingUrl(env, o.token), otp) }); } catch {}
           }
           try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'ops_payment_received', recipient: env.OPS_EMAIL, subject: `תשלום התקבל #${o.id} — ₪${o.price}`, html: `${escHtml(o.name)} · ${escHtml(o.pickup)} → ${escHtml(o.dropoff)}<br>המתינו לאישור ויציאה לדרך ב- ops.edenmish.com` }); } catch {}
         }
@@ -590,7 +639,7 @@ export default {
         let emailed = false;
         if (o.email) {
           try {
-            const sent = await notifyEmail(env, env.DB, { orderId: id, template: 'customer_payment_link', recipient: o.email, subject: `המחיר אושר ✓ — קישור לתשלום הזמנה #${id}`, html: paymentLinkHtml({ id, pickup: o.pickup, dropoff: o.dropoff, price }, charge.checkoutUrl) });
+            const sent = await notifyEmail(env, env.DB, { orderId: id, template: 'customer_payment_link', recipient: o.email, subject: `המחיר אושר ✓ — קישור לתשלום הזמנה #${id}`, html: paymentLinkHtml(env, { ...o, id, price }, charge.checkoutUrl) });
             emailed = !!(sent && sent.ok);
           } catch {}
         }
@@ -658,6 +707,12 @@ export default {
       if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
       const coupons = await listCoupons(env.DB);
       return json({ coupons });
+    }
+
+    if (onOps && path === '/api/ops/cancellations' && req.method === 'GET') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      const requests = await listCancellationRequests(env.DB, Number(url.searchParams.get('limit')) || 100);
+      return json({ requests: requests.results || [] });
     }
     if (onOps && path === '/api/ops/coupons' && req.method === 'POST') {
       if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
@@ -727,7 +782,7 @@ export default {
             if (custEmail && env.SENDGRID_API_KEY) {
               const otp = genOtp();
               await setEmailAndOtp(env.DB, o.id, custEmail, await hashOtp(env, otp), Date.now() + 10 * 60 * 1000);
-              try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_payment_confirmation', recipient: custEmail, subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב', html: paymentConfirmedHtml({ ...o, email: custEmail }, trackingUrl(env, o.token), otp) }); } catch {}
+              try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_payment_confirmation', recipient: custEmail, subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב', html: paymentConfirmedHtml(env, { ...o, email: custEmail }, trackingUrl(env, o.token), otp) }); } catch {}
             }
             try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'ops_payment_received', recipient: env.OPS_EMAIL, subject: `תשלום התקבל #${o.id} — ₪${o.price}`, html: `${escHtml(o.name)} · ${escHtml(o.pickup)} → ${escHtml(o.dropoff)}<br>המתינו לאישור ויציאה לדרך ב- ops.edenmish.com` }); } catch {}
             try { await notifyWhatsApp(env, env.DB, { orderId: o.id, template: 'ops_payment_received', recipient: env.WHATSAPP_NUMBER, body: `תשלום התקבל #${o.id} — ₪${o.price}\n${o.name} · ${o.pickup} → ${o.dropoff}\nצפייה ואישור: ${storefrontUrl(env, '/dash.html')}` }); } catch {}
@@ -742,5 +797,10 @@ export default {
     }
 
     return new Response('Not found', { status: 404 });
+  },
+  async scheduled(_event, env, ctx) {
+    ctx.waitUntil(runRetentionCleanup(env.DB).catch((error) => {
+      console.error('retention_cleanup_failed', error && error.message ? error.message : String(error));
+    }));
   }
 };
