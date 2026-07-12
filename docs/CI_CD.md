@@ -289,6 +289,7 @@ git push origin "v$(./scripts/current_version.sh)"
      wrangler d1 execute edenmish --remote --file=./migrations/008_coupons.sql
      wrangler d1 execute edenmish --remote --file=./migrations/009_invoice_tracking.sql
      wrangler d1 execute edenmish --remote --file=./migrations/010_order_service_schedule.sql
+     wrangler d1 execute edenmish --remote --file=./migrations/011_cancellation_requests.sql
 3. Go to GitHub → Actions → "Production deploy" → Run workflow
      - confirm_migrations_ran = "I ran required migrations"
      - deploy_worker = true
@@ -365,6 +366,18 @@ STAGING_D1_DATABASE_ID=<returned-uuid> node scripts/render-staging-config.mjs
 npx wrangler d1 execute edenmish-staging --remote \
   --config wrangler.staging.generated.toml --file=./schema.sql
 ```
+
+For an existing staging database, apply new numbered migrations manually before
+deploying Worker code that depends on them. For migration 011:
+
+```bash
+npx wrangler d1 execute edenmish-staging --remote \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/011_cancellation_requests.sql
+```
+
+The GitHub deployment token intentionally does not run D1 migrations; use an
+authorized operator session and verify the migration before triggering the workflow.
 
 Then create the GitHub `staging` environment and add:
 

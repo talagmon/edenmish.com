@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html class="dark" dir="rtl" lang="he">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>EdenMish | ביטול עסקה</title>
+<meta name="app-version" content="v0.2.0(274272)">
+<meta name="description" content="שליחת הודעת ביטול עסקה מקוונת ל-EdenMish וקבלת אסמכתא."/>
+<meta name="robots" content="noindex"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/assets/styles.css"/>
+<link rel="icon" href="/assets/favicon.ico"/>
+<meta name="theme-color" content="#8B5CF6"/>
+</head>
+<body class="bg-surface-dim min-h-screen">
+<header class="fixed top-0 w-full z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border shadow-sm h-16">
+<div class="flex flex-row-reverse justify-between items-center px-gutter-desktop max-w-container-max mx-auto h-full">
+<a href="/" class="font-display-lg text-headline-md font-bold text-primary">EdenMish</a>
+<nav class="hidden md:flex gap-stack-lg items-center" aria-label="ניווט ראשי">
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary" href="/">בית</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary" href="/booking.html">שירותים</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary" href="/track.html">מעקב משלוחים</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary" href="/about.html">אודות</a>
+</nav>
+<a href="/booking.html" class="bg-primary-container text-on-primary-container px-6 py-2 rounded-lg font-label-bold">שלחו עכשיו</a>
+</div>
+</header>
+
+<main id="main-content" class="pt-24 pb-stack-lg px-gutter-mobile md:px-gutter-desktop max-w-3xl mx-auto">
+<article class="glass-card rounded-2xl p-stack-lg space-y-stack-md">
+<div>
+<h1 class="font-headline-lg text-on-surface">ביטול עסקה</h1>
+<p class="text-on-surface-variant mt-2">באמצעות טופס זה ניתן לשלוח הודעת ביטול מקוונת. לאחר השליחה תוצג אסמכתא. קבלת ההודעה אינה אישור שהביטול אושר; הבקשה תיבדק בהתאם לדין, למועד קבלתה ולשלב שבו נמצא השירות.</p>
+</div>
+
+<div class="bg-surface-container-low rounded-xl p-stack-md text-label-sm text-on-surface-variant">
+<p class="font-label-bold text-on-surface mb-2">דרכים נוספות למסירת הודעת ביטול</p>
+<p>בטלפון: <a class="text-primary underline" href="tel:+972534058498" dir="ltr">053-405-8498</a><br>בדוא״ל: <a class="text-primary underline" href="mailto:eden@edenmish.com">eden@edenmish.com</a><br>בדואר רשום: קריניצי 111, רמת גן, ישראל</p>
+</div>
+
+<form id="cancel-form" class="space-y-stack-md" novalidate>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-stack-md">
+<label class="flex flex-col gap-1">
+<span class="font-label-bold text-on-surface">מספר הזמנה או אסמכתא</span>
+<input name="order_number" maxlength="80" required class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3" placeholder="לדוגמה: 1234"/>
+</label>
+<label class="flex flex-col gap-1">
+<span class="font-label-bold text-on-surface">שם מלא</span>
+<input name="customer_name" maxlength="120" autocomplete="name" required class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3"/>
+</label>
+<label class="flex flex-col gap-1">
+<span class="font-label-bold text-on-surface">מספר זהות</span>
+<input name="identity_number" inputmode="numeric" maxlength="9" autocomplete="off" required class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3" aria-describedby="identity-help"/>
+<span id="identity-help" class="text-label-sm text-on-surface-variant">נדרש בהודעת ביטול לפי חוק הגנת הצרכן. במסד ההזמנות נשמרות רק ארבע הספרות האחרונות; המספר המלא מועבר בהודעה מאובטחת לצורך הטיפול.</span>
+</label>
+<label class="flex flex-col gap-1">
+<span class="font-label-bold text-on-surface">דוא״ל</span>
+<input name="email" type="email" maxlength="254" autocomplete="email" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3"/>
+</label>
+<label class="flex flex-col gap-1 md:col-span-2">
+<span class="font-label-bold text-on-surface">טלפון</span>
+<input name="phone" type="tel" maxlength="24" autocomplete="tel" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3"/>
+<span class="text-label-sm text-on-surface-variant">יש למלא לפחות דוא״ל או טלפון אחד ליצירת קשר.</span>
+</label>
+<label class="flex flex-col gap-1 md:col-span-2">
+<span class="font-label-bold text-on-surface">פירוט נוסף, אם נדרש</span>
+<textarea name="reason" maxlength="1000" rows="4" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3"></textarea>
+</label>
+</div>
+
+<div class="border border-outline-variant rounded-xl p-stack-md text-label-sm text-on-surface-variant">
+<p><b class="text-on-surface">הודעה בדבר איסוף מידע:</b> אין חובה חוקית למסור את פרטי הקשר או את פירוט הבקשה, אך ללא שם, מספר זהות ומזהה הזמנה לא נוכל לקלוט הודעת ביטול מקוונת; ללא אמצעי קשר לא נוכל להשיב. המידע ישמש לקליטת הבקשה, זיהוי העסקה, טיפול בביטול, מניעת שימוש לרעה ועמידה בחובות משפטיות. המידע יימסר לפי הצורך לספקי האחסון והדוא״ל ולספק התשלום לצורך הטיפול. מספר הזהות המלא מועבר באמצעות ספק הדוא״ל לתיבת העסק, ואילו במסד האתר נשמרות רק ארבע הספרות האחרונות; הודעות יימחקו בהתאם למדיניות השמירה. בעל השליטה במאגר הוא עדן אריאלי. לפרטים על זכויות עיון ותיקון ראו <a class="text-primary underline" href="/privacy.html">מדיניות הפרטיות</a>.</p>
+</div>
+
+<div id="cancel-error" hidden class="bg-error-container/30 border border-error/40 text-error rounded-lg p-stack-sm" role="alert"></div>
+<div id="cancel-success" hidden class="bg-secondary-container/20 border border-secondary/40 text-secondary rounded-lg p-stack-md" role="status"></div>
+<button id="cancel-submit" type="submit" class="w-full bg-primary text-on-primary py-4 rounded-xl font-headline-md hover:opacity-90 disabled:opacity-60">שליחת הודעת ביטול</button>
+</form>
+</article>
+</main>
+
+<footer class="w-full py-stack-lg border-t border-glass-border text-center space-y-stack-sm">
+<div class="flex flex-wrap justify-center gap-stack-md">
+<a class="text-on-surface-variant hover:text-primary" href="/terms.html">תקנון</a>
+<a class="text-on-surface-variant hover:text-primary" href="/refund.html">מדיניות ביטול</a>
+<a class="text-on-surface-variant hover:text-primary" href="/privacy.html">מדיניות פרטיות</a>
+<a class="text-on-surface-variant hover:text-primary" href="/accessibility.html">נגישות</a>
+</div>
+<p class="text-label-sm text-on-surface-variant">עדן אריאלי · עוסק פטור 211568928 · קריניצי 111, רמת גן, ישראל</p>
+</footer>
+
+<script src="/assets/api-origin.js"></script>
+<script>
+const cancelForm = document.getElementById('cancel-form');
+const cancelError = document.getElementById('cancel-error');
+const cancelSuccess = document.getElementById('cancel-success');
+const cancelSubmit = document.getElementById('cancel-submit');
+
+cancelForm.addEventListener('submit', async function (event) {
+  event.preventDefault();
+  cancelError.hidden = true;
+  cancelSuccess.hidden = true;
+  const fields = new FormData(cancelForm);
+  const payload = Object.fromEntries(fields.entries());
+  if (!payload.order_number.trim() || !payload.customer_name.trim() || !payload.identity_number.trim()) {
+    cancelError.textContent = 'נא למלא מספר הזמנה, שם מלא ומספר זהות.';
+    cancelError.hidden = false;
+    return;
+  }
+  if (!payload.email.trim() && !payload.phone.trim()) {
+    cancelError.textContent = 'נא למלא דוא״ל או מספר טלפון.';
+    cancelError.hidden = false;
+    return;
+  }
+  cancelSubmit.disabled = true;
+  cancelSubmit.textContent = 'שולח…';
+  try {
+    const response = await fetch(window.EDEN_API.find + '/api/cancellations', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    });
+    const data = await response.json().catch(function () { return {}; });
+    if (!response.ok) {
+      const messages = {
+        invalid_identity: 'מספר הזהות אינו תקין.', invalid_email: 'כתובת הדוא״ל אינה תקינה.',
+        invalid_phone: 'מספר הטלפון אינו תקין.', rate_limited: 'נשלחו יותר מדי בקשות. נסו שוב מאוחר יותר.'
+      };
+      throw new Error(messages[data.error] || 'לא ניתן היה לשלוח את הבקשה. נסו שוב או פנו אלינו בטלפון.');
+    }
+    cancelSuccess.innerHTML = '<b>הודעת הביטול התקבלה.</b><br>מספר אסמכתא: ' + String(data.reference) + '. שמרו מספר זה. ניצור קשר לאחר בדיקת הבקשה.';
+    cancelSuccess.hidden = false;
+    cancelForm.reset();
+  } catch (error) {
+    cancelError.textContent = error.message;
+    cancelError.hidden = false;
+  } finally {
+    cancelSubmit.disabled = false;
+    cancelSubmit.textContent = 'שליחת הודעת ביטול';
+  }
+});
+</script>
+<script src="/assets/mobile-nav.js" defer></script>
+</body>
+</html>

@@ -90,7 +90,7 @@ Database name: `edenmish`. Binding: `DB`.
 ### Schema and migrations
 
 `schema.sql` is the **fresh-DB source of truth** — it defines every current table.
-The numbered migrations (`003`–`010`) add tables/columns that were introduced after the
+The numbered migrations (`003`–`011`) add tables/columns that were introduced after the
 initial schema. Tables are idempotent (`CREATE TABLE IF NOT EXISTS`); `ALTER TABLE …
 ADD COLUMN` migrations (`006`–`010`) must run only on DBs that predate their columns.
 
@@ -101,7 +101,8 @@ ADD COLUMN` migrations (`006`–`010`) must run only on DBs that predate their c
   `ALTER TABLE … ADD COLUMN` would fail with "duplicate column").
 
 Current tables: `orders`, `status_history`, `gps_pings`, `payments`, `pricing_rules`,
-`rate_limits`, `delivery_proofs`, `notifications`, `coupons`, `coupon_redemptions`.
+`rate_limits`, `delivery_proofs`, `notifications`, `coupons`, `coupon_redemptions`,
+`cancellation_requests`.
 
 ## Secret checklist
 
@@ -159,6 +160,7 @@ wrangler d1 execute edenmish --remote --file=./migrations/007_order_rating.sql
 wrangler d1 execute edenmish --remote --file=./migrations/008_coupons.sql
 wrangler d1 execute edenmish --remote --file=./migrations/009_invoice_tracking.sql
 wrangler d1 execute edenmish --remote --file=./migrations/010_order_service_schedule.sql
+wrangler d1 execute edenmish --remote --file=./migrations/011_cancellation_requests.sql
 ```
 
 > Run only migrations that have not already been applied. Several `ALTER TABLE`

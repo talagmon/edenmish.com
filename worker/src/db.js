@@ -226,3 +226,48 @@ export async function listNotificationsForOrder(DB, orderId) {
   return DB.prepare('SELECT id, channel, template, recipient, subject, status, provider_ref, error, created_at FROM notifications WHERE order_id = ? ORDER BY id ASC')
     .bind(orderId).all();
 }
+
+// ---- inbound online cancellation notices ----
+// Full identity numbers are never persisted; callers pass only the last 4 digits.
+export async function createCancellationRequest(DB, data) {
+  const r = await DB.prepare(
+    `INSERT INTO cancellation_requests
+      (order_number, customer_name, identity_last4, email, phone, reason, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, 'received', ?) RETURNING id, created_at`
+  ).bind(
+    data.order_number,
+    data.customer_name,
+    data.identity_last4,
+    data.email ?? null,
+    data.phone ?? null,
+    data.reason ?? null,
+    Date.now()
+  ).first();
+  return r;
+}
+
+export async function listCancellationRequests(DB, limit = 100) {
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 100, 500));
+  return DB.prepare(
+    `SELECT id, order_number, customer_name, identity_last4, email, phone, reason, status, created_at, processed_at
+     FROM cancellation_requests ORDER BY created_at DESC LIMIT ?`
+  ).bind(safeLimit).all();
+}
+
+// Data-minimization schedule. Core order/payment records remain available for
+// accounting and legal claims; short-lived operational and security data does not.
+export async function runRetentionCleanup(DB, now = Date.now()) {
+  const day = 24 * 60 * 60 * 1000;
+  const results = {};
+  results.gps = await DB.prepare('DELETE FROM gps_pings WHERE at < ?').bind(now - 30 * day).run();
+  results.proofs = await DB.prepare(
+    `UPDATE delivery_proofs SET photo_url = NULL, signature = NULL
+     WHERE updated_at < ? AND (photo_url IS NOT NULL OR signature IS NOT NULL)`
+  ).bind(now - 90 * day).run();
+  results.notifications = await DB.prepare('DELETE FROM notifications WHERE created_at < ?').bind(now - 365 * day).run();
+  results.cancellations = await DB.prepare('DELETE FROM cancellation_requests WHERE created_at < ?').bind(now - 365 * day).run();
+  results.rateLimits = await DB.prepare(
+    'DELETE FROM rate_limits WHERE last_at < ? AND (locked_until IS NULL OR locked_until < ?)'
+  ).bind(now - 2 * day, now).run();
+  return results;
+}

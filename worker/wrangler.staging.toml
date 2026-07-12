@@ -7,6 +7,9 @@ routes = [
   { pattern = "ops-staging.edenmish.com", custom_domain = true }
 ]
 
+[triggers]
+crons = ["17 2 * * *"]
+
 [vars]
 BRAND = "EdenMish Staging"
 BOOKING_URL = "https://staging.edenmish.com"

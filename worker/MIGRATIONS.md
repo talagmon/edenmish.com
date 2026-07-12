@@ -200,6 +200,25 @@ WHERE name IN ('service','size','when_date','when_hour');
 
 ---
 
+### 011_cancellation_requests.sql
+
+**Purpose:** Adds the `cancellation_requests` table for durable online cancellation
+notices. The table stores only the last four digits of the identity number; the full
+number is validated in memory and is not persisted in D1.
+
+**Command:**
+```bash
+wrangler d1 execute edenmish --remote --file=./migrations/011_cancellation_requests.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM sqlite_master
+WHERE type='table' AND name='cancellation_requests';
+```
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -214,6 +233,7 @@ WHERE name IN ('service','size','when_date','when_hour');
 - [ ] Run `008_coupons.sql` if not already applied.
 - [ ] Run `009_invoice_tracking.sql` if not already applied.
 - [ ] Run `010_order_service_schedule.sql` after merge and before deploying the Worker.
+- [ ] Run `011_cancellation_requests.sql` after merge and before deploying the Worker.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).

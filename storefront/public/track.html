@@ -161,9 +161,10 @@
 <a class="hover:text-secondary transition-colors" href="/about.html">צור קשר</a>
 <a class="hover:text-secondary transition-colors" href="/terms.html">תקנון</a>
 <a class="hover:text-secondary transition-colors" href="/privacy.html">מדיניות פרטיות</a>
+<a class="hover:text-secondary transition-colors" href="/accessibility.html">נגישות</a>
 </div>
 <p class="text-on-surface-variant font-body-md text-body-md opacity-60">© 2025 EdenMish. כל הזכויות שמורות.</p>
-<p class="text-label-sm text-on-surface-variant opacity-50 text-center mt-1">קריניצי 111 ד׳, רמת גן, ישראל</p>
+<p class="text-label-sm text-on-surface-variant opacity-50 text-center mt-1">קריניצי 111, רמת גן, ישראל</p>
 </div>
 
 <div class="flex items-center justify-center gap-2 mt-3 opacity-60">
@@ -347,7 +348,7 @@ function renderTrack(d){
     ["שולח", o.name || "—"],
     ["איסוף", o.pickup || "—"],
     ["מסירה", o.dropoff || "—"],
-    ["שירות", o.service ? (o.service.charAt(0).toUpperCase() + o.service.slice(1)) : (o.package || "—")],
+    ["שירות", o.service ? ({ eco: "חסכוני", standard: "רגיל", flash: "מהיר" }[o.service] || "—") : (o.package || "—")],
     ["גודל", o.size === "medium" ? "בינוני" : o.size === "small" ? "קטן" : "—"],
     ["סטטוס תשלום", o.payment_status || "—"],
     ["סכום", o.price != null ? "₪" + o.price : "—"],
