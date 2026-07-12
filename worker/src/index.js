@@ -60,6 +60,57 @@ const requestReceivedHtml = (env, o) => `<div dir="rtl" style="font-family:sans-
 // only copied to Eden's clipboard and the customer was never notified).
 const paymentLinkHtml = (env, o, url) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px"><h2 style="color:#5B2A86;margin:0 0 8px">המחיר אושר ✓</h2><p>הזמנה #${o.id || ''} מוכנה לתשלום.</p><table style="border-collapse:collapse;font-size:15px"><tr><td style="padding:5px 14px;color:#777">איסוף</td><td style="padding:5px 0">${escHtml(o.pickup)}</td></tr><tr><td style="padding:5px 14px;color:#777">מסירה</td><td style="padding:5px 0">${escHtml(o.dropoff)}</td></tr><tr><td style="padding:5px 14px;color:#777">מחיר</td><td style="padding:5px 0;font-weight:700;color:#91d3c8;font-size:18px">₪${o.price || ''}</td></tr></table><div style="text-align:center;margin:18px 0"><a href="${url}" style="display:inline-block;background:#5B2A86;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px">לתשלום מאובטח ←</a></div><p style="color:#777;font-size:13px">התשלום מתבצע בסביבה המאובטחת של Shopify ו‑PayPlus. EdenMish אינה שומרת פרטי כרטיס אשראי. לאחר התשלום יישלח קישור מעקב חי וקוד אימות למייל.</p>${transactionDisclosureHtml(env, o)}${SUPPORT_LINE}</div>`;
 
+// Single post-payment boundary for both an authenticated manual payment and a
+// reconciled Shopify orders/paid webhook. Callers must perform provider-specific
+// validation before entering this helper. payment_status is the idempotency guard.
+async function confirmPaidOrder(env, order, opts = {}) {
+  if (!order) return { order: null, unchanged: true };
+  if (order.payment_status === 'paid') return { order, unchanged: true };
+
+  const paidAt = Date.now();
+  const paidAmount = Number(opts.amountNis ?? order.price);
+  if (!Number.isFinite(paidAmount) || paidAmount < 0) throw new Error('invalid_paid_amount');
+
+  const customerEmail = order.email || opts.customerEmail || null;
+  const orderFields = { ...(opts.orderFields || {}), payment_status: 'paid' };
+  await setOrderStatus(env.DB, order.id, 'paid', orderFields);
+  await recordPayment(env.DB, order.id, {
+    amount: Math.round(paidAmount * 100),
+    status: 'paid',
+    payplus_id: opts.paymentRef == null ? null : String(opts.paymentRef),
+    paid_at: paidAt,
+  });
+
+  const paidOrder = { ...order, ...orderFields, status: 'paid', email: customerEmail };
+  if (customerEmail && env.SENDGRID_API_KEY) {
+    const otp = genOtp();
+    await setEmailAndOtp(env.DB, order.id, customerEmail, await hashOtp(env, otp), paidAt + 10 * 60 * 1000);
+    await notifyEmail(env, env.DB, {
+      orderId: order.id,
+      template: 'customer_payment_confirmation',
+      recipient: customerEmail,
+      subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב',
+      html: paymentConfirmedHtml(env, paidOrder, trackingUrl(env, order.token), otp),
+    });
+  }
+
+  await notifyEmail(env, env.DB, {
+    orderId: order.id,
+    template: 'ops_payment_received',
+    recipient: env.OPS_EMAIL,
+    subject: `תשלום התקבל #${order.id} — ₪${order.price}`,
+    html: `${escHtml(order.name)} · ${escHtml(order.pickup)} → ${escHtml(order.dropoff)}<br>המתינו לאישור ויציאה לדרך ב- ops.edenmish.com`,
+  });
+  await notifyWhatsApp(env, env.DB, {
+    orderId: order.id,
+    template: 'ops_payment_received',
+    recipient: env.WHATSAPP_NUMBER,
+    body: `תשלום התקבל #${order.id} — ₪${order.price}\n${order.name || ''} · ${order.pickup || ''} → ${order.dropoff || ''}\nצפייה ואישור: ${storefrontUrl(env, '/dash.html')}`,
+  });
+
+  return { order: (await getOrderById(env.DB, order.id)) || paidOrder, unchanged: false };
+}
+
 // Safe customer-facing Hebrew per validateCoupon rejection reason. Never expose the
 // raw reason string alone — the UI shows `message`; `reason` is for programmatic use.
 const COUPON_MESSAGES = {
@@ -570,25 +621,15 @@ export default {
       const before = await getOrderById(env.DB, id);
       if (!before) return json({ error: 'not found' }, 404);
       if (!canTransition(before.status, b.status)) return json({ error: 'invalid transition', from: before.status, to: b.status }, 409);
-      if (before.status === b.status) return json({ ok: true, unchanged: true });
+      if (before.status === b.status && b.status !== 'paid') return json({ ok: true, unchanged: true });
+      if (b.status === 'paid') {
+        const paid = await confirmPaidOrder(env, before);
+        return paid.unchanged ? json({ ok: true, unchanged: true }) : json({ ok: true, order: paid.order });
+      }
       const fields = {};
       if (b.status === 'picked_up') fields.picked_up_at = Date.now();
-      if (b.status === 'paid') fields.payment_status = 'paid';
       if (b.status === 'delivered') { fields.delivered_at = Date.now(); fields.payment_status = fields.payment_status || 'paid'; }
       await setOrderStatus(env.DB, id, b.status, fields);
-      if (b.status === 'paid') {
-        const o = await getOrderById(env.DB, id);
-        if (o) {
-          await recordPayment(env.DB, id, { amount: o.price * 100, status: 'paid', paid_at: Date.now() });
-
-          if (o.email) {
-            const otp = genOtp();
-            await setEmailAndOtp(env.DB, o.id, o.email, await hashOtp(env, otp), Date.now() + 10 * 60 * 1000);
-            try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_payment_confirmation', recipient: o.email, subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב', html: paymentConfirmedHtml(env, { ...o, email: o.email }, trackingUrl(env, o.token), otp) }); } catch {}
-          }
-          try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'ops_payment_received', recipient: env.OPS_EMAIL, subject: `תשלום התקבל #${o.id} — ₪${o.price}`, html: `${escHtml(o.name)} · ${escHtml(o.pickup)} → ${escHtml(o.dropoff)}<br>המתינו לאישור ויציאה לדרך ב- ops.edenmish.com` }); } catch {}
-        }
-      }
       if (b.status === 'delivered') {
         const o = await getOrderById(env.DB, id);
         if (o) {
@@ -772,20 +813,14 @@ export default {
                 .bind('mismatch', parsed.shopifyOrderId, 'payment_mismatch', o.id).run();
               return json({ received: true, reconciled: false });
             }
-            await setOrderStatus(env.DB, o.id, 'paid', { payment_status: 'paid', shopify_order_id: parsed.shopifyOrderId });
             // o.price is the FINAL amount (post-coupon when one applied) — the Draft
             // Order's applied_discount guarantees Shopify captured exactly this total.
-            await recordPayment(env.DB, o.id, { amount: Math.round(paidAmount * 100), status: 'paid', payplus_id: String(parsed.shopifyOrderId), paid_at: Date.now() });
-
-            // Use checkout email if the order doesn't have one (customer entered it in Shopify checkout)
-            var custEmail = o.email || parsed.email;
-            if (custEmail && env.SENDGRID_API_KEY) {
-              const otp = genOtp();
-              await setEmailAndOtp(env.DB, o.id, custEmail, await hashOtp(env, otp), Date.now() + 10 * 60 * 1000);
-              try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_payment_confirmation', recipient: custEmail, subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב', html: paymentConfirmedHtml(env, { ...o, email: custEmail }, trackingUrl(env, o.token), otp) }); } catch {}
-            }
-            try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'ops_payment_received', recipient: env.OPS_EMAIL, subject: `תשלום התקבל #${o.id} — ₪${o.price}`, html: `${escHtml(o.name)} · ${escHtml(o.pickup)} → ${escHtml(o.dropoff)}<br>המתינו לאישור ויציאה לדרך ב- ops.edenmish.com` }); } catch {}
-            try { await notifyWhatsApp(env, env.DB, { orderId: o.id, template: 'ops_payment_received', recipient: env.WHATSAPP_NUMBER, body: `תשלום התקבל #${o.id} — ₪${o.price}\n${o.name} · ${o.pickup} → ${o.dropoff}\nצפייה ואישור: ${storefrontUrl(env, '/dash.html')}` }); } catch {}
+            await confirmPaidOrder(env, o, {
+              amountNis: paidAmount,
+              customerEmail: parsed.email,
+              paymentRef: parsed.shopifyOrderId,
+              orderFields: { shopify_order_id: parsed.shopifyOrderId },
+            });
           } else {
             // authorized but not yet captured (future Mesh/preauth mode)
             await env.DB.prepare('UPDATE orders SET shopify_order_id=?, payment_status=? WHERE id=?')

@@ -47,7 +47,10 @@ function apiDb({ coupon = null, raceRedemptions = false, orderRow = null } = {})
           }
           if (/SELECT \* FROM orders WHERE id/.test(sql)) return orderRow;
           if (/SELECT \* FROM orders WHERE LOWER\(token\)/.test(sql)) return orderRow;
-          if (/INSERT INTO notifications/.test(sql)) return { id: 1 };
+          if (/INSERT INTO notifications/.test(sql)) {
+            state.runs.push({ sql, args: this.args });
+            return { id: state.runs.length };
+          }
           return null;
         },
         async all() {
@@ -608,6 +611,63 @@ describe('order lifecycle hardening', () => {
   });
 });
 
+describe('manual paid confirmation', () => {
+  test('runs the full paid side effects once and is idempotent', async () => {
+    const orderRow = {
+      id: 12,
+      token: 'manualpaidtoken123456',
+      status: 'payment_sent',
+      payment_status: 'link_sent',
+      price: 50,
+      currency: 'ILS',
+      email: 'customer@example.com',
+      name: 'Manual Customer',
+      pickup: 'איסוף',
+      dropoff: 'מסירה',
+    };
+    const db = apiDb({ orderRow });
+    globalThis.fetch = async (url) => {
+      assert.equal(url, 'https://api.sendgrid.com/v3/mail/send');
+      return new Response(null, { status: 202 });
+    };
+    const env = {
+      ...envFor(db),
+      SENDGRID_API_KEY: 'sendgrid-test-key',
+      OPS_EMAIL: 'ops@example.com',
+      WHATSAPP_NUMBER: '972500000000',
+    };
+
+    let res = await worker.fetch(await opsPost('/api/ops/orders/12/status', { status: 'paid' }), env);
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).ok, true);
+    assert.equal(orderRow.status, 'paid');
+    assert.equal(orderRow.payment_status, 'paid');
+
+    const payments = db.state.runs.filter(c => /INSERT INTO payments/.test(c.sql));
+    assert.equal(payments.length, 1);
+    assert.equal(payments[0].args[0], 12);
+    assert.equal(payments[0].args[1], 5000);
+    assert.equal(payments[0].args[4], 'paid');
+    assert.equal(payments[0].args[3], null, 'manual payment must not invent a provider reference');
+
+    const otpUpdate = db.state.runs.find(c => /UPDATE orders SET email = \?/.test(c.sql));
+    assert.ok(otpUpdate, 'fresh OTP fields should be written');
+    assert.equal(otpUpdate.args[0], 'customer@example.com');
+    assert.equal(otpUpdate.args[3], 12);
+
+    const attempts = db.state.runs.filter(c => /INSERT INTO notifications/.test(c.sql));
+    assert.ok(attempts.some(c => c.args[1] === 'email' && c.args[2] === 'customer_payment_confirmation'));
+    assert.ok(attempts.some(c => c.args[1] === 'email' && c.args[2] === 'ops_payment_received'));
+    assert.ok(attempts.some(c => c.args[1] === 'whatsapp' && c.args[2] === 'ops_payment_received'));
+
+    const runCount = db.state.runs.length;
+    res = await worker.fetch(await opsPost('/api/ops/orders/12/status', { status: 'paid' }), env);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { ok: true, unchanged: true });
+    assert.equal(db.state.runs.length, runCount, 'retry must not add payments, OTPs, or notifications');
+  });
+});
+
 describe('Shopify payment reconciliation', () => {
   const baseOrder = {
     id: 9, token: 'abcdef1234567890abcdef', status: 'payment_sent', payment_status: 'link_sent',
@@ -627,6 +687,26 @@ describe('Shopify payment reconciliation', () => {
     const payment = db.state.runs.find(c => /INSERT INTO payments/.test(c.sql));
     assert.ok(payment);
     assert.equal(payment.args[1], 5000);
+  });
+
+  test('uses the checkout email for the shared OTP confirmation flow', async () => {
+    const db = apiDb({ orderRow: { ...baseOrder } });
+    globalThis.fetch = async (url) => {
+      assert.equal(url, 'https://api.sendgrid.com/v3/mail/send');
+      return new Response(null, { status: 202 });
+    };
+    const req = await shopifyWebhook({ ...payload, email: 'checkout@example.com' });
+    const res = await worker.fetch(req, {
+      DB: db,
+      SESSION_SECRET: 'test-secret',
+      SHOPIFY_WEBHOOK_SECRET: 'webhook-secret',
+      SENDGRID_API_KEY: 'sendgrid-test-key',
+    });
+    assert.equal(res.status, 200);
+    const otpUpdate = db.state.runs.find(c => /UPDATE orders SET email = \?/.test(c.sql));
+    assert.ok(otpUpdate);
+    assert.equal(otpUpdate.args[0], 'checkout@example.com');
+    assert.ok(db.state.runs.some(c => /INSERT INTO notifications/.test(c.sql) && c.args[2] === 'customer_payment_confirmation'));
   });
 
   test('quarantines a paid webhook whose amount does not match', async () => {
