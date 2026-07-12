@@ -1,7 +1,7 @@
-import { createOrder, getOrderByToken, getOrderById, listOrders, setOrderStatus, setOrderRating, getStatusHistory, addGps, latestGps, getGpsTrail, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof, listRecentNotificationFailures, listNotificationsForOrder, createCancellationRequest, listCancellationRequests, runRetentionCleanup } from './db.js';
+import { createOrder, getOrderByToken, getOrderById, getOrderByShopifyOrderId, listOrders, setOrderStatus, setOrderRating, getStatusHistory, addGps, latestGps, getGpsTrail, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof, listRecentNotificationFailures, listNotificationsForOrder, createCancellationRequest, listCancellationRequests, runRetentionCleanup } from './db.js';
 import { priceOrder, ZONE_CITIES, DEFAULT_PRICING_RULES } from './pricing.js';
 import { makeSession, checkSession, getCookie, genOtp, hashOtp, timingSafeEqual } from './integrations.js';
-import { createCharge, settleOrder, verifyShopifyWebhook, parseShopifyOrderWebhook } from './payment.js';
+import { createCharge, settleOrder, verifyShopifyWebhook, parseShopifyOrderWebhook, parseShopifyRefundWebhook } from './payment.js';
 import { trackingHtml, opsHtml } from './pages.js';
 import { corsFor, maskEmail, publicOrderSummary, clientIp, anonKey } from './security.js';
 import { notifyEmail, notifyWhatsApp } from './notify.js';
@@ -116,6 +116,79 @@ async function confirmPaidOrder(env, order, opts = {}) {
   return { order: (await getOrderById(env.DB, order.id)) || paidOrder, unchanged: false };
 }
 
+const REFUND_PAYMENT_STATES = new Set([
+  'refund_pending',
+  'partially_refunded',
+  'refunded',
+  'refund_failed',
+  'refund_mismatch',
+]);
+
+async function reconcileShopifyRefund(env, order, refund = {}) {
+  if (!order) return { reconciled: false, reason: 'order_not_found' };
+  // Webhooks can arrive out of order. Once Shopify has confirmed the full refund,
+  // a delayed refunds/create delivery must not reopen the terminal state.
+  if (order.payment_status === 'refunded' && order.status === 'cancelled') {
+    return { reconciled: true, unchanged: true };
+  }
+
+  const expectedCurrency = String(order.currency || 'ILS').toUpperCase();
+  const refundCurrency = String(refund.currency || expectedCurrency).toUpperCase();
+  if (refundCurrency !== expectedCurrency) {
+    if (order.payment_status === 'refund_mismatch' && order.status === 'refund_pending') return { reconciled: false, unchanged: true };
+    await setOrderStatus(env.DB, order.id, 'refund_pending', {
+      payment_status: 'refund_mismatch',
+      review_flag: 1,
+      review_reason: 'refund_currency_mismatch',
+    });
+    return { reconciled: false, reason: 'currency_mismatch' };
+  }
+
+  const financialStatus = String(refund.financialStatus || '').toLowerCase();
+  const successfulAmount = Number(refund.successfulAmount) || 0;
+  const pendingAmount = Number(refund.pendingAmount) || 0;
+  const expectedAmount = Number(order.price);
+  const fullSuccessfulRefund = Number.isFinite(expectedAmount) && successfulAmount + 0.005 >= expectedAmount;
+
+  if (financialStatus === 'refunded' || fullSuccessfulRefund) {
+    if (order.payment_status === 'refunded' && order.status === 'cancelled') return { reconciled: true, unchanged: true };
+    await setOrderStatus(env.DB, order.id, 'cancelled', {
+      payment_status: 'refunded',
+      review_flag: 0,
+      review_reason: null,
+    });
+    return { reconciled: true, final: true };
+  }
+
+  if (financialStatus === 'partially_refunded' || successfulAmount > 0) {
+    if (order.payment_status === 'partially_refunded' && order.status === 'refund_pending') return { reconciled: true, unchanged: true };
+    await setOrderStatus(env.DB, order.id, 'refund_pending', {
+      payment_status: 'partially_refunded',
+      review_flag: 1,
+      review_reason: 'partial_refund',
+    });
+    return { reconciled: true, partial: true };
+  }
+
+  if (refund.hasFailedTransaction && pendingAmount === 0) {
+    if (order.payment_status === 'refund_failed' && order.status === 'refund_pending') return { reconciled: false, unchanged: true };
+    await setOrderStatus(env.DB, order.id, 'refund_pending', {
+      payment_status: 'refund_failed',
+      review_flag: 1,
+      review_reason: 'refund_failed',
+    });
+    return { reconciled: false, reason: 'refund_failed' };
+  }
+
+  if (order.payment_status === 'refund_pending' && order.status === 'refund_pending') return { reconciled: true, unchanged: true };
+  await setOrderStatus(env.DB, order.id, 'refund_pending', {
+    payment_status: 'refund_pending',
+    review_flag: 1,
+    review_reason: 'refund_pending',
+  });
+  return { reconciled: true, pending: true };
+}
+
 // Safe customer-facing Hebrew per validateCoupon rejection reason. Never expose the
 // raw reason string alone — the UI shows `message`; `reason` is for programmatic use.
 const COUPON_MESSAGES = {
@@ -168,7 +241,8 @@ async function isOps(req, env) {
   return await checkSession(env, c);
 }
 
-// Lazy self-registration: ensures Shopify sends orders/paid to this Worker.
+// Lazy self-registration: ensures Shopify sends payment + refund lifecycle
+// events to this Worker.
 // Idempotent (checks before registering). Runs once per isolate.
 let _whReady = false;
 async function ensureWebhook(env) {
@@ -181,15 +255,20 @@ async function ensureWebhook(env) {
       headers: { 'X-Shopify-Access-Token': env.SHOPIFY_ADMIN_TOKEN }
     });
     const d = await r.json();
-    const exists = (d.webhooks || []).some(w => w.topic === 'orders/paid' && (w.address || '').includes('/webhooks/shopify'));
-    if (exists) { console.log('webhook_already_registered'); return; }
-    const cr = await fetch(`https://${shop}/admin/api/${ver}/webhooks.json`, {
-      method: 'POST',
-      headers: { 'X-Shopify-Access-Token': env.SHOPIFY_ADMIN_TOKEN, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ webhook: { topic: 'orders/paid', address: 'https://find.edenmish.com/webhooks/shopify', format: 'json' } })
-    });
-    const cd = await cr.json();
-    console.log('webhook_registered', cd.webhook ? { id: cd.webhook.id, address: cd.webhook.address } : (cd.errors || cd));
+    const topics = ['orders/paid', 'orders/updated', 'refunds/create'];
+    const existing = new Set((d.webhooks || [])
+      .filter((w) => (w.address || '').includes('/webhooks/shopify'))
+      .map((w) => w.topic));
+    for (const topic of topics) {
+      if (existing.has(topic)) continue;
+      const cr = await fetch(`https://${shop}/admin/api/${ver}/webhooks.json`, {
+        method: 'POST',
+        headers: { 'X-Shopify-Access-Token': env.SHOPIFY_ADMIN_TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ webhook: { topic, address: 'https://find.edenmish.com/webhooks/shopify', format: 'json' } })
+      });
+      const cd = await cr.json();
+      console.log('webhook_registered', cd.webhook ? { id: cd.webhook.id, topic: cd.webhook.topic, address: cd.webhook.address } : (cd.errors || cd));
+    }
   } catch (e) { console.log('webhook_check_error', e.message); }
 }
 
@@ -214,7 +293,7 @@ export default {
       return json({ ok: true, service: 'edenmish-worker' });
     }
 
-    // Ensure Shopify orders/paid webhook is registered (once per isolate, never blocks on failure)
+    // Ensure Shopify payment/refund webhooks are registered (once per isolate, never blocks on failure)
     try { await ensureWebhook(env); } catch (e) {}
 
     // ---- public API (CORS) ----
@@ -840,22 +919,45 @@ export default {
       return json({ ok: true, coupon: c });
     }
 
-    // ---- Shopify webhook (replaces PayPlus webhook) ----
-    // Fires when the customer completes checkout on the draft-order invoice URL.
-    // Subscribe to `orders/paid` (immediate mode) and optionally `orders/create` in Shopify admin.
+    // ---- Shopify webhooks (PayPlus remains behind Shopify) ----
+    // orders/paid reconciles capture; refunds/create starts refund reconciliation;
+    // orders/updated finalizes refunded / partially_refunded financial states.
     if (path === '/webhooks/shopify' && req.method === 'POST') {
       const rawBody = await req.text();
       const hmac = req.headers.get('X-Shopify-Hmac-SHA256') || '';
       if (!(await verifyShopifyWebhook(env, rawBody, hmac))) return json({ error: 'invalid signature' }, 401);
       let b; try { b = JSON.parse(rawBody); } catch { return json({ error: 'bad json' }, 400); }
+      const topic = String(req.headers.get('X-Shopify-Topic') || 'orders/paid').toLowerCase();
+      if (!['orders/paid', 'orders/updated', 'refunds/create'].includes(topic)) {
+        return json({ received: true, reconciled: false });
+      }
+
+      if (topic === 'refunds/create') {
+        const refund = parseShopifyRefundWebhook(b);
+        if (!refund.shopifyOrderId) return json({ received: true, reconciled: false });
+        const o = await getOrderByShopifyOrderId(env.DB, refund.shopifyOrderId);
+        if (!o) return json({ received: true, reconciled: false });
+        const result = await reconcileShopifyRefund(env, o, refund);
+        return json({ received: true, reconciled: !!result.reconciled });
+      }
+
       const parsed = parseShopifyOrderWebhook(b);
-      if (parsed.token) {
-        const o = await getOrderByToken(env.DB, parsed.token);
+      if (parsed.token || parsed.shopifyOrderId) {
+        const o = parsed.token
+          ? await getOrderByToken(env.DB, parsed.token)
+          : await getOrderByShopifyOrderId(env.DB, parsed.shopifyOrderId);
         if (o) {
+          const financialStatus = String(parsed.financial_status || '').toLowerCase();
+          if (financialStatus === 'refunded' || financialStatus === 'partially_refunded') {
+            const result = await reconcileShopifyRefund(env, o, { financialStatus, currency: parsed.currency });
+            return json({ received: true, reconciled: !!result.reconciled });
+          }
+          if (REFUND_PAYMENT_STATES.has(o.payment_status)) return json({ received: true });
           if (parsed.paid) {
             // Idempotency: Shopify retries webhook deliveries. Re-processing would insert a
             // duplicate payment row, invalidate the customer's OTP, and re-send both emails.
             if (o.payment_status === 'paid') return json({ received: true });
+            // Late or retried paid events must never roll a refund state back to paid.
             const paidAmount = Number(parsed.total);
             const expectedAmount = Number(o.price);
             const amountMatches = Number.isFinite(paidAmount) && Number.isFinite(expectedAmount) && Math.abs(paidAmount - expectedAmount) < 0.005;

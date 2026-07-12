@@ -1,8 +1,8 @@
 # Status Model
 
 This documents the **current** status values actually used in the code, then
-proposes a **future normalized** model. **Nothing here is implemented in this PR** —
-the future model is a target for a later, scoped PR.
+proposes a **future normalized** model. The future model remains a target for a
+later, scoped PR.
 
 > Current values are a **free-text enum** on `orders.status`. There is no DB
 > constraint enforcing them. Both UIs (`pages.js`) hardcode the value→label maps.
@@ -26,8 +26,8 @@ Source of truth: `worker/src/pages.js` (HE label map + tracking FLOW), plus
 | `to_dropoff` | בדרך למסירה | Courier en route to drop-off (**live GPS**) | ops stepper |
 | `delivered` | נמסר | Delivered (writes `delivered_at`, sends summary email) | ops stepper |
 | `failed` | נכשל | Delivery attempt failed | ops "mark failed" |
-| `cancelled` | בוטל | Cancelled | (manual) |
-| `refund_pending` | ממתין לזיכוי | Refund in progress | (manual) |
+| `cancelled` | בוטל | Cancelled, including a confirmed full refund | manual / Shopify webhook |
+| `refund_pending` | ממתין לזיכוי | Refund pending, partial, failed, or under review | Shopify webhook |
 
 ### Current customer-visible lifecycle (tracking page `FLOW`)
 
@@ -57,7 +57,8 @@ The stepper collapses `received`/`priced`/`review`/`payment_sent` into step 0
   (a paid order waiting to be dispatched is indistinguishable from a paid order
   about to leave).
 - No `arrived_at_pickup` / `arrived_at_dropoff` granularity.
-- `refund_pending` exists as a label but there is no `refunded` terminal state.
+- There is no separate delivery-status value for `refunded`: a confirmed full
+  refund uses terminal delivery status `cancelled` and `payment_status = refunded`.
 - Values are free text → typos won't be caught by the DB.
 
 ---

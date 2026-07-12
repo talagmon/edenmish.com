@@ -46,6 +46,9 @@ function apiDb({ coupon = null, raceRedemptions = false, orderRow = null } = {})
             return { id, token: this.args[0] };
           }
           if (/SELECT \* FROM orders WHERE id/.test(sql)) return orderRow;
+          if (/SELECT \* FROM orders WHERE shopify_order_id/.test(sql)) {
+            return orderRow && String(orderRow.shopify_order_id) === String(this.args[0]) ? orderRow : null;
+          }
           if (/SELECT \* FROM orders WHERE LOWER\(token\)/.test(sql)) return orderRow;
           if (/INSERT INTO notifications/.test(sql)) {
             state.runs.push({ sql, args: this.args });
@@ -165,13 +168,13 @@ async function opsPost(path, body) {
   });
 }
 
-async function shopifyWebhook(body, secret = 'webhook-secret') {
+async function shopifyWebhook(body, secret = 'webhook-secret', topic = 'orders/paid') {
   const raw = JSON.stringify(body);
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(raw));
   const hmac = btoa(String.fromCharCode(...new Uint8Array(sig)));
   return new Request('https://find.edenmish.com/webhooks/shopify', {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Shopify-Hmac-SHA256': hmac }, body: raw,
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Shopify-Hmac-SHA256': hmac, 'X-Shopify-Topic': topic }, body: raw,
   });
 }
 
@@ -372,7 +375,12 @@ describe('POST /api/orders with coupon', () => {
     const db = apiDb();
     globalThis.fetch = async (url, opts = {}) => {
       if (String(url).endsWith('/webhooks.json')) {
-        return { ok: true, async json() { return { webhooks: [{ topic: 'orders/paid', address: 'https://find.edenmish.com/webhooks/shopify' }] }; } };
+        if (!opts.method) {
+          return { ok: true, async json() { return { webhooks: [{ topic: 'orders/paid', address: 'https://find.edenmish.com/webhooks/shopify' }] }; } };
+        }
+        const webhook = JSON.parse(opts.body).webhook;
+        assert.ok(['orders/updated', 'refunds/create'].includes(webhook.topic));
+        return { ok: true, async json() { return { webhook: { id: webhook.topic, ...webhook } }; } };
       }
       assert.ok(String(url).endsWith('/draft_orders.json'));
       assert.equal(opts.method, 'POST');
@@ -593,6 +601,9 @@ describe('createDraftOrder coupon pricing', () => {
     const d = captured.body.draft_order;
     assert.equal(d.line_items[0].price, '50.00');
     assert.ok(!('applied_discount' in d), 'no applied_discount for non-coupon orders');
+    assert.equal(d.line_items[0].title, 'שליחות — רגיל (מסירה בתוך 4 שעות)');
+    assert.equal(d.line_items[0].properties.find(p => p.name === 'רמת שירות').value, 'רגיל (מסירה בתוך 4 שעות)');
+    assert.ok(!/Standard|Eco|Flash/.test(JSON.stringify(d)), 'customer-facing Draft Order copy must be fully Hebrew');
   });
 });
 
@@ -807,7 +818,7 @@ describe('OTP lockout and resend flow', () => {
 describe('Shopify payment reconciliation', () => {
   const baseOrder = {
     id: 9, token: 'abcdef1234567890abcdef', status: 'payment_sent', payment_status: 'link_sent',
-    price: 50, currency: 'ILS', shopify_draft_order_id: 123, email: null,
+    price: 50, currency: 'ILS', shopify_draft_order_id: 123, shopify_order_id: 999, email: null,
   };
   const payload = {
     id: 999, draft_order_id: 123, financial_status: 'paid', total_price: '50.00', currency: 'ILS',
@@ -860,5 +871,130 @@ describe('Shopify payment reconciliation', () => {
     assert.ok(mismatch);
     assert.equal(mismatch.args[2], 'payment_mismatch');
     assert.ok(!db.state.runs.some(c => /INSERT INTO payments/.test(c.sql)));
+  });
+
+  test('marks a newly created refund pending without treating it as complete', async () => {
+    const orderRow = { ...baseOrder, status: 'paid', payment_status: 'paid' };
+    const db = apiDb({ orderRow });
+    const refund = {
+      id: 7001,
+      order_id: 999,
+      transactions: [{ id: 8001, kind: 'refund', status: 'pending', amount: '50.00', currency: 'ILS' }],
+    };
+
+    let res = await worker.fetch(await shopifyWebhook(refund, 'webhook-secret', 'refunds/create'), {
+      DB: db, SHOPIFY_WEBHOOK_SECRET: 'webhook-secret',
+    });
+    assert.deepEqual(await res.json(), { received: true, reconciled: true });
+    assert.equal(orderRow.status, 'refund_pending');
+    assert.equal(orderRow.payment_status, 'refund_pending');
+    assert.equal(orderRow.review_flag, 1);
+
+    const runCount = db.state.runs.length;
+    res = await worker.fetch(await shopifyWebhook(refund, 'webhook-secret', 'refunds/create'), {
+      DB: db, SHOPIFY_WEBHOOK_SECRET: 'webhook-secret',
+    });
+    assert.deepEqual(await res.json(), { received: true, reconciled: true });
+    assert.equal(db.state.runs.length, runCount, 'refund webhook retries must be idempotent');
+  });
+
+  test('finalizes a successful full refund as cancelled and refunded', async () => {
+    const orderRow = { ...baseOrder, status: 'paid', payment_status: 'paid' };
+    const db = apiDb({ orderRow });
+    const refund = {
+      id: 7002,
+      order_id: 999,
+      transactions: [{ id: 8002, kind: 'refund', status: 'success', amount: '50.00', currency: 'ILS' }],
+    };
+    const res = await worker.fetch(await shopifyWebhook(refund, 'webhook-secret', 'refunds/create'), {
+      DB: db, SHOPIFY_WEBHOOK_SECRET: 'webhook-secret',
+    });
+    assert.deepEqual(await res.json(), { received: true, reconciled: true });
+    assert.equal(orderRow.status, 'cancelled');
+    assert.equal(orderRow.payment_status, 'refunded');
+    assert.equal(orderRow.review_flag, 0);
+  });
+
+  test('uses orders/updated to finalize a pending refund without a tracking property', async () => {
+    const orderRow = { ...baseOrder, status: 'refund_pending', payment_status: 'refund_pending' };
+    const db = apiDb({ orderRow });
+    const update = { id: 999, financial_status: 'refunded', total_price: '50.00', currency: 'ILS', line_items: [] };
+    const res = await worker.fetch(await shopifyWebhook(update, 'webhook-secret', 'orders/updated'), {
+      DB: db, SHOPIFY_WEBHOOK_SECRET: 'webhook-secret',
+    });
+    assert.deepEqual(await res.json(), { received: true, reconciled: true });
+    assert.equal(orderRow.status, 'cancelled');
+    assert.equal(orderRow.payment_status, 'refunded');
+  });
+
+  test('keeps partial, failed, and currency-mismatched refunds under review', async () => {
+    const cases = [
+      [{ transactions: [{ kind: 'refund', status: 'success', amount: '10.00', currency: 'ILS' }] }, 'partially_refunded', 'partial_refund'],
+      [{ transactions: [{ kind: 'refund', status: 'failure', amount: '50.00', currency: 'ILS' }] }, 'refund_failed', 'refund_failed'],
+      [{ transactions: [{ kind: 'refund', status: 'success', amount: '50.00', currency: 'USD' }] }, 'refund_mismatch', 'refund_currency_mismatch'],
+    ];
+    for (const [extra, expectedPayment, expectedReason] of cases) {
+      const orderRow = { ...baseOrder, status: 'paid', payment_status: 'paid' };
+      const db = apiDb({ orderRow });
+      const refund = { id: 7100, order_id: 999, ...extra };
+      const res = await worker.fetch(await shopifyWebhook(refund, 'webhook-secret', 'refunds/create'), {
+        DB: db, SHOPIFY_WEBHOOK_SECRET: 'webhook-secret',
+      });
+      assert.equal(res.status, 200);
+      assert.equal(orderRow.status, 'refund_pending');
+      assert.equal(orderRow.payment_status, expectedPayment);
+      assert.equal(orderRow.review_reason, expectedReason);
+      assert.equal(orderRow.review_flag, 1);
+    }
+  });
+
+  test('does not let a late paid event regress an order being refunded', async () => {
+    const orderRow = { ...baseOrder, status: 'refund_pending', payment_status: 'refund_pending' };
+    const db = apiDb({ orderRow });
+    const res = await worker.fetch(await shopifyWebhook(payload), {
+      DB: db, SHOPIFY_WEBHOOK_SECRET: 'webhook-secret',
+    });
+    assert.deepEqual(await res.json(), { received: true });
+    assert.equal(orderRow.status, 'refund_pending');
+    assert.equal(orderRow.payment_status, 'refund_pending');
+    assert.ok(!db.state.runs.some(c => /INSERT INTO payments/.test(c.sql)));
+  });
+
+  test('does not let an out-of-order pending refund reopen a completed refund', async () => {
+    const orderRow = { ...baseOrder, status: 'cancelled', payment_status: 'refunded' };
+    const db = apiDb({ orderRow });
+    const refund = {
+      id: 7004,
+      order_id: 999,
+      transactions: [{ kind: 'refund', status: 'pending', amount: '50.00', currency: 'ILS' }],
+    };
+    const res = await worker.fetch(await shopifyWebhook(refund, 'webhook-secret', 'refunds/create'), {
+      DB: db, SHOPIFY_WEBHOOK_SECRET: 'webhook-secret',
+    });
+    assert.deepEqual(await res.json(), { received: true, reconciled: true });
+    assert.equal(orderRow.status, 'cancelled');
+    assert.equal(orderRow.payment_status, 'refunded');
+    assert.equal(db.state.runs.length, 0);
+  });
+
+  test('acknowledges unsupported signed Shopify topics without changing an order', async () => {
+    const orderRow = { ...baseOrder };
+    const db = apiDb({ orderRow });
+    const res = await worker.fetch(await shopifyWebhook(payload, 'webhook-secret', 'orders/create'), {
+      DB: db, SHOPIFY_WEBHOOK_SECRET: 'webhook-secret',
+    });
+    assert.deepEqual(await res.json(), { received: true, reconciled: false });
+    assert.equal(db.state.runs.length, 0);
+    assert.equal(orderRow.payment_status, 'link_sent');
+  });
+
+  test('acknowledges a refund for an unknown Shopify order without writes', async () => {
+    const db = apiDb();
+    const refund = { id: 7003, order_id: 404, transactions: [] };
+    const res = await worker.fetch(await shopifyWebhook(refund, 'webhook-secret', 'refunds/create'), {
+      DB: db, SHOPIFY_WEBHOOK_SECRET: 'webhook-secret',
+    });
+    assert.deepEqual(await res.json(), { received: true, reconciled: false });
+    assert.equal(db.state.runs.length, 0);
   });
 });

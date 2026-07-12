@@ -31,7 +31,7 @@ authentication and OTP flows fail closed when `SESSION_SECRET` is missing.
 | `SESSION_SECRET` | Signs the ops session cookie + hashes OTPs | `replace-me-long-random-string` |
 | `MAPS_KEY` | Google Maps JS key, injected into the tracking page HTML | `AIza…` (set as a secret; do **not** put in `wrangler.toml`) |
 | `SHOPIFY_ADMIN_TOKEN` | Creates Shopify Draft Orders (custom app token) | `shpat_replaceme` |
-| `SHOPIFY_WEBHOOK_SECRET` | Verifies the `orders/paid` webhook HMAC | `replace-me-from-shopify-webhook-page` |
+| `SHOPIFY_WEBHOOK_SECRET` | Verifies `orders/paid`, `orders/updated`, and `refunds/create` webhook HMACs | `replace-me-from-shopify-webhook-page` |
 | `SENDGRID_API_KEY` | All outbound email (customer OTP/confirmation + Eden alerts) | `SG.replaceme` |
 | `MESH_API_KEY` | **Future** — Mesh/J5 preauth processor. Not used today. | (unset for now) |
 
