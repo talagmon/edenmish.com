@@ -115,11 +115,14 @@
 <span class="font-label-sm text-secondary uppercase tracking-wider">GPS פעיל</span>
 </div>
 <div id="map" class="w-full h-full hidden"></div>
+<div id="map-status" class="hidden absolute bottom-4 right-4 left-4 z-10 glass-panel px-4 py-3 rounded-xl text-right" aria-live="polite">
+<p id="eta-hint" class="hidden font-label-bold text-secondary"></p>
+<p id="gps-last" class="hidden mt-1 text-label-sm text-on-surface-variant"></p>
+</div>
 <div id="map-placeholder" class="absolute inset-0 bg-surface-container-high flex flex-col items-center justify-center text-center p-8">
 <span class="material-symbols-outlined text-[72px] text-primary/40 mb-4">my_location</span>
 <p class="text-on-surface-variant max-w-sm">המפה החיה מוצגת בזמן אמת בעת יציאת השליח לדרך.</p>
 <div class="mt-6 glass-panel px-4 py-2 rounded-full text-label-sm text-on-surface-variant">המפה תופיע אוטומטית כשהשליח יצא לדרך</div>
-<p id="gps-last" class="hidden mt-4 text-label-sm text-on-surface-variant"></p>
 </div>
 </div>
 <!-- Stepper + support -->
@@ -224,8 +227,26 @@ async function loadOrder(){
   } catch(e){ show("entry"); entryError("בעיית תקשורת. בדקו את החיבור ונסו שוב."); }
 }
 
+// ---- ETA helpers ----
+const ROUTE_REFRESH_MS = 60 * 1000;
+function routeDestination(order){
+  const pickup = order && order.status === "to_pickup";
+  const lat = Number(pickup ? order && order.pickup_lat : order && order.dropoff_lat);
+  const lng = Number(pickup ? order && order.pickup_lng : order && order.dropoff_lng);
+  return Number.isFinite(lat) && Number.isFinite(lng) ? {lat,lng} : null;
+}
+function etaCopy(status,duration){
+  if(!duration) return "";
+  if(status === "to_pickup") return "זמן משוער להגעה לאיסוף: " + duration;
+  if(status === "to_dropoff") return "זמן משוער להגעה למסירה: " + duration;
+  return "";
+}
+function routeRefreshDue(status,now,previousStatus,previousAt){
+  return status !== previousStatus || !previousAt || now - previousAt >= ROUTE_REFRESH_MS;
+}
+
 // ---- Live Google Map (loaded via /maps-key) ----
-let gMap=null, gMarker=null, gDestMarker=null, gTrailLine=null, gDirRenderer=null, gPickupMarker=null, gPoll=null, lastStatus=null, mapsRequested=false;
+let gMap=null, gMarker=null, gDestMarker=null, gTrailLine=null, gDirRenderer=null, gDirService=null, gFallbackLine=null, gPickupMarker=null, gPoll=null, lastStatus=null, mapsRequested=false, lastRouteAt=0, lastRouteStatus=null;
 function loadMapsForTrack(){
   if(mapsRequested || (window.google && google.maps)) return;
   mapsRequested=true;
@@ -240,7 +261,7 @@ window.__trackMapReady = function(){
   if(window.__lastTrack){ const o=__lastTrack.order||{}; renderMap(["to_pickup","to_dropoff"].includes(o.status), __lastTrack.gps||null, o, __lastTrack.gpsTrail||null); }
 };
 function renderMap(live, gps, order, trail){
-  const ph=$("map-placeholder"), mapEl=$("map");
+  const ph=$("map-placeholder"), mapEl=$("map"), mapStatus=$("map-status"), eta=$("eta-hint");
   const hasGps = gps && gps.lat != null;
   const needsMap = (live || lastStatus === "delivered") && hasGps && mapEl;
   const mapsReady = window.google && google.maps;
@@ -258,6 +279,7 @@ function renderMap(live, gps, order, trail){
       }
     } else { gMarker.setPosition(pos); if(live) gMap.panTo(pos); }
     mapEl.classList.remove("hidden"); if(ph) ph.classList.add("hidden");
+    if(mapStatus) mapStatus.classList.remove("hidden");
     const gl=$("gps-last"); if(gl && gps.at){ gl.classList.remove("hidden"); gl.textContent="עדכון מיקום אחרון: "+fmtTime(gps.at); }
     if(trail && trail.length > 1 && google.maps.Polyline){
       const tp=trail.map(function(p){ return {lat:Number(p.lat),lng:Number(p.lng)}; });
@@ -267,23 +289,42 @@ function renderMap(live, gps, order, trail){
     // Driving route overlay (roads) + pickup marker
     if(order && order.pickup_lat && order.dropoff_lat){
       if(!gPickupMarker){ gPickupMarker=new google.maps.Marker({ position:{lat:Number(order.pickup_lat),lng:Number(order.pickup_lng)}, map:gMap, title:"נקודת איסוף", icon:{ path:google.maps.SymbolPath.CIRCLE, scale:8, fillColor:"#8B5CF6", fillOpacity:0.5, strokeColor:"#fff", strokeWeight:1.5 } }); }
-      if(google.maps.DirectionsService && !gDirRenderer){
-        gDirRenderer=new google.maps.DirectionsRenderer({ suppressMarkers:true, polylineOptions:{ strokeColor:"#8B5CF6", strokeWeight:6, strokeOpacity:0.4 }, map:gMap });
-        var ds=new google.maps.DirectionsService();
-        var org=(live&&gps)?pos:{lat:Number(order.pickup_lat),lng:Number(order.pickup_lng)};
-        var dest={lat:Number(order.dropoff_lat),lng:Number(order.dropoff_lng)};
-        ds.route({ origin:org, destination:dest, travelMode:"DRIVING" }, function(res,st){
-          if(st==="OK"){ gDirRenderer.setDirections(res); }
-          else{
-            console.warn("Directions API failed:",st,"— enable Directions API in Google Cloud Console");
-            gDirRenderer.setMap(null);
-            new google.maps.Polyline({ path:[org,dest], strokeColor:"#8B5CF6", strokeWeight:3, strokeOpacity:0.5, geodesic:true, map:gMap });
-          }
-        });
+      if(google.maps.DirectionsService && live){
+        if(!gDirRenderer) gDirRenderer=new google.maps.DirectionsRenderer({ suppressMarkers:true, polylineOptions:{ strokeColor:"#8B5CF6", strokeWeight:6, strokeOpacity:0.4 }, map:gMap });
+        if(!gDirService) gDirService=new google.maps.DirectionsService();
+        var org=pos;
+        var dest=routeDestination(order);
+        var routeNow=Date.now();
+        var routeStatus=order.status;
+        if(!dest && eta){eta.textContent="";eta.classList.add("hidden");}
+        if(dest && routeRefreshDue(routeStatus,routeNow,lastRouteStatus,lastRouteAt)){
+          lastRouteAt=routeNow;lastRouteStatus=routeStatus;
+          var routeRequest={origin:org,destination:dest,travelMode:"DRIVING"};
+          if(google.maps.TrafficModel) routeRequest.drivingOptions={departureTime:new Date(),trafficModel:google.maps.TrafficModel.BEST_GUESS};
+          gDirService.route(routeRequest,function(res,st){
+            if(routeStatus!==lastStatus)return;
+            if(st==="OK"){
+              gDirRenderer.setMap(gMap);gDirRenderer.setDirections(res);
+              if(gFallbackLine){gFallbackLine.setMap(null);gFallbackLine=null;}
+              var leg=res&&res.routes&&res.routes[0]&&res.routes[0].legs&&res.routes[0].legs[0];
+              var duration=leg&&(leg.duration_in_traffic||leg.duration);
+              if(eta){eta.textContent=etaCopy(routeStatus,duration&&duration.text);eta.classList.toggle("hidden",!eta.textContent);}
+            }else{
+              console.warn("Directions API failed:",st,"— enable Directions API in Google Cloud Console");
+              if(eta){eta.textContent="";eta.classList.add("hidden");}
+              gDirRenderer.setMap(null);
+              if(!gFallbackLine)gFallbackLine=new google.maps.Polyline({path:[org,dest],strokeColor:"#8B5CF6",strokeWeight:3,strokeOpacity:0.5,geodesic:true,map:gMap});
+              else{gFallbackLine.setPath([org,dest]);gFallbackLine.setMap(gMap);}
+            }
+          });
+        }
       }
     }
+    if(!live && eta){eta.textContent="";eta.classList.add("hidden");}
   } else {
     if(mapEl) mapEl.classList.add("hidden"); if(ph) ph.classList.remove("hidden");
+    if(mapStatus) mapStatus.classList.add("hidden");
+    if(eta){eta.textContent="";eta.classList.add("hidden");}
   }
 }
 function stopTrackPoll(){ if(gPoll){ clearTimeout(gPoll); gPoll=null; } }
