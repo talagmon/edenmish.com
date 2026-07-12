@@ -352,6 +352,9 @@ describe('POST /api/orders with coupon', () => {
     assert.equal(res.status, 200);
     const d = await res.json();
     assert.equal(d.price, 50);
+    assert.equal(d.order_id, 1);
+    assert.ok(!('token' in d), 'unpaid response must not expose a tracking token');
+    assert.ok(!('tracking_url' in d), 'unpaid response must not expose a tracking URL');
     assert.ok(!('subtotal_price' in d), 'no subtotal_price key without a coupon');
     assert.ok(!('discount_amount' in d), 'no discount_amount key without a coupon');
     assert.ok(!('discount_code' in d), 'no discount_code key without a coupon');
@@ -365,6 +368,27 @@ describe('POST /api/orders with coupon', () => {
     assert.equal(db.state.redemptions.length, 0);
   });
 
+  test('exact-price order returns only the Shopify checkout URL before payment', async () => {
+    const db = apiDb();
+    globalThis.fetch = async (url, opts = {}) => {
+      if (String(url).endsWith('/webhooks.json')) {
+        return { ok: true, async json() { return { webhooks: [{ topic: 'orders/paid', address: 'https://find.edenmish.com/webhooks/shopify' }] }; } };
+      }
+      assert.ok(String(url).endsWith('/draft_orders.json'));
+      assert.equal(opts.method, 'POST');
+      return { ok: true, async json() { return { draft_order: { id: 99, invoice_url: 'https://test.myshopify.com/invoice/abc' } }; } };
+    };
+    const env = { ...envFor(db), SHOPIFY_SHOP: 'test.myshopify.com', SHOPIFY_ADMIN_TOKEN: 'shpat_test' };
+    const res = await worker.fetch(post('/api/orders', { ...ORDER_BODY }, nextIp()), env);
+    assert.equal(res.status, 200);
+    const d = await res.json();
+    assert.equal(d.order_id, 1);
+    assert.equal(d.status, 'payment_sent');
+    assert.equal(d.payment_url, 'https://test.myshopify.com/invoice/abc?locale=he');
+    assert.ok(!('token' in d));
+    assert.ok(!('tracking_url' in d));
+  });
+
   test('rejects unsupported enums and oversized public input before insertion', async () => {
     for (const body of [
       { ...ORDER_BODY, service: 'teleport' },
@@ -376,6 +400,26 @@ describe('POST /api/orders with coupon', () => {
       assert.equal(res.status, 400);
       assert.equal(db.state.orders.length, 0);
     }
+  });
+});
+
+describe('customer tracking payment gate', () => {
+  test('blocks an unpaid tracking token without revealing order data', async () => {
+    const token = 'unpaidtrackingtoken12345';
+    const db = apiDb({ orderRow: { id: 31, token, status: 'payment_sent', payment_status: 'link_sent' } });
+    const res = await worker.fetch(new Request(`https://find.edenmish.com/api/orders/${token}`), envFor(db));
+    assert.equal(res.status, 402);
+    assert.deepEqual(await res.json(), { error: 'payment_required' });
+  });
+
+  test('allows tracking after payment confirmation', async () => {
+    const token = 'paidtrackingtoken123456';
+    const db = apiDb({ orderRow: { id: 32, token, status: 'paid', payment_status: 'paid', delivered_at: null } });
+    const res = await worker.fetch(new Request(`https://find.edenmish.com/api/orders/${token}`), envFor(db));
+    assert.equal(res.status, 200);
+    const d = await res.json();
+    assert.equal(d.order.id, 32);
+    assert.equal(d.otp_pending, false);
   });
 });
 

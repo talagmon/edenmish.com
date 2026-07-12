@@ -32,8 +32,11 @@ processor boundaries so future work stays clean.
 
 - Price is **known** at order time (Worker pricing).
 - Worker creates a **Shopify Draft Order** with the exact price.
+- The booking funnel redirects directly to the Draft Order **`invoice_url`**.
 - Customer pays through **Shopify checkout** (PayPlus app) → immediate capture.
 - Shopify **`orders/paid` webhook** updates the internal order to `paid`.
+- The booking response does not expose tracking. The tracking link is sent and the
+  tracking API unlocks only after the signed paid webhook is reconciled.
 - Maps to `payment_mode = 'immediate'` today.
 
 ### 2. `QUOTE_THEN_PAY` — price unknown, Eden quotes *(already used for review orders)*
@@ -76,15 +79,14 @@ processor boundaries so future work stays clean.
 
 | Mode | Status today | Path |
 |---|---|---|
-| `EXACT_CAPTURE` | 🟡 exists via **legacy cart path** (variants) — to be migrated to **Draft Orders** | Path A → migrate to Path B |
+| `EXACT_CAPTURE` | ✅ implemented via Draft Orders with checkout-before-tracking | Path B |
 | `QUOTE_THEN_PAY` | ✅ implemented via Draft Orders (ops "approve") | Path B |
 | `PREAUTH_MAX_HOLD` | ⛔ stubbed only (`settleOrder` no-op, `MESH_API_KEY` unset) | future Mesh adapter |
 | `BUSINESS_POSTPAID` | ⛔ not started | future |
 | `MANUAL` | ✅ ops "mark paid manually" | fallback |
 
-> The **legacy cart/variant path** (Path A) is the thing to retire. Once
-> `EXACT_CAPTURE` runs over Draft Orders, Path A is removed and Shopify
-> cart/catalog UX is hidden. See `ARCHITECTURE.md` → "Known architecture issue".
+> The legacy cart/variant path (Path A) is retired for the EdenMish booking funnel.
+> Do not reintroduce Shopify cart/catalog UX. See `ARCHITECTURE.md`.
 
 ## References
 

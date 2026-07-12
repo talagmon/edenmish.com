@@ -20,6 +20,11 @@ async function readJson(req, maxBytes = BODY_LIMIT) {
   try { return JSON.parse(raw); } catch { throw Object.assign(new Error('invalid_body'), { status: 400 }); }
 }
 const validCoordinate = (v, min, max) => typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max;
+const trackingIsAvailable = (order) => order && (
+  order.payment_status === 'paid' ||
+  order.payment_status === 'paid_manual' ||
+  ['paid', 'to_pickup', 'picked_up', 'to_dropoff', 'delivered'].includes(order.status)
+);
 const canTransition = (from, to) => {
   if (!getStatusMeta(to)) return false;
   if (from === to) return true;
@@ -449,7 +454,8 @@ export default {
       //    Shopify orders/paid webhook reconciles it back to this order. Review/manual-quote
       //    orders skip this (Eden approves the price in ops first). If Shopify isn't
       //    configured (createCharge returns null) or it throws, paymentUrl stays null and
-      //    the customer lands on the tracking page (pay-from-tracking / manual coordination).
+      //    the customer sees a request-received page for manual coordination. Tracking is
+      //    never exposed until payment has been confirmed.
       // TEST MODE (no charge): skip Shopify/PayPlus and auto-mark the order paid so
       // the full tracking + ops flow can be exercised end-to-end. Double-gated — needs
       // env.TEST_MODE=1 (set ONLY in local worker/.dev.vars, gitignored) AND ?test=1 on
@@ -490,7 +496,7 @@ export default {
       }
 
       return json({
-        token, tracking_url: finalUrl,
+        order_id: created.id,
         payment_url: paymentUrl,
         status: isReview ? 'review' : (paymentUrl ? 'payment_sent' : 'priced'),
         price: finalPrice,
@@ -505,6 +511,11 @@ export default {
       const token = path.split('/')[3];
       const o = await getOrderByToken(env.DB, token);
       if (!o) return json({ error: 'not found' }, 404, cors);
+      // Tracking is a post-payment capability. The token is created with the order so it
+      // can be attached to the Shopify Draft Order, but it must not reveal customer or
+      // delivery data until a signed webhook (or an explicit manual-payment action) has
+      // moved the order into the paid delivery lifecycle.
+      if (!trackingIsAvailable(o)) return json({ error: 'payment_required' }, 402, cors);
       // Magic-link tracking: the unguessable 22-char token authorizes read-only
       // viewing — no OTP needed to see live status. OTP is re-enabled ONLY by the
       // 24-hour post-delivery privacy lock (so an old/leaked link can't harvest PII),
