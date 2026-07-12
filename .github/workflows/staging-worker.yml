@@ -44,9 +44,6 @@ jobs:
       - name: Render isolated staging configuration
         working-directory: worker
         run: node scripts/render-staging-config.mjs
-      - name: Apply additive cancellation migration to staging
-        working-directory: worker
-        run: npx wrangler d1 execute edenmish-staging --remote --config wrangler.staging.generated.toml --file=./migrations/011_cancellation_requests.sql
       - name: Prepare staging secrets
         run: |
           node --input-type=module -e 'import { writeFileSync } from "node:fs"; writeFileSync("/tmp/edenmish-staging-secrets.json", JSON.stringify({ OPS_PIN: process.env.STAGING_OPS_PIN, SESSION_SECRET: process.env.STAGING_SESSION_SECRET }), { mode: 0o600 });'
