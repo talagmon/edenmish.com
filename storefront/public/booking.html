@@ -11,6 +11,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="/assets/styles.css"/>
+<style>
+gmp-place-autocomplete.eden-places{display:block;width:100%;color-scheme:dark}
+</style>
 <script src="/assets/scheduling.js"></script>
 <link rel="icon" href="/assets/favicon.ico"/>
 <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"/>
@@ -65,7 +68,7 @@
 <div class="flex justify-between items-end mb-stack-lg">
 <div>
 <p class="text-on-surface-variant font-label-sm">מחיר סופי</p>
-<p class="text-headline-lg text-secondary font-display-lg">₪<span id="price-val">-</span></p>
+<p class="text-headline-lg text-secondary font-display-lg" aria-live="polite">₪<span id="price-val">-</span></p>
 </div>
 <span class="material-symbols-outlined text-secondary text-4xl">payments</span>
 </div>
@@ -108,7 +111,7 @@
 <!-- /Coupon UI -->
 <div class="bg-surface-container-high rounded-lg p-stack-sm">
 <p class="text-label-sm text-on-surface-variant text-center">
-* מחיר סופי לפי אזור ורמת שירות. ערב (19-22) +₪30 · שישי/שבת ×1.5.
+* המחיר הסופי מחושב בשרת לפי אזור, רמת שירות, גודל, שעת איסוף ושבת.
 </p>
 </div>
 </div>
@@ -244,6 +247,7 @@
 <div class="grid grid-cols-1 md:grid-cols-12 gap-stack-md">
 <div class="flex flex-col gap-1 md:col-span-8">
 <label for="f-pickup-addr" class="text-label-bold text-on-surface-variant mr-1">כתובת איסוף</label>
+<div id="f-pickup-places" hidden></div>
 <input id="f-pickup-addr" name="pickup_address" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 transition-all" placeholder="רחוב, מספר בית, עיר" type="text" required/>
 </div>
 <div class="flex flex-col gap-1 md:col-span-2">
@@ -269,6 +273,7 @@
 <div class="grid grid-cols-1 md:grid-cols-12 gap-stack-md">
 <div class="flex flex-col gap-1 md:col-span-8">
 <label for="f-dropoff-addr" class="text-label-bold text-on-surface-variant mr-1">כתובת יעד</label>
+<div id="f-dropoff-places" hidden></div>
 <input id="f-dropoff-addr" name="dropoff_address" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 transition-all" placeholder="רחוב, מספר בית, עיר" type="text" required/>
 </div>
 <div class="flex flex-col gap-1 md:col-span-2">
@@ -405,114 +410,223 @@
 // Existing Worker backend (sibling repo). Public order endpoint only.
 const API = window.EDEN_API.find;
 
-// ---- Google Maps: address autocomplete + drive distance → exact pricing ----
+// ---- Google Maps: address autocomplete + authoritative Worker quote ----
 const geo = { pickupLat:null, pickupLng:null, pickupCity:null, dropoffLat:null, dropoffLng:null, dropoffCity:null, distanceKm:null };
+let placesAutocompleteReady = false;
 const distEl = document.getElementById("dist-val");
-// Final price (FINAL_PRICING_SPEC): zone matrix + service level + surcharges.
-const ZONES = { 1:['תל אביב','תל אביב-יפו','תל אביב יפו','רמת גן','גבעתיים','בני ברק'], 2:['הרצליה','רמת השרון','חולון','בת ים','קריית אונו','קרית אונו','גבעת שמואל','אזור','גני תקווה','סביון','אור יהודה'], 3:['ראשון לציון','כפר סבא','רעננה','פתח תקווה','הוד השרון','רמלה','לוד'] };
-let MATRIX = { eco:{1:35,2:55,3:75}, standard:{1:50,2:70,3:115}, flash:{1:85,2:110,3:null} };
-let SUR_MEDIUM = 15, SUR_EVENING = 30, WEEKEND_MULT = 1.5;
-let pricingReady = false;
-// Fetch live pricing rules from the server so the client always matches the Worker's D1 source of truth.
-(async function initPricing(){
-  try {
-    const r = await fetch(API + "/api/pricing");
-    if(!r.ok) return;
-    const d = await r.json();
-    const R = { ...d.defaults, ...d.overrides };
-    MATRIX = { eco:{1:R.eco_z1,2:R.eco_z2,3:R.eco_z3}, standard:{1:R.std_z1,2:R.std_z2,3:R.std_z3}, flash:{1:R.flash_z1,2:R.flash_z2,3:null} };
-    SUR_MEDIUM = R.sur_medium; SUR_EVENING = R.sur_evening; WEEKEND_MULT = R.weekend_mult;
-    pricingReady = true;
-    computeEstimate(); // Re-compute with live pricing if address is already selected
-  } catch(e){}
-})();
-function zoneOf(city){ const c=String(city||'').trim(); for(const z of [1,2,3]){ if(ZONES[z].includes(c)) return z; } return null; }
+// These minimums are display-only offline fallbacks. Exact route pricing, zones,
+// surcharges, and D1 overrides come exclusively from POST /api/quote.
+const FALLBACK_BASE = { eco:35, standard:50, flash:85 };
+const FALLBACK_MEDIUM = 15;
+const quoteState = { timer:null, sequence:0, fingerprint:"", data:null };
 function isoDate(d){ return d ? (d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate())) : ""; }
-function isWeekend(iso){ if(!iso) return false; const m=String(iso).match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/); if(!m) return false; const day=new Date(Date.UTC(+m[1],+m[2]-1,+m[3])).getUTCDay(); return day===6; } // Saturday only (Friday is a regular work day in Israel)
-function computeEstimate(){
-  const service = (document.querySelector('input[name="service"]:checked')||{}).value || "standard";
-  const size = (document.querySelector('input[name="size"]:checked')||{}).value || "small";
-  const pz = zoneOf(geo.pickupCity), dz = zoneOf(geo.dropoffCity);
-  const zone = (pz && dz) ? Math.max(pz,dz) : null;
-  // Default to zone-1 (minimum) when no address is selected yet, so the price
-  // updates immediately when the user picks a service. Refines when address is chosen.
-  let base = zone ? (MATRIX[service] ? MATRIX[service][zone] : null) : (MATRIX[service] ? MATRIX[service][1] : null);
-  if(service==="flash" && zone===3) base = null;
-  const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
-  set("est-zone", zone ? ("אזור "+zone) : "החל מ-");
+const setEstimateText = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
+function quoteFingerprint(fields){ return [fields.service,fields.size,fields.pickup_city,fields.dropoff_city,fields.when_date,fields.when_hour].join("|"); }
+function quoteFieldsReady(fields){ return !!(geo.pickupLat!=null && geo.dropoffLat!=null && fields.pickup_city && fields.dropoff_city && fields.when_date && Number.isInteger(fields.when_hour) && fields.when_hour >= 0); }
+function setPriceNote(message, visible){
   const priceNote = document.getElementById("price-note");
-  if (priceNote) priceNote.hidden = !!zone;
-  const sizeRow = document.getElementById("est-size-row"); if(sizeRow) sizeRow.classList.toggle("hidden", size!=="medium");
-  set("est-base", base!=null ? "₪"+base : "-");
-  const hour = sched.service==="flash" ? new Date().getHours() : (sched.window ? parseInt(sched.window.split(":")[0],10) : -1);
-  const wknd = isWeekend(isoDate(sched.date));
-  let surch = 0; const labels = [];
-  if(hour>=19 && hour<22){ surch += SUR_EVENING; labels.push("ערב +₪"+SUR_EVENING); }
-  const surchRow = document.getElementById("est-surch-row");
-  let total = base!=null ? base + (size==="medium"?SUR_MEDIUM:0) + surch : null;
-  if(total!=null && wknd){
-    const beforeWknd = total;
-    total = Math.round(total*WEEKEND_MULT);
-    const wkndExtra = total - beforeWknd;
-    labels.push("סופ״ש ×"+WEEKEND_MULT+" (+₪"+wkndExtra+")");
-    surch += wkndExtra;
-  } else if(total!=null){ total = Math.round(total); }
-  if(surchRow){ if(labels.length){ surchRow.classList.remove("hidden"); set("est-surch-label", labels.join(" · ")); set("est-surch", "₪"+surch); } else { surchRow.classList.add("hidden"); } }
-  set("price-val", total!=null ? total : "-");
+  if (!priceNote) return;
+  priceNote.hidden = !visible;
+  const p = priceNote.querySelector("p"); if (p && message) p.textContent = message;
+}
+function quoteUnavailableMessage(reason){
+  return reason === "flash_unavailable_z3" ? "שירות מהיר אינו זמין באזור 3. בחרו שירות רגיל או חסכוני." : "אחת הכתובות מחוץ לאזור השירות שלנו.";
+}
+function renderFallbackEstimate(fields, unavailable){
+  const base = FALLBACK_BASE[fields.service] || FALLBACK_BASE.standard;
+  const total = base + (fields.size === "medium" ? FALLBACK_MEDIUM : 0);
+  setEstimateText("est-zone", "החל מ-");
+  setEstimateText("est-base", "₪"+base);
+  const sizeRow = document.getElementById("est-size-row");
+  if(sizeRow){
+    sizeRow.classList.toggle("hidden", fields.size!=="medium");
+    const amount=sizeRow.querySelector("span:last-child");if(amount)amount.textContent="+₪"+FALLBACK_MEDIUM;
+  }
+  const surchRow = document.getElementById("est-surch-row"); if(surchRow) surchRow.classList.add("hidden");
+  setEstimateText("price-val", total);
+  setPriceNote(unavailable ? "לא הצלחנו לעדכן מחיר מדויק כרגע. המחיר המוצג הוא הערכת מינימום בלבד; המחיר הסופי יחושב בשרת לפני יצירת ההזמנה." : "המחיר המוצג הוא הערכה התחלתית — המחיר המדויק יתעדכן לאחר בחירת כתובות האיסוף והיעד", true);
+  if(couponState.data&&couponState.data.valid)setEstimateText("price-val",couponState.data.price);
+}
+function renderAuthoritativeQuote(quote){
+  if (!quote.available) {
+    const reason = (quote.reasons||[])[0];
+    setEstimateText("est-zone", quote.zone ? ("אזור "+quote.zone) : "מחוץ לאזור השירות");
+    setEstimateText("est-base", "-"); setEstimateText("price-val", "-");
+    const sizeRow=document.getElementById("est-size-row"); if(sizeRow) sizeRow.classList.add("hidden");
+    const surchRow=document.getElementById("est-surch-row"); if(surchRow) surchRow.classList.add("hidden");
+    setPriceNote(quoteUnavailableMessage(reason), true);
+    return;
+  }
+  const b = quote.breakdown || {};
+  setEstimateText("est-zone", "אזור "+quote.zone);
+  setEstimateText("est-base", "₪"+quote.base);
+  const sizeRow=document.getElementById("est-size-row"); if(sizeRow) sizeRow.classList.toggle("hidden", !b.medium_surcharge);
+  if(sizeRow && b.medium_surcharge){ const amount=sizeRow.querySelector("span:last-child"); if(amount) amount.textContent="+₪"+b.medium_surcharge; }
+  const labels=[]; let surcharge=0;
+  if(b.evening_surcharge){labels.push("ערב +₪"+b.evening_surcharge);surcharge+=b.evening_surcharge;}
+  if(b.weekend_multiplier>1){labels.push("שבת ×"+b.weekend_multiplier+" (+₪"+b.weekend_surcharge+")");surcharge+=b.weekend_surcharge;}
+  const surchRow=document.getElementById("est-surch-row");
+  if(surchRow){surchRow.classList.toggle("hidden",!labels.length);if(labels.length){setEstimateText("est-surch-label",labels.join(" · "));setEstimateText("est-surch","₪"+surcharge);}}
+  setEstimateText("price-val", quote.price);
+  setPriceNote("", false);
+  if(couponState.data && couponState.data.valid) setEstimateText("price-val", couponState.data.price);
+}
+function requestAuthoritativeQuote(fields){
+  if(quoteState.timer) clearTimeout(quoteState.timer);
+  const fingerprint=quoteFingerprint(fields); const sequence=++quoteState.sequence;
+  quoteState.fingerprint=fingerprint; quoteState.data=null;
+  quoteState.timer=setTimeout(async()=>{
+    try{
+      const res=await fetch(API+"/api/quote",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(fields)});
+      const data=await res.json();
+      if(sequence!==quoteState.sequence||fingerprint!==quoteFingerprint(getCouponPricingFields()))return;
+      if(!res.ok)throw new Error(data.error||"quote_failed");
+      quoteState.data=data; renderAuthoritativeQuote(data);
+    }catch(e){if(sequence===quoteState.sequence)renderFallbackEstimate(fields,true);}
+  },300);
+}
+function computeEstimate(){
+  const fields=getCouponPricingFields();
+  renderFallbackEstimate(fields,false);
+  if(!quoteFieldsReady(fields)){quoteState.data=null;quoteState.fingerprint="";quoteState.sequence++;if(quoteState.timer)clearTimeout(quoteState.timer);return;}
+  requestAuthoritativeQuote(fields);
 }
 function loadMapsScript(){
   fetch("/maps-key").then(r=>r.json()).then(d=>{
     const key = d && d.key; if(!key) return;
     const s = document.createElement("script");
-    s.src = "https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(key)+"&libraries=places,geometry&language=iw&region=il&v=weekly&callback=__initAutocomplete";
+    s.src = "https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(key)+"&loading=async&libraries=places&language=iw&region=il&v=weekly&callback=__initAutocomplete";
     s.async = true; s.defer = true;
     document.head.appendChild(s);
   }).catch(()=>{});
 }
-window.__initAutocomplete = function(){
+function addressInput(which){return document.getElementById(which==="pickup"?"f-pickup-addr":"f-dropoff-addr");}
+function resetAddressGeo(which){
+  geo[which+"Lat"]=null;geo[which+"Lng"]=null;geo[which+"City"]=null;geo.distanceKm=null;
+  if(distEl)distEl.textContent="-";
+  computeEstimate();
+}
+function clearAddressSelection(which){
+  const input=addressInput(which);if(input)input.value="";
+  resetAddressGeo(which);
+}
+function syncTypedAddress(which,widget){
+  const input=addressInput(which);if(input)input.value=(widget&&typeof widget.value==="string"?widget.value:"").trim();
+  resetAddressGeo(which);
+}
+window.__initAutocomplete = async function(){
   try {
-    if(!window.google || !google.maps || !google.maps.places) return;
-    const opts = { componentRestrictions:{country:"il"}, types:["geocode"], fields:["formatted_address","address_components","geometry"], bounds:{north:32.20,south:31.90,east:34.95,west:34.70}, strictBounds:true };
-    const a1 = new google.maps.places.Autocomplete(document.getElementById("f-pickup-addr"), opts);
-    const a2 = new google.maps.places.Autocomplete(document.getElementById("f-dropoff-addr"), opts);
-    const onPick = (which) => () => {
-      const p = (which==="pickup"?a1:a2).getPlace();
-      if(!p || !p.geometry) return;
-      const loc = p.geometry.location;
-      const lat = typeof loc.lat==="function" ? loc.lat() : loc.lat;
-      const lng = typeof loc.lng==="function" ? loc.lng() : loc.lng;
-      // Hard geographic gate: reject anything outside the Gush-Dan service rectangle.
-      if(!inGushDanBounds(lat,lng)){
-        document.getElementById(which==="pickup"?"f-pickup-addr":"f-dropoff-addr").value = "";
-        showError(which==="pickup" ? "כתובת האיסוף מחוץ לטווח השירות - אנו פעילים בגוש דן בלבד." : "כתובת היעד מחוץ לטווח השירות - אנו פעילים בגוש דן בלבד.");
-        return;
-      }
-      const comps = p.address_components || [];
-      const city = comps.map(c=> (c.types||[]).some(t=>["locality","postal_town","administrative_area_level_2"].includes(t)) ? c.long_name : null).filter(Boolean)[0] || "";
-      if(which==="pickup"){ geo.pickupLat=lat; geo.pickupLng=lng; geo.pickupCity=city; }
-      else { geo.dropoffLat=lat; geo.dropoffLng=lng; geo.dropoffCity=city; }
-      if(p.formatted_address){ document.getElementById(which==="pickup"?"f-pickup-addr":"f-dropoff-addr").value = p.formatted_address; }
-      maybeDistance();
+    if(!window.google || !google.maps || !google.maps.importLibrary) return;
+    const {PlaceAutocompleteElement}=await google.maps.importLibrary("places");
+    if(!PlaceAutocompleteElement)throw new Error("places_new_unavailable");
+    const bounds={north:32.20,south:31.90,east:34.95,west:34.70};
+    const makeWidget=(which)=>{
+      const input=addressInput(which);
+      const mount=document.getElementById(which==="pickup"?"f-pickup-places":"f-dropoff-places");
+      if(!input||!mount)throw new Error("address_mount_missing");
+      const widget=new PlaceAutocompleteElement();
+      widget.id=which==="pickup"?"f-pickup-places-input":"f-dropoff-places-input";
+      widget.className="eden-places";
+      widget.placeholder=input.placeholder;
+      widget.includedRegionCodes=["il"];
+      widget.locationRestriction=bounds;
+      widget.setAttribute("aria-label",which==="pickup"?"כתובת איסוף":"כתובת יעד");
+      const label=input.parentElement.querySelector("label");
+      let selecting=false;
+      let fallbackActivated=false;
+      widget.addEventListener("input",()=>{if(!selecting)syncTypedAddress(which,widget);});
+      widget.addEventListener("focusin",()=>{if(label)label.classList.replace("text-on-surface-variant","text-primary");});
+      widget.addEventListener("focusout",()=>{if(label)label.classList.replace("text-primary","text-on-surface-variant");});
+      widget.addEventListener("gmp-error",()=>{
+        if(fallbackActivated)return;fallbackActivated=true;
+        input.value=(typeof widget.value==="string"?widget.value:input.value).trim();
+        resetAddressGeo(which);mount.hidden=true;input.hidden=false;input.required=true;
+        if(label)label.htmlFor=input.id;
+        placesAutocompleteReady=false;
+        console.warn("EdenMish Places request failed; using plain address field for",which);
+        showError("שירות הצעות הכתובת אינו זמין כרגע. ניתן להמשיך עם כתובת מלאה שהוקלדה ידנית.");
+      });
+      widget.addEventListener("gmp-select",async({placePrediction})=>{
+        selecting=true;
+        try{
+          const place=placePrediction.toPlace();
+          await place.fetchFields({fields:["formattedAddress","location","addressComponents"]});
+          if(!place.location)throw new Error("place_location_missing");
+          const loc=place.location;
+          const lat=typeof loc.lat==="function"?loc.lat():loc.lat;
+          const lng=typeof loc.lng==="function"?loc.lng():loc.lng;
+          if(!inGushDanBounds(lat,lng)){
+            clearAddressSelection(which);
+            if("value" in widget)widget.value="";
+            showError(which==="pickup"?"כתובת האיסוף מחוץ לטווח השירות - אנו פעילים בגוש דן בלבד.":"כתובת היעד מחוץ לטווח השירות - אנו פעילים בגוש דן בלבד.");
+            return;
+          }
+          const comps=place.addressComponents||[];
+          const city=comps.map(c=>(c.types||[]).some(t=>["locality","postal_town","administrative_area_level_2"].includes(t))?(c.longText||c.long_name||""):null).filter(Boolean)[0]||"";
+          input.value=place.formattedAddress||"";
+          if(which==="pickup"){geo.pickupLat=lat;geo.pickupLng=lng;geo.pickupCity=city;}
+          else{geo.dropoffLat=lat;geo.dropoffLng=lng;geo.dropoffCity=city;}
+          computeEstimate();
+          maybeDistance();
+        }catch(e){console.warn("EdenMish place selection failed:",e);syncTypedAddress(which,widget);showError("לא הצלחנו לקרוא את ההצעה שנבחרה. ניתן לנסות שוב או להמשיך עם כתובת מלאה שהוקלדה ידנית.");}
+        finally{selecting=false;}
+      });
+      return {which,input,mount,widget,label};
     };
-    a1.addListener("place_changed", onPick("pickup"));
-    a2.addListener("place_changed", onPick("dropoff"));
-  } catch(e){ console.warn("EdenMish Maps init failed:", e); }
-};
-function maybeDistance(){
-  if(geo.pickupLat==null || geo.dropoffLat==null) return;
-  try {
-    const svc = new google.maps.DistanceMatrixService();
-    svc.getDistanceMatrix({
-      origins:[{lat:geo.pickupLat,lng:geo.pickupLng}],
-      destinations:[{lat:geo.dropoffLat,lng:geo.dropoffLng}],
-      travelMode:"DRIVING", unitSystem:google.maps.UnitSystem.METRIC
-    }, (resp, status)=>{
-      if(status!=="OK" || !resp || !resp.rows[0] || !resp.rows[0].elements[0] || !resp.rows[0].elements[0].distance) return;
-      geo.distanceKm = Math.round((resp.rows[0].elements[0].distance.value/1000)*100)/100;
-      if(distEl) distEl.textContent = geo.distanceKm + " ק״מ";
-      computeEstimate();
+    const widgets=[makeWidget("pickup"),makeWidget("dropoff")];
+    widgets.forEach(({input,mount,widget,label})=>{
+      mount.replaceChildren(widget);mount.hidden=false;input.hidden=true;input.required=false;
+      if(label)label.htmlFor=widget.id;
     });
-  } catch(e){}
+    placesAutocompleteReady=true;
+  } catch(e){
+    placesAutocompleteReady=false;
+    console.warn("EdenMish Places (New) init failed; using plain address fields:",e);
+  }
+};
+["pickup","dropoff"].forEach(which=>{
+  const input=addressInput(which);
+  if(!input)return;
+  input.addEventListener("input",()=>{
+    geo[which+"Lat"]=null;geo[which+"Lng"]=null;geo[which+"City"]=null;geo.distanceKm=null;
+    if(distEl)distEl.textContent="-";
+    computeEstimate();
+  });
+});
+let routeMatrixLibraryPromise=null;
+function loadRouteMatrixLibrary(){
+  if(!routeMatrixLibraryPromise){
+    routeMatrixLibraryPromise=google.maps.importLibrary("routes").then(({RouteMatrix})=>{
+      if(!RouteMatrix)throw new Error("route_matrix_unavailable");
+      return RouteMatrix;
+    }).catch(error=>{routeMatrixLibraryPromise=null;throw error;});
+  }
+  return routeMatrixLibraryPromise;
+}
+async function maybeDistance(){
+  if(geo.pickupLat==null || geo.dropoffLat==null) return;
+  const requestCoordinates={
+    pickupLat:geo.pickupLat,pickupLng:geo.pickupLng,
+    dropoffLat:geo.dropoffLat,dropoffLng:geo.dropoffLng
+  };
+  try {
+    const RouteMatrix=await loadRouteMatrixLibrary();
+    const {matrix}=await RouteMatrix.computeRouteMatrix({
+      origins:[{lat:requestCoordinates.pickupLat,lng:requestCoordinates.pickupLng}],
+      destinations:[{lat:requestCoordinates.dropoffLat,lng:requestCoordinates.dropoffLng}],
+      travelMode:"DRIVING",
+      fields:["distanceMeters","condition"]
+    });
+    if(
+      geo.pickupLat!==requestCoordinates.pickupLat || geo.pickupLng!==requestCoordinates.pickupLng ||
+      geo.dropoffLat!==requestCoordinates.dropoffLat || geo.dropoffLng!==requestCoordinates.dropoffLng
+    )return;
+    const item=matrix&&matrix.rows&&matrix.rows[0]&&matrix.rows[0].items&&matrix.rows[0].items[0];
+    if(!item || item.condition!=="ROUTE_EXISTS" || !Number.isFinite(item.distanceMeters))return;
+    geo.distanceKm=Math.round((item.distanceMeters/1000)*100)/100;
+    if(distEl)distEl.textContent=geo.distanceKm+" ק״מ";
+    computeEstimate();
+  } catch(e){console.warn("EdenMish route distance unavailable; using quote fallback:",e);}
 }
 loadMapsScript();
 
@@ -661,7 +775,6 @@ computeEstimate = function() {
 // ---- /Coupon UI ----
 
 // ---- Service area + business-hours scheduling (mirrors eden-funnel.liquid) ----
-const EDEN_ZONES = ['תל אביב','תל אביב-יפו','תל אביב יפו','רמת גן','גבעתיים','בני ברק','הרצליה','רמת השרון','הוד השרון','קריית אונו','קרית אונו','גבעת שמואל','אור יהודה','בת ים','חולון','ראשון לציון','כפר סבא','רעננה','פתח תקווה','אזור','גני תקווה','סביון','רמלה','לוד'];
 // Hard geographic gate (Gush-Dan service rectangle). strictBounds only biases the
 // dropdown; this reliably rejects out-of-area selections (e.g. far-out localities).
 function inGushDanBounds(lat,lng){ return lat>=31.90 && lat<=32.20 && lng>=34.70 && lng<=34.95; }
@@ -989,24 +1102,17 @@ form.addEventListener("submit", async (e) => {
   if (!pickupAddress) return showError("נא למלא כתובת איסוף.");
   if (!dropoffAddress) return showError("נא למלא כתובת יעד.");
 
-  // Require selecting both addresses from the autocomplete dropdown (when Maps is
-  // loaded) so coordinates + a real city are sent → exact pricing, no manual review.
-  // If Maps failed to load, we fall through (order becomes review) rather than block.
-  if (window.google && google.maps && google.maps.places) {
-    if (geo.pickupLat == null) return showError("נא לבחור כתובת איסוף מהרשימה (הקלידו ובחרו הצעה).");
-    if (geo.dropoffLat == null) return showError("נא לבחור כתובת יעד מהרשימה (הקלידו ובחרו הצעה).");
-    if (geo.pickupCity && EDEN_ZONES.indexOf(geo.pickupCity) < 0) return showError("כתובת האיסוף מחוץ לטווח השירות - אנו פעילים בגוש דן בלבד.");
-    if (geo.dropoffCity && EDEN_ZONES.indexOf(geo.dropoffCity) < 0) return showError("כתובת היעד מחוץ לטווח השירות - אנו פעילים בגוש דן בלבד.");
-  }
+  // A selected prediction supplies coordinates for an exact quote. A complete
+  // manually typed address remains valid and is sent without coordinates so the
+  // Worker can route it through the existing review path instead of blocking checkout.
   if (service === "flash") {
     if (!flashAvailableNow()) return showError("שירות מהיר זמין לשיגור מיידי בשעות הפעילות בלבד (א׳-ה׳ 09:00-20:00 · ו׳ 08:00-13:00). בחרו רגיל או חסכוני, או חזרו בשעות הפעילות.");
-    const pz = zoneOf(geo.pickupCity || cityOf(pickupAddress));
-    const dz = zoneOf(geo.dropoffCity || cityOf(dropoffAddress));
-    const fzone = (pz && dz) ? Math.max(pz, dz) : null;
-    if (fzone !== 1 && fzone !== 2) return showError("שירות שירות מהיר זמין באזורים 1-2 בלבד. לאזור זה בחרו רגיל או חסכוני.");
   } else if (!sched.window) {
     return showError("נא לבחור מועד לאיסוף (תאריך וחלון זמן).");
   }
+  const activeQuoteFields=getCouponPricingFields();
+  const activeQuote=quoteState.fingerprint===quoteFingerprint(activeQuoteFields)?quoteState.data:null;
+  if(activeQuote&&!activeQuote.available)return showError(quoteUnavailableMessage((activeQuote.reasons||[])[0]));
   if (!document.getElementById("agree-terms").checked) return showError("נא לאשר את התקנון והמדיניות.");
 
   const hour = service === "flash" ? new Date().getHours() : (sched.window ? parseInt(sched.window.split(":")[0], 10) : -1);
@@ -1047,6 +1153,9 @@ form.addEventListener("submit", async (e) => {
       if (res.status === 429) return showError("שלחנו יותר מדי בקשות. נא להמתין מספר דקות ולנסות שוב.");
       if (data && data.error && data.error.startsWith("invalid phone")) return showError("מספר הטלפון אינו תקין.");
       if (data && data.error && data.error.startsWith("invalid email")) return showError("כתובת האימייל אינה תקינה.");
+      if (data && data.error === "out_of_zone") return showError("אחת הכתובות מחוץ לאזור השירות שלנו.");
+      if (data && data.error === "flash_unavailable_z3") return showError("שירות מהיר אינו זמין באזור 3. בחרו שירות רגיל או חסכוני.");
+      if (data && ["closed_saturday","outside_hours"].includes(data.error)) return showError("המועד שנבחר אינו זמין. בחרו מועד אחר.");
       if (data && data.error && data.error === "invalid_coupon") {
         showCouponError(data.message || "קוד הקופון אינו תקף.");
         if (couponSection) couponSection.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1055,13 +1164,23 @@ form.addEventListener("submit", async (e) => {
       if (data && data.error && data.error.startsWith("missing")) return showError("חסר שדה חובה: " + data.error.replace("missing ", ""));
       return showError("שגיאה בשליחת ההזמנה. נא לנסות שוב או לפנות אלינו.");
     }
+    // Exact-price orders continue directly to Shopify's secure checkout. Tracking is
+    // intentionally unavailable until the signed paid webhook confirms the payment.
+    if (data.payment_url) {
+      window.location.assign(data.payment_url);
+      return;
+    }
     const q = new URLSearchParams({
-      token: data.token || "",
-      tracking_url: data.tracking_url || "",
-      payment_url: data.payment_url || "",
+      order_id: data.order_id != null ? String(data.order_id) : "",
       price: data.price != null ? String(data.price) : "",
       review: data.review ? "1" : "0"
     });
+    // Local, double-gated test mode is already paid and may exercise tracking directly.
+    if (data.test && data.token) {
+      q.set("test", "1");
+      q.set("token", data.token);
+      if (data.tracking_url) q.set("tracking_url", data.tracking_url);
+    }
     // Coupon snapshot → success page shows the discount breakdown (only when applied)
     if (data.discount_code && Number(data.discount_amount) > 0) {
       q.set("discount_code", data.discount_code);

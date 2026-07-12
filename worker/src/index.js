@@ -1,7 +1,7 @@
-import { createOrder, getOrderByToken, getOrderById, listOrders, setOrderStatus, setOrderRating, getStatusHistory, addGps, latestGps, getGpsTrail, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof, listRecentNotificationFailures, listNotificationsForOrder, createCancellationRequest, listCancellationRequests, runRetentionCleanup } from './db.js';
-import { priceOrder, zoneOf } from './pricing.js';
+import { createOrder, getOrderByToken, getOrderById, getOrderByShopifyOrderId, listOrders, setOrderStatus, setOrderRating, getStatusHistory, addGps, latestGps, getGpsTrail, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof, listRecentNotificationFailures, listNotificationsForOrder, createCancellationRequest, listCancellationRequests, runRetentionCleanup } from './db.js';
+import { priceOrder, ZONE_CITIES, DEFAULT_PRICING_RULES } from './pricing.js';
 import { makeSession, checkSession, getCookie, genOtp, hashOtp, timingSafeEqual } from './integrations.js';
-import { createCharge, settleOrder, verifyShopifyWebhook, parseShopifyOrderWebhook } from './payment.js';
+import { createCharge, settleOrder, verifyShopifyWebhook, parseShopifyOrderWebhook, parseShopifyRefundWebhook } from './payment.js';
 import { trackingHtml, opsHtml } from './pages.js';
 import { corsFor, maskEmail, publicOrderSummary, clientIp, anonKey } from './security.js';
 import { notifyEmail, notifyWhatsApp } from './notify.js';
@@ -20,6 +20,11 @@ async function readJson(req, maxBytes = BODY_LIMIT) {
   try { return JSON.parse(raw); } catch { throw Object.assign(new Error('invalid_body'), { status: 400 }); }
 }
 const validCoordinate = (v, min, max) => typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max;
+const trackingIsAvailable = (order) => order && (
+  order.payment_status === 'paid' ||
+  order.payment_status === 'paid_manual' ||
+  ['paid', 'to_pickup', 'picked_up', 'to_dropoff', 'delivered'].includes(order.status)
+);
 const canTransition = (from, to) => {
   if (!getStatusMeta(to)) return false;
   if (from === to) return true;
@@ -60,6 +65,130 @@ const requestReceivedHtml = (env, o) => `<div dir="rtl" style="font-family:sans-
 // only copied to Eden's clipboard and the customer was never notified).
 const paymentLinkHtml = (env, o, url) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px"><h2 style="color:#5B2A86;margin:0 0 8px">המחיר אושר ✓</h2><p>הזמנה #${o.id || ''} מוכנה לתשלום.</p><table style="border-collapse:collapse;font-size:15px"><tr><td style="padding:5px 14px;color:#777">איסוף</td><td style="padding:5px 0">${escHtml(o.pickup)}</td></tr><tr><td style="padding:5px 14px;color:#777">מסירה</td><td style="padding:5px 0">${escHtml(o.dropoff)}</td></tr><tr><td style="padding:5px 14px;color:#777">מחיר</td><td style="padding:5px 0;font-weight:700;color:#91d3c8;font-size:18px">₪${o.price || ''}</td></tr></table><div style="text-align:center;margin:18px 0"><a href="${url}" style="display:inline-block;background:#5B2A86;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px">לתשלום מאובטח ←</a></div><p style="color:#777;font-size:13px">התשלום מתבצע בסביבה המאובטחת של Shopify ו‑PayPlus. EdenMish אינה שומרת פרטי כרטיס אשראי. לאחר התשלום יישלח קישור מעקב חי וקוד אימות למייל.</p>${transactionDisclosureHtml(env, o)}${SUPPORT_LINE}</div>`;
 
+// Single post-payment boundary for both an authenticated manual payment and a
+// reconciled Shopify orders/paid webhook. Callers must perform provider-specific
+// validation before entering this helper. payment_status is the idempotency guard.
+async function confirmPaidOrder(env, order, opts = {}) {
+  if (!order) return { order: null, unchanged: true };
+  if (order.payment_status === 'paid') return { order, unchanged: true };
+
+  const paidAt = Date.now();
+  const paidAmount = Number(opts.amountNis ?? order.price);
+  if (!Number.isFinite(paidAmount) || paidAmount < 0) throw new Error('invalid_paid_amount');
+
+  const customerEmail = order.email || opts.customerEmail || null;
+  const orderFields = { ...(opts.orderFields || {}), payment_status: 'paid' };
+  await setOrderStatus(env.DB, order.id, 'paid', orderFields);
+  await recordPayment(env.DB, order.id, {
+    amount: Math.round(paidAmount * 100),
+    status: 'paid',
+    payplus_id: opts.paymentRef == null ? null : String(opts.paymentRef),
+    paid_at: paidAt,
+  });
+
+  const paidOrder = { ...order, ...orderFields, status: 'paid', email: customerEmail };
+  if (customerEmail && env.SENDGRID_API_KEY) {
+    const otp = genOtp();
+    await setEmailAndOtp(env.DB, order.id, customerEmail, await hashOtp(env, otp), paidAt + 10 * 60 * 1000);
+    await notifyEmail(env, env.DB, {
+      orderId: order.id,
+      template: 'customer_payment_confirmation',
+      recipient: customerEmail,
+      subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב',
+      html: paymentConfirmedHtml(env, paidOrder, trackingUrl(env, order.token), otp),
+    });
+  }
+
+  await notifyEmail(env, env.DB, {
+    orderId: order.id,
+    template: 'ops_payment_received',
+    recipient: env.OPS_EMAIL,
+    subject: `תשלום התקבל #${order.id} — ₪${order.price}`,
+    html: `${escHtml(order.name)} · ${escHtml(order.pickup)} → ${escHtml(order.dropoff)}<br>המתינו לאישור ויציאה לדרך ב- ops.edenmish.com`,
+  });
+  await notifyWhatsApp(env, env.DB, {
+    orderId: order.id,
+    template: 'ops_payment_received',
+    recipient: env.WHATSAPP_NUMBER,
+    body: `תשלום התקבל #${order.id} — ₪${order.price}\n${order.name || ''} · ${order.pickup || ''} → ${order.dropoff || ''}\nצפייה ואישור: ${storefrontUrl(env, '/dash.html')}`,
+  });
+
+  return { order: (await getOrderById(env.DB, order.id)) || paidOrder, unchanged: false };
+}
+
+const REFUND_PAYMENT_STATES = new Set([
+  'refund_pending',
+  'partially_refunded',
+  'refunded',
+  'refund_failed',
+  'refund_mismatch',
+]);
+
+async function reconcileShopifyRefund(env, order, refund = {}) {
+  if (!order) return { reconciled: false, reason: 'order_not_found' };
+  // Webhooks can arrive out of order. Once Shopify has confirmed the full refund,
+  // a delayed refunds/create delivery must not reopen the terminal state.
+  if (order.payment_status === 'refunded' && order.status === 'cancelled') {
+    return { reconciled: true, unchanged: true };
+  }
+
+  const expectedCurrency = String(order.currency || 'ILS').toUpperCase();
+  const refundCurrency = String(refund.currency || expectedCurrency).toUpperCase();
+  if (refundCurrency !== expectedCurrency) {
+    if (order.payment_status === 'refund_mismatch' && order.status === 'refund_pending') return { reconciled: false, unchanged: true };
+    await setOrderStatus(env.DB, order.id, 'refund_pending', {
+      payment_status: 'refund_mismatch',
+      review_flag: 1,
+      review_reason: 'refund_currency_mismatch',
+    });
+    return { reconciled: false, reason: 'currency_mismatch' };
+  }
+
+  const financialStatus = String(refund.financialStatus || '').toLowerCase();
+  const successfulAmount = Number(refund.successfulAmount) || 0;
+  const pendingAmount = Number(refund.pendingAmount) || 0;
+  const expectedAmount = Number(order.price);
+  const fullSuccessfulRefund = Number.isFinite(expectedAmount) && successfulAmount + 0.005 >= expectedAmount;
+
+  if (financialStatus === 'refunded' || fullSuccessfulRefund) {
+    if (order.payment_status === 'refunded' && order.status === 'cancelled') return { reconciled: true, unchanged: true };
+    await setOrderStatus(env.DB, order.id, 'cancelled', {
+      payment_status: 'refunded',
+      review_flag: 0,
+      review_reason: null,
+    });
+    return { reconciled: true, final: true };
+  }
+
+  if (financialStatus === 'partially_refunded' || successfulAmount > 0) {
+    if (order.payment_status === 'partially_refunded' && order.status === 'refund_pending') return { reconciled: true, unchanged: true };
+    await setOrderStatus(env.DB, order.id, 'refund_pending', {
+      payment_status: 'partially_refunded',
+      review_flag: 1,
+      review_reason: 'partial_refund',
+    });
+    return { reconciled: true, partial: true };
+  }
+
+  if (refund.hasFailedTransaction && pendingAmount === 0) {
+    if (order.payment_status === 'refund_failed' && order.status === 'refund_pending') return { reconciled: false, unchanged: true };
+    await setOrderStatus(env.DB, order.id, 'refund_pending', {
+      payment_status: 'refund_failed',
+      review_flag: 1,
+      review_reason: 'refund_failed',
+    });
+    return { reconciled: false, reason: 'refund_failed' };
+  }
+
+  if (order.payment_status === 'refund_pending' && order.status === 'refund_pending') return { reconciled: true, unchanged: true };
+  await setOrderStatus(env.DB, order.id, 'refund_pending', {
+    payment_status: 'refund_pending',
+    review_flag: 1,
+    review_reason: 'refund_pending',
+  });
+  return { reconciled: true, pending: true };
+}
+
 // Safe customer-facing Hebrew per validateCoupon rejection reason. Never expose the
 // raw reason string alone — the UI shows `message`; `reason` is for programmatic use.
 const COUPON_MESSAGES = {
@@ -76,6 +205,35 @@ const couponMessage = (reason) => COUPON_MESSAGES[reason] || COUPON_MESSAGES.not
 // Phone (E.164-normalized) preferred — it's required on orders; email is the fallback.
 const couponCustomerKey = (b) => normalizeIlPhone(b && b.phone) || (b && b.email ? String(b.email).trim().toLowerCase() : null);
 
+// One pricing boundary for quotes, coupon validation, and order creation. Every
+// caller reads the current D1 rules and executes the same pricing engine.
+async function authoritativeQuote(env, input) {
+  return priceOrder(input, await getRules(env.DB));
+}
+
+function normalizeQuoteInput(input) {
+  const b = { ...(input || {}) };
+  const rawHour = b.when_hour;
+  b.service = String(b.service || '').trim().toLowerCase();
+  b.size = String(b.size || '').trim().toLowerCase();
+  b.pickup_city = String(b.pickup_city || '').trim().slice(0, 100);
+  b.dropoff_city = String(b.dropoff_city || '').trim().slice(0, 100);
+  b.when_date = String(b.when_date || '').trim();
+  b.when_hour = rawHour == null || rawHour === '' ? NaN : Number(rawHour);
+  return b;
+}
+
+function quoteInputError(b) {
+  if (!b.pickup_city || !b.dropoff_city) return 'missing_cities';
+  if (!['eco', 'standard', 'flash'].includes(b.service)) return 'invalid_service';
+  if (!['small', 'medium'].includes(b.size)) return 'invalid_size';
+  const m = b.when_date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m || !Number.isInteger(b.when_hour) || b.when_hour < 0 || b.when_hour > 23) return 'invalid_schedule';
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  if (d.getUTCFullYear() !== +m[1] || d.getUTCMonth() !== +m[2] - 1 || d.getUTCDate() !== +m[3]) return 'invalid_schedule';
+  return null;
+}
+
 async function isOps(req, env) {
   const xOps = req.headers.get('X-Ops');
   if (xOps && await checkSession(env, xOps)) return true;
@@ -83,7 +241,8 @@ async function isOps(req, env) {
   return await checkSession(env, c);
 }
 
-// Lazy self-registration: ensures Shopify sends orders/paid to this Worker.
+// Lazy self-registration: ensures Shopify sends payment + refund lifecycle
+// events to this Worker.
 // Idempotent (checks before registering). Runs once per isolate.
 let _whReady = false;
 async function ensureWebhook(env) {
@@ -96,15 +255,20 @@ async function ensureWebhook(env) {
       headers: { 'X-Shopify-Access-Token': env.SHOPIFY_ADMIN_TOKEN }
     });
     const d = await r.json();
-    const exists = (d.webhooks || []).some(w => w.topic === 'orders/paid' && (w.address || '').includes('/webhooks/shopify'));
-    if (exists) { console.log('webhook_already_registered'); return; }
-    const cr = await fetch(`https://${shop}/admin/api/${ver}/webhooks.json`, {
-      method: 'POST',
-      headers: { 'X-Shopify-Access-Token': env.SHOPIFY_ADMIN_TOKEN, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ webhook: { topic: 'orders/paid', address: 'https://find.edenmish.com/webhooks/shopify', format: 'json' } })
-    });
-    const cd = await cr.json();
-    console.log('webhook_registered', cd.webhook ? { id: cd.webhook.id, address: cd.webhook.address } : (cd.errors || cd));
+    const topics = ['orders/paid', 'orders/updated', 'refunds/create'];
+    const existing = new Set((d.webhooks || [])
+      .filter((w) => (w.address || '').includes('/webhooks/shopify'))
+      .map((w) => w.topic));
+    for (const topic of topics) {
+      if (existing.has(topic)) continue;
+      const cr = await fetch(`https://${shop}/admin/api/${ver}/webhooks.json`, {
+        method: 'POST',
+        headers: { 'X-Shopify-Access-Token': env.SHOPIFY_ADMIN_TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ webhook: { topic, address: 'https://find.edenmish.com/webhooks/shopify', format: 'json' } })
+      });
+      const cd = await cr.json();
+      console.log('webhook_registered', cd.webhook ? { id: cd.webhook.id, topic: cd.webhook.topic, address: cd.webhook.address } : (cd.errors || cd));
+    }
   } catch (e) { console.log('webhook_check_error', e.message); }
 }
 
@@ -129,7 +293,7 @@ export default {
       return json({ ok: true, service: 'edenmish-worker' });
     }
 
-    // Ensure Shopify orders/paid webhook is registered (once per isolate, never blocks on failure)
+    // Ensure Shopify payment/refund webhooks are registered (once per isolate, never blocks on failure)
     try { await ensureWebhook(env); } catch (e) {}
 
     // ---- public API (CORS) ----
@@ -147,28 +311,43 @@ export default {
         }
       } catch (rlErr) { console.error('rate_limit_error', rlErr && rlErr.message ? rlErr.message : String(rlErr)); }
       let b; try { b = await readJson(req); } catch (e) { return json({ error: e.message }, e.status || 400, cors); }
-      const rules = await getRules(env.DB);
-      const pr = priceOrder(b, rules);
+      const pr = await authoritativeQuote(env, b);
       const v = await validateCoupon(env.DB, b.coupon_code, pr.price, couponCustomerKey(b));
       if (!v.valid) return json({ valid: false, reason: v.reason, message: couponMessage(v.reason) }, 200, cors);
       return json({ valid: true, code: v.code, subtotal_price: v.subtotal, discount_amount: v.discountAmount, price: v.price, title: v.title }, 200, cors);
     }
 
-    // ---- Public pricing rules (zone matrix + surcharges) ----
-    // Lets the booking funnel show accurate prices by reading the same D1 pricing_rules
-    // the server uses, eliminating client/server drift.
+    // ---- Authoritative public quote ----
+    // GET supports simple integrations; the booking funnel uses POST so customer
+    // route details do not end up in URLs or intermediary logs.
+    if (path === '/api/quote' && ['GET', 'POST'].includes(req.method)) {
+      try {
+        const k = await anonKey(env, clientIp(req));
+        const rl = await incrRateLimit(env.DB, 'quote:' + k, 60 * 1000);
+        if (rl.count > 60) return json({ error: 'rate_limited' }, 429, { ...cors, 'Retry-After': '60' });
+      } catch (rlErr) { console.error('rate_limit_error', rlErr && rlErr.message ? rlErr.message : String(rlErr)); }
+
+      let raw;
+      if (req.method === 'GET') raw = Object.fromEntries(url.searchParams.entries());
+      else {
+        try { raw = await readJson(req); } catch (e) { return json({ error: e.message }, e.status || 400, cors); }
+      }
+      const b = normalizeQuoteInput(raw);
+      const inputError = quoteInputError(b);
+      if (inputError) return json({ error: inputError }, 400, cors);
+
+      const quote = await authoritativeQuote(env, b);
+      return json({ ...quote, available: !quote.review, currency: 'ILS' }, 200, cors);
+    }
+
+    // ---- Backward-compatible public pricing config ----
+    // New funnel code uses /api/quote. Keep this endpoint for integrations that need
+    // the canonical city-zone map and current D1 overrides.
     if (path === '/api/pricing' && req.method === 'GET') {
       const rules = await getRules(env.DB);
       return json({
-        zones: { 1: zoneOf('תל אביב'), 2: zoneOf('הרצליה'), 3: zoneOf('פתח תקווה') },
-        defaults: {
-          eco_z1: 35, eco_z2: 55, eco_z3: 75,
-          std_z1: 50, std_z2: 70, std_z3: 115,
-          flash_z1: 85, flash_z2: 110,
-          sur_medium: 15,
-          sur_evening: 30,
-          weekend_mult: 1.5,
-        },
+        zones: ZONE_CITIES,
+        defaults: DEFAULT_PRICING_RULES,
         overrides: rules || {},
       }, 200, { ...cors, 'Cache-Control': 'public, max-age=300' });
     }
@@ -263,8 +442,7 @@ export default {
         }
       }
 
-      const rules = await getRules(env.DB);
-      const pr = priceOrder(b, rules);
+      const pr = await authoritativeQuote(env, b);
       const isReview = pr.review;
 
       // Server-side hard gates: reject out-of-zone, Flash Zone 3, outside business hours.
@@ -355,7 +533,8 @@ export default {
       //    Shopify orders/paid webhook reconciles it back to this order. Review/manual-quote
       //    orders skip this (Eden approves the price in ops first). If Shopify isn't
       //    configured (createCharge returns null) or it throws, paymentUrl stays null and
-      //    the customer lands on the tracking page (pay-from-tracking / manual coordination).
+      //    the customer sees a request-received page for manual coordination. Tracking is
+      //    never exposed until payment has been confirmed.
       // TEST MODE (no charge): skip Shopify/PayPlus and auto-mark the order paid so
       // the full tracking + ops flow can be exercised end-to-end. Double-gated — needs
       // env.TEST_MODE=1 (set ONLY in local worker/.dev.vars, gitignored) AND ?test=1 on
@@ -396,7 +575,7 @@ export default {
       }
 
       return json({
-        token, tracking_url: finalUrl,
+        order_id: created.id,
         payment_url: paymentUrl,
         status: isReview ? 'review' : (paymentUrl ? 'payment_sent' : 'priced'),
         price: finalPrice,
@@ -411,6 +590,11 @@ export default {
       const token = path.split('/')[3];
       const o = await getOrderByToken(env.DB, token);
       if (!o) return json({ error: 'not found' }, 404, cors);
+      // Tracking is a post-payment capability. The token is created with the order so it
+      // can be attached to the Shopify Draft Order, but it must not reveal customer or
+      // delivery data until a signed webhook (or an explicit manual-payment action) has
+      // moved the order into the paid delivery lifecycle.
+      if (!trackingIsAvailable(o)) return json({ error: 'payment_required' }, 402, cors);
       // Magic-link tracking: the unguessable 22-char token authorizes read-only
       // viewing — no OTP needed to see live status. OTP is re-enabled ONLY by the
       // 24-hour post-delivery privacy lock (so an old/leaked link can't harvest PII),
@@ -570,25 +754,15 @@ export default {
       const before = await getOrderById(env.DB, id);
       if (!before) return json({ error: 'not found' }, 404);
       if (!canTransition(before.status, b.status)) return json({ error: 'invalid transition', from: before.status, to: b.status }, 409);
-      if (before.status === b.status) return json({ ok: true, unchanged: true });
+      if (before.status === b.status && b.status !== 'paid') return json({ ok: true, unchanged: true });
+      if (b.status === 'paid') {
+        const paid = await confirmPaidOrder(env, before);
+        return paid.unchanged ? json({ ok: true, unchanged: true }) : json({ ok: true, order: paid.order });
+      }
       const fields = {};
       if (b.status === 'picked_up') fields.picked_up_at = Date.now();
-      if (b.status === 'paid') fields.payment_status = 'paid';
       if (b.status === 'delivered') { fields.delivered_at = Date.now(); fields.payment_status = fields.payment_status || 'paid'; }
       await setOrderStatus(env.DB, id, b.status, fields);
-      if (b.status === 'paid') {
-        const o = await getOrderById(env.DB, id);
-        if (o) {
-          await recordPayment(env.DB, id, { amount: o.price * 100, status: 'paid', paid_at: Date.now() });
-
-          if (o.email) {
-            const otp = genOtp();
-            await setEmailAndOtp(env.DB, o.id, o.email, await hashOtp(env, otp), Date.now() + 10 * 60 * 1000);
-            try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_payment_confirmation', recipient: o.email, subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב', html: paymentConfirmedHtml(env, { ...o, email: o.email }, trackingUrl(env, o.token), otp) }); } catch {}
-          }
-          try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'ops_payment_received', recipient: env.OPS_EMAIL, subject: `תשלום התקבל #${o.id} — ₪${o.price}`, html: `${escHtml(o.name)} · ${escHtml(o.pickup)} → ${escHtml(o.dropoff)}<br>המתינו לאישור ויציאה לדרך ב- ops.edenmish.com` }); } catch {}
-        }
-      }
       if (b.status === 'delivered') {
         const o = await getOrderById(env.DB, id);
         if (o) {
@@ -745,22 +919,45 @@ export default {
       return json({ ok: true, coupon: c });
     }
 
-    // ---- Shopify webhook (replaces PayPlus webhook) ----
-    // Fires when the customer completes checkout on the draft-order invoice URL.
-    // Subscribe to `orders/paid` (immediate mode) and optionally `orders/create` in Shopify admin.
+    // ---- Shopify webhooks (PayPlus remains behind Shopify) ----
+    // orders/paid reconciles capture; refunds/create starts refund reconciliation;
+    // orders/updated finalizes refunded / partially_refunded financial states.
     if (path === '/webhooks/shopify' && req.method === 'POST') {
       const rawBody = await req.text();
       const hmac = req.headers.get('X-Shopify-Hmac-SHA256') || '';
       if (!(await verifyShopifyWebhook(env, rawBody, hmac))) return json({ error: 'invalid signature' }, 401);
       let b; try { b = JSON.parse(rawBody); } catch { return json({ error: 'bad json' }, 400); }
+      const topic = String(req.headers.get('X-Shopify-Topic') || 'orders/paid').toLowerCase();
+      if (!['orders/paid', 'orders/updated', 'refunds/create'].includes(topic)) {
+        return json({ received: true, reconciled: false });
+      }
+
+      if (topic === 'refunds/create') {
+        const refund = parseShopifyRefundWebhook(b);
+        if (!refund.shopifyOrderId) return json({ received: true, reconciled: false });
+        const o = await getOrderByShopifyOrderId(env.DB, refund.shopifyOrderId);
+        if (!o) return json({ received: true, reconciled: false });
+        const result = await reconcileShopifyRefund(env, o, refund);
+        return json({ received: true, reconciled: !!result.reconciled });
+      }
+
       const parsed = parseShopifyOrderWebhook(b);
-      if (parsed.token) {
-        const o = await getOrderByToken(env.DB, parsed.token);
+      if (parsed.token || parsed.shopifyOrderId) {
+        const o = parsed.token
+          ? await getOrderByToken(env.DB, parsed.token)
+          : await getOrderByShopifyOrderId(env.DB, parsed.shopifyOrderId);
         if (o) {
+          const financialStatus = String(parsed.financial_status || '').toLowerCase();
+          if (financialStatus === 'refunded' || financialStatus === 'partially_refunded') {
+            const result = await reconcileShopifyRefund(env, o, { financialStatus, currency: parsed.currency });
+            return json({ received: true, reconciled: !!result.reconciled });
+          }
+          if (REFUND_PAYMENT_STATES.has(o.payment_status)) return json({ received: true });
           if (parsed.paid) {
             // Idempotency: Shopify retries webhook deliveries. Re-processing would insert a
             // duplicate payment row, invalidate the customer's OTP, and re-send both emails.
             if (o.payment_status === 'paid') return json({ received: true });
+            // Late or retried paid events must never roll a refund state back to paid.
             const paidAmount = Number(parsed.total);
             const expectedAmount = Number(o.price);
             const amountMatches = Number.isFinite(paidAmount) && Number.isFinite(expectedAmount) && Math.abs(paidAmount - expectedAmount) < 0.005;
@@ -772,20 +969,14 @@ export default {
                 .bind('mismatch', parsed.shopifyOrderId, 'payment_mismatch', o.id).run();
               return json({ received: true, reconciled: false });
             }
-            await setOrderStatus(env.DB, o.id, 'paid', { payment_status: 'paid', shopify_order_id: parsed.shopifyOrderId });
             // o.price is the FINAL amount (post-coupon when one applied) — the Draft
             // Order's applied_discount guarantees Shopify captured exactly this total.
-            await recordPayment(env.DB, o.id, { amount: Math.round(paidAmount * 100), status: 'paid', payplus_id: String(parsed.shopifyOrderId), paid_at: Date.now() });
-
-            // Use checkout email if the order doesn't have one (customer entered it in Shopify checkout)
-            var custEmail = o.email || parsed.email;
-            if (custEmail && env.SENDGRID_API_KEY) {
-              const otp = genOtp();
-              await setEmailAndOtp(env.DB, o.id, custEmail, await hashOtp(env, otp), Date.now() + 10 * 60 * 1000);
-              try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'customer_payment_confirmation', recipient: custEmail, subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב', html: paymentConfirmedHtml(env, { ...o, email: custEmail }, trackingUrl(env, o.token), otp) }); } catch {}
-            }
-            try { await notifyEmail(env, env.DB, { orderId: o.id, template: 'ops_payment_received', recipient: env.OPS_EMAIL, subject: `תשלום התקבל #${o.id} — ₪${o.price}`, html: `${escHtml(o.name)} · ${escHtml(o.pickup)} → ${escHtml(o.dropoff)}<br>המתינו לאישור ויציאה לדרך ב- ops.edenmish.com` }); } catch {}
-            try { await notifyWhatsApp(env, env.DB, { orderId: o.id, template: 'ops_payment_received', recipient: env.WHATSAPP_NUMBER, body: `תשלום התקבל #${o.id} — ₪${o.price}\n${o.name} · ${o.pickup} → ${o.dropoff}\nצפייה ואישור: ${storefrontUrl(env, '/dash.html')}` }); } catch {}
+            await confirmPaidOrder(env, o, {
+              amountNis: paidAmount,
+              customerEmail: parsed.email,
+              paymentRef: parsed.shopifyOrderId,
+              orderFields: { shopify_order_id: parsed.shopifyOrderId },
+            });
           } else {
             // authorized but not yet captured (future Mesh/preauth mode)
             await env.DB.prepare('UPDATE orders SET shopify_order_id=?, payment_status=? WHERE id=?')

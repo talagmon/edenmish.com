@@ -51,6 +51,9 @@ export async function getOrderByToken(DB, token) {
 export async function getOrderById(DB, id) {
   return DB.prepare(`SELECT * FROM orders WHERE id = ?`).bind(id).first();
 }
+export async function getOrderByShopifyOrderId(DB, shopifyOrderId) {
+  return DB.prepare(`SELECT * FROM orders WHERE shopify_order_id = ?`).bind(shopifyOrderId).first();
+}
 // Customer delivery rating (1-5) submitted from v2 delivered.html. Token-gated.
 export async function setOrderRating(DB, orderId, rating) {
   await DB.prepare(`UPDATE orders SET rating = ? WHERE id = ?`).bind(rating, orderId).run();

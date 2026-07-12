@@ -51,14 +51,14 @@ Shopify is the **storefront and the trusted checkout/payment shell**.
 Implemented in `worker/src/`:
 
 - **Order creation** — `POST /api/orders` → `createOrder` writes the `orders` row.
-- **Pricing result** — `pricing.js#priceOrder` computes price + review flags; stored on the order.
+- **Pricing and quotes** — `pricing.js#priceOrder` is the single calculation source for `GET/POST /api/quote`, coupon validation, and order creation. It reads current D1 `pricing_rules`; the funnel keeps only a disclosed minimum-price fallback for temporary network failure.
 - **Payment mode selection** — `payment.js` chooses `immediate` (today) vs `preauth` (future Mesh).
 - **Tracking token** — 22-hex unguessable token, generated on order creation.
 - **Customer tracking page** — `find.edenmish.com/t/:token`, OTP-gated, live map.
 - **Ops dashboard** — `ops.edenmish.com`, PIN login, status stepper, GPS broadcast.
 - **Status history** — append-only `status_history` on every status change.
 - **GPS pings** — `gps_pings` written from the ops dashboard during live legs.
-- **Shopify webhook handling** — `POST /webhooks/shopify`, HMAC-verified, reconciles `orders/paid`.
+- **Shopify webhook handling** — `POST /webhooks/shopify`, HMAC-verified, reconciles `orders/paid`, `refunds/create`, and refund completion from `orders/updated`.
 - **Coupon management, validation & redemption** — codes are managed D1-only from the ops dashboard (`/api/ops/coupons` CRUD); the Worker validates them straight from D1, applies the discount to its own computed price, and counts redemptions in D1 (`coupon_redemptions` is authoritative). See `COUPONS.md`.
 - **Future Mesh/J5 webhook handling** — payment boundary already stubbed (`payment_mode`, `authorized_amount`, `settleOrder`).
 
@@ -85,8 +85,9 @@ target architecture. **Do not extend the legacy path.**
 - The customer pays the Draft Order's **`invoice_url`** through Shopify checkout
   (PayPlus app).
 - The Worker **is** the source of truth for the charge from creation.
-- Used today only for **review orders** (ops "approve price"). This is the path to
-  standardize on for `EXACT_CAPTURE` and `QUOTE_THEN_PAY`.
+- Used for both **exact-price orders** and approved **review orders**. Exact-price
+  bookings redirect directly to the Draft Order checkout; review orders receive the
+  same checkout only after ops approves the price.
 
 ### Target
 
@@ -95,8 +96,21 @@ Retire Path A. The webhook handler already recovers the token from both paths, s
 the migration is incremental. See `PAYMENT_MODES.md` for the mode definitions and
 `STATUS_MODEL.md` for the lifecycle.
 
-> Migration to Draft-Order-only is **a separate PR** (the "Funnel → Draft Order
-> payment" PR). Do not start it from this doc.
+The customer must complete Shopify checkout before receiving tracking access. The
+booking response exposes the invoice URL but not the tracking token. Only the signed
+Shopify `orders/paid` webhook marks the Worker order paid and sends the tracking link;
+the tracking API also rejects unpaid orders as defense in depth.
+
+Refunds remain Shopify/PayPlus operations, but Shopify webhooks reconcile their
+state back into D1. `refunds/create` marks the Worker order `refund_pending` until
+a successful full refund transaction or an `orders/updated` payload with
+`financial_status = refunded` confirms completion. Full refunds map the delivery
+status to `cancelled` and `payment_status` to `refunded`; partial, failed, pending,
+or currency-mismatched refunds remain review-flagged and cannot be overwritten by
+a late `orders/paid` retry.
+
+> The Draft-Order-only funnel is implemented. Do not reintroduce the legacy
+> cart/variant path.
 
 ---
 

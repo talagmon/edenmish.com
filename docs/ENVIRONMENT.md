@@ -31,7 +31,7 @@ authentication and OTP flows fail closed when `SESSION_SECRET` is missing.
 | `SESSION_SECRET` | Signs the ops session cookie + hashes OTPs | `replace-me-long-random-string` |
 | `MAPS_KEY` | Google Maps JS key, injected into the tracking page HTML | `AIza…` (set as a secret; do **not** put in `wrangler.toml`) |
 | `SHOPIFY_ADMIN_TOKEN` | Creates Shopify Draft Orders (custom app token) | `shpat_replaceme` |
-| `SHOPIFY_WEBHOOK_SECRET` | Verifies the `orders/paid` webhook HMAC | `replace-me-from-shopify-webhook-page` |
+| `SHOPIFY_WEBHOOK_SECRET` | Verifies `orders/paid`, `orders/updated`, and `refunds/create` webhook HMACs | `replace-me-from-shopify-webhook-page` |
 | `SENDGRID_API_KEY` | All outbound email (customer OTP/confirmation + Eden alerts) | `SG.replaceme` |
 | `MESH_API_KEY` | **Future** — Mesh/J5 preauth processor. Not used today. | (unset for now) |
 
@@ -70,6 +70,37 @@ The GitHub `staging` environment contains only:
 
 Never copy production Shopify, payment, webhook, email, or customer-data
 credentials into the staging Worker. See `CI_CD.md` for one-time setup.
+
+---
+
+## Cloudflare Pages secrets (canonical storefront)
+
+| Secret | Purpose | Required Google services |
+|---|---|---|
+| `MAPS_KEY` | Returned by the server-side `/maps-key` function for booking address autocomplete, route distance, and customer maps | Maps JavaScript API, **Places API (New)**, and **Routes API** |
+
+The canonical booking page uses `PlaceAutocompleteElement`, `gmp-select`, and
+`Place.fetchFields()` for addresses, plus the Maps JavaScript Routes library's
+`RouteMatrix.computeRouteMatrix()` for driving distance. The customer tracking
+page uses the same Routes library's `Route.computeRoutes()` for its road overlay
+and traffic-aware ETA. Enable Places API (New) and Routes API in the same Google
+Cloud project before releasing these features, and add both services to the
+browser key's API restrictions. Restrict that key to the EdenMish production,
+staging, and approved preview origins. If address or route services are
+unavailable, the pages retain their plain-address, bounded-quote, and
+straight-line route fallbacks; no key or configuration value is embedded in git.
+
+Do not remove legacy Places API or Distance Matrix API key permissions until the
+remaining Shopify-theme consumers have been migrated and verified in their own
+PR. Directions API is no longer required by repository code after the tracking
+Route migration, but removing its key permission remains a separate operator
+change after staging verification.
+
+Google references: [Autocomplete migration guide](https://developers.google.com/maps/documentation/javascript/legacy/places-migration-autocomplete)
+and [Place Autocomplete Widget](https://developers.google.com/maps/documentation/javascript/place-autocomplete-new),
+plus [Get started with Routes](https://developers.google.com/maps/documentation/javascript/routes/start)
+and [Route Matrix](https://developers.google.com/maps/documentation/javascript/routes/get-a-route-matrix),
+and [Route migration](https://developers.google.com/maps/documentation/javascript/routes/routes-js-migration).
 
 ---
 

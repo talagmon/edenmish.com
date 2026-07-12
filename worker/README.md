@@ -15,7 +15,7 @@ EdenMish orders, tracking, pricing, ops dashboard, and payment reconciliation.
 - Serves the **customer tracking page** (status timeline + live GPS map + OTP gate).
 - Serves the **ops dashboard** (PIN login, order queue, status stepper, GPS broadcast).
 - Creates Shopify **Draft Orders** (Worker-side charge) for review/manual payments.
-- Receives and verifies the **Shopify `orders/paid` webhook** to reconcile payments.
+- Receives and verifies Shopify **`orders/paid`, `orders/updated`, and `refunds/create` webhooks** to reconcile payments and refunds.
 - Sends email notifications (SendGrid) — customer OTP/confirmation + Eden alerts.
 
 It is a **single Worker** that routes by hostname (`find.` vs `ops.`).
@@ -25,7 +25,7 @@ It is a **single Worker** that routes by hostname (`find.` vs `ops.`).
 | Host | Purpose | Entry |
 |---|---|---|
 | `find.edenmish.com` | Customer-facing tracking page | `GET /t/:token` → `pages.js#trackingHtml` |
-| `find.edenmish.com` | Public order API | `POST /api/orders`, `GET /api/orders/:token`, `/verify-otp`, `/resend-otp` |
+| `find.edenmish.com` | Public order API | `GET/POST /api/quote`, `POST /api/orders`, `GET /api/orders/:token`, `/verify-otp`, `/resend-otp` |
 | `ops.edenmish.com` | Ops/driver dashboard | `GET /` → `pages.js#opsHtml` |
 | `ops.edenmish.com` | Ops API (session-gated) | `/api/ops/login`, `/api/ops/orders`, `…/status`, `…/gps`, `…/approve` |
 | (any) | Shopify webhook | `POST /webhooks/shopify` |
@@ -42,7 +42,7 @@ Staging uses separate hosts and a separate D1 database:
 |---|---|
 | `index.js` | Request router + endpoint handlers (create order, tracking, ops, webhook). Host-based routing. |
 | `db.js` | D1 data access: `createOrder`, `setOrderStatus`, `getOrderByToken/Id`, `listOrders`, `getStatusHistory`, `addGps`/`latestGps`, `recordPayment`, `getRules`, `setEmailAndOtp`/`verifyOtp`, rate-limit helpers, delivery-proof helpers, notification-audit helpers. |
-| `pricing.js` | Automatic pricing + exception detection (`priceOrder`). Gush-Dan zone allow-list, km/urgency rules. |
+| `pricing.js` | Automatic pricing + exception detection (`priceOrder`). Canonical Gush-Dan zones, service matrix, and surcharge breakdown. |
 | `payment.js` | **Clean payment boundary.** `createCharge()` / `settleOrder()`. `immediate` mode today; `preauth` (Mesh) stubbed for the future. |
 | `integrations.js` | Shopify Admin API (`createDraftOrder`), Shopify webhook HMAC verify (`verifyShopifyWebhook`), webhook parser (`parseShopifyOrderWebhook`), SendGrid email (`sendEmail`), OTP helpers, ops session (signed cookie). |
 | `pages.js` | Server-rendered HTML for the tracking page (`trackingHtml`) and ops dashboard (`opsHtml`). |
@@ -116,7 +116,7 @@ See `../docs/ENVIRONMENT.md` for the full list and placeholders.
 | `SESSION_SECRET` | signed ops cookie + OTP hashing | mandatory; auth/order OTP flows fail closed if unset |
 | `MAPS_KEY` | tracking page live map (injected into HTML) | Google Maps JS key |
 | `SHOPIFY_ADMIN_TOKEN` | creating Draft Orders (`shpat_…`) | Worker-side charge |
-| `SHOPIFY_WEBHOOK_SECRET` | verifying `orders/paid` webhook | webhook fails closed (401) if unset |
+| `SHOPIFY_WEBHOOK_SECRET` | verifying Shopify payment/refund webhooks | webhook fails closed (401) if unset |
 | `SENDGRID_API_KEY` | all email notifications | currently SendGrid |
 
 Non-secret vars live in `wrangler.toml [vars]`: `BRAND`, `BOOKING_URL`,
@@ -126,7 +126,8 @@ Non-secret vars live in `wrangler.toml [vars]`: `BRAND`, `BOOKING_URL`,
 
 Shopify admin → **Settings → Notifications → Webhooks**:
 
-- **Event:** `Order payment` (= `orders/paid`) → **URL:** `https://ops.edenmish.com/webhooks/shopify`, **Format:** JSON.
+- Ensure these topics point to **`https://find.edenmish.com/webhooks/shopify`** as JSON: `orders/paid`, `orders/updated`, and `refunds/create`.
+- The Worker also checks and creates missing subscriptions through the Shopify Admin API when `SHOPIFY_ADMIN_TOKEN` is configured.
 - Copy the **Webhook signature key** → `wrangler secret put SHOPIFY_WEBHOOK_SECRET`.
 - The Worker verifies HMAC-SHA256 (`verifyShopifyWebhook`) on every hit before
   trusting the payload. It recovers the tracking token from the line-item
@@ -202,8 +203,8 @@ Set in `wrangler.toml [vars]` (non-secret):
 
 ### 5. Shopify webhook
 
-- **Event:** `Order payment` (= `orders/paid`)
-- **URL:** `https://ops.edenmish.com/webhooks/shopify`
+- **Topics:** `orders/paid`, `orders/updated`, `refunds/create`
+- **URL:** `https://find.edenmish.com/webhooks/shopify`
 - **Format:** JSON
 - **Secret:** set in the Worker as `SHOPIFY_WEBHOOK_SECRET` (see step 3).
 
@@ -220,8 +221,11 @@ wrangler deploy
 - [ ] Submit a normal order from the EdenMish funnel.
 - [ ] Confirm D1 order created.
 - [ ] Confirm `payment_url` returned for exact-price order.
+- [ ] Confirm the unpaid booking response contains `order_id` but no tracking token or URL.
+- [ ] Confirm the booking funnel redirects directly to `payment_url`.
 - [ ] Confirm Draft Order invoice opens Shopify checkout.
 - [ ] Confirm paid webhook marks order paid.
+- [ ] Confirm the tracking link is delivered only after payment and unpaid tracking requests return HTTP 402.
 - [ ] Confirm tracking page requires OTP before PII.
 - [ ] Confirm ops dashboard buckets show the order.
 - [ ] Confirm inline price approval works for a review order.

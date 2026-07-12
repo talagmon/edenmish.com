@@ -81,15 +81,15 @@
 <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-container/20 mb-8 border border-primary/20">
 <span class="material-symbols-outlined text-primary text-4xl" style="font-variation-settings: 'FILL' 1;">lock</span>
 </div>
-<h1 class="font-headline-lg text-headline-lg text-on-surface mb-4">אימות זהות</h1>
-<p class="font-body-md text-body-md text-on-surface-variant mb-10 max-w-[320px] mx-auto">שלחנו קוד בן 6 ספרות למייל / לטלפון המקושר למשלוח.</p>
+<h1 class="font-headline-lg text-headline-lg text-on-surface mb-4">אימות כתובת הדוא״ל</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mb-10 max-w-[320px] mx-auto">הזינו את הקוד בן 6 הספרות שנשלח אליכם.</p>
 <div id="otp-container" class="flex flex-row-reverse justify-center gap-2 md:gap-3 mb-6">
-<input aria-label="ספרה 1" autocomplete="one-time-code" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="0"/>
-<input aria-label="ספרה 2" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="1"/>
-<input aria-label="ספרה 3" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="2"/>
-<input aria-label="ספרה 4" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="3"/>
-<input aria-label="ספרה 5" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="4"/>
-<input aria-label="ספרה 6" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="5"/>
+<input aria-label="ספרה 1" autocomplete="one-time-code" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" pattern="[0-9]*" type="text" data-i="0"/>
+<input aria-label="ספרה 2" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" pattern="[0-9]*" type="text" data-i="1"/>
+<input aria-label="ספרה 3" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" pattern="[0-9]*" type="text" data-i="2"/>
+<input aria-label="ספרה 4" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" pattern="[0-9]*" type="text" data-i="3"/>
+<input aria-label="ספרה 5" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" pattern="[0-9]*" type="text" data-i="4"/>
+<input aria-label="ספרה 6" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" pattern="[0-9]*" type="text" data-i="5"/>
 </div>
 <p id="otp-msg" class="text-status-alert font-label-sm mb-6 min-h-[1em]">&nbsp;</p>
 <button id="otp-submit" class="w-full bg-tertiary py-4 rounded-lg text-on-tertiary font-bold text-lg hover:shadow-[0_0_20px_rgba(210,187,255,0.4)] transition-all duration-300 active:scale-95 disabled:opacity-60">המשיכו למעקב</button>
@@ -115,11 +115,14 @@
 <span class="font-label-sm text-secondary uppercase tracking-wider">GPS פעיל</span>
 </div>
 <div id="map" class="w-full h-full hidden"></div>
+<div id="map-status" class="hidden absolute bottom-4 right-4 left-4 z-10 glass-panel px-4 py-3 rounded-xl text-right" aria-live="polite">
+<p id="eta-hint" class="hidden font-label-bold text-secondary"></p>
+<p id="gps-last" class="hidden mt-1 text-label-sm text-on-surface-variant"></p>
+</div>
 <div id="map-placeholder" class="absolute inset-0 bg-surface-container-high flex flex-col items-center justify-center text-center p-8">
 <span class="material-symbols-outlined text-[72px] text-primary/40 mb-4">my_location</span>
 <p class="text-on-surface-variant max-w-sm">המפה החיה מוצגת בזמן אמת בעת יציאת השליח לדרך.</p>
 <div class="mt-6 glass-panel px-4 py-2 rounded-full text-label-sm text-on-surface-variant">המפה תופיע אוטומטית כשהשליח יצא לדרך</div>
-<p id="gps-last" class="hidden mt-4 text-label-sm text-on-surface-variant"></p>
 </div>
 </div>
 <!-- Stepper + support -->
@@ -195,42 +198,123 @@ const show = (v) => ["entry","otp","track"].forEach(x => $(`view-${x}`).classLis
 
 let token = "";
 
-function setToken(t){ token = String(t||"").trim().toLowerCase(); const u = new URL(location.href); if(token){ u.searchParams.set("t", token); } else { u.searchParams.delete("t"); } history.replaceState(null,"",u); }
+function setToken(t){ const nextToken = String(t||"").trim().toLowerCase(); if(nextToken !== token) stopTrackPoll(); token = nextToken; const u = new URL(location.href); if(token){ u.searchParams.set("t", token); } else { u.searchParams.delete("t"); } history.replaceState(null,"",u); }
 
 function entryError(msg){ const e = $("entry-msg"); if(!msg){ e.classList.add("hidden"); e.textContent=""; return; } e.textContent = msg; e.classList.remove("hidden"); }
 
 function showToast(msg){ const t=$("toast"); if(!t) return; t.textContent=msg; t.style.opacity="1"; clearTimeout(t._h); t._h=setTimeout(()=>{ t.style.opacity="0"; }, 2200); }
+
+// ---- Tracking refresh policy ----
+const LIVE_TRACK_STATUSES = ["to_pickup", "to_dropoff"];
+const TERMINAL_TRACK_STATUSES = ["delivered", "failed", "cancelled"];
+const LIVE_POLL_MS = 5000;
+const IDLE_POLL_MS = 30000;
+function isLiveTrackStatus(status){ return LIVE_TRACK_STATUSES.includes(status); }
+function isTerminalTrackStatus(status){ return TERMINAL_TRACK_STATUSES.includes(status); }
+function pollDelayForStatus(status){ return isLiveTrackStatus(status) ? LIVE_POLL_MS : IDLE_POLL_MS; }
 
 async function loadOrder(){
   if(!token){ show("entry"); return; }
   showToast("מתחבר למערכת המעקב של עדן…");
   try {
     const r = await fetch(API + "/api/orders/" + encodeURIComponent(token));
-    if(r.status === 404){ location.href = "/error.html?t=" + encodeURIComponent(token); return; }
+    if(r.status === 404){ show("entry"); entryError("לא נמצא משלוח עם מספר המעקב הזה."); return; }
+    if(r.status === 402){ show("entry"); entryError("המעקב יהיה זמין לאחר אישור התשלום."); return; }
     if(!r.ok){ show("entry"); entryError("לא ניתן לטעון את המשלוח כעת. נסו שוב."); return; }
     const d = await r.json();
+    entryError("");
     if(d.otp_pending){ show("otp"); focusOtp(); }
     else { renderTrack(d); }
   } catch(e){ show("entry"); entryError("בעיית תקשורת. בדקו את החיבור ונסו שוב."); }
 }
 
+// ---- ETA helpers ----
+const ROUTE_REFRESH_MS = 60 * 1000;
+function routeDestination(order){
+  const pickup = order && order.status === "to_pickup";
+  const lat = Number(pickup ? order && order.pickup_lat : order && order.dropoff_lat);
+  const lng = Number(pickup ? order && order.pickup_lng : order && order.dropoff_lng);
+  return Number.isFinite(lat) && Number.isFinite(lng) ? {lat,lng} : null;
+}
+function etaCopy(status,duration){
+  if(!duration) return "";
+  if(status === "to_pickup") return "זמן משוער להגעה לאיסוף: " + duration;
+  if(status === "to_dropoff") return "זמן משוער להגעה למסירה: " + duration;
+  return "";
+}
+function formatEtaDuration(durationMillis){
+  const millis=Number(durationMillis);
+  if(!Number.isFinite(millis)||millis<=0)return "";
+  const minutes=Math.max(1,Math.ceil(millis/60000));
+  return minutes===1?"דקה":minutes+" דקות";
+}
+function routeRefreshDue(status,now,previousStatus,previousAt){
+  return status !== previousStatus || !previousAt || now - previousAt >= ROUTE_REFRESH_MS;
+}
+
 // ---- Live Google Map (loaded via /maps-key) ----
-let gMap=null, gMarker=null, gDestMarker=null, gTrailLine=null, gDirRenderer=null, gPickupMarker=null, gPoll=null, lastStatus=null;
+let gMap=null, gMarker=null, gDestMarker=null, gTrailLine=null, gRoutePolylines=[], gRouteLibraryPromise=null, gRouteSequence=0, gFallbackLine=null, gPickupMarker=null, gPoll=null, lastStatus=null, mapsRequested=false, lastRouteAt=0, lastRouteStatus=null;
 function loadMapsForTrack(){
+  if(mapsRequested || (window.google && google.maps)) return;
+  mapsRequested=true;
   fetch("/maps-key").then(r=>r.json()).then(d=>{
     const key=d&&d.key; if(!key) return;
     const s=document.createElement("script");
-    s.src="https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(key)+"&language=iw&region=il&callback=__trackMapReady";
-    s.async=true; document.head.appendChild(s);
-  }).catch(()=>{});
+    s.src="https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(key)+"&loading=async&language=iw&region=il&v=weekly&callback=__trackMapReady";
+    s.async=true; s.onerror=()=>{ mapsRequested=false; }; document.head.appendChild(s);
+  }).catch(()=>{ mapsRequested=false; });
 }
 window.__trackMapReady = function(){
   if(window.__lastTrack){ const o=__lastTrack.order||{}; renderMap(["to_pickup","to_dropoff"].includes(o.status), __lastTrack.gps||null, o, __lastTrack.gpsTrail||null); }
 };
+function clearRoutePolylines(){
+  gRoutePolylines.forEach(function(polyline){polyline.setMap(null);});
+  gRoutePolylines=[];
+}
+function loadRouteLibrary(){
+  if(!gRouteLibraryPromise){
+    gRouteLibraryPromise=google.maps.importLibrary("routes").then(function(library){
+      if(!library.Route)throw new Error("route_class_unavailable");
+      return library.Route;
+    }).catch(function(error){gRouteLibraryPromise=null;throw error;});
+  }
+  return gRouteLibraryPromise;
+}
+function showRouteFallback(org,dest,eta){
+  clearRoutePolylines();
+  if(eta){eta.textContent="";eta.classList.add("hidden");}
+  if(!gFallbackLine)gFallbackLine=new google.maps.Polyline({path:[org,dest],strokeColor:"#8B5CF6",strokeWeight:3,strokeOpacity:0.5,geodesic:true,map:gMap});
+  else{gFallbackLine.setPath([org,dest]);gFallbackLine.setMap(gMap);}
+}
+async function refreshLiveRoute(org,dest,routeStatus,eta){
+  const sequence=++gRouteSequence;
+  try{
+    const Route=await loadRouteLibrary();
+    const result=await Route.computeRoutes({
+      origin:org,destination:dest,travelMode:"DRIVING",routingPreference:"TRAFFIC_AWARE",
+      fields:["path","durationMillis"]
+    });
+    if(sequence!==gRouteSequence||routeStatus!==lastStatus)return;
+    const route=result&&result.routes&&result.routes[0];
+    if(!route)throw new Error("route_not_found");
+    clearRoutePolylines();
+    gRoutePolylines=route.createPolylines({polylineOptions:{strokeColor:"#8B5CF6",strokeWeight:6,strokeOpacity:0.4}});
+    gRoutePolylines.forEach(function(polyline){polyline.setMap(gMap);});
+    if(gFallbackLine){gFallbackLine.setMap(null);gFallbackLine=null;}
+    if(eta){eta.textContent=etaCopy(routeStatus,formatEtaDuration(route.durationMillis));eta.classList.toggle("hidden",!eta.textContent);}
+  }catch(error){
+    if(sequence!==gRouteSequence||routeStatus!==lastStatus)return;
+    console.warn("Routes API failed; using straight-line fallback:",error);
+    showRouteFallback(org,dest,eta);
+  }
+}
 function renderMap(live, gps, order, trail){
-  const ph=$("map-placeholder"), mapEl=$("map");
+  const ph=$("map-placeholder"), mapEl=$("map"), mapStatus=$("map-status"), eta=$("eta-hint");
   const hasGps = gps && gps.lat != null;
-  const showMap = (live || lastStatus === "delivered") && hasGps && window.google && google.maps && mapEl;
+  const needsMap = (live || lastStatus === "delivered") && hasGps && mapEl;
+  const mapsReady = window.google && google.maps;
+  if(needsMap && !mapsReady) loadMapsForTrack();
+  const showMap = needsMap && mapsReady;
   if(showMap){
     const pos={ lat:Number(gps.lat), lng:Number(gps.lng) };
     if(!gMap){
@@ -243,6 +327,7 @@ function renderMap(live, gps, order, trail){
       }
     } else { gMarker.setPosition(pos); if(live) gMap.panTo(pos); }
     mapEl.classList.remove("hidden"); if(ph) ph.classList.add("hidden");
+    if(mapStatus) mapStatus.classList.remove("hidden");
     const gl=$("gps-last"); if(gl && gps.at){ gl.classList.remove("hidden"); gl.textContent="עדכון מיקום אחרון: "+fmtTime(gps.at); }
     if(trail && trail.length > 1 && google.maps.Polyline){
       const tp=trail.map(function(p){ return {lat:Number(p.lat),lng:Number(p.lng)}; });
@@ -252,43 +337,48 @@ function renderMap(live, gps, order, trail){
     // Driving route overlay (roads) + pickup marker
     if(order && order.pickup_lat && order.dropoff_lat){
       if(!gPickupMarker){ gPickupMarker=new google.maps.Marker({ position:{lat:Number(order.pickup_lat),lng:Number(order.pickup_lng)}, map:gMap, title:"נקודת איסוף", icon:{ path:google.maps.SymbolPath.CIRCLE, scale:8, fillColor:"#8B5CF6", fillOpacity:0.5, strokeColor:"#fff", strokeWeight:1.5 } }); }
-      if(google.maps.DirectionsService && !gDirRenderer){
-        gDirRenderer=new google.maps.DirectionsRenderer({ suppressMarkers:true, polylineOptions:{ strokeColor:"#8B5CF6", strokeWeight:6, strokeOpacity:0.4 }, map:gMap });
-        var ds=new google.maps.DirectionsService();
-        var org=(live&&gps)?pos:{lat:Number(order.pickup_lat),lng:Number(order.pickup_lng)};
-        var dest={lat:Number(order.dropoff_lat),lng:Number(order.dropoff_lng)};
-        ds.route({ origin:org, destination:dest, travelMode:"DRIVING" }, function(res,st){
-          if(st==="OK"){ gDirRenderer.setDirections(res); }
-          else{
-            console.warn("Directions API failed:",st,"— enable Directions API in Google Cloud Console");
-            gDirRenderer.setMap(null);
-            new google.maps.Polyline({ path:[org,dest], strokeColor:"#8B5CF6", strokeWeight:3, strokeOpacity:0.5, geodesic:true, map:gMap });
-          }
-        });
+      if(live){
+        var org=pos;
+        var dest=routeDestination(order);
+        var routeNow=Date.now();
+        var routeStatus=order.status;
+        if(!dest){gRouteSequence++;clearRoutePolylines();if(eta){eta.textContent="";eta.classList.add("hidden");}}
+        if(dest && routeRefreshDue(routeStatus,routeNow,lastRouteStatus,lastRouteAt)){
+          lastRouteAt=routeNow;lastRouteStatus=routeStatus;
+          refreshLiveRoute(org,dest,routeStatus,eta);
+        }
       }
     }
+    if(!live && eta){eta.textContent="";eta.classList.add("hidden");}
   } else {
     if(mapEl) mapEl.classList.add("hidden"); if(ph) ph.classList.remove("hidden");
+    if(mapStatus) mapStatus.classList.add("hidden");
+    if(eta){eta.textContent="";eta.classList.add("hidden");}
   }
 }
-function startLivePoll(){
-  if(gPoll || document.hidden) return;
-  gPoll=setInterval(async ()=>{
-    try{
-      const r=await fetch(API+"/api/orders/"+encodeURIComponent(token));
-      if(!r.ok) return;
-      const d=await r.json();
-      if(d.otp_pending) return;
-      window.__lastTrack=d;
-      const o=d.order||{};
-      if(o.status!==lastStatus){ renderTrack(d); }
-      else { renderMap(["to_pickup","to_dropoff"].includes(o.status), d.gps||null, d.order||{}, d.gpsTrail||null); }
-    }catch(e){}
-  }, 5000);
+function stopTrackPoll(){ if(gPoll){ clearTimeout(gPoll); gPoll=null; } }
+function scheduleTrackPoll(status){
+  stopTrackPoll();
+  if(!token || document.hidden || isTerminalTrackStatus(status)) return;
+  gPoll=setTimeout(pollTrack, pollDelayForStatus(status));
 }
-function stopLivePoll(){ if(gPoll){ clearInterval(gPoll); gPoll=null; } }
-document.addEventListener("visibilitychange", function(){ if(document.hidden) stopLivePoll(); else if(token) startLivePoll(); });
-loadMapsForTrack();
+async function pollTrack(){
+  gPoll=null;
+  if(!token || document.hidden || isTerminalTrackStatus(lastStatus)) return;
+  try{
+    const r=await fetch(API+"/api/orders/"+encodeURIComponent(token));
+    if(r.status===404){ stopTrackPoll(); show("entry"); entryError("לא נמצא משלוח עם מספר המעקב הזה."); return; }
+    if(!r.ok){ showToast("לא הצלחנו לעדכן כרגע. ננסה שוב אוטומטית."); scheduleTrackPoll(lastStatus); return; }
+    const d=await r.json();
+    if(d.otp_pending){ stopTrackPoll(); show("otp"); focusOtp(); return; }
+    window.__lastTrack=d;
+    const o=d.order||{};
+    if(o.status!==lastStatus){ renderTrack(d); return; }
+    renderMap(isLiveTrackStatus(o.status), d.gps||null, o, d.gpsTrail||null);
+    scheduleTrackPoll(o.status);
+  }catch(e){ showToast("בעיית תקשורת. ננסה שוב אוטומטית."); scheduleTrackPoll(lastStatus); }
+}
+document.addEventListener("visibilitychange", function(){ if(document.hidden) stopTrackPoll(); else if(token) scheduleTrackPoll(lastStatus); });
 
 function renderTrack(d){
   const o = d.order || {};
@@ -334,12 +424,12 @@ function renderTrack(d){
   }
 
   // Live badge + live map (no external redirect — map renders in-page)
-  const live = ["to_pickup","to_dropoff"].includes(cur);
+  const live = isLiveTrackStatus(cur);
   $("live-badge").classList.toggle("hidden", !live);
   lastStatus = cur;
   window.__lastTrack = d;
   renderMap(live, gps, o, (d.gpsTrail||[]));
-  startLivePoll();
+  scheduleTrackPoll(cur);
 
   // Details
   $("details").innerHTML = "";
@@ -417,30 +507,53 @@ $("track-another").addEventListener("click", () => { setToken(""); $("entry-inpu
 
 // ---- OTP ----
 const otpInputs = Array.from(document.querySelectorAll(".otp-input"));
+let otpVerifying = false;
+function otpCode(){ return otpInputs.map(i => i.value).join(""); }
+function maybeVerifyOtp(){ if(otpCode().length === 6) verifyOtpNow(); }
+function applyOtpDigits(raw, startIndex){
+  const digits = String(raw || "").replace(/\D/g, "").slice(0, 6);
+  if(!digits) return;
+  const start = digits.length === 6 ? 0 : Math.max(0, startIndex || 0);
+  digits.split("").forEach((digit, offset) => { if(otpInputs[start + offset]) otpInputs[start + offset].value = digit; });
+  const next = Math.min(start + digits.length, otpInputs.length - 1);
+  if(otpInputs[next]) otpInputs[next].focus();
+  maybeVerifyOtp();
+}
 otpInputs.forEach((inp, i) => {
   inp.addEventListener("input", () => {
-    inp.value = inp.value.replace(/\D/g,"").slice(0,1);
+    const digits = inp.value.replace(/\D/g, "");
+    if(digits.length > 1){ applyOtpDigits(digits, i); return; }
+    inp.value = digits.slice(0, 1);
     if(inp.value && i < otpInputs.length-1) otpInputs[i+1].focus();
+    maybeVerifyOtp();
   });
   inp.addEventListener("keydown", (e) => { if(e.key === "Backspace" && !inp.value && i>0) otpInputs[i-1].focus(); });
+  inp.addEventListener("paste", (e) => {
+    const pasted = e.clipboardData && e.clipboardData.getData("text");
+    if(!pasted) return;
+    e.preventDefault();
+    applyOtpDigits(pasted, i);
+  });
 });
 function focusOtp(){ otpMsg(""); setTimeout(()=>otpInputs[0] && otpInputs[0].focus(), 50); }
-function otpCode(){ return otpInputs.map(i => i.value).join(""); }
 function otpMsg(msg, isErr){ const e=$("otp-msg"); e.textContent = msg || "\u00A0"; e.className = "font-label-sm mb-6 min-h-[1em] " + (isErr===false ? "text-status-delivered" : "text-status-alert"); }
-$("otp-submit").addEventListener("click", async () => {
+async function verifyOtpNow(){
+  if(otpVerifying) return;
   const code = otpCode();
   if(code.length !== 6){ otpMsg("נא להזין את כל 6 הספרות."); const c=document.querySelector("#view-otp .glass-panel"); c.classList.add("animate-shake"); setTimeout(()=>c.classList.remove("animate-shake"),400); return; }
   const btn = $("otp-submit"); const orig = btn.textContent; btn.disabled = true; btn.textContent = "מאמת…";
+  otpVerifying = true;
   try {
     const r = await fetch(API + "/api/orders/" + encodeURIComponent(token) + "/verify-otp", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ code }) });
     const d = await r.json().catch(()=>({}));
     if(d.verified){ otpMsg("מאומת! טוען מעקב…", false); loadOrder(); }
     else if(d.error === "locked"){ otpMsg("יותר מדי ניסיונות. נסו שוב מאוחר יותר."); }
     else if(d.error === "expired"){ otpMsg("פג תוקף הקוד. שלחו קוד חדש."); }
-    else { otpMsg("קוד שגוי - נסו שוב."); otpInputs.forEach(i=>i.value=""); otpInputs[0].focus(); }
+    else { otpMsg("קוד שגוי - נסו שוב."); otpInputs[0].focus(); }
   } catch(e){ otpMsg("בעיית תקשורת. נסו שוב."); }
-  finally { btn.disabled = false; btn.textContent = orig; }
-});
+  finally { otpVerifying = false; btn.disabled = false; btn.textContent = orig; }
+}
+$("otp-submit").addEventListener("click", verifyOtpNow);
 $("otp-resend").addEventListener("click", async () => {
   const btn = $("otp-resend"); const orig = btn.textContent; btn.textContent = "שולח…";
   try { await fetch(API + "/api/orders/" + encodeURIComponent(token) + "/resend-otp", { method:"POST" }); otpMsg("קוד חדש נשלח.", false); }
