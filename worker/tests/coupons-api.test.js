@@ -8,7 +8,7 @@
 import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../src/index.js';
-import { createDraftOrder, makeSession } from '../src/integrations.js';
+import { createDraftOrder, hashOtp, makeSession } from '../src/integrations.js';
 
 // ---- mocks ----
 
@@ -668,6 +668,98 @@ describe('manual paid confirmation', () => {
   });
 });
 
+describe('OTP lockout and resend flow', () => {
+  test('accepts the correct code, verifies the order, and resets prior failures', async () => {
+    const token = 'otpsuccesstoken123456789';
+    const env = { SESSION_SECRET: 'test-secret' };
+    const orderRow = {
+      id: 19, token, status: 'paid', payment_status: 'paid', email: 'customer@example.com',
+      otp_hash: await hashOtp(env, '654321'), otp_expires: Date.now() + 10 * 60 * 1000,
+    };
+    const db = apiDb({ orderRow });
+    db.state.rateLimits.set(`otpv:${token}`, {
+      count: 2, window_start: Date.now(), last_at: Date.now(), locked_until: null,
+    });
+
+    const res = await worker.fetch(post(`/api/orders/${token}/verify-otp`, { code: '654321' }, nextIp()), { ...env, DB: db });
+    assert.deepEqual(await res.json(), { verified: true });
+    assert.ok(db.state.runs.some(c => /UPDATE orders SET email_verified = 1/.test(c.sql) && c.args[0] === 19));
+    assert.ok(db.state.runs.some(c => /DELETE FROM rate_limits WHERE key = \?/.test(c.sql) && c.args[0] === `otpv:${token}`));
+  });
+
+  test('rejects an expired code without consuming a failed attempt', async () => {
+    const token = 'otpexpiredtoken123456789';
+    const env = { SESSION_SECRET: 'test-secret' };
+    const orderRow = {
+      id: 18, token, status: 'paid', payment_status: 'paid', email: 'customer@example.com',
+      otp_hash: await hashOtp(env, '654321'), otp_expires: Date.now() - 1,
+    };
+    const db = apiDb({ orderRow });
+
+    const res = await worker.fetch(post(`/api/orders/${token}/verify-otp`, { code: '000000' }, nextIp()), { ...env, DB: db });
+    assert.deepEqual(await res.json(), { verified: false, error: 'expired' });
+    assert.equal(db.state.rateLimits.has(`otpv:${token}`), false);
+  });
+
+  test('locks verification after five wrong codes and honors the active lock', async () => {
+    const token = 'otpverifytoken1234567890';
+    const env = { SESSION_SECRET: 'test-secret' };
+    const orderRow = {
+      id: 20, token, status: 'paid', payment_status: 'paid', email: 'customer@example.com',
+      otp_hash: await hashOtp(env, '654321'), otp_expires: Date.now() + 10 * 60 * 1000,
+    };
+    const db = apiDb({ orderRow });
+    const request = () => post(`/api/orders/${token}/verify-otp`, { code: '000000' }, nextIp());
+
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      const res = await worker.fetch(request(), { ...env, DB: db });
+      assert.deepEqual(await res.json(), { verified: false });
+    }
+    let res = await worker.fetch(request(), { ...env, DB: db });
+    assert.deepEqual(await res.json(), { verified: false, error: 'locked' });
+    const lock = db.state.rateLimits.get(`otpv:${token}`);
+    assert.ok(lock.locked_until > Date.now());
+
+    const runCount = db.state.runs.length;
+    res = await worker.fetch(request(), { ...env, DB: db });
+    assert.deepEqual(await res.json(), { verified: false, error: 'locked' });
+    assert.equal(db.state.runs.length, runCount, 'an active lock must reject before another counter write');
+  });
+
+  test('resends once, writes a fresh OTP, then throttles an immediate retry', async () => {
+    const token = 'otpresendtoken123456789';
+    const orderRow = {
+      id: 21, token, status: 'paid', payment_status: 'paid', email: 'customer@example.com',
+    };
+    const db = apiDb({ orderRow });
+    globalThis.fetch = async (url) => {
+      assert.equal(url, 'https://api.sendgrid.com/v3/mail/send');
+      return new Response(null, { status: 202 });
+    };
+    const env = { DB: db, SESSION_SECRET: 'test-secret', SENDGRID_API_KEY: 'sendgrid-test-key' };
+    const request = () => post(`/api/orders/${token}/resend-otp`, {}, nextIp());
+
+    let res = await worker.fetch(request(), env);
+    assert.deepEqual(await res.json(), { ok: true });
+    const otpWrites = () => db.state.runs.filter(c => /UPDATE orders SET email = \?/.test(c.sql));
+    assert.equal(otpWrites().length, 1);
+    assert.equal(otpWrites()[0].args[0], 'customer@example.com');
+    assert.equal(otpWrites()[0].args[3], 21);
+    assert.ok(db.state.runs.some(c => /INSERT INTO notifications/.test(c.sql) && c.args[2] === 'customer_otp'));
+
+    res = await worker.fetch(request(), env);
+    assert.deepEqual(await res.json(), { ok: false, error: 'throttled' });
+    assert.equal(otpWrites().length, 1, 'throttled retries must not rotate the OTP');
+  });
+
+  test('does not reveal whether an unknown resend token exists', async () => {
+    const db = apiDb();
+    const res = await worker.fetch(post('/api/orders/unknown-token/resend-otp', {}, nextIp()), envFor(db));
+    assert.deepEqual(await res.json(), { ok: true });
+    assert.ok(!db.state.runs.some(c => /UPDATE orders SET email = \?/.test(c.sql)));
+  });
+});
+
 describe('Shopify payment reconciliation', () => {
   const baseOrder = {
     id: 9, token: 'abcdef1234567890abcdef', status: 'payment_sent', payment_status: 'link_sent',
@@ -680,13 +772,18 @@ describe('Shopify payment reconciliation', () => {
 
   test('records the actual amount only when amount, currency, and draft match', async () => {
     const db = apiDb({ orderRow: { ...baseOrder } });
-    const req = await shopifyWebhook(payload);
-    const res = await worker.fetch(req, { DB: db, SHOPIFY_WEBHOOK_SECRET: 'webhook-secret' });
+    let req = await shopifyWebhook(payload);
+    let res = await worker.fetch(req, { DB: db, SHOPIFY_WEBHOOK_SECRET: 'webhook-secret' });
     assert.equal(res.status, 200);
     assert.equal((await res.json()).received, true);
-    const payment = db.state.runs.find(c => /INSERT INTO payments/.test(c.sql));
-    assert.ok(payment);
-    assert.equal(payment.args[1], 5000);
+    const payments = () => db.state.runs.filter(c => /INSERT INTO payments/.test(c.sql));
+    assert.equal(payments().length, 1);
+    assert.equal(payments()[0].args[1], 5000);
+
+    req = await shopifyWebhook(payload);
+    res = await worker.fetch(req, { DB: db, SHOPIFY_WEBHOOK_SECRET: 'webhook-secret' });
+    assert.deepEqual(await res.json(), { received: true });
+    assert.equal(payments().length, 1, 'Shopify webhook retries must not duplicate payments');
   });
 
   test('uses the checkout email for the shared OTP confirmation flow', async () => {
