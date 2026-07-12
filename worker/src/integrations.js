@@ -19,7 +19,11 @@ export async function createDraftOrder(env, order, priceNis) {
   const apiVersion = env.SHOPIFY_API_VERSION || '2026-04';
   const url = `https://${env.SHOPIFY_SHOP}/admin/api/${apiVersion}/draft_orders.json`;
 
-  const SERVICE_HE = { eco: 'Eco (עד סוף יום)', standard: 'Standard (4 שעות)', flash: 'Flash (90 דקות)' };
+  const SERVICE_HE = {
+    eco: 'חסכוני (מסירה עד סוף היום)',
+    standard: 'רגיל (מסירה בתוך 4 שעות)',
+    flash: 'מהיר (מסירה בתוך 90 דקות)',
+  };
   const SIZE_HE = { small: 'קטן', medium: 'בינוני' };
   const pkgTitle = 'שליחות — ' + (SERVICE_HE[order.service] || 'שליחות') + (order.size === 'medium' ? ' · עד גודל קופסת נעלים' : '');
 
@@ -145,6 +149,38 @@ export function parseShopifyOrderWebhook(body) {
     email: o.email || (o.customer && o.customer.email) || null,
     customerName: (o.customer && (o.customer.first_name + ' ' + o.customer.last_name).trim()) || o.email || null,
     raw: o,
+  };
+}
+
+// ---- Parse Shopify refunds/create webhook ----
+// Shopify emits refunds/create when the refund record is created, independently
+// of when the gateway finishes moving money. Consumers must inspect transaction
+// statuses and use orders/updated financial_status as the final fallback signal.
+export function parseShopifyRefundWebhook(body) {
+  const refund = body || {};
+  const transactions = (refund.transactions || [])
+    .filter((tx) => String(tx.kind || '').toLowerCase() === 'refund')
+    .map((tx) => ({
+      id: tx.id || null,
+      status: String(tx.status || '').toLowerCase(),
+      amount: Number(tx.amount),
+      currency: tx.currency || null,
+    }))
+    .filter((tx) => Number.isFinite(tx.amount) && tx.amount >= 0);
+
+  const amountFor = (status) => transactions
+    .filter((tx) => tx.status === status)
+    .reduce((sum, tx) => sum + tx.amount, 0);
+
+  return {
+    refundId: refund.id || null,
+    shopifyOrderId: refund.order_id || null,
+    transactions,
+    successfulAmount: amountFor('success'),
+    pendingAmount: amountFor('pending'),
+    hasFailedTransaction: transactions.some((tx) => ['failure', 'error'].includes(tx.status)),
+    currency: (transactions.find((tx) => tx.currency) || {}).currency || null,
+    raw: refund,
   };
 }
 

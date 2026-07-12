@@ -7,7 +7,7 @@
 // The rest of the app calls createCharge() / settleOrder() and never knows
 // which processor is behind them. Swapping to Mesh = rewrite this file only.
 
-import { createDraftOrder, verifyShopifyWebhook, parseShopifyOrderWebhook } from './integrations.js';
+import { createDraftOrder, verifyShopifyWebhook, parseShopifyOrderWebhook, parseShopifyRefundWebhook } from './integrations.js';
 
 // createCharge(env, order, priceNis) → { checkoutUrl, mode, processorRef } | null
 // - 'immediate' mode: returns a Shopify checkout URL; payment is captured at checkout.
@@ -51,4 +51,4 @@ export async function settleOrder(env, order) {
   return { settled: false, error: 'preauth_mode_not_configured' };
 }
 
-export { verifyShopifyWebhook, parseShopifyOrderWebhook };
+export { verifyShopifyWebhook, parseShopifyOrderWebhook, parseShopifyRefundWebhook };

@@ -37,6 +37,9 @@ processor boundaries so future work stays clean.
 - Shopify **`orders/paid` webhook** updates the internal order to `paid`.
 - The booking response does not expose tracking. The tracking link is sent and the
   tracking API unlocks only after the signed paid webhook is reconciled.
+- Shopify **`refunds/create`** and **`orders/updated`** webhooks reconcile pending,
+  partial, failed, and completed refunds back into the Worker order. A full refund
+  results in delivery status `cancelled` plus `payment_status = refunded`.
 - Maps to `payment_mode = 'immediate'` today.
 
 ### 2. `QUOTE_THEN_PAY` — price unknown, Eden quotes *(already used for review orders)*

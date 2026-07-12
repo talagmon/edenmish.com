@@ -15,7 +15,7 @@ EdenMish orders, tracking, pricing, ops dashboard, and payment reconciliation.
 - Serves the **customer tracking page** (status timeline + live GPS map + OTP gate).
 - Serves the **ops dashboard** (PIN login, order queue, status stepper, GPS broadcast).
 - Creates Shopify **Draft Orders** (Worker-side charge) for review/manual payments.
-- Receives and verifies the **Shopify `orders/paid` webhook** to reconcile payments.
+- Receives and verifies Shopify **`orders/paid`, `orders/updated`, and `refunds/create` webhooks** to reconcile payments and refunds.
 - Sends email notifications (SendGrid) — customer OTP/confirmation + Eden alerts.
 
 It is a **single Worker** that routes by hostname (`find.` vs `ops.`).
@@ -116,7 +116,7 @@ See `../docs/ENVIRONMENT.md` for the full list and placeholders.
 | `SESSION_SECRET` | signed ops cookie + OTP hashing | mandatory; auth/order OTP flows fail closed if unset |
 | `MAPS_KEY` | tracking page live map (injected into HTML) | Google Maps JS key |
 | `SHOPIFY_ADMIN_TOKEN` | creating Draft Orders (`shpat_…`) | Worker-side charge |
-| `SHOPIFY_WEBHOOK_SECRET` | verifying `orders/paid` webhook | webhook fails closed (401) if unset |
+| `SHOPIFY_WEBHOOK_SECRET` | verifying Shopify payment/refund webhooks | webhook fails closed (401) if unset |
 | `SENDGRID_API_KEY` | all email notifications | currently SendGrid |
 
 Non-secret vars live in `wrangler.toml [vars]`: `BRAND`, `BOOKING_URL`,
@@ -126,7 +126,8 @@ Non-secret vars live in `wrangler.toml [vars]`: `BRAND`, `BOOKING_URL`,
 
 Shopify admin → **Settings → Notifications → Webhooks**:
 
-- **Event:** `Order payment` (= `orders/paid`) → **URL:** `https://ops.edenmish.com/webhooks/shopify`, **Format:** JSON.
+- Ensure these topics point to **`https://find.edenmish.com/webhooks/shopify`** as JSON: `orders/paid`, `orders/updated`, and `refunds/create`.
+- The Worker also checks and creates missing subscriptions through the Shopify Admin API when `SHOPIFY_ADMIN_TOKEN` is configured.
 - Copy the **Webhook signature key** → `wrangler secret put SHOPIFY_WEBHOOK_SECRET`.
 - The Worker verifies HMAC-SHA256 (`verifyShopifyWebhook`) on every hit before
   trusting the payload. It recovers the tracking token from the line-item
@@ -202,8 +203,8 @@ Set in `wrangler.toml [vars]` (non-secret):
 
 ### 5. Shopify webhook
 
-- **Event:** `Order payment` (= `orders/paid`)
-- **URL:** `https://ops.edenmish.com/webhooks/shopify`
+- **Topics:** `orders/paid`, `orders/updated`, `refunds/create`
+- **URL:** `https://find.edenmish.com/webhooks/shopify`
 - **Format:** JSON
 - **Secret:** set in the Worker as `SHOPIFY_WEBHOOK_SECRET` (see step 3).
 
