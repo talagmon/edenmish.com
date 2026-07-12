@@ -495,7 +495,7 @@ function loadMapsScript(){
   fetch("/maps-key").then(r=>r.json()).then(d=>{
     const key = d && d.key; if(!key) return;
     const s = document.createElement("script");
-    s.src = "https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(key)+"&loading=async&libraries=places,geometry&language=iw&region=il&v=weekly&callback=__initAutocomplete";
+    s.src = "https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(key)+"&loading=async&libraries=places&language=iw&region=il&v=weekly&callback=__initAutocomplete";
     s.async = true; s.defer = true;
     document.head.appendChild(s);
   }).catch(()=>{});
@@ -593,21 +593,40 @@ window.__initAutocomplete = async function(){
     computeEstimate();
   });
 });
-function maybeDistance(){
+let routeMatrixLibraryPromise=null;
+function loadRouteMatrixLibrary(){
+  if(!routeMatrixLibraryPromise){
+    routeMatrixLibraryPromise=google.maps.importLibrary("routes").then(({RouteMatrix})=>{
+      if(!RouteMatrix)throw new Error("route_matrix_unavailable");
+      return RouteMatrix;
+    }).catch(error=>{routeMatrixLibraryPromise=null;throw error;});
+  }
+  return routeMatrixLibraryPromise;
+}
+async function maybeDistance(){
   if(geo.pickupLat==null || geo.dropoffLat==null) return;
+  const requestCoordinates={
+    pickupLat:geo.pickupLat,pickupLng:geo.pickupLng,
+    dropoffLat:geo.dropoffLat,dropoffLng:geo.dropoffLng
+  };
   try {
-    const svc = new google.maps.DistanceMatrixService();
-    svc.getDistanceMatrix({
-      origins:[{lat:geo.pickupLat,lng:geo.pickupLng}],
-      destinations:[{lat:geo.dropoffLat,lng:geo.dropoffLng}],
-      travelMode:"DRIVING", unitSystem:google.maps.UnitSystem.METRIC
-    }, (resp, status)=>{
-      if(status!=="OK" || !resp || !resp.rows[0] || !resp.rows[0].elements[0] || !resp.rows[0].elements[0].distance) return;
-      geo.distanceKm = Math.round((resp.rows[0].elements[0].distance.value/1000)*100)/100;
-      if(distEl) distEl.textContent = geo.distanceKm + " ק״מ";
-      computeEstimate();
+    const RouteMatrix=await loadRouteMatrixLibrary();
+    const {matrix}=await RouteMatrix.computeRouteMatrix({
+      origins:[{lat:requestCoordinates.pickupLat,lng:requestCoordinates.pickupLng}],
+      destinations:[{lat:requestCoordinates.dropoffLat,lng:requestCoordinates.dropoffLng}],
+      travelMode:"DRIVING",
+      fields:["distanceMeters","condition"]
     });
-  } catch(e){}
+    if(
+      geo.pickupLat!==requestCoordinates.pickupLat || geo.pickupLng!==requestCoordinates.pickupLng ||
+      geo.dropoffLat!==requestCoordinates.dropoffLat || geo.dropoffLng!==requestCoordinates.dropoffLng
+    )return;
+    const item=matrix&&matrix.rows&&matrix.rows[0]&&matrix.rows[0].items&&matrix.rows[0].items[0];
+    if(!item || item.condition!=="ROUTE_EXISTS" || !Number.isFinite(item.distanceMeters))return;
+    geo.distanceKm=Math.round((item.distanceMeters/1000)*100)/100;
+    if(distEl)distEl.textContent=geo.distanceKm+" ק״מ";
+    computeEstimate();
+  } catch(e){console.warn("EdenMish route distance unavailable; using quote fallback:",e);}
 }
 loadMapsScript();
 

@@ -175,6 +175,17 @@ describe('Frontend: Booking form', () => {
     assert.ok(!html.includes('place_changed'), 'canonical booking must not use the legacy selection event');
   });
 
+  test('Uses Route Matrix for driving distance with a stale-response guard', () => {
+    assertContains(html, 'google.maps.importLibrary("routes")', 'dynamic Routes library import');
+    assertContains(html, 'RouteMatrix.computeRouteMatrix', 'new route matrix request');
+    assertContains(html, 'fields:["distanceMeters","condition"]', 'minimal route matrix field mask');
+    assertContains(html, 'matrix.rows[0].items', 'new route matrix response shape');
+    assertContains(html, 'item.condition!=="ROUTE_EXISTS"', 'missing-route rejection');
+    assertContains(html, 'geo.pickupLat!==requestCoordinates.pickupLat', 'stale route response guard');
+    assertContains(html, 'using quote fallback', 'route failure fallback');
+    assert.ok(!html.includes('new google.maps.DistanceMatrixService'), 'canonical booking must not use the legacy distance service');
+  });
+
   test('Has area gate (Gush-Dan bounds)', () => {
     assertContains(html, 'inGushDanBounds', 'coordinate gate');
     assert.ok(!html.includes('const EDEN_ZONES'), 'the funnel must not duplicate the Worker city-zone list');
@@ -378,6 +389,7 @@ describe('Frontend: Security and accessibility hardening', () => {
     const headers = readFileSync(join(PUB, '_headers'), 'utf8');
     assertContains(headers, 'Content-Security-Policy:');
     assertContains(headers, 'https://places.googleapis.com', 'Places API New connection origin');
+    assertContains(headers, 'https://routes.googleapis.com', 'Routes API connection origin');
     assertContains(headers, "object-src 'none'");
     assertContains(headers, "base-uri 'self'");
   });
