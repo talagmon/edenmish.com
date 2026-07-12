@@ -81,15 +81,15 @@
 <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-container/20 mb-8 border border-primary/20">
 <span class="material-symbols-outlined text-primary text-4xl" style="font-variation-settings: 'FILL' 1;">lock</span>
 </div>
-<h1 class="font-headline-lg text-headline-lg text-on-surface mb-4">אימות זהות</h1>
-<p class="font-body-md text-body-md text-on-surface-variant mb-10 max-w-[320px] mx-auto">שלחנו קוד בן 6 ספרות למייל / לטלפון המקושר למשלוח.</p>
+<h1 class="font-headline-lg text-headline-lg text-on-surface mb-4">אימות כתובת הדוא״ל</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mb-10 max-w-[320px] mx-auto">הזינו את הקוד בן 6 הספרות שנשלח אליכם.</p>
 <div id="otp-container" class="flex flex-row-reverse justify-center gap-2 md:gap-3 mb-6">
-<input aria-label="ספרה 1" autocomplete="one-time-code" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="0"/>
-<input aria-label="ספרה 2" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="1"/>
-<input aria-label="ספרה 3" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="2"/>
-<input aria-label="ספרה 4" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="3"/>
-<input aria-label="ספרה 5" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="4"/>
-<input aria-label="ספרה 6" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" type="text" data-i="5"/>
+<input aria-label="ספרה 1" autocomplete="one-time-code" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" pattern="[0-9]*" type="text" data-i="0"/>
+<input aria-label="ספרה 2" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" pattern="[0-9]*" type="text" data-i="1"/>
+<input aria-label="ספרה 3" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" pattern="[0-9]*" type="text" data-i="2"/>
+<input aria-label="ספרה 4" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" pattern="[0-9]*" type="text" data-i="3"/>
+<input aria-label="ספרה 5" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" pattern="[0-9]*" type="text" data-i="4"/>
+<input aria-label="ספרה 6" class="otp-input w-12 h-16 md:w-14 md:h-20 text-center text-2xl font-bold bg-surface-container-highest rounded-lg border border-outline-variant transition-all duration-300" maxlength="1" inputmode="numeric" pattern="[0-9]*" type="text" data-i="5"/>
 </div>
 <p id="otp-msg" class="text-status-alert font-label-sm mb-6 min-h-[1em]">&nbsp;</p>
 <button id="otp-submit" class="w-full bg-tertiary py-4 rounded-lg text-on-tertiary font-bold text-lg hover:shadow-[0_0_20px_rgba(210,187,255,0.4)] transition-all duration-300 active:scale-95 disabled:opacity-60">המשיכו למעקב</button>
@@ -417,30 +417,53 @@ $("track-another").addEventListener("click", () => { setToken(""); $("entry-inpu
 
 // ---- OTP ----
 const otpInputs = Array.from(document.querySelectorAll(".otp-input"));
+let otpVerifying = false;
+function otpCode(){ return otpInputs.map(i => i.value).join(""); }
+function maybeVerifyOtp(){ if(otpCode().length === 6) verifyOtpNow(); }
+function applyOtpDigits(raw, startIndex){
+  const digits = String(raw || "").replace(/\D/g, "").slice(0, 6);
+  if(!digits) return;
+  const start = digits.length === 6 ? 0 : Math.max(0, startIndex || 0);
+  digits.split("").forEach((digit, offset) => { if(otpInputs[start + offset]) otpInputs[start + offset].value = digit; });
+  const next = Math.min(start + digits.length, otpInputs.length - 1);
+  if(otpInputs[next]) otpInputs[next].focus();
+  maybeVerifyOtp();
+}
 otpInputs.forEach((inp, i) => {
   inp.addEventListener("input", () => {
-    inp.value = inp.value.replace(/\D/g,"").slice(0,1);
+    const digits = inp.value.replace(/\D/g, "");
+    if(digits.length > 1){ applyOtpDigits(digits, i); return; }
+    inp.value = digits.slice(0, 1);
     if(inp.value && i < otpInputs.length-1) otpInputs[i+1].focus();
+    maybeVerifyOtp();
   });
   inp.addEventListener("keydown", (e) => { if(e.key === "Backspace" && !inp.value && i>0) otpInputs[i-1].focus(); });
+  inp.addEventListener("paste", (e) => {
+    const pasted = e.clipboardData && e.clipboardData.getData("text");
+    if(!pasted) return;
+    e.preventDefault();
+    applyOtpDigits(pasted, i);
+  });
 });
 function focusOtp(){ otpMsg(""); setTimeout(()=>otpInputs[0] && otpInputs[0].focus(), 50); }
-function otpCode(){ return otpInputs.map(i => i.value).join(""); }
 function otpMsg(msg, isErr){ const e=$("otp-msg"); e.textContent = msg || "\u00A0"; e.className = "font-label-sm mb-6 min-h-[1em] " + (isErr===false ? "text-status-delivered" : "text-status-alert"); }
-$("otp-submit").addEventListener("click", async () => {
+async function verifyOtpNow(){
+  if(otpVerifying) return;
   const code = otpCode();
   if(code.length !== 6){ otpMsg("נא להזין את כל 6 הספרות."); const c=document.querySelector("#view-otp .glass-panel"); c.classList.add("animate-shake"); setTimeout(()=>c.classList.remove("animate-shake"),400); return; }
   const btn = $("otp-submit"); const orig = btn.textContent; btn.disabled = true; btn.textContent = "מאמת…";
+  otpVerifying = true;
   try {
     const r = await fetch(API + "/api/orders/" + encodeURIComponent(token) + "/verify-otp", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ code }) });
     const d = await r.json().catch(()=>({}));
     if(d.verified){ otpMsg("מאומת! טוען מעקב…", false); loadOrder(); }
     else if(d.error === "locked"){ otpMsg("יותר מדי ניסיונות. נסו שוב מאוחר יותר."); }
     else if(d.error === "expired"){ otpMsg("פג תוקף הקוד. שלחו קוד חדש."); }
-    else { otpMsg("קוד שגוי - נסו שוב."); otpInputs.forEach(i=>i.value=""); otpInputs[0].focus(); }
+    else { otpMsg("קוד שגוי - נסו שוב."); otpInputs[0].focus(); }
   } catch(e){ otpMsg("בעיית תקשורת. נסו שוב."); }
-  finally { btn.disabled = false; btn.textContent = orig; }
-});
+  finally { otpVerifying = false; btn.disabled = false; btn.textContent = orig; }
+}
+$("otp-submit").addEventListener("click", verifyOtpNow);
 $("otp-resend").addEventListener("click", async () => {
   const btn = $("otp-resend"); const orig = btn.textContent; btn.textContent = "שולח…";
   try { await fetch(API + "/api/orders/" + encodeURIComponent(token) + "/resend-otp", { method:"POST" }); otpMsg("קוד חדש נשלח.", false); }

@@ -2,6 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { runInNewContext } from 'node:vm';
 
 const PUB = join(process.cwd(), 'public');
 
@@ -13,6 +14,51 @@ function readPage(name) {
 
 function assertContains(html, needle, label) {
   assert.ok(html.includes(needle), `${label || needle} missing from page`);
+}
+
+function trackingOtpHarness(response = { verified: true }) {
+  const html = readPage('track.html');
+  const source = html.split('// ---- OTP ----')[1].split('// ---- init ----')[0];
+  let focused = -1;
+  let fetchCalls = 0;
+  let loadCalls = 0;
+  const makeElement = (index = -1) => ({
+    value: '', textContent: '', className: '', disabled: false,
+    listeners: {},
+    addEventListener(type, handler) { this.listeners[type] = handler; },
+    focus() { focused = index; },
+  });
+  const inputs = Array.from({ length: 6 }, (_, i) => makeElement(i));
+  const elements = {
+    'otp-submit': makeElement(),
+    'otp-resend': makeElement(),
+    'otp-msg': makeElement(),
+  };
+  elements['otp-submit'].textContent = 'המשיכו למעקב';
+  elements['otp-resend'].textContent = 'שלח קוד שוב';
+  const context = {
+    document: {
+      querySelectorAll: () => inputs,
+      querySelector: () => ({ classList: { add() {}, remove() {} } }),
+    },
+    $: id => elements[id],
+    API: 'https://find.example',
+    token: 'tracking-token',
+    encodeURIComponent,
+    setTimeout: fn => fn(),
+    fetch: async () => { fetchCalls += 1; return { json: async () => response }; },
+    loadOrder: () => { loadCalls += 1; },
+    console,
+  };
+  runInNewContext(source, context);
+  return {
+    inputs,
+    elements,
+    dispatch: async (element, type, event = {}) => element.listeners[type] && element.listeners[type](event),
+    focused: () => focused,
+    fetchCalls: () => fetchCalls,
+    loadCalls: () => loadCalls,
+  };
 }
 
 describe('Frontend: Pages exist', () => {
@@ -162,6 +208,51 @@ describe('Frontend: Tracking page', () => {
     assertContains(html, 'eco: "חסכוני"');
     assertContains(html, 'standard: "רגיל"');
     assertContains(html, 'flash: "מהיר"');
+  });
+
+  test('OTP cells expose numeric and one-time-code input semantics', () => {
+    assert.equal((html.match(/class="otp-input/g) || []).length, 6);
+    assert.equal((html.match(/pattern="\[0-9\]\*"/g) || []).length, 6);
+    assertContains(html, 'autocomplete="one-time-code"');
+    assertContains(html, 'אימות כתובת הדוא״ל');
+  });
+
+  test('pasting a full OTP into any cell distributes it and auto-submits once', async () => {
+    const h = trackingOtpHarness();
+    let prevented = false;
+    await h.dispatch(h.inputs[3], 'paste', {
+      clipboardData: { getData: () => '12 34-56' },
+      preventDefault: () => { prevented = true; },
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(prevented, true);
+    assert.equal(h.inputs.map(input => input.value).join(''), '123456');
+    assert.equal(h.fetchCalls(), 1);
+    assert.equal(h.loadCalls(), 1);
+  });
+
+  test('autofill-shaped input auto-submits and duplicate input is guarded', async () => {
+    const h = trackingOtpHarness();
+    h.inputs[0].value = '654321';
+    const first = h.dispatch(h.inputs[0], 'input');
+    h.inputs[5].value = '1';
+    const duplicate = h.dispatch(h.inputs[5], 'input');
+    await Promise.all([first, duplicate]);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(h.inputs.map(input => input.value).join(''), '654321');
+    assert.equal(h.fetchCalls(), 1);
+  });
+
+  test('backspace moves focus and failed verification retains the OTP', async () => {
+    const h = trackingOtpHarness({ verified: false });
+    h.inputs[2].value = '';
+    await h.dispatch(h.inputs[2], 'keydown', { key: 'Backspace' });
+    assert.equal(h.focused(), 1);
+    '123456'.split('').forEach((digit, i) => { h.inputs[i].value = digit; });
+    await h.dispatch(h.elements['otp-submit'], 'click');
+    assert.equal(h.inputs.map(input => input.value).join(''), '123456');
+    assert.equal(h.elements['otp-msg'].textContent, 'קוד שגוי - נסו שוב.');
+    assert.equal(h.elements['otp-submit'].disabled, false);
   });
 });
 
