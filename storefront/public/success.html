@@ -36,13 +36,13 @@
 <div class="absolute inset-0 rounded-full bg-primary-container blur-xl opacity-50"></div>
 <span class="material-symbols-outlined text-primary text-[56px] relative z-10" style="font-variation-settings: 'FILL' 1;">check_circle</span>
 </div>
-<h1 class="font-headline-lg-mobile text-center mb-3">ההזמנה נקלטה בהצלחה!</h1>
-<p class="text-on-surface-variant text-center mb-10 max-w-[320px]">תודה שבחרת ב-EdenMish. אנחנו כבר מתחילים לעבוד על המשלוח שלך.</p>
-<!-- Tracking Number Card -->
-<div class="glass-panel w-full p-6 rounded-2xl mb-10 border border-white/5">
+<h1 class="font-headline-lg-mobile text-center mb-3" id="success-title">הבקשה נקלטה בהצלחה!</h1>
+<p class="text-on-surface-variant text-center mb-10 max-w-[340px]" id="success-copy">נבדוק את הפרטים ונשלח אליכם קישור מאובטח לתשלום. קישור המעקב יישלח לאחר אישור התשלום.</p>
+<!-- Request reference; becomes a tracking card only in local paid test mode. -->
+<div class="glass-panel w-full p-6 rounded-2xl mb-10 border border-white/5 hidden" id="reference-card">
 <div class="flex justify-between items-center mb-5">
 <span class="text-secondary font-bold text-sm" id="price-line"></span>
-<span class="font-label-sm text-on-surface-variant uppercase tracking-wider">מספר מעקב</span>
+<span class="font-label-sm text-on-surface-variant uppercase tracking-wider" id="reference-label">מספר בקשה</span>
 </div>
 <div class="flex items-center justify-between bg-surface-container-lowest p-4 rounded-xl border border-outline-variant/20">
 <code class="text-primary font-bold text-xl tracking-widest break-all" id="tracking-id">-</code>
@@ -53,11 +53,6 @@
 </div>
 <p class="text-status-delivered text-xs mt-3 opacity-0 transition-opacity text-center font-medium" id="copy-status">המספר הועתק ללוח!</p>
 </div>
-<!-- Pay now (only when an exact-price payment link was returned) -->
-<a id="pay-cta" href="#" class="hidden w-full bg-tertiary hover:brightness-110 text-on-tertiary font-bold py-4 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-[0.98] shadow-lg shadow-tertiary/20 h-14 mb-6">
-<span class="material-symbols-outlined text-[20px]">credit_card</span>
-<span>לתשלום כעת</span>
-</a>
 <!-- Next Steps -->
 <div class="w-full space-y-4 mb-10">
 <h2 class="font-headline-md text-on-surface text-right px-1 mb-2">מה הצעדים הבאים?</h2>
@@ -67,7 +62,7 @@
 </div>
 <div>
 <h3 class="font-bold text-on-surface mb-1">אישור מחיר סופי</h3>
-<p class="text-on-surface-variant text-sm leading-relaxed">המומחים שלנו בודקים את פרטי ההזמנה. תקבלו עדכון ברגע שהמחיר יאושר סופית.</p>
+<p class="text-on-surface-variant text-sm leading-relaxed">אנחנו בודקים את פרטי הבקשה ומכינים את התשלום.</p>
 </div>
 </div>
 <div class="glass-panel p-5 rounded-2xl flex gap-4 items-start opacity-60 bg-surface-container-low/20">
@@ -76,7 +71,7 @@
 </div>
 <div>
 <h3 class="font-bold text-on-surface mb-1">קישור לתשלום</h3>
-<p class="text-on-surface-variant text-sm leading-relaxed">לאחר אישור המחיר, יישלח אליכם קישור מאובטח לתשלום בוואטסאפ ובמייל.</p>
+<p class="text-on-surface-variant text-sm leading-relaxed">לאחר אישור המחיר, יישלח אליכם קישור מאובטח לתשלום.</p>
 </div>
 </div>
 <div class="glass-panel p-5 rounded-2xl flex gap-4 items-start opacity-60 bg-surface-container-low/20">
@@ -85,13 +80,13 @@
 </div>
 <div>
 <h3 class="font-bold text-on-surface mb-1">יציאה לדרך</h3>
-<p class="text-on-surface-variant text-sm leading-relaxed">ברגע שהתשלום יאושר, השליח שלנו ייצא לאסוף את החבילה שלכם.</p>
+<p class="text-on-surface-variant text-sm leading-relaxed">לאחר אישור התשלום תקבלו קישור למעקב, והמשלוח ייכנס לתהליך הביצוע.</p>
 </div>
 </div>
 </div>
 <!-- Actions -->
 <div class="w-full space-y-4">
-<a id="track-cta" href="/track.html" class="w-full bg-tertiary hover:brightness-110 text-on-tertiary font-bold rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-[0.98] shadow-lg shadow-tertiary/20 h-14">
+<a id="track-cta" href="/track.html" class="hidden w-full bg-tertiary hover:brightness-110 text-on-tertiary font-bold rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-[0.98] shadow-lg shadow-tertiary/20 h-14">
 <span class="material-symbols-outlined text-[20px] scale-x-[-1]">trending_flat</span>
 <span>מעבר לעמוד המעקב</span>
 </a>
@@ -128,7 +123,8 @@
 const params = new URLSearchParams(location.search);
 const token = (params.get("token") || "").trim();
 const trackingUrl = params.get("tracking_url") || "";
-const paymentUrl = params.get("payment_url") || "";
+const orderId = (params.get("order_id") || "").trim();
+const paidTestMode = params.get("test") === "1" && !!token;
 const price = params.get("price");
 const review = params.get("review") === "1";
 // Coupon breakdown (numbers coerced + code escaped — these come from the URL)
@@ -138,10 +134,16 @@ const subtotalPrice = Number(params.get("subtotal_price")) || 0;
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 const idEl = document.getElementById("tracking-id");
-if (token) {
+const referenceCard = document.getElementById("reference-card");
+if (paidTestMode) {
+  referenceCard.classList.remove("hidden");
+  document.getElementById("reference-label").textContent = "מספר מעקב";
   idEl.textContent = token.toUpperCase();
-} else {
-  idEl.textContent = "-";
+  document.getElementById("success-title").textContent = "ההזמנה נקלטה בהצלחה!";
+  document.getElementById("success-copy").textContent = "מצב הבדיקה סומן כשולם, ולכן המעקב זמין כעת.";
+} else if (orderId) {
+  referenceCard.classList.remove("hidden");
+  idEl.textContent = orderId;
   idEl.classList.remove("tracking-widest");
 }
 if (price) {
@@ -157,11 +159,10 @@ if (price) {
   }
 }
 const trackCta = document.getElementById("track-cta");
-if (trackingUrl) trackCta.href = trackingUrl;
-else if (token) trackCta.href = "/track.html?t=" + encodeURIComponent(token);
-
-const payCta = document.getElementById("pay-cta");
-if (paymentUrl) { payCta.href = paymentUrl; payCta.classList.remove("hidden"); }
+if (paidTestMode) {
+  trackCta.href = trackingUrl || ("/track.html?t=" + encodeURIComponent(token));
+  trackCta.classList.remove("hidden");
+}
 
 document.getElementById("copy-btn").addEventListener("click", () => {
   const text = idEl.textContent.trim();

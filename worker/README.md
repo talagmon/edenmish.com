@@ -220,8 +220,11 @@ wrangler deploy
 - [ ] Submit a normal order from the EdenMish funnel.
 - [ ] Confirm D1 order created.
 - [ ] Confirm `payment_url` returned for exact-price order.
+- [ ] Confirm the unpaid booking response contains `order_id` but no tracking token or URL.
+- [ ] Confirm the booking funnel redirects directly to `payment_url`.
 - [ ] Confirm Draft Order invoice opens Shopify checkout.
 - [ ] Confirm paid webhook marks order paid.
+- [ ] Confirm the tracking link is delivered only after payment and unpaid tracking requests return HTTP 402.
 - [ ] Confirm tracking page requires OTP before PII.
 - [ ] Confirm ops dashboard buckets show the order.
 - [ ] Confirm inline price approval works for a review order.

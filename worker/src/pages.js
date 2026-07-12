@@ -59,7 +59,7 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){retur
 function ago(ms){const m=Math.max(0,Math.round((Date.now()-ms)/60000));return m<=1?'רגע':m+' דקות';}
 async function load(){
   try{
-    const r=await fetch('/api/orders/'+TOKEN); if(!r.ok) throw 0; const d=await r.json(); render(d);
+    const r=await fetch('/api/orders/'+TOKEN); if(r.status===402){document.getElementById('app').innerHTML='<div class="card">המעקב יהיה זמין לאחר אישור התשלום.</div>';return;} if(!r.ok) throw 0; const d=await r.json(); render(d);
   }catch(e){document.getElementById('app').innerHTML='<div class="card">לא נמצא משלוח. בדקו את הקישור.</div>';}
 }
 function render(d){

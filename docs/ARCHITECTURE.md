@@ -85,8 +85,9 @@ target architecture. **Do not extend the legacy path.**
 - The customer pays the Draft Order's **`invoice_url`** through Shopify checkout
   (PayPlus app).
 - The Worker **is** the source of truth for the charge from creation.
-- Used today only for **review orders** (ops "approve price"). This is the path to
-  standardize on for `EXACT_CAPTURE` and `QUOTE_THEN_PAY`.
+- Used for both **exact-price orders** and approved **review orders**. Exact-price
+  bookings redirect directly to the Draft Order checkout; review orders receive the
+  same checkout only after ops approves the price.
 
 ### Target
 
@@ -95,8 +96,13 @@ Retire Path A. The webhook handler already recovers the token from both paths, s
 the migration is incremental. See `PAYMENT_MODES.md` for the mode definitions and
 `STATUS_MODEL.md` for the lifecycle.
 
-> Migration to Draft-Order-only is **a separate PR** (the "Funnel → Draft Order
-> payment" PR). Do not start it from this doc.
+The customer must complete Shopify checkout before receiving tracking access. The
+booking response exposes the invoice URL but not the tracking token. Only the signed
+Shopify `orders/paid` webhook marks the Worker order paid and sends the tracking link;
+the tracking API also rejects unpaid orders as defense in depth.
+
+> The Draft-Order-only funnel is implemented. Do not reintroduce the legacy
+> cart/variant path.
 
 ---
 

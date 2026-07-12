@@ -1164,13 +1164,23 @@ form.addEventListener("submit", async (e) => {
       if (data && data.error && data.error.startsWith("missing")) return showError("חסר שדה חובה: " + data.error.replace("missing ", ""));
       return showError("שגיאה בשליחת ההזמנה. נא לנסות שוב או לפנות אלינו.");
     }
+    // Exact-price orders continue directly to Shopify's secure checkout. Tracking is
+    // intentionally unavailable until the signed paid webhook confirms the payment.
+    if (data.payment_url) {
+      window.location.assign(data.payment_url);
+      return;
+    }
     const q = new URLSearchParams({
-      token: data.token || "",
-      tracking_url: data.tracking_url || "",
-      payment_url: data.payment_url || "",
+      order_id: data.order_id != null ? String(data.order_id) : "",
       price: data.price != null ? String(data.price) : "",
       review: data.review ? "1" : "0"
     });
+    // Local, double-gated test mode is already paid and may exercise tracking directly.
+    if (data.test && data.token) {
+      q.set("test", "1");
+      q.set("token", data.token);
+      if (data.tracking_url) q.set("tracking_url", data.tracking_url);
+    }
     // Coupon snapshot → success page shows the discount breakdown (only when applied)
     if (data.discount_code && Number(data.discount_amount) > 0) {
       q.set("discount_code", data.discount_code);

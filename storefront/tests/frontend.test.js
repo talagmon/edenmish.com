@@ -255,6 +255,26 @@ describe('Frontend: Booking form', () => {
     assertContains(html, '"invalid_coupon"', 'invalid_coupon error string');
     assertContains(html, 'showCouponError', 'showCouponError handler');
   });
+
+  test('Redirects exact-price orders to checkout before exposing tracking', () => {
+    assertContains(html, 'if (data.payment_url)', 'payment redirect guard');
+    assertContains(html, 'window.location.assign(data.payment_url)', 'direct Shopify checkout redirect');
+    assert.ok(!html.includes('payment_url: data.payment_url'), 'payment URL must not be copied into the success-page query');
+    assertContains(html, 'if (data.test && data.token)', 'paid local test-mode exception');
+  });
+});
+
+describe('Frontend: Post-booking confirmation', () => {
+  const html = readPage('success.html');
+
+  test('Keeps tracking hidden until payment, except in paid local test mode', () => {
+    assertContains(html, 'id="reference-card"', 'request reference card');
+    assertContains(html, 'id="track-cta"', 'tracking CTA');
+    assertContains(html, 'const paidTestMode = params.get("test") === "1" && !!token', 'paid test-mode gate');
+    assertContains(html, 'if (paidTestMode)', 'tracking display gate');
+    assert.ok(!html.includes('params.get("payment_url")'), 'success page must not offer prepayment tracking/payment choices');
+    assertContains(html, 'קישור המעקב יישלח לאחר אישור התשלום', 'post-payment tracking copy');
+  });
 });
 
 describe('Frontend: Tracking page', () => {
@@ -266,6 +286,7 @@ describe('Frontend: Tracking page', () => {
 
   test('Has magic-link (no forced OTP for active orders)', () => {
     assertContains(html, 'otp_pending', 'OTP check');
+    assertContains(html, 'r.status === 402', 'unpaid tracking guard');
   });
 
   test('Has PoD display (delivered photo)', () => {
