@@ -367,6 +367,18 @@ npx wrangler d1 execute edenmish-staging --remote \
   --config wrangler.staging.generated.toml --file=./schema.sql
 ```
 
+For an existing staging database, apply new numbered migrations manually before
+deploying Worker code that depends on them. For migration 011:
+
+```bash
+npx wrangler d1 execute edenmish-staging --remote \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/011_cancellation_requests.sql
+```
+
+The GitHub deployment token intentionally does not run D1 migrations; use an
+authorized operator session and verify the migration before triggering the workflow.
+
 Then create the GitHub `staging` environment and add:
 
 - variable: `STAGING_D1_DATABASE_ID`
