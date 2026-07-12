@@ -69,6 +69,14 @@ function trackingRefreshPolicy() {
   return context.__policy;
 }
 
+function trackingEtaHelpers() {
+  const html = readPage('track.html');
+  const source = html.split('// ---- ETA helpers ----')[1].split('// ---- Live Google Map')[0];
+  const context = {};
+  runInNewContext(`${source}\nglobalThis.__eta = { routeDestination, etaCopy, routeRefreshDue };`, context);
+  return context.__eta;
+}
+
 function opsQueueHelpers() {
   const html = readPage('dash.html');
   const source = html.split('// ---- Ops queue helpers ----')[1].split('async function refresh()')[0];
@@ -250,6 +258,31 @@ describe('Frontend: Tracking page', () => {
     assertContains(html, 'if(nextToken !== token) stopTrackPoll()', 'old token timer cleanup');
     assertContains(html, 's.onerror=()=>{ mapsRequested=false; }', 'Maps script retry guard');
     assert.ok(!html.includes('\nloadMapsForTrack();\n'), 'Maps must not load eagerly during page startup');
+  });
+
+  test('ETA targets pickup before collection and drop-off during delivery', () => {
+    const helpers = trackingEtaHelpers();
+    const order = { pickup_lat: 32.1, pickup_lng: 34.8, dropoff_lat: 32.2, dropoff_lng: 34.9 };
+    assert.deepEqual(helpers.routeDestination({ ...order, status: 'to_pickup' }), { lat: 32.1, lng: 34.8 });
+    assert.deepEqual(helpers.routeDestination({ ...order, status: 'to_dropoff' }), { lat: 32.2, lng: 34.9 });
+    assert.equal(helpers.etaCopy('to_pickup', '12 דקות'), 'זמן משוער להגעה לאיסוף: 12 דקות');
+    assert.equal(helpers.etaCopy('to_dropoff', '8 דקות'), 'זמן משוער להגעה למסירה: 8 דקות');
+    assert.equal(helpers.etaCopy('picked_up', '8 דקות'), '');
+  });
+
+  test('ETA route refresh is throttled for one minute but refreshes on leg changes', () => {
+    const helpers = trackingEtaHelpers();
+    const now = 100000;
+    assert.equal(helpers.routeRefreshDue('to_pickup', now, 'to_pickup', now - 59000), false);
+    assert.equal(helpers.routeRefreshDue('to_pickup', now, 'to_pickup', now - 60000), true);
+    assert.equal(helpers.routeRefreshDue('to_dropoff', now, 'to_pickup', now - 1000), true);
+  });
+
+  test('renders ETA as a polite Hebrew live status overlay', () => {
+    assertContains(html, 'id="eta-hint"');
+    assertContains(html, 'id="map-status"');
+    assertContains(html, 'aria-live="polite"');
+    assertContains(html, 'duration_in_traffic||leg.duration');
   });
 
   test('OTP cells expose numeric and one-time-code input semantics', () => {
