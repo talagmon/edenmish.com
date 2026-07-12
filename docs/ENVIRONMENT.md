@@ -73,6 +73,24 @@ credentials into the staging Worker. See `CI_CD.md` for one-time setup.
 
 ---
 
+## Cloudflare Pages secrets (canonical storefront)
+
+| Secret | Purpose | Required Google services |
+|---|---|---|
+| `MAPS_KEY` | Returned by the server-side `/maps-key` function for booking address autocomplete and customer maps | Maps JavaScript API and **Places API (New)** |
+
+The canonical booking page uses `PlaceAutocompleteElement`, `gmp-select`, and
+`Place.fetchFields()`. Enable Places API (New) in the same Google Cloud project
+before releasing the migration, and restrict the browser key to the EdenMish
+production, staging, and approved preview origins. If the new Places library
+cannot initialize, the form keeps both plain address inputs visible; no key or
+configuration value is embedded in git.
+
+Google references: [Autocomplete migration guide](https://developers.google.com/maps/documentation/javascript/legacy/places-migration-autocomplete)
+and [Place Autocomplete Widget](https://developers.google.com/maps/documentation/javascript/place-autocomplete-new).
+
+---
+
 ## Shopify theme settings (admin → Themes → Customize → "EdenMish Funnel")
 
 These live in the Shopify admin (stored in `templates/index.json` settings), **not**

@@ -150,9 +150,24 @@ describe('Frontend: Booking form', () => {
     assertContains(html, 'EdenMish אינה שומרת פרטי כרטיס אשראי', 'accurate hosted-payment disclosure');
   });
 
-  test('Has Maps key loader', () => {
+  test('Uses Places API (New) with a plain-input fallback', () => {
     assertContains(html, '/maps-key', 'maps-key endpoint');
     assertContains(html, '__initAutocomplete', 'autocomplete callback');
+    assertContains(html, 'id="f-pickup-places" hidden', 'pickup widget mount');
+    assertContains(html, 'id="f-dropoff-places" hidden', 'dropoff widget mount');
+    assertContains(html, 'name="pickup_address"', 'pickup submission mirror');
+    assertContains(html, 'name="dropoff_address"', 'dropoff submission mirror');
+    assertContains(html, 'google.maps.importLibrary("places")', 'dynamic Places library import');
+    assertContains(html, 'PlaceAutocompleteElement', 'new autocomplete element');
+    assertContains(html, '"gmp-select"', 'new place-selection event');
+    assertContains(html, 'placePrediction.toPlace()', 'new Place conversion');
+    assertContains(html, 'place.fetchFields({fields:["formattedAddress","location","addressComponents"]})', 'minimal Place fields');
+    assertContains(html, 'includedRegionCodes=["il"]', 'Israel restriction');
+    assertContains(html, 'locationRestriction=bounds', 'Gush-Dan bounds restriction');
+    assertContains(html, 'placesAutocompleteReady=true', 'successful all-widget activation');
+    assertContains(html, 'using plain address fields', 'graceful fallback');
+    assert.ok(!html.includes('new google.maps.places.Autocomplete'), 'canonical booking must not instantiate the legacy widget');
+    assert.ok(!html.includes('place_changed'), 'canonical booking must not use the legacy selection event');
   });
 
   test('Has area gate (Gush-Dan bounds)', () => {
