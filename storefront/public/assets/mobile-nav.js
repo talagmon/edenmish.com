@@ -26,7 +26,7 @@
   panel.addEventListener('click', function (e) { if (e.target.closest('a')) panel.classList.add('hidden'); });
 })();
 
-// Footer: wire policy links to the legal pages + add the עוסק פטור / final-price line.
+// Footer: wire policy links to the legal pages + add missing legal links and business details.
 (function () {
   var footer = document.querySelector('footer');
   if (!footer) return;
@@ -35,12 +35,27 @@
     if (t === 'אודותינו' || t === 'צור קשר') a.setAttribute('href', '/about.html');
     else if (t === 'תקנון' || t === 'תקנון ותנאי שימוש' || t === 'תנאי שימוש') a.setAttribute('href', '/terms.html');
     else if (t === 'מדיניות פרטיות') a.setAttribute('href', '/privacy.html');
+    else if (t === 'נגישות' || t === 'הצהרת נגישות') a.setAttribute('href', '/accessibility.html');
   });
   var links = footer.querySelectorAll('a');
   var hasRefund = Array.prototype.some.call(links, function (a) { return (a.textContent || '').trim() === 'מדיניות ביטול'; });
   if (!hasRefund) {
     var privacy = Array.prototype.find.call(links, function (a) { return (a.textContent || '').trim() === 'מדיניות פרטיות'; });
     if (privacy) { var r = privacy.cloneNode(true); r.textContent = 'מדיניות ביטול'; r.setAttribute('href', '/refund.html'); privacy.parentNode.insertBefore(r, privacy.nextSibling); }
+  }
+  var linksAfterCancellationPolicy = footer.querySelectorAll('a');
+  var hasCancellationForm = Array.prototype.some.call(linksAfterCancellationPolicy, function (a) { return (a.textContent || '').trim() === 'ביטול עסקה'; });
+  if (!hasCancellationForm) {
+    var refundPolicy = Array.prototype.find.call(linksAfterCancellationPolicy, function (a) { return (a.textContent || '').trim() === 'מדיניות ביטול'; });
+    if (refundPolicy) { var cancellation = refundPolicy.cloneNode(true); cancellation.textContent = 'ביטול עסקה'; cancellation.setAttribute('href', '/cancel.html'); refundPolicy.parentNode.insertBefore(cancellation, refundPolicy.nextSibling); }
+  }
+  var linksAfterRefund = footer.querySelectorAll('a');
+  var hasAccessibility = Array.prototype.some.call(linksAfterRefund, function (a) { return (a.textContent || '').trim() === 'נגישות'; });
+  if (!hasAccessibility) {
+    var refund = Array.prototype.find.call(linksAfterRefund, function (a) { return (a.textContent || '').trim() === 'מדיניות ביטול'; });
+    var privacyForAccessibility = Array.prototype.find.call(linksAfterRefund, function (a) { return (a.textContent || '').trim() === 'מדיניות פרטיות'; });
+    var anchor = refund || privacyForAccessibility;
+    if (anchor) { var accessibility = anchor.cloneNode(true); accessibility.textContent = 'נגישות'; accessibility.setAttribute('href', '/accessibility.html'); anchor.parentNode.insertBefore(accessibility, anchor.nextSibling); }
   }
   if (!/עוסק פטור/.test(footer.textContent)) {
     var line = document.createElement('p');

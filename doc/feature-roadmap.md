@@ -39,7 +39,7 @@
 - **Terms of Service + Refund/Cancellation policy** — required for a service (lost/damaged package liability, cancellation cutoff, refunds). Israeli consumer law.
 - **Privacy policy page** — publish at `Settings → Policies` (text is ready in `doc/policies/`).
 - **PayPlus (payment provider)** — still pending; checkout can't take money yet.
-- **Invoicing / receipts** — as עוסק פטור you must issue a receipt (קבלה/חשבונית מסירה) per delivery. PayPlus can, or an invoicing app (iCount / "חשבית ירוקה" / Winkeeper).
+- **Invoicing / receipts** — as עוסק פטור, issue a receipt or transaction invoice and receipt (קבלה / חשבונית עסקה וקבלה), as applicable. PayPlus or an invoicing app can provide this.
 
 ### Operational
 - **WhatsApp Business** (not personal) for the booking number → away message, quick replies, labels; later **WhatsApp Cloud API** for automated tracking messages.

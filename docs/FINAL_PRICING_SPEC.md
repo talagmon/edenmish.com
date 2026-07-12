@@ -59,7 +59,8 @@ function calculatePrice({ pickupZone, dropoffZone, size, urgency, timestamp }) {
 As a solo courier operation, the system must protect your time:
 1. **Zone 3 Flash Removal:** To prevent impossible 90-minute promises across Gush Dan traffic.
 2. **Zone 3 Standard Pricing:** Increased to ₪115 to reflect the high opportunity cost of the round trip.
-3. **Capacity Caps (Future):** The Worker should reject/delay `Standard` orders if the "Active Order Count" exceeds your capacity (e.g., > 5 open jobs).
+3. **Same-day Eco cutoff:** Eco requires three hours' notice, accepts same-day orders through 09:00 Israel time, picks up by 13:00, and delivers by the end of that day. At 09:00 the final pickup window is 12:00–13:00; after 09:00 no same-day Eco window is offered.
+4. **Capacity Caps (Future):** The Worker should reject/delay `Standard` orders if the "Active Order Count" exceeds your capacity (e.g., > 5 open jobs).
 
 ---
 

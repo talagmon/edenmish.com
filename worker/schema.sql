@@ -107,6 +107,22 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_status ON notifications(status, id DESC);
 
+-- Online cancellation notices. The full identity number is deliberately not
+-- persisted; only its last four digits are retained for request correlation.
+CREATE TABLE IF NOT EXISTS cancellation_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_number TEXT NOT NULL,
+  customer_name TEXT NOT NULL,
+  identity_last4 TEXT NOT NULL,
+  email TEXT,
+  phone TEXT,
+  reason TEXT,
+  status TEXT NOT NULL DEFAULT 'received',
+  created_at INTEGER NOT NULL,
+  processed_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_cancellation_requests_status ON cancellation_requests(status, created_at DESC);
+
 -- Coupons (008). Synced snapshot of Shopify discount codes. Shopify Admin is where
 -- codes are created/edited; this table caches the definition the Worker validates against.
 CREATE TABLE IF NOT EXISTS coupons (
