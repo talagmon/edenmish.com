@@ -69,6 +69,16 @@ function trackingRefreshPolicy() {
   return context.__policy;
 }
 
+function opsQueueHelpers() {
+  const html = readPage('dash.html');
+  const source = html.split('// ---- Ops queue helpers ----')[1].split('async function refresh()')[0];
+  const activeMatch = html.match(/var ACTIVE = (\[[^;]+\]);/);
+  assert.ok(activeMatch, 'canonical ops ACTIVE statuses missing');
+  const context = { ACTIVE: JSON.parse(activeMatch[1]), deliveryDeadline: o => o.deadline || null };
+  runInNewContext(`${source}\nglobalThis.__ops = { israelDateKey, isActiveOrder, dailyOpsSummary, scheduleSortKey, compareQueueOrders };`, context);
+  return context.__ops;
+}
+
 describe('Frontend: Pages exist', () => {
   for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'success.html', 'error.html', 'terms.html', 'privacy.html', 'refund.html', 'accessibility.html', 'cancel.html']) {
     test(`${page} exists`, () => {
@@ -348,6 +358,54 @@ describe('Frontend: Security and accessibility hardening', () => {
     assertContains(html, 'function toggleGps(id)');
     assert.ok(!html.includes('if(isLive && watchId===null) startWatch(o.id)'), 'detail rendering must not request location');
     assert.ok(!html.includes('if(st==="to_pickup"||st==="to_dropoff")startWatch(id)'), 'status changes must not request location');
+  });
+});
+
+describe('Frontend: Ops daily summary and queue ordering', () => {
+  test('uses Israel calendar days for delivered count and revenue', () => {
+    const helpers = opsQueueHelpers();
+    const now = Date.parse('2026-07-12T12:00:00Z');
+    assert.equal(helpers.israelDateKey(Date.parse('2026-07-11T22:30:00Z')), '2026-07-12');
+    const summary = helpers.dailyOpsSummary([
+      { status: 'delivered', delivered_at: Date.parse('2026-07-11T22:30:00Z'), price: 50 },
+      { status: 'delivered', delivered_at: Date.parse('2026-07-12T08:00:00Z'), price: '70' },
+      { status: 'delivered', delivered_at: Date.parse('2026-07-11T18:00:00Z'), price: 999 },
+    ], now);
+    assert.equal(summary.delivered, 2);
+    assert.equal(summary.revenue, 120);
+  });
+
+  test('counts only unpaid priced/payment-link orders older than one hour as stale', () => {
+    const helpers = opsQueueHelpers();
+    const now = Date.parse('2026-07-12T12:00:00Z');
+    const summary = helpers.dailyOpsSummary([
+      { status: 'priced', payment_status: 'none', created_at: now - 61 * 60 * 1000 },
+      { status: 'payment_sent', payment_status: 'link_sent', created_at: now - 2 * 60 * 60 * 1000 },
+      { status: 'payment_sent', payment_status: 'paid', created_at: now - 2 * 60 * 60 * 1000 },
+      { status: 'payment_sent', payment_status: 'link_sent', created_at: now - 59 * 60 * 1000 },
+      { status: 'received', payment_status: 'none', created_at: now - 2 * 60 * 60 * 1000 },
+    ], now);
+    assert.equal(summary.stalePayment, 2);
+  });
+
+  test('active queue includes picked-up orders and sorts urgent then scheduled windows', () => {
+    const helpers = opsQueueHelpers();
+    assert.equal(helpers.isActiveOrder({ status: 'picked_up' }), true);
+    const orders = [
+      { id: 4, status: 'paid', when_date: null, when_hour: null, created_at: 4 },
+      { id: 3, status: 'paid', when_date: '2026-07-12', when_hour: 12, created_at: 3 },
+      { id: 2, status: 'picked_up', when_date: '2026-07-12', when_hour: 10, created_at: 2 },
+      { id: 1, status: 'to_pickup', urgent: 1, when_date: '2026-07-12', when_hour: 18, created_at: 1 },
+    ];
+    const sorted = orders.slice().sort((a, b) => helpers.compareQueueOrders(a, b, true));
+    assert.deepEqual(sorted.map(o => o.id), [1, 2, 3, 4]);
+  });
+
+  test('renders the Hebrew daily summary strip in the canonical dashboard', () => {
+    const html = readPage('dash.html');
+    assertContains(html, 'מסירות היום');
+    assertContains(html, 'הכנסה היום');
+    assertContains(html, 'ממתינות מעל שעה');
   });
 });
 
