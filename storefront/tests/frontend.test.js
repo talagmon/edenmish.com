@@ -61,6 +61,14 @@ function trackingOtpHarness(response = { verified: true }) {
   };
 }
 
+function trackingRefreshPolicy() {
+  const html = readPage('track.html');
+  const source = html.split('// ---- Tracking refresh policy ----')[1].split('async function loadOrder()')[0];
+  const context = {};
+  runInNewContext(`${source}\nglobalThis.__policy = { isLiveTrackStatus, isTerminalTrackStatus, pollDelayForStatus };`, context);
+  return context.__policy;
+}
+
 describe('Frontend: Pages exist', () => {
   for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'success.html', 'error.html', 'terms.html', 'privacy.html', 'refund.html', 'accessibility.html', 'cancel.html']) {
     test(`${page} exists`, () => {
@@ -208,6 +216,30 @@ describe('Frontend: Tracking page', () => {
     assertContains(html, 'eco: "חסכוני"');
     assertContains(html, 'standard: "רגיל"');
     assertContains(html, 'flash: "מהיר"');
+  });
+
+  test('tracking refresh is fast only for live GPS and stops on terminal states', () => {
+    const policy = trackingRefreshPolicy();
+    assert.equal(policy.pollDelayForStatus('to_pickup'), 5000);
+    assert.equal(policy.pollDelayForStatus('to_dropoff'), 5000);
+    assert.equal(policy.pollDelayForStatus('paid'), 30000);
+    assert.equal(policy.pollDelayForStatus('picked_up'), 30000);
+    assert.equal(policy.isTerminalTrackStatus('delivered'), true);
+    assert.equal(policy.isTerminalTrackStatus('failed'), true);
+    assert.equal(policy.isTerminalTrackStatus('cancelled'), true);
+    assert.equal(policy.isTerminalTrackStatus('refund_pending'), false);
+  });
+
+  test('tracking distinguishes missing orders, retries transient failures, and lazy-loads Maps', () => {
+    assertContains(html, 'r.status === 404', 'initial not-found handling');
+    assertContains(html, 'r.status===404', 'poll not-found handling');
+    assertContains(html, 'לא נמצא משלוח עם מספר המעקב הזה.', 'not-found copy');
+    assertContains(html, 'לא הצלחנו לעדכן כרגע. ננסה שוב אוטומטית.', 'transient retry copy');
+    assertContains(html, 'scheduleTrackPoll(lastStatus)', 'transient retry scheduling');
+    assertContains(html, 'if(needsMap && !mapsReady) loadMapsForTrack()', 'lazy Maps loader');
+    assertContains(html, 'if(nextToken !== token) stopTrackPoll()', 'old token timer cleanup');
+    assertContains(html, 's.onerror=()=>{ mapsRequested=false; }', 'Maps script retry guard');
+    assert.ok(!html.includes('\nloadMapsForTrack();\n'), 'Maps must not load eagerly during page startup');
   });
 
   test('OTP cells expose numeric and one-time-code input semantics', () => {

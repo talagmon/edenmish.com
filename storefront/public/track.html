@@ -195,34 +195,46 @@ const show = (v) => ["entry","otp","track"].forEach(x => $(`view-${x}`).classLis
 
 let token = "";
 
-function setToken(t){ token = String(t||"").trim().toLowerCase(); const u = new URL(location.href); if(token){ u.searchParams.set("t", token); } else { u.searchParams.delete("t"); } history.replaceState(null,"",u); }
+function setToken(t){ const nextToken = String(t||"").trim().toLowerCase(); if(nextToken !== token) stopTrackPoll(); token = nextToken; const u = new URL(location.href); if(token){ u.searchParams.set("t", token); } else { u.searchParams.delete("t"); } history.replaceState(null,"",u); }
 
 function entryError(msg){ const e = $("entry-msg"); if(!msg){ e.classList.add("hidden"); e.textContent=""; return; } e.textContent = msg; e.classList.remove("hidden"); }
 
 function showToast(msg){ const t=$("toast"); if(!t) return; t.textContent=msg; t.style.opacity="1"; clearTimeout(t._h); t._h=setTimeout(()=>{ t.style.opacity="0"; }, 2200); }
+
+// ---- Tracking refresh policy ----
+const LIVE_TRACK_STATUSES = ["to_pickup", "to_dropoff"];
+const TERMINAL_TRACK_STATUSES = ["delivered", "failed", "cancelled"];
+const LIVE_POLL_MS = 5000;
+const IDLE_POLL_MS = 30000;
+function isLiveTrackStatus(status){ return LIVE_TRACK_STATUSES.includes(status); }
+function isTerminalTrackStatus(status){ return TERMINAL_TRACK_STATUSES.includes(status); }
+function pollDelayForStatus(status){ return isLiveTrackStatus(status) ? LIVE_POLL_MS : IDLE_POLL_MS; }
 
 async function loadOrder(){
   if(!token){ show("entry"); return; }
   showToast("מתחבר למערכת המעקב של עדן…");
   try {
     const r = await fetch(API + "/api/orders/" + encodeURIComponent(token));
-    if(r.status === 404){ location.href = "/error.html?t=" + encodeURIComponent(token); return; }
+    if(r.status === 404){ show("entry"); entryError("לא נמצא משלוח עם מספר המעקב הזה."); return; }
     if(!r.ok){ show("entry"); entryError("לא ניתן לטעון את המשלוח כעת. נסו שוב."); return; }
     const d = await r.json();
+    entryError("");
     if(d.otp_pending){ show("otp"); focusOtp(); }
     else { renderTrack(d); }
   } catch(e){ show("entry"); entryError("בעיית תקשורת. בדקו את החיבור ונסו שוב."); }
 }
 
 // ---- Live Google Map (loaded via /maps-key) ----
-let gMap=null, gMarker=null, gDestMarker=null, gTrailLine=null, gDirRenderer=null, gPickupMarker=null, gPoll=null, lastStatus=null;
+let gMap=null, gMarker=null, gDestMarker=null, gTrailLine=null, gDirRenderer=null, gPickupMarker=null, gPoll=null, lastStatus=null, mapsRequested=false;
 function loadMapsForTrack(){
+  if(mapsRequested || (window.google && google.maps)) return;
+  mapsRequested=true;
   fetch("/maps-key").then(r=>r.json()).then(d=>{
     const key=d&&d.key; if(!key) return;
     const s=document.createElement("script");
     s.src="https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(key)+"&language=iw&region=il&callback=__trackMapReady";
-    s.async=true; document.head.appendChild(s);
-  }).catch(()=>{});
+    s.async=true; s.onerror=()=>{ mapsRequested=false; }; document.head.appendChild(s);
+  }).catch(()=>{ mapsRequested=false; });
 }
 window.__trackMapReady = function(){
   if(window.__lastTrack){ const o=__lastTrack.order||{}; renderMap(["to_pickup","to_dropoff"].includes(o.status), __lastTrack.gps||null, o, __lastTrack.gpsTrail||null); }
@@ -230,7 +242,10 @@ window.__trackMapReady = function(){
 function renderMap(live, gps, order, trail){
   const ph=$("map-placeholder"), mapEl=$("map");
   const hasGps = gps && gps.lat != null;
-  const showMap = (live || lastStatus === "delivered") && hasGps && window.google && google.maps && mapEl;
+  const needsMap = (live || lastStatus === "delivered") && hasGps && mapEl;
+  const mapsReady = window.google && google.maps;
+  if(needsMap && !mapsReady) loadMapsForTrack();
+  const showMap = needsMap && mapsReady;
   if(showMap){
     const pos={ lat:Number(gps.lat), lng:Number(gps.lng) };
     if(!gMap){
@@ -271,24 +286,29 @@ function renderMap(live, gps, order, trail){
     if(mapEl) mapEl.classList.add("hidden"); if(ph) ph.classList.remove("hidden");
   }
 }
-function startLivePoll(){
-  if(gPoll || document.hidden) return;
-  gPoll=setInterval(async ()=>{
-    try{
-      const r=await fetch(API+"/api/orders/"+encodeURIComponent(token));
-      if(!r.ok) return;
-      const d=await r.json();
-      if(d.otp_pending) return;
-      window.__lastTrack=d;
-      const o=d.order||{};
-      if(o.status!==lastStatus){ renderTrack(d); }
-      else { renderMap(["to_pickup","to_dropoff"].includes(o.status), d.gps||null, d.order||{}, d.gpsTrail||null); }
-    }catch(e){}
-  }, 5000);
+function stopTrackPoll(){ if(gPoll){ clearTimeout(gPoll); gPoll=null; } }
+function scheduleTrackPoll(status){
+  stopTrackPoll();
+  if(!token || document.hidden || isTerminalTrackStatus(status)) return;
+  gPoll=setTimeout(pollTrack, pollDelayForStatus(status));
 }
-function stopLivePoll(){ if(gPoll){ clearInterval(gPoll); gPoll=null; } }
-document.addEventListener("visibilitychange", function(){ if(document.hidden) stopLivePoll(); else if(token) startLivePoll(); });
-loadMapsForTrack();
+async function pollTrack(){
+  gPoll=null;
+  if(!token || document.hidden || isTerminalTrackStatus(lastStatus)) return;
+  try{
+    const r=await fetch(API+"/api/orders/"+encodeURIComponent(token));
+    if(r.status===404){ stopTrackPoll(); show("entry"); entryError("לא נמצא משלוח עם מספר המעקב הזה."); return; }
+    if(!r.ok){ showToast("לא הצלחנו לעדכן כרגע. ננסה שוב אוטומטית."); scheduleTrackPoll(lastStatus); return; }
+    const d=await r.json();
+    if(d.otp_pending){ stopTrackPoll(); show("otp"); focusOtp(); return; }
+    window.__lastTrack=d;
+    const o=d.order||{};
+    if(o.status!==lastStatus){ renderTrack(d); return; }
+    renderMap(isLiveTrackStatus(o.status), d.gps||null, o, d.gpsTrail||null);
+    scheduleTrackPoll(o.status);
+  }catch(e){ showToast("בעיית תקשורת. ננסה שוב אוטומטית."); scheduleTrackPoll(lastStatus); }
+}
+document.addEventListener("visibilitychange", function(){ if(document.hidden) stopTrackPoll(); else if(token) scheduleTrackPoll(lastStatus); });
 
 function renderTrack(d){
   const o = d.order || {};
@@ -334,12 +354,12 @@ function renderTrack(d){
   }
 
   // Live badge + live map (no external redirect — map renders in-page)
-  const live = ["to_pickup","to_dropoff"].includes(cur);
+  const live = isLiveTrackStatus(cur);
   $("live-badge").classList.toggle("hidden", !live);
   lastStatus = cur;
   window.__lastTrack = d;
   renderMap(live, gps, o, (d.gpsTrail||[]));
-  startLivePoll();
+  scheduleTrackPoll(cur);
 
   // Details
   $("details").innerHTML = "";
