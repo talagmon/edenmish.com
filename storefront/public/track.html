@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="/assets/styles.css"/>
+<script src="/assets/analytics.js" defer></script>
 <link rel="icon" href="/assets/favicon.ico"/>
 <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"/>
 <meta name="theme-color" content="#8B5CF6"/>
@@ -197,8 +198,9 @@ const $ = (id) => document.getElementById(id);
 const show = (v) => ["entry","otp","track"].forEach(x => $(`view-${x}`).classList.toggle("hidden", x !== v));
 
 let token = "";
+let trackingAnalyticsSent = false;
 
-function setToken(t){ const nextToken = String(t||"").trim().toLowerCase(); if(nextToken !== token) stopTrackPoll(); token = nextToken; const u = new URL(location.href); if(token){ u.searchParams.set("t", token); } else { u.searchParams.delete("t"); } history.replaceState(null,"",u); }
+function setToken(t){ const nextToken = String(t||"").trim().toLowerCase(); if(nextToken !== token) stopTrackPoll(); if(nextToken !== token) trackingAnalyticsSent=false; token = nextToken; const u = new URL(location.href); if(token){ u.searchParams.set("t", token); } else { u.searchParams.delete("t"); } history.replaceState(null,"",u); }
 
 function entryError(msg){ const e = $("entry-msg"); if(!msg){ e.classList.add("hidden"); e.textContent=""; return; } e.textContent = msg; e.classList.remove("hidden"); }
 
@@ -490,6 +492,9 @@ function renderTrack(d){
   }
 
   show("track");
+  if(!trackingAnalyticsSent && window.edenAnalytics){
+    trackingAnalyticsSent=window.edenAnalytics.track("tracking_opened", { source: "tracking_page" });
+  }
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 

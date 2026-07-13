@@ -12,6 +12,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="/assets/styles.css"/>
+<script src="/assets/analytics.js" defer></script>
 <link rel="icon" href="/assets/favicon.ico"/>
 <meta name="theme-color" content="#8B5CF6"/>
 </head>
@@ -131,6 +132,7 @@ cancelForm.addEventListener('submit', async function (event) {
     }
     cancelSuccess.innerHTML = '<b>הודעת הביטול התקבלה.</b><br>מספר אסמכתא: ' + String(data.reference) + '. שמרו מספר זה. ניצור קשר לאחר בדיקת הבקשה.';
     cancelSuccess.hidden = false;
+    if (window.edenAnalytics) window.edenAnalytics.track('cancellation_submitted', { source: 'cancellation_form' });
     cancelForm.reset();
   } catch (error) {
     cancelError.textContent = error.message;
