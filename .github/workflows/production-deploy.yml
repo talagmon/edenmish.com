@@ -107,7 +107,9 @@ jobs:
       - name: Push unpublished theme
         if: ${{ inputs.deploy_theme }}
         run: |
+          # Name the preview theme so Shopify CLI never prompts in CI.
           shopify theme push --path theme --unpublished \
+            --theme "Production preview" \
             --store "${{ secrets.SHOPIFY_STORE }}" \
             --password "${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}"
           echo "✅ Theme pushed as unpublished preview"
