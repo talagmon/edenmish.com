@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+
+Disallow: /dash
+Disallow: /dash.html
+Disallow: /delivered
+Disallow: /delivered.html
+Disallow: /error
+Disallow: /error.html
+Disallow: /success
+Disallow: /success.html
+
+Sitemap: https://edenmish.com/sitemap.xml
