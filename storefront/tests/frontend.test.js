@@ -95,6 +95,33 @@ describe('Frontend: Pages exist', () => {
   }
 });
 
+describe('Frontend: SEO foundations', () => {
+  test('Publishes crawler directives and a focused sitemap', () => {
+    const robots = readPage('robots.txt');
+    const sitemap = readPage('sitemap.xml');
+    assertContains(robots, 'Sitemap: https://edenmish.com/sitemap.xml', 'sitemap directive');
+    assertContains(robots, 'Disallow: /dash', 'ops dashboard exclusion');
+    assertContains(sitemap, '<loc>https://edenmish.com/</loc>', 'homepage sitemap entry');
+    assertContains(sitemap, '<loc>https://edenmish.com/booking.html</loc>', 'booking sitemap entry');
+    assert.ok(!sitemap.includes('/dash'), 'ops dashboard must not be listed in the sitemap');
+    assert.ok(!sitemap.includes('/success'), 'transaction result pages must not be listed in the sitemap');
+  });
+
+  test('Homepage exposes valid LocalBusiness structured data', () => {
+    const html = readPage('index.html');
+    const match = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+    assert.ok(match, 'LocalBusiness JSON-LD missing from homepage');
+    const schema = JSON.parse(match[1]);
+    assert.equal(schema['@context'], 'https://schema.org');
+    assert.equal(schema['@type'], 'LocalBusiness');
+    assert.equal(schema['@id'], 'https://edenmish.com/#business');
+    assert.equal(schema.address.streetAddress, 'קריניצי 111');
+    assert.equal(schema.address.addressLocality, 'רמת גן');
+    assert.equal(schema.address.addressCountry, 'IL');
+    assert.equal(schema.makesOffer.itemOffered['@type'], 'Service');
+  });
+});
+
 describe('Frontend: RTL + accessible viewport', () => {
   for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'success.html', 'error.html', 'accessibility.html', 'cancel.html']) {
     test(`${page} is RTL Hebrew and allows browser zoom`, () => {
