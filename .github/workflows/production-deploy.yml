@@ -120,7 +120,7 @@ jobs:
           echo "::warning::Publishing theme LIVE. This cannot be undone from this workflow."
           # Merchant settings in the live theme editor are production data. Keep
           # preview pushes complete, but never overwrite those files on a live push.
-          shopify theme push --path theme --live \
+          shopify theme push --path theme --live --allow-live \
             --ignore "config/settings_data.json" \
             --ignore "templates/*.json" \
             --store "${{ secrets.SHOPIFY_STORE }}" \
