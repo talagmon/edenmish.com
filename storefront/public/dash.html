@@ -24,7 +24,7 @@ var LIVE = ["to_pickup","to_dropoff"];
 var ACTIVE = ["paid","to_pickup","picked_up","to_dropoff"];
 var NEXT = {paid:"to_pickup",to_pickup:"picked_up",picked_up:"to_dropoff"};
 var NEXTLBL = {paid:"אשר יציאה לאיסוף",to_pickup:"אשר איסוף ✓",picked_up:"אשר יציאה למסירה"};
-var orders = [], coupons = [], activeOrder = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, gpsOrderId = null, gpsState = "idle", activeFilter = "active", currentView = "queue";
+var orders = [], coupons = [], webhookHealth = null, activeOrder = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, gpsOrderId = null, gpsState = "idle", activeFilter = "active", currentView = "queue";
 
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
 function fmt(t){return t?new Date(t).toLocaleString("he-IL",{timeZone:"Asia/Jerusalem",hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"}):"—";}
@@ -118,7 +118,9 @@ async function refresh(){
   try{r = await api("/api/ops/orders");}catch(e){return connectionErrorView();}
   if(r.status===401) return loginView();
   if(!r.ok) return showTransientError("לא ניתן לרענן כרגע. בדקו את החיבור ונסו שוב.");
-  orders = (await r.json()).orders || [];
+  var payload = await r.json();
+  orders = payload.orders || [];
+  webhookHealth = payload.integrations && payload.integrations.shopify_webhooks || null;
   if(activeOrder){
     var u = orders.find(function(o){return o.id===activeOrder.id;});
     if(u){activeOrder=u;return renderDetail(u);}
@@ -163,6 +165,14 @@ function renderQueue(){
     var dot = (key==="problems"&&count>0) ? '<span class="w-1.5 h-1.5 bg-error rounded-full animate-pulse mr-1"></span>' : '';
     return '<button onclick="setFilter(\''+key+'\')" class="px-3 py-2 rounded-xl font-label-bold text-label-sm whitespace-nowrap transition-all '+bg+' flex items-center gap-1">'+dot+label+' <span class="opacity-60">('+count+')</span></button>';
   }
+  function webhookWarning(){
+    if(!webhookHealth || webhookHealth.ready || ["idle","checking"].includes(webhookHealth.status)) return "";
+    var text = webhookHealth.status==="unconfigured"
+      ? "חיבור Shopify אינו מוגדר במלואו. תשלומים וזיכויים עלולים שלא להסתנכרן."
+      : "לא ניתן לאמת אוטומטית את חיבורי Shopify. בדקו את הגדרות ה‑Webhooks.";
+    return '<div class="glass-card border border-alert-amber/40 bg-alert-amber/10 rounded-xl p-3 flex items-start gap-2 text-alert-amber" role="alert">'+
+      '<span class="material-symbols-outlined shrink-0">warning</span><span class="text-label-sm">'+text+'</span></div>';
+  }
 
   $("app").innerHTML =
     '<div class="sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm">'+
@@ -183,6 +193,7 @@ function renderQueue(){
     tabBtn("all","הכל",counts.all)+tabBtn("inbox","חדשות",counts.inbox)+tabBtn("active","פעילות",counts.active)+tabBtn("done","הושלם",counts.done)+tabBtn("cancelled","בוטלו",counts.cancelled)+tabBtn("problems","תקלות",counts.problems)+
     '</div></div>'+
     '<div class="px-gutter-mobile py-stack-sm max-w-lg mx-auto space-y-3 pb-24">'+
+    webhookWarning()+
     (cards || '<div class="glass-card rounded-2xl p-stack-lg text-center text-on-surface-variant">אין הזמנות בקטטגוריה זו.</div>')+
     '</div>';
   attachSwipeHandlers();

@@ -127,7 +127,8 @@ Non-secret vars live in `wrangler.toml [vars]`: `BRAND`, `BOOKING_URL`,
 Shopify admin → **Settings → Notifications → Webhooks**:
 
 - Ensure these topics point to **`https://find.edenmish.com/webhooks/shopify`** as JSON: `orders/paid`, `orders/updated`, and `refunds/create`.
-- The Worker also checks and creates missing subscriptions through the Shopify Admin API when `SHOPIFY_ADMIN_TOKEN` is configured.
+- The Worker also checks and creates missing subscriptions through the Shopify Admin API when `SHOPIFY_ADMIN_TOKEN` is configured. Failed checks are retried after five minutes and appear as a warning in the authenticated ops dashboard; they no longer mark the Worker as ready or disappear silently.
+- If the dashboard warns that automatic verification is unavailable, confirm all three subscriptions manually in Shopify Admin. Manual subscriptions remain the production fallback when the Admin token cannot manage webhooks.
 - Copy the **Webhook signature key** → `wrangler secret put SHOPIFY_WEBHOOK_SECRET`.
 - The Worker verifies HMAC-SHA256 (`verifyShopifyWebhook`) on every hit before
   trusting the payload. It recovers the tracking token from the line-item

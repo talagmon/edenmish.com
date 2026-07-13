@@ -8,6 +8,7 @@ import { notifyEmail, notifyWhatsApp } from './notify.js';
 import { normalizeIlPhone, scheduleError, validIsraeliId } from './validate.js';
 import { validateCoupon, recordRedemption, listCoupons, createCoupon, updateCoupon, deleteCoupon } from './coupons.js';
 import { getStatusMeta, getNextStatuses, isTerminalStatus } from './status.js';
+import { shopifyWebhookRegistrar } from './shopify-webhooks.js';
 
 const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra } });
 const html = (s) => new Response(s, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -241,37 +242,6 @@ async function isOps(req, env) {
   return await checkSession(env, c);
 }
 
-// Lazy self-registration: ensures Shopify sends payment + refund lifecycle
-// events to this Worker.
-// Idempotent (checks before registering). Runs once per isolate.
-let _whReady = false;
-async function ensureWebhook(env) {
-  if (_whReady || !env.SHOPIFY_ADMIN_TOKEN || !env.SHOPIFY_SHOP) return;
-  _whReady = true;
-  try {
-    const shop = env.SHOPIFY_SHOP;
-    const ver = env.SHOPIFY_API_VERSION || '2024-10';
-    const r = await fetch(`https://${shop}/admin/api/${ver}/webhooks.json`, {
-      headers: { 'X-Shopify-Access-Token': env.SHOPIFY_ADMIN_TOKEN }
-    });
-    const d = await r.json();
-    const topics = ['orders/paid', 'orders/updated', 'refunds/create'];
-    const existing = new Set((d.webhooks || [])
-      .filter((w) => (w.address || '').includes('/webhooks/shopify'))
-      .map((w) => w.topic));
-    for (const topic of topics) {
-      if (existing.has(topic)) continue;
-      const cr = await fetch(`https://${shop}/admin/api/${ver}/webhooks.json`, {
-        method: 'POST',
-        headers: { 'X-Shopify-Access-Token': env.SHOPIFY_ADMIN_TOKEN, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ webhook: { topic, address: 'https://find.edenmish.com/webhooks/shopify', format: 'json' } })
-      });
-      const cd = await cr.json();
-      console.log('webhook_registered', cd.webhook ? { id: cd.webhook.id, topic: cd.webhook.topic, address: cd.webhook.address } : (cd.errors || cd));
-    }
-  } catch (e) { console.log('webhook_check_error', e.message); }
-}
-
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
@@ -293,8 +263,14 @@ export default {
       return json({ ok: true, service: 'edenmish-worker' });
     }
 
-    // Ensure Shopify payment/refund webhooks are registered (once per isolate, never blocks on failure)
-    try { await ensureWebhook(env); } catch (e) {}
+    // Verify Shopify payment/refund subscriptions. Failures are sanitized, logged,
+    // exposed to authenticated ops, and retried after a cooldown.
+    try {
+      await shopifyWebhookRegistrar.ensure(env);
+    } catch {
+      // Registration diagnostics must never block booking, tracking, or ops.
+      console.error('shopify_webhook_registration_unexpected');
+    }
 
     // ---- public API (CORS) ----
     // Coupon pre-check for the booking funnel: same pricing inputs as POST /api/orders
@@ -743,7 +719,10 @@ export default {
     if (onOps && path === '/api/ops/orders' && req.method === 'GET') {
       if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
       const r = await listOrders(env.DB);
-      return json({ orders: r.results });
+      return json({
+        orders: r.results,
+        integrations: { shopify_webhooks: shopifyWebhookRegistrar.status() },
+      });
     }
 
     if (onOps && path.includes('/api/ops/orders/') && path.includes('/status') && req.method === 'POST') {
