@@ -175,6 +175,9 @@ describe('Frontend: Stylesheet + fonts', () => {
       assertContains(h, 'Hanken+Grotesk');
     });
   }
+  test('Homepage cache-busts the current compiled stylesheet', () => {
+    assertContains(readPage('index.html'), '/assets/styles.css?v=1af9999');
+  });
 });
 
 describe('Frontend: Booking form', () => {
