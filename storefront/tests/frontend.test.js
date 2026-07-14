@@ -119,6 +119,24 @@ describe('Frontend: SEO foundations', () => {
     assert.equal(schema.address.addressLocality, 'רמת גן');
     assert.equal(schema.address.addressCountry, 'IL');
     assert.equal(schema.makesOffer.itemOffered['@type'], 'Service');
+    assert.deepEqual(schema.areaServed.map(area => area.name), [
+      'תל אביב-יפו', 'רמת גן', 'גבעתיים', 'בני ברק', 'הרצליה', 'רמת השרון',
+      'חולון', 'בת ים', 'קריית אונו', 'גבעת שמואל', 'אזור', 'גני תקווה',
+      'סביון', 'אור יהודה', 'ראשון לציון', 'כפר סבא', 'רעננה', 'פתח תקווה',
+      'הוד השרון', 'רמלה', 'לוד'
+    ]);
+  });
+
+  test('Homepage visibly lists every supported service city', () => {
+    const html = readPage('index.html');
+    const cities = [
+      'תל אביב-יפו', 'רמת גן', 'גבעתיים', 'בני ברק', 'הרצליה', 'רמת השרון',
+      'חולון', 'בת ים', 'קריית אונו', 'גבעת שמואל', 'אזור', 'גני תקווה',
+      'סביון', 'אור יהודה', 'ראשון לציון', 'כפר סבא', 'רעננה', 'פתח תקווה',
+      'הוד השרון', 'רמלה', 'לוד'
+    ];
+    assertContains(html, 'aria-label="כל אזורי השירות של EdenMish"');
+    for (const city of cities) assertContains(html, `>${city}</span>`, `${city} service-area card`);
   });
 });
 
@@ -470,6 +488,17 @@ describe('Frontend: Security and accessibility hardening', () => {
     assert.ok(!html.includes('(Eco)'), 'customer FAQ must not expose English service labels');
   });
 
+  test('homepage exposes right-side WhatsApp and keyboard-accessible accessibility tools', () => {
+    const html = readPage('index.html');
+    assertContains(html, 'class="eden-floating-tools"', 'floating tools container');
+    assertContains(html, 'https://wa.me/972534058498', 'business WhatsApp destination');
+    assertContains(html, 'aria-label="שליחת הודעת וואטסאפ לעדן"');
+    assertContains(html, 'aria-controls="eden-a11y-panel"');
+    assertContains(html, 'aria-label="פתיחת כלי נגישות"');
+    assertContains(html, 'if (event.key === \'Escape\'', 'Escape close behavior');
+    assertContains(html, 'href="/accessibility.html">הצהרת הנגישות</a>');
+  });
+
   test('staging and preview pages use isolated Worker origins', () => {
     const routing = readFileSync(join(PUB, 'assets', 'api-origin.js'), 'utf8');
     assertContains(routing, "host === 'staging.edenmish.com'");
@@ -527,9 +556,16 @@ describe('Frontend: Ops daily summary and queue ordering', () => {
     assert.equal(summary.stalePayment, 2);
   });
 
-  test('active queue includes picked-up orders and sorts urgent then scheduled windows', () => {
+  test('new paid orders stay in the inbox until dispatch starts', () => {
     const helpers = opsQueueHelpers();
     assert.equal(helpers.isActiveOrder({ status: 'picked_up' }), true);
+    assert.equal(helpers.isActiveOrder({ status: 'paid' }), false);
+    const html = readPage('dash.html');
+    assertContains(html, '["received","priced","review","payment_sent","paid"]', 'new-order inbox statuses');
+  });
+
+  test('sorts urgent then scheduled queue windows', () => {
+    const helpers = opsQueueHelpers();
     const orders = [
       { id: 4, status: 'paid', when_date: null, when_hour: null, created_at: 4 },
       { id: 3, status: 'paid', when_date: '2026-07-12', when_hour: 12, created_at: 3 },
@@ -538,6 +574,12 @@ describe('Frontend: Ops daily summary and queue ordering', () => {
     ];
     const sorted = orders.slice().sort((a, b) => helpers.compareQueueOrders(a, b, true));
     assert.deepEqual(sorted.map(o => o.id), [1, 2, 3, 4]);
+  });
+
+  test('uses the correctly spelled empty-category message', () => {
+    const html = readPage('dash.html');
+    assertContains(html, 'אין הזמנות בקטגוריה זו.');
+    assert.ok(!html.includes('בקטטגוריה'));
   });
 
   test('renders the Hebrew daily summary strip in the canonical dashboard', () => {
