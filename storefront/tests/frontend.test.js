@@ -136,6 +136,10 @@ describe('Frontend: SEO foundations', () => {
       'הוד השרון', 'רמלה', 'לוד'
     ];
     assertContains(html, 'aria-label="כל אזורי השירות של EdenMish"');
+    assertContains(html, 'class="service-areas-layout', 'desktop service-area grid');
+    assertContains(html, 'class="service-areas-map', 'desktop-centered service map');
+    assertContains(html, 'class="service-areas-intro', 'service-area intro row');
+    assertContains(html, 'class="service-areas-cities', 'service city-card row');
     for (const city of cities) assertContains(html, `>${city}</span>`, `${city} service-area card`);
   });
 });
