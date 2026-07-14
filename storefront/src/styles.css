@@ -69,4 +69,30 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* On desktop, center the service map against the city cards themselves.
+     The intro remains above the cards and mobile keeps its original flow. */
+  @media (min-width: 1024px) {
+    .service-areas-layout {
+      grid-template-rows: auto auto;
+      column-gap: 32px;
+      row-gap: 0;
+    }
+    .service-areas-content {
+      display: contents;
+    }
+    .service-areas-intro {
+      grid-column: 2;
+      grid-row: 1;
+    }
+    .service-areas-cities {
+      grid-column: 2;
+      grid-row: 2;
+    }
+    .service-areas-map {
+      align-self: center;
+      grid-column: 1;
+      grid-row: 2;
+    }
+  }
 }
