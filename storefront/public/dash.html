@@ -21,7 +21,7 @@
 var API = window.EDEN_API.ops;
 var HE = {received:"נתקבלה",priced:"מחושב",review:"בדיקה",payment_sent:"תשלום נשלח",paid:"שולם",to_pickup:"בדרך לאיסוף",picked_up:"נאסף",to_dropoff:"בדרך למסירה",delivered:"נמסר",failed:"נכשל",cancelled:"בוטל"};
 var LIVE = ["to_pickup","to_dropoff"];
-var ACTIVE = ["paid","to_pickup","picked_up","to_dropoff"];
+var ACTIVE = ["to_pickup","picked_up","to_dropoff"];
 var NEXT = {paid:"to_pickup",to_pickup:"picked_up",picked_up:"to_dropoff"};
 var NEXTLBL = {paid:"אשר יציאה לאיסוף",to_pickup:"אשר איסוף ✓",picked_up:"אשר יציאה למסירה"};
 var orders = [], coupons = [], webhookHealth = null, activeOrder = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, gpsOrderId = null, gpsState = "idle", activeFilter = "active", currentView = "queue";
@@ -131,7 +131,7 @@ async function refresh(){
 function renderQueue(){
   var counts = {
     all: orders.length,
-    inbox: orders.filter(function(o){return ["received","priced","review","payment_sent"].includes(o.status);}).length,
+    inbox: orders.filter(function(o){return ["received","priced","review","payment_sent","paid"].includes(o.status);}).length,
     active: orders.filter(isActiveOrder).length,
     done: orders.filter(function(o){return o.status==="delivered";}).length,
     cancelled: orders.filter(function(o){return o.status==="cancelled";}).length,
@@ -142,7 +142,7 @@ function renderQueue(){
   var urgentCount = orders.filter(function(o){return (o.urgent||o.review_flag) && !["delivered","cancelled","failed"].includes(o.status);}).length;
 
   var filtered = orders;
-  if(activeFilter==="inbox") filtered = orders.filter(function(o){return ["received","priced","review","payment_sent"].includes(o.status);});
+  if(activeFilter==="inbox") filtered = orders.filter(function(o){return ["received","priced","review","payment_sent","paid"].includes(o.status);});
   else if(activeFilter==="active") filtered = orders.filter(isActiveOrder);
   else if(activeFilter==="done") filtered = orders.filter(function(o){return o.status==="delivered";});
   else if(activeFilter==="cancelled") filtered = orders.filter(function(o){return o.status==="cancelled";});
@@ -194,7 +194,7 @@ function renderQueue(){
     '</div></div>'+
     '<div class="px-gutter-mobile py-stack-sm max-w-lg mx-auto space-y-3 pb-24">'+
     webhookWarning()+
-    (cards || '<div class="glass-card rounded-2xl p-stack-lg text-center text-on-surface-variant">אין הזמנות בקטטגוריה זו.</div>')+
+    (cards || '<div class="glass-card rounded-2xl p-stack-lg text-center text-on-surface-variant">אין הזמנות בקטגוריה זו.</div>')+
     '</div>';
   attachSwipeHandlers();
 }
