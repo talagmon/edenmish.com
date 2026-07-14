@@ -24,7 +24,7 @@ var LIVE = ["to_pickup","to_dropoff"];
 var ACTIVE = ["to_pickup","picked_up","to_dropoff"];
 var NEXT = {paid:"to_pickup",to_pickup:"picked_up",picked_up:"to_dropoff"};
 var NEXTLBL = {paid:"אשר יציאה לאיסוף",to_pickup:"אשר איסוף ✓",picked_up:"אשר יציאה למסירה"};
-var orders = [], coupons = [], webhookHealth = null, activeOrder = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, gpsOrderId = null, gpsState = "idle", activeFilter = "active", currentView = "queue";
+var orders = [], coupons = [], webhookHealth = null, activeOrder = null, podOrderId = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, gpsOrderId = null, gpsState = "idle", activeFilter = "active", currentView = "queue";
 
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
 function fmt(t){return t?new Date(t).toLocaleString("he-IL",{timeZone:"Asia/Jerusalem",hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"}):"—";}
@@ -570,11 +570,12 @@ async function setStatus(id,st){
 }
 
 function showPod(id){
+  podOrderId=id;
   $("app").innerHTML =
     '<div class="fixed inset-0 z-[100] bg-background/95 backdrop-blur-xl p-6 overflow-y-auto">'+
     '<div class="glass-card rounded-2xl p-stack-lg max-w-md mx-auto space-y-stack-md">'+
     '<div class="flex justify-between items-center"><h3 class="font-headline-md text-primary">אישור מסירה · #'+id+'</h3>'+
-    '<button onclick="renderDetail(orders.find(function(o){return o.id==='+id+';}))" class="text-on-surface-variant hover:text-error p-2"><span class="material-symbols-outlined">close</span></button></div>'+
+    '<button onclick="closePod('+id+')" class="text-on-surface-variant hover:text-error p-2"><span class="material-symbols-outlined">close</span></button></div>'+
     '<input id="pod-recv" type="text" placeholder="שם המקבל (אופציונלי)" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-right"/>'+
     '<input id="pod-note" type="text" placeholder="הערת מסירה (אופציונלי)" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-right"/>'+
     '<label class="glass-card flex flex-col items-center justify-center min-h-[120px] border-2 border-dashed border-primary/40 rounded-xl cursor-pointer p-4 text-center">'+
@@ -589,11 +590,18 @@ function showPod(id){
 
   requestAnimationFrame(function(){setTimeout(initSig,50);});
   $("pod-photo").addEventListener("change",function(){
-    var f=this.files[0];if(!f)return;
+    var input=this,f=input.files[0],ph=$("pod-photo-ph");if(!f||!ph)return;
+    ph.innerHTML='<span class="text-on-surface-variant text-label-sm">מעבד את התמונה…</span>';
     var fr=new FileReader();
-    fr.onload=function(){$("pod-photo-ph").innerHTML='<img src="'+fr.result+'" class="max-h-32 rounded-xl">';};
+    fr.onload=function(){if(podOrderId===id&&ph.isConnected&&input.files[0]===f)ph.innerHTML='<img src="'+fr.result+'" alt="תצלום המסירה" class="max-h-32 rounded-xl">';};
+    fr.onerror=function(){if(podOrderId===id&&ph.isConnected)ph.innerHTML='<span class="text-error text-label-sm">לא הצלחנו להציג את התמונה. נסו לבחור שוב.</span>';};
     fr.readAsDataURL(f);
   });
+}
+
+function closePod(id){
+  podOrderId=null;
+  renderDetail(orders.find(function(o){return Number(o.id)===Number(id);}));
 }
 
 function initSig(){
@@ -631,7 +639,7 @@ async function submitPod(id){
   try{
     var r=await api("/api/ops/orders/"+id+"/deliver",{method:"POST",body:JSON.stringify({receiver_name:$("pod-recv").value,delivery_note:$("pod-note").value,photo_url:photo,signature:sig})});
     var d=await r.json();
-    if(d.ok){stopWatch();await refresh();}
+    if(d.ok){podOrderId=null;stopWatch();await refresh();}
     else{throw 0;}
   }catch(e){
     btn.disabled=false;btn.textContent="אשר מסירה וסגור משימה";
@@ -825,7 +833,10 @@ async function deleteCoupon(code){
 }
 
 refresh();
-setInterval(function(){if(!(document.activeElement&&document.activeElement.tagName==="INPUT"))refresh();},20000);
+setInterval(function(){
+  if(podOrderId!==null)return;
+  if(!(document.activeElement&&document.activeElement.tagName==="INPUT"))refresh();
+},20000);
 </script>
 </body>
 </html>
