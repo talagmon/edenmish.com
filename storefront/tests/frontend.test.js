@@ -129,6 +129,7 @@ describe('Frontend: SEO foundations', () => {
 
   test('Homepage visibly lists every supported service city', () => {
     const html = readPage('index.html');
+    const styles = readFileSync(join(process.cwd(), 'src', 'styles.css'), 'utf8');
     const cities = [
       'תל אביב-יפו', 'רמת גן', 'גבעתיים', 'בני ברק', 'הרצליה', 'רמת השרון',
       'חולון', 'בת ים', 'קריית אונו', 'גבעת שמואל', 'אזור', 'גני תקווה',
@@ -137,9 +138,17 @@ describe('Frontend: SEO foundations', () => {
     ];
     assertContains(html, 'aria-label="כל אזורי השירות של EdenMish"');
     assertContains(html, 'class="service-areas-layout', 'desktop service-area grid');
+    assertContains(html, 'class="service-areas-map-slot', 'desktop map anchor slot');
     assertContains(html, 'class="service-areas-map', 'desktop-centered service map');
     assertContains(html, 'class="service-areas-intro', 'service-area intro row');
     assertContains(html, 'class="service-areas-cities', 'service city-card row');
+    assertContains(styles, '.service-areas-layout .service-areas-cities {\n      display: contents;', 'city cards join the desktop parent grid');
+    assertContains(styles, '.service-areas-cities > :nth-child(n + 4):nth-child(-n + 6) {\n      grid-row: 3;', 'Bnei Brak group uses the second city row');
+    assertContains(styles, '.service-areas-cities > :nth-child(n + 16):nth-child(-n + 18) {\n      grid-row: 7;', 'Kfar Saba group uses the sixth city row');
+    assertContains(styles, '.service-areas-map-slot {', 'map anchor slot styles');
+    assertContains(styles, 'align-self: stretch;', 'map anchor spans the target city rows');
+    assertContains(styles, 'grid-row: 3 / 8;', 'map spans Bnei Brak through Kfar Saba rows');
+    assertContains(styles, 'transform: translateY(-50%);', 'map center uses the target city-row span as its anchor');
     for (const city of cities) assertContains(html, `>${city}</span>`, `${city} service-area card`);
   });
 });
