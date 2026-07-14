@@ -527,6 +527,16 @@ describe('Frontend: Security and accessibility hardening', () => {
     assert.ok(!html.includes('if(isLive && watchId===null) startWatch(o.id)'), 'detail rendering must not request location');
     assert.ok(!html.includes('if(st==="to_pickup"||st==="to_dropoff")startWatch(id)'), 'status changes must not request location');
   });
+
+  test('proof-of-delivery preserves the first selected image while its modal is open', () => {
+    const html = readPage('dash.html');
+    assertContains(html, 'podOrderId=id;', 'proof modal active state');
+    assertContains(html, 'if(podOrderId!==null)return;', 'background refresh pause');
+    assertContains(html, 'function closePod(id)', 'proof modal close reset');
+    assertContains(html, 'if(d.ok){podOrderId=null;', 'successful delivery reset');
+    assertContains(html, 'var input=this,f=input.files[0],ph=$("pod-photo-ph")', 'stable preview reference');
+    assertContains(html, 'ph.isConnected&&input.files[0]===f', 'stale FileReader result guard');
+  });
 });
 
 describe('Frontend: Ops daily summary and queue ordering', () => {
