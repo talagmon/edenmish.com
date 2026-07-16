@@ -151,6 +151,20 @@ describe('Frontend: SEO foundations', () => {
     assertContains(styles, 'transform: translateY(-50%);', 'map center uses the target city-row span as its anchor');
     for (const city of cities) assertContains(html, `>${city}</span>`, `${city} service-area card`);
   });
+
+  test('Publishes the EdenMish platform story without unsupported customer claims', () => {
+    const homepage = readPage('index.html');
+    const about = readPage('about.html');
+    const articleUrl = 'https://talagmon.com/2026/07/16/building-edenmish-delivery-operations-system/';
+    assertContains(homepage, 'id="behind-the-scenes"', 'homepage story section');
+    assertContains(homepage, articleUrl, 'homepage article link');
+    assertContains(homepage, 'לקריאת המאמר באנגלית', 'article language disclosure');
+    assertContains(homepage, 'טל אגמון ו־Sol', 'homepage author credit');
+    assertContains(about, articleUrl, 'about-page article link');
+    assertContains(about, 'טל אגמון ו־Sol', 'about-page author credit');
+    assert.ok(!homepage.includes('הצטרפו למאות עסקים'), 'homepage must not claim hundreds of customers during launch');
+    assertContains(homepage, 'הצטרפו ללקוחות הראשונים של EdenMish', 'honest launch-stage CTA');
+  });
 });
 
 describe('Frontend: RTL + accessible viewport', () => {
