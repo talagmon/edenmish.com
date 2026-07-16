@@ -159,9 +159,11 @@ describe('Frontend: SEO foundations', () => {
     assertContains(homepage, 'id="behind-the-scenes"', 'homepage story section');
     assertContains(homepage, articleUrl, 'homepage article link');
     assertContains(homepage, 'לקריאת המאמר באנגלית', 'article language disclosure');
-    assertContains(homepage, 'טל אגמון ו־Sol', 'homepage author credit');
+    assertContains(homepage, 'טל אגמון משתף', 'homepage author credit');
     assertContains(about, articleUrl, 'about-page article link');
-    assertContains(about, 'טל אגמון ו־Sol', 'about-page author credit');
+    assertContains(about, 'טל אגמון כתב', 'about-page author credit');
+    assert.ok(!homepage.includes('Sol'), 'homepage must not present the AI model as a public co-author');
+    assert.ok(!about.includes('Sol'), 'about page must not present the AI model as a public co-author');
     assert.ok(!homepage.includes('הצטרפו למאות עסקים'), 'homepage must not claim hundreds of customers during launch');
     assertContains(homepage, 'הצטרפו ללקוחות הראשונים של EdenMish', 'honest launch-stage CTA');
   });
