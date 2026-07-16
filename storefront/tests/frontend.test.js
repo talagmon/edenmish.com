@@ -152,7 +152,7 @@ describe('Frontend: SEO foundations', () => {
     for (const city of cities) assertContains(html, `>${city}</span>`, `${city} service-area card`);
   });
 
-  test('Publishes the EdenMish platform story without unsupported customer claims', () => {
+  test('Publishes the EdenMish platform story with professional attribution and honest launch copy', () => {
     const homepage = readPage('index.html');
     const about = readPage('about.html');
     const articleUrl = 'https://talagmon.com/2026/07/16/building-edenmish-delivery-operations-system/';
