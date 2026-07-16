@@ -156,11 +156,16 @@ describe('Frontend: SEO foundations', () => {
     const homepage = readPage('index.html');
     const about = readPage('about.html');
     const articleUrl = 'https://talagmon.com/2026/07/16/building-edenmish-delivery-operations-system/';
+    const securityArticleUrl = 'https://talagmon.com/2026/07/16/edenmish-white-hat-security-product-review/';
     assertContains(homepage, 'id="behind-the-scenes"', 'homepage story section');
     assertContains(homepage, articleUrl, 'homepage article link');
-    assertContains(homepage, 'לקריאת המאמר באנגלית', 'article language disclosure');
+    assertContains(homepage, securityArticleUrl, 'homepage security article link');
+    assertContains(homepage, 'בשני מאמרים באנגלית', 'article language disclosure');
+    assertContains(homepage, 'גישת האבטחה והפרטיות', 'homepage security article label');
     assertContains(homepage, 'טל אגמון משתף', 'homepage author credit');
     assertContains(about, articleUrl, 'about-page article link');
+    assertContains(about, securityArticleUrl, 'about-page security article link');
+    assertContains(about, 'גישת האבטחה והפרטיות', 'about-page security article label');
     assertContains(about, 'טל אגמון כתב', 'about-page author credit');
     assert.ok(!homepage.includes('Sol'), 'homepage must not present the AI model as a public co-author');
     assert.ok(!about.includes('Sol'), 'about page must not present the AI model as a public co-author');
