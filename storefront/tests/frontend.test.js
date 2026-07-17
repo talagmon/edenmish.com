@@ -103,7 +103,7 @@ describe('Frontend: SEO foundations', () => {
     assertContains(robots, 'Disallow: /dash', 'ops dashboard exclusion');
     assertContains(sitemap, '<loc>https://edenmish.com/</loc>', 'homepage sitemap entry');
     assertContains(sitemap, '<loc>https://edenmish.com/booking.html</loc>', 'booking sitemap entry');
-    assertContains(sitemap, '<loc>https://edenmish.com/blog/edenmish-information-security.html</loc>', 'security article sitemap entry');
+    assertContains(sitemap, '<loc>https://edenmish.com/blog/edenmish-information-security</loc>', 'security article sitemap entry');
     assert.ok(!sitemap.includes('/dash'), 'ops dashboard must not be listed in the sitemap');
     assert.ok(!sitemap.includes('/success'), 'transaction result pages must not be listed in the sitemap');
   });
@@ -157,7 +157,7 @@ describe('Frontend: SEO foundations', () => {
     const homepage = readPage('index.html');
     const about = readPage('about.html');
     const articleUrl = 'https://talagmon.com/2026/07/16/building-edenmish-delivery-operations-system/';
-    const securityArticleUrl = '/blog/edenmish-information-security.html';
+    const securityArticleUrl = '/blog/edenmish-information-security';
     const technicalReviewUrl = 'https://talagmon.com/2026/07/17/edenmish-security-review-what-we-fixed/';
     const securityArticle = readPage('blog/edenmish-information-security.html');
     assertContains(homepage, 'id="behind-the-scenes"', 'homepage story section');
@@ -170,7 +170,7 @@ describe('Frontend: SEO foundations', () => {
     assertContains(about, securityArticleUrl, 'about-page security article link');
     assertContains(about, 'איך אנחנו שומרים על המידע שלכם', 'about-page security article label');
     assertContains(about, 'טל אגמון כתב', 'about-page author credit');
-    assertContains(securityArticle, '<link rel="canonical" href="https://edenmish.com/blog/edenmish-information-security.html"', 'security article canonical URL');
+    assertContains(securityArticle, '<link rel="canonical" href="https://edenmish.com/blog/edenmish-information-security"', 'security article canonical URL');
     assertContains(securityArticle, 'https://github.com/usestrix/strix', 'Strix project credit');
     assertContains(securityArticle, technicalReviewUrl, 'technical security review link');
     assertContains(securityArticle, '"@type": "BlogPosting"', 'security article structured data');
