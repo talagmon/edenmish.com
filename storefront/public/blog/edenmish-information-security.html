@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html class="dark" dir="rtl" lang="he">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>איך אנחנו שומרים על המידע שלכם | EdenMish</title>
+<meta name="description" content="הצצה לתהליך בדיקת האבטחה של EdenMish: מה בדקנו, כיצד טיפלנו בממצאים ולמה אבטחת מידע היא חלק קבוע מפיתוח שירות המשלוחים."/>
+<link rel="canonical" href="https://edenmish.com/blog/edenmish-information-security"/>
+<meta property="og:type" content="article"/>
+<meta property="og:site_name" content="EdenMish"/>
+<meta property="og:locale" content="he_IL"/>
+<meta property="og:url" content="https://edenmish.com/blog/edenmish-information-security"/>
+<meta property="og:title" content="איך אנחנו שומרים על המידע שלכם ב-EdenMish"/>
+<meta property="og:description" content="מה בדקנו, כיצד טיפלנו בממצאים ולמה אבטחת מידע היא חלק קבוע מפיתוח שירות המשלוחים."/>
+<meta property="og:image" content="https://edenmish.com/assets/og-image.jpg"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="איך אנחנו שומרים על המידע שלכם ב-EdenMish"/>
+<meta name="twitter:description" content="הצצה לתהליך בדיקת האבטחה של EdenMish ולדרך שבה אנחנו מגינים על מידע הקשור למשלוחים."/>
+<meta name="twitter:image" content="https://edenmish.com/assets/og-image.jpg"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/assets/styles.css"/>
+<link rel="icon" href="/assets/favicon.ico"/>
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"/>
+<meta name="theme-color" content="#8B5CF6"/>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "איך אנחנו שומרים על המידע שלכם ב-EdenMish",
+  "description": "הצצה לתהליך בדיקת האבטחה של EdenMish ולדרך שבה אנחנו מגינים על מידע הקשור למשלוחים.",
+  "datePublished": "2026-07-17",
+  "dateModified": "2026-07-17",
+  "inLanguage": "he-IL",
+  "mainEntityOfPage": "https://edenmish.com/blog/edenmish-information-security",
+  "image": "https://edenmish.com/assets/og-image.jpg",
+  "author": {
+    "@type": "Organization",
+    "name": "EdenMish",
+    "url": "https://edenmish.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "EdenMish",
+    "url": "https://edenmish.com/",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://edenmish.com/assets/apple-touch-icon.png"
+    }
+  }
+}
+</script>
+<style>
+  .article-shell { max-width: 860px; }
+  .article-body { font-size: 1.08rem; line-height: 1.95; }
+  .article-body p { margin: 0 0 1.5rem; color: #cbd5e1; font-weight: 400; }
+  .article-body h2 { margin: 3rem 0 1rem; color: #dfb7ff; font-size: 1.55rem; line-height: 1.45; font-weight: 500; }
+  .article-body a { color: #91d3c8; text-decoration: underline; text-underline-offset: 4px; }
+  .article-body a:hover { color: #dfb7ff; }
+  .article-meta { color: #94a3b8; font-weight: 400; }
+  .article-accessibility { position: fixed; right: 16px; bottom: 16px; z-index: 60; width: 52px; height: 52px; border-radius: 16px; display: flex; align-items: center; justify-content: center; color: #fff; background: #5b2a86; box-shadow: 0 10px 28px rgba(0,0,0,.35); }
+  .article-accessibility:focus-visible { outline: 3px solid #91d3c8; outline-offset: 3px; }
+  @media (max-width: 640px) {
+    .article-body { font-size: 1rem; line-height: 1.85; }
+    .article-body h2 { font-size: 1.35rem; }
+    .article-accessibility { right: 12px; bottom: 12px; width: 48px; height: 48px; border-radius: 14px; }
+  }
+</style>
+</head>
+<body class="bg-surface-dim text-on-surface selection:bg-primary-container selection:text-on-primary-container">
+<header class="fixed top-0 w-full z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border shadow-sm">
+  <div class="flex flex-row-reverse justify-between items-center px-gutter-desktop max-w-container-max mx-auto h-16">
+    <a href="/" class="font-display-lg text-headline-md text-primary">EdenMish</a>
+    <nav class="hidden md:flex gap-stack-lg items-center" aria-label="ניווט ראשי">
+      <a class="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/">בית</a>
+      <a class="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/booking.html">שירותים</a>
+      <a class="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/track.html">מעקב משלוחים</a>
+      <a class="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/about.html">אודות</a>
+    </nav>
+    <a href="/booking.html" class="bg-primary-container text-on-primary-container px-6 py-2 rounded-lg font-body-md active:scale-95 transition-transform hover:opacity-90">שלחו עכשיו</a>
+  </div>
+</header>
+
+<main class="relative pt-28 pb-24 px-gutter-mobile md:px-gutter-desktop overflow-hidden">
+  <div class="absolute top-[-100px] left-[-100px] w-96 h-96 bg-primary opacity-10 blur-[120px] rounded-full pointer-events-none"></div>
+  <article class="article-shell mx-auto relative z-10" itemscope itemtype="https://schema.org/BlogPosting">
+    <header class="text-center mb-12">
+      <a href="/#behind-the-scenes" class="inline-flex items-center gap-2 text-secondary font-body-md mb-6 hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_forward</span>
+        מאחורי הקלעים של EdenMish
+      </a>
+      <h1 class="font-display-lg text-headline-lg md:text-display-lg text-on-surface leading-tight mb-5" itemprop="headline">איך אנחנו שומרים על המידע שלכם ב-EdenMish</h1>
+      <p class="article-meta">17 ביולי 2026 · צוות EdenMish</p>
+    </header>
+
+    <div class="glass-card rounded-3xl p-stack-md md:p-stack-lg article-body" itemprop="articleBody">
+      <p>כשבונים שירות משלוחים, קל להתמקד במה שהלקוחות רואים: הזמנה מהירה, מעקב ברור ואישור מסירה שמגיע בזמן. אבל מאחורי כל הפעולות האלה נמצא מידע שצריך להתייחס אליו באחריות.</p>
+      <p>ב-EdenMish החלטנו לעצור ולבחון את המערכת מנקודת מבט אחרת. לא רק האם היא עובדת, אלא גם מה עלול להשתבש, איזה מידע עובר בין החלקים השונים ואיך אפשר לצמצם סיכונים לפני שהם הופכים לבעיה אמיתית.</p>
+
+      <h2>המידע שמאחורי המשלוח</h2>
+      <p>תהליך משלוח עשוי לכלול כתובת איסוף ומסירה, פרטי קשר, סטטוס המשלוח, מעקב במהלך הדרך ואישור מסירה, כולל הוכחת מסירה דיגיטלית (POD). המידע הזה דרוש כדי להשלים את השירות, אבל הוא לא צריך להיות חשוף מעבר למי שבאמת זקוק לו.</p>
+      <p>לכן התחלנו במיפוי של זרימת המידע: איפה הוא נכנס למערכת, מי יכול לראות אותו, היכן הוא נשמר ואילו פעולות מתבצעות כאשר משלוח מתעדכן או מסתיים.</p>
+
+      <h2>מה בדקנו</h2>
+      <p>הבדיקה כללה את מנגנוני ההרשאה, הגישה למסלולי המערכת, טיפול בקלט שמגיע מהמשתמשים, הגנה על פעולות רגישות והתנהגות המערכת במצבים לא רגילים. בדקנו גם שהודעות שגיאה ולוגים לא חושפים מידע שאינו נחוץ.</p>
+      <p>לא הסתפקנו בסריקה אוטומטית. עברנו ידנית על אזורים רגישים בקוד, עקבנו אחרי תרחישים מתחילתם ועד סופם והרצנו בדיקות חוזרות כדי לוודא ששינוי במקום אחד לא יוצר בעיה במקום אחר.</p>
+
+      <h2>מה עושים כשמוצאים משהו</h2>
+      <p>מטרתה של בדיקת אבטחה אינה להצהיר שהכול מושלם. המטרה היא למצוא נקודות שדורשות שיפור, להבין את המשמעות שלהן ולטפל בהן באופן מסודר.</p>
+      <p>במהלך הבדיקה זיהינו נושאים שדרשו תיקון וחיזוק. טיפלנו בהם לפני שסיימנו את שלב העבודה, ולאחר מכן חזרנו על התרחישים הרלוונטיים. מבחינתנו, תיקון אינו מסתיים ברגע שהקוד משתנה. הוא מסתיים רק לאחר שבדקנו שהבעיה אכן נפתרה וששאר המערכת ממשיכה לעבוד כמצופה.</p>
+
+      <h2>בדיקה נוספת לאחר התיקונים</h2>
+      <p>לאחר סבב התיקונים ביצענו בדיקה חוזרת בסביבה מקומית ומבודדת. השתמשנו בעותק מצומצם של הקוד, ללא מידע של לקוחות וללא הרשאה לבדוק את האתר הפעיל, את Shopify, ספקי תשלום או שירותים חיצוניים אחרים.</p>
+      <p>ההפרדה הזו חשובה. בדיקת אבטחה אחראית צריכה להיות מוגדרת מראש, עם גבולות ברורים, ולא להפעיל עומס או ניסיונות חדירה על מערכות פעילות ללא צורך והרשאה מפורשת.</p>
+
+      <h2>קרדיט לכלי שבו השתמשנו</h2>
+      <p>אחד הכלים ששימשו אותנו בבדיקה החוזרת היה <a href="https://github.com/usestrix/strix" target="_blank" rel="noopener">Strix</a>, פרויקט קוד פתוח לבדיקות אבטחה בסיוע AI, המתוחזק על ידי צוות Strix. תודה למפתחים ולמתחזקים של הפרויקט על כך שהעמידו אותו לרשות הקהילה.</p>
+      <p>Strix היה כלי אחד בתוך תהליך רחב יותר שכלל מעבר ידני על הקוד, מעקב אחר זרימת המידע ובדיקות רגרסיה. כלי אוטומטי יכול לעזור לזהות כיוונים חשובים, אבל הוא אינו מחליף שיקול דעת, הבנת המוצר ואחריות אנושית.</p>
+
+      <h2>מה זה אומר עבור הלקוחות שלנו</h2>
+      <p>אין מערכת שאפשר להבטיח שלעולם לא תותקף. הבטחה כזו לא תהיה רצינית. מה שאנחנו כן יכולים לעשות הוא לתכנן בזהירות, לצמצם גישה למידע, לבדוק שינויים, לתקן ממצאים ולהמשיך לעקוב גם אחרי שהמערכת כבר פעילה.</p>
+      <p>אבטחה מבחינתנו אינה תווית שמוסיפים בסוף הפרויקט. היא חלק מהדרך שבה EdenMish נבנית ומשתפרת.</p>
+
+      <p>למי שרוצה לקרוא על התהליך מהצד הטכני ומנקודת המבט של מי שבנה ובדק את המערכת, פרסמנו גם <a href="https://talagmon.com/2026/07/17/edenmish-security-review-what-we-fixed/" target="_blank" rel="noopener">סקירה מפורטת באתר של Tal Agmon</a>.</p>
+    </div>
+
+    <div class="text-center mt-10">
+      <a href="/booking.html" class="inline-flex items-center justify-center gap-2 bg-primary text-on-primary px-9 py-4 rounded-xl font-body-md hover:bg-primary-fixed-dim active:scale-95 transition-all">
+        הזמינו משלוח
+        <span class="material-symbols-outlined" aria-hidden="true">local_shipping</span>
+      </a>
+    </div>
+  </article>
+</main>
+
+<a class="article-accessibility" href="/accessibility.html" aria-label="הצהרת נגישות">
+  <span class="material-symbols-outlined" aria-hidden="true" style="font-size:30px">accessibility_new</span>
+</a>
+
+<footer class="w-full pt-stack-lg pb-stack-md bg-surface-container-lowest border-t border-glass-border">
+  <div class="flex flex-col md:flex-row-reverse justify-between items-center px-gutter-desktop max-w-container-max mx-auto gap-stack-md">
+    <div class="font-display-lg text-headline-md text-primary">EdenMish</div>
+    <div class="flex flex-wrap justify-center gap-x-stack-lg gap-y-stack-sm">
+      <a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/">בית</a>
+      <a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/booking.html">שירותים</a>
+      <a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/track.html">מעקב משלוחים</a>
+      <a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/about.html">אודות</a>
+      <a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/privacy.html">מדיניות פרטיות</a>
+      <a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/accessibility.html">נגישות</a>
+    </div>
+    <div class="font-body-md text-body-md text-on-surface-variant opacity-70">© 2026 EdenMish. כל הזכויות שמורות.</div>
+  </div>
+</footer>
+<script src="/assets/mobile-nav.js" defer></script>
+</body>
+</html>
