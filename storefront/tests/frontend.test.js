@@ -88,7 +88,7 @@ function opsQueueHelpers() {
 }
 
 describe('Frontend: Pages exist', () => {
-  for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'success.html', 'error.html', 'terms.html', 'privacy.html', 'refund.html', 'accessibility.html', 'cancel.html']) {
+  for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'blog/edenmish-information-security.html', 'success.html', 'error.html', 'terms.html', 'privacy.html', 'refund.html', 'accessibility.html', 'cancel.html']) {
     test(`${page} exists`, () => {
       assert.ok(existsSync(join(PUB, page)), `${page} not found in public/`);
     });
@@ -103,6 +103,7 @@ describe('Frontend: SEO foundations', () => {
     assertContains(robots, 'Disallow: /dash', 'ops dashboard exclusion');
     assertContains(sitemap, '<loc>https://edenmish.com/</loc>', 'homepage sitemap entry');
     assertContains(sitemap, '<loc>https://edenmish.com/booking.html</loc>', 'booking sitemap entry');
+    assertContains(sitemap, '<loc>https://edenmish.com/blog/edenmish-information-security</loc>', 'security article sitemap entry');
     assert.ok(!sitemap.includes('/dash'), 'ops dashboard must not be listed in the sitemap');
     assert.ok(!sitemap.includes('/success'), 'transaction result pages must not be listed in the sitemap');
   });
@@ -156,17 +157,24 @@ describe('Frontend: SEO foundations', () => {
     const homepage = readPage('index.html');
     const about = readPage('about.html');
     const articleUrl = 'https://talagmon.com/2026/07/16/building-edenmish-delivery-operations-system/';
-    const securityArticleUrl = 'https://talagmon.com/2026/07/16/edenmish-white-hat-security-product-review/';
+    const securityArticleUrl = '/blog/edenmish-information-security';
+    const technicalReviewUrl = 'https://talagmon.com/2026/07/17/edenmish-security-review-what-we-fixed/';
+    const securityArticle = readPage('blog/edenmish-information-security.html');
     assertContains(homepage, 'id="behind-the-scenes"', 'homepage story section');
     assertContains(homepage, articleUrl, 'homepage article link');
     assertContains(homepage, securityArticleUrl, 'homepage security article link');
-    assertContains(homepage, 'בשני מאמרים באנגלית', 'article language disclosure');
-    assertContains(homepage, 'גישת האבטחה והפרטיות', 'homepage security article label');
+    assertContains(homepage, 'במאמר נוסף בעברית', 'article language disclosure');
+    assertContains(homepage, 'איך אנחנו שומרים על המידע שלכם', 'homepage security article label');
     assertContains(homepage, 'טל אגמון משתף', 'homepage author credit');
     assertContains(about, articleUrl, 'about-page article link');
     assertContains(about, securityArticleUrl, 'about-page security article link');
-    assertContains(about, 'גישת האבטחה והפרטיות', 'about-page security article label');
+    assertContains(about, 'איך אנחנו שומרים על המידע שלכם', 'about-page security article label');
     assertContains(about, 'טל אגמון כתב', 'about-page author credit');
+    assertContains(securityArticle, '<link rel="canonical" href="https://edenmish.com/blog/edenmish-information-security"', 'security article canonical URL');
+    assertContains(securityArticle, 'https://github.com/usestrix/strix', 'Strix project credit');
+    assertContains(securityArticle, technicalReviewUrl, 'technical security review link');
+    assertContains(securityArticle, '"@type": "BlogPosting"', 'security article structured data');
+    assert.ok(!securityArticle.includes('—'), 'security article must not use em dashes');
     assert.ok(!homepage.includes('Sol'), 'homepage must not present the AI model as a public co-author');
     assert.ok(!about.includes('Sol'), 'about page must not present the AI model as a public co-author');
     assert.ok(!homepage.includes('הצטרפו למאות עסקים'), 'homepage must not claim hundreds of customers during launch');
