@@ -101,14 +101,12 @@
 .eden-a11y-reset,.eden-a11y-statement{display:block;width:100%;margin-top:8px;padding:10px;border-radius:10px;text-align:center;font-weight:700}
 .eden-a11y-reset{border:1px solid rgba(255,255,255,.16);background:transparent;color:#f8fafc;cursor:pointer}
 .eden-a11y-statement{color:#91d3c8;text-decoration:underline}
-.eden-footer-sunflower{animation:eden-footer-sunflower-spin 7s linear infinite;transform-origin:center;will-change:transform}
-@keyframes eden-footer-sunflower-spin{to{transform:rotate(1turn)}}
 html.eden-a11y-text{font-size:112.5%}
 html.eden-a11y-contrast body{filter:contrast(1.35)}
 html.eden-a11y-links a{text-decoration:underline!important;text-decoration-thickness:2px!important;text-underline-offset:3px}
 html.eden-a11y-motion *,html.eden-a11y-motion *::before,html.eden-a11y-motion *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 @media (max-width:480px){.eden-floating-tools{right:12px;bottom:12px}.eden-floating-button{width:50px;height:50px;border-radius:14px}.eden-a11y-panel{bottom:120px}}
-@media (prefers-reduced-motion:reduce){.eden-floating-button{transition:none}.eden-footer-sunflower{animation:none}}
+@media (prefers-reduced-motion:reduce){.eden-floating-button{transition:none}}
 </style>
 </head>
 <body class="bg-surface-dim selection:bg-primary-container selection:text-on-primary-container">
@@ -386,7 +384,7 @@ EdenMish היא מערכת תפעולית שמחברת בין הזמנה, תמח
 </div>
 
 <div class="flex items-center justify-center gap-2 mt-3 opacity-60">
-  <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener"><img src="/assets/se-footer.png" class="eden-footer-sunflower w-7 h-7 rounded-full" alt="Six Elements Altiora"></a>
+  <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener"><img src="/assets/se-footer.png" class="w-7 h-7 rounded-full" alt="Six Elements Altiora"></a>
   <span class="text-label-sm">פותח על ידי <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Six Elements Altiora</a> · <a href="https://talagmon.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Tal Agmon</a></span>
 <span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.2.0(274272)</span>
 </div>
