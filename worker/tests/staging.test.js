@@ -35,7 +35,7 @@ describe('staging Worker isolation', () => {
     assert.match(config, /find-staging\.edenmish\.com/);
     assert.match(config, /ops-staging\.edenmish\.com/);
     assert.match(config, /database_name = "edenmish-staging"/);
-    assert.match(config, /required = \["OPS_PIN", "SESSION_SECRET"\]/);
+    assert.match(config, /required = \["OPS_PIN", "SESSION_SECRET", "DRIVER_ONE_TIME_CODE"\]/);
     assert.ok(!config.includes('f2f51b54-0170-4594-a41c-7a6037c902aa'), 'must not bind the production D1 database');
   });
 });

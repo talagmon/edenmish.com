@@ -19,7 +19,7 @@ OPS_EMAIL = "eden@edenmish.com"
 ALLOWED_ORIGINS = "https://staging.edenmish.com,https://edenmish-staging.pages.dev,https://*.edenmish-staging.pages.dev,https://edenmish-v2.pages.dev,https://*.edenmish-v2.pages.dev"
 
 [secrets]
-required = ["OPS_PIN", "SESSION_SECRET"]
+required = ["OPS_PIN", "SESSION_SECRET", "DRIVER_ONE_TIME_CODE"]
 
 [[d1_databases]]
 binding = "DB"

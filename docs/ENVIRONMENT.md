@@ -29,6 +29,7 @@ authentication and OTP flows fail closed when `SESSION_SECRET` is missing.
 |---|---|---|
 | `OPS_PIN` | Ops dashboard login PIN | `replace-me-strong-pin` |
 | `SESSION_SECRET` | Signs the ops session cookie + hashes OTPs | `replace-me-long-random-string` |
+| `DRIVER_ONE_TIME_CODE` | Single-use bootstrap code exchanged by the driver app; rotate after each successful exchange | `replace-with-6-to-12-digits` |
 | `MAPS_KEY` | Google Maps JS key, injected into the tracking page HTML | `AIza…` (set as a secret; do **not** put in `wrangler.toml`) |
 | `SHOPIFY_ADMIN_TOKEN` | Creates Shopify Draft Orders (custom app token) | `shpat_replaceme` |
 | `SHOPIFY_WEBHOOK_SECRET` | Verifies `orders/paid`, `orders/updated`, and `refunds/create` webhook HMACs | `replace-me-from-shopify-webhook-page` |
@@ -67,6 +68,7 @@ The GitHub `staging` environment contains only:
 | `STAGING_D1_DATABASE_ID` | environment variable | Binds the separate `edenmish-staging` D1 database |
 | `STAGING_OPS_PIN` | environment secret | Staging-only dashboard PIN |
 | `STAGING_SESSION_SECRET` | environment secret | Staging-only cookie/OTP signing key |
+| `STAGING_DRIVER_ONE_TIME_CODE` | environment secret | Staging-only single-use driver bootstrap code |
 
 Never copy production Shopify, payment, webhook, email, or customer-data
 credentials into the staging Worker. See `CI_CD.md` for one-time setup.
@@ -154,7 +156,7 @@ it** (per `../AGENTS.md` §2), then move it to a secret/setting.
 | Public (OK in repo) | Secret (NEVER in repo) |
 |---|---|
 | `SHOPIFY_SHOP`, `SHOPIFY_API_VERSION`, `SHOPIFY_APP_CLIENT_ID` | `SHOPIFY_ADMIN_TOKEN`, `SHOPIFY_CLI_THEME_TOKEN`, `SHOPIFY_WEBHOOK_SECRET` |
-| `BRAND`, `BOOKING_URL`, `WHATSAPP_NUMBER`, `OPS_EMAIL` | `OPS_PIN`, `SESSION_SECRET` |
+| `BRAND`, `BOOKING_URL`, `WHATSAPP_NUMBER`, `OPS_EMAIL` | `OPS_PIN`, `SESSION_SECRET`, `DRIVER_ONE_TIME_CODE` |
 | brand colors, Hebrew copy | `MAPS_KEY` (Worker + theme), `SENDGRID_API_KEY`, `MESH_API_KEY` |
 
 > The public business phone numbers and `eden@edenmish.com` are intentionally
