@@ -28,6 +28,7 @@ It is a **single Worker** that routes by hostname (`find.` vs `ops.`).
 | `find.edenmish.com` | Public order API | `GET/POST /api/quote`, `POST /api/orders`, `GET /api/orders/:token`, `/verify-otp`, `/resend-otp` |
 | `ops.edenmish.com` | Ops/driver dashboard | `GET /` → `pages.js#opsHtml` |
 | `ops.edenmish.com` | Ops API (session-gated) | `/api/ops/login`, `/api/ops/orders`, `…/status`, `…/gps`, `…/approve` |
+| `ops.edenmish.com` | Driver mobile API (bearer-token scoped) | `/api/driver/v1/session`, `/session/refresh`, `/shifts/current`, `/shifts/:id/route`, `/execution-events:batch` |
 | (any) | Shopify webhook | `POST /webhooks/shopify` |
 
 Staging uses separate hosts and a separate D1 database:
@@ -48,6 +49,7 @@ Staging uses separate hosts and a separate D1 database:
 | `pages.js` | Server-rendered HTML for the tracking page (`trackingHtml`) and ops dashboard (`opsHtml`). |
 | `status.js` | Shared status model: `STATUS`, `STATUS_META` (labels, lifecycle, live-GPS, queue buckets, next-status), `QUEUE_LAYOUT`, helpers. Single source of truth for both UIs. |
 | `security.js` | PII sanitizer (`publicOrderSummary`), `maskEmail`, `corsFor` (CORS allowlist), `clientIp`, `anonKey` (hashed IP rate-limit keys). |
+| `driver-api.js` | Driver mobile boundary: single-use login exchange, installation-bound bearer auth, route snapshots, and idempotent execution events. |
 | `notify.js` | Email notification wrapper (`notifyEmail`): best-effort audit trail in D1 `notifications`; never throws. |
 
 ## Local dev
@@ -90,7 +92,7 @@ Database name: `edenmish`. Binding: `DB`.
 ### Schema and migrations
 
 `schema.sql` is the **fresh-DB source of truth** — it defines every current table.
-The numbered migrations (`003`–`011`) add tables/columns that were introduced after the
+The numbered migrations (`003`–`014`) add tables/columns that were introduced after the
 initial schema. Tables are idempotent (`CREATE TABLE IF NOT EXISTS`); `ALTER TABLE …
 ADD COLUMN` migrations (`006`–`010`) must run only on DBs that predate their columns.
 
@@ -102,7 +104,8 @@ ADD COLUMN` migrations (`006`–`010`) must run only on DBs that predate their c
 
 Current tables: `orders`, `status_history`, `gps_pings`, `payments`, `pricing_rules`,
 `rate_limits`, `delivery_proofs`, `notifications`, `coupons`, `coupon_redemptions`,
-`cancellation_requests`.
+`cancellation_requests`, `drivers`, `driver_sessions`, `driver_shifts`,
+`driver_assignments`, `driver_routes`, `driver_route_stops`, `driver_execution_events`.
 
 ## Secret checklist
 
@@ -114,6 +117,7 @@ See `../docs/ENVIRONMENT.md` for the full list and placeholders.
 |---|---|---|
 | `OPS_PIN` | ops dashboard login | shared PIN today |
 | `SESSION_SECRET` | signed ops cookie + OTP hashing | mandatory; auth/order OTP flows fail closed if unset |
+| `DRIVER_ONE_TIME_CODE` | driver app bootstrap login | single use; 6–12 digits; rotate after every successful exchange |
 | `MAPS_KEY` | tracking page live map (injected into HTML) | Google Maps JS key |
 | `SHOPIFY_ADMIN_TOKEN` | creating Draft Orders (`shpat_…`) | Worker-side charge |
 | `SHOPIFY_WEBHOOK_SECRET` | verifying Shopify payment/refund webhooks | webhook fails closed (401) if unset |
@@ -163,6 +167,7 @@ wrangler d1 execute edenmish --remote --file=./migrations/008_coupons.sql
 wrangler d1 execute edenmish --remote --file=./migrations/009_invoice_tracking.sql
 wrangler d1 execute edenmish --remote --file=./migrations/010_order_service_schedule.sql
 wrangler d1 execute edenmish --remote --file=./migrations/011_cancellation_requests.sql
+wrangler d1 execute edenmish --remote --file=./migrations/014_driver_api_v1.sql
 ```
 
 > Run only migrations that have not already been applied. Several `ALTER TABLE`
@@ -173,6 +178,7 @@ wrangler d1 execute edenmish --remote --file=./migrations/011_cancellation_reque
 ```bash
 wrangler secret put OPS_PIN
 wrangler secret put SESSION_SECRET
+wrangler secret put DRIVER_ONE_TIME_CODE
 wrangler secret put MAPS_KEY
 wrangler secret put SHOPIFY_ADMIN_TOKEN
 wrangler secret put SHOPIFY_WEBHOOK_SECRET

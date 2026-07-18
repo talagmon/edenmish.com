@@ -9,6 +9,7 @@ import { normalizeIlPhone, scheduleError, validIsraeliId } from './validate.js';
 import { validateCoupon, recordRedemption, listCoupons, createCoupon, updateCoupon, deleteCoupon } from './coupons.js';
 import { getStatusMeta, getNextStatuses, isTerminalStatus } from './status.js';
 import { shopifyWebhookRegistrar } from './shopify-webhooks.js';
+import { handleDriverApi } from './driver-api.js';
 
 const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra } });
 const html = (s) => new Response(s, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -262,6 +263,9 @@ export default {
     if (path === '/health' && req.method === 'GET') {
       return json({ ok: true, service: 'edenmish-worker' });
     }
+
+    const driverResponse = await handleDriverApi(req, env, path);
+    if (driverResponse) return driverResponse;
 
     // Verify Shopify payment/refund subscriptions. Failures are sanitized, logged,
     // exposed to authenticated ops, and retried after a cooldown.

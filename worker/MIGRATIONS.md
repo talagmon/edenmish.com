@@ -219,6 +219,35 @@ WHERE type='table' AND name='cancellation_requests';
 
 ---
 
+### 014_driver_api_v1.sql
+
+**Purpose:** Adds the scoped mobile-driver foundation: driver identities,
+installation-bound hashed sessions, shifts, assignments, revisioned routes, and
+idempotent execution events. Migration numbers 012–013 are reserved by parallel
+security work and must be applied before 014 if those files are present at merge time.
+
+**Commands:**
+```bash
+# Staging (render the config first; run from worker/):
+npx wrangler d1 execute edenmish-staging --remote \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/014_driver_api_v1.sql
+
+# Production (only after the production release is approved):
+wrangler d1 execute edenmish --remote --file=./migrations/014_driver_api_v1.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM sqlite_master
+WHERE type='table' AND name IN (
+  'drivers', 'driver_sessions', 'driver_shifts', 'driver_assignments',
+  'driver_routes', 'driver_route_stops', 'driver_execution_events'
+);
+```
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -234,6 +263,7 @@ WHERE type='table' AND name='cancellation_requests';
 - [ ] Run `009_invoice_tracking.sql` if not already applied.
 - [ ] Run `010_order_service_schedule.sql` after merge and before deploying the Worker.
 - [ ] Run `011_cancellation_requests.sql` after merge and before deploying the Worker.
+- [ ] Run `014_driver_api_v1.sql` after merge and before enabling the driver app.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).
