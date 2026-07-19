@@ -306,6 +306,7 @@ git push origin "v$(./scripts/current_version.sh)"
      wrangler d1 execute edenmish --remote --file=./migrations/011_cancellation_requests.sql
      wrangler d1 execute edenmish --remote --file=./migrations/014_driver_api_v1.sql
      wrangler d1 execute edenmish --remote --file=./migrations/015_driver_route_tasks.sql
+     wrangler d1 execute edenmish --remote --file=./migrations/016_driver_route_integrity.sql
 3. Configure the production Worker bootstrap secret if it is not already present:
      cd worker
      wrangler secret put DRIVER_ONE_TIME_CODE
@@ -388,12 +389,18 @@ npx wrangler d1 execute edenmish-staging --remote \
 ```
 
 For an existing staging database, apply new numbered migrations manually before
-deploying Worker code that depends on them. For the current driver API migration:
+deploying Worker code that depends on them. For the current driver API migrations:
 
 ```bash
 npx wrangler d1 execute edenmish-staging --remote \
   --config wrangler.staging.generated.toml \
   --file=./migrations/014_driver_api_v1.sql
+npx wrangler d1 execute edenmish-staging --remote \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/015_driver_route_tasks.sql
+npx wrangler d1 execute edenmish-staging --remote \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/016_driver_route_integrity.sql
 ```
 
 The GitHub deployment token intentionally does not run D1 migrations; use an
