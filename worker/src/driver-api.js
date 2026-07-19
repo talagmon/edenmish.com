@@ -5,6 +5,7 @@ const ACCESS_TTL_MS = 15 * 60 * 1000;
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 64 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const CLIENT_VERSION = /^\d+\.\d+\.\d+\+\d+(?: \([0-9a-f]{7,40}\))?$/i;
 const ID = /^(drv|sh|stop)_[A-Za-z0-9]+$/;
 const EVENT_TYPES = new Set([
   'route_revision_acknowledged', 'inserted_order_rejected', 'inserted_stop_rejected',
@@ -47,7 +48,7 @@ function metadata(req) {
   const clientVersion = req.headers.get('x-client-version') || '';
   if (!UUID.test(requestId)) return { error: 'invalid_request_id', requestId: null };
   if (!UUID.test(installationId)) return { error: 'invalid_installation_id', requestId };
-  if (!/^\d+\.\d+\.\d+\+\d+$/.test(clientVersion)) return { error: 'invalid_client_version', requestId };
+  if (!CLIENT_VERSION.test(clientVersion)) return { error: 'invalid_client_version', requestId };
   return { requestId, installationId, clientVersion };
 }
 
