@@ -280,6 +280,35 @@ WHERE name IN (
 
 ---
 
+### 016_driver_route_integrity.sql
+
+**Purpose:** Stores bounded, shift-scoped driver location samples and adds a
+deterministic fingerprint to immutable route revisions. Dispatch uses only fresh,
+accurate samples as its origin, creates a new revision when routing inputs change,
+and can safely detect a concurrently generated equivalent route.
+
+**Commands:**
+```bash
+# Staging (render the config first; run from worker/):
+npx wrangler d1 execute edenmish-staging --remote \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/016_driver_route_integrity.sql
+
+# Production (only after the production release is approved):
+wrangler d1 execute edenmish --remote --file=./migrations/016_driver_route_integrity.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM pragma_table_info('driver_routes')
+WHERE name='plan_fingerprint';
+
+SELECT name FROM sqlite_master
+WHERE type='table' AND name='driver_location_samples';
+```
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -297,6 +326,7 @@ WHERE name IN (
 - [ ] Run `011_cancellation_requests.sql` after merge and before deploying the Worker.
 - [ ] Run `014_driver_api_v1.sql` after merge and before enabling the driver app.
 - [ ] Run `015_driver_route_tasks.sql` after 014 and before enabling mixed pickup/drop-off routes.
+- [ ] Run `016_driver_route_integrity.sql` after 015 and before enabling GPS-origin route optimization.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).

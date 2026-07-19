@@ -412,4 +412,75 @@ describe('driver API v1', () => {
     assert.ok(!db.calls.some((call) => call.sql.startsWith('UPDATE orders SET')));
     assert.ok(db.calls.some((call) => call.sql.includes('INSERT OR IGNORE INTO driver_execution_events')));
   });
+
+  test('accepts bounded location samples for the active authenticated shift', async () => {
+    const now = Date.now();
+    const db = fakeDb({
+      first: (call) => {
+        const auth = authenticatedFirst(call);
+        if (auth) return auth;
+        if (call.sql.includes('SELECT id, started_at FROM driver_shifts')) {
+          return { id: 'sh_123', started_at: now - 60_000 };
+        }
+        return null;
+      },
+    });
+    const sampleId = '44444444-4444-4444-8444-444444444444';
+
+    const res = await handleDriverApi(request('/api/driver/v1/location:batch', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({
+        shift_id: 'sh_123',
+        samples: [{
+          sample_id: sampleId,
+          captured_at: new Date(now).toISOString(),
+          latitude: 32.0809,
+          longitude: 34.7806,
+          accuracy_meters: 12,
+          speed_meters_per_second: 4.5,
+        }],
+      }),
+    }), { DB: db });
+
+    assert.equal(res.status, 202);
+    assert.deepEqual(await res.json(), { accepted_count: 1 });
+    const insert = db.calls.find((call) => call.sql.includes('INSERT OR IGNORE INTO driver_location_samples'));
+    assert.ok(insert);
+    assert.deepEqual(insert.args.slice(0, 3), [sampleId, 'drv_eden', 'sh_123']);
+    assert.ok(db.calls.some((call) => call.sql.startsWith('DELETE FROM driver_location_samples')));
+  });
+
+  test('rejects stale or inaccurate location samples without persisting them', async () => {
+    const now = Date.now();
+    const db = fakeDb({
+      first: (call) => {
+        const auth = authenticatedFirst(call);
+        if (auth) return auth;
+        if (call.sql.includes('SELECT id, started_at FROM driver_shifts')) {
+          return { id: 'sh_123', started_at: now - 60_000 };
+        }
+        return null;
+      },
+    });
+
+    const res = await handleDriverApi(request('/api/driver/v1/location:batch', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({
+        shift_id: 'sh_123',
+        samples: [{
+          sample_id: '55555555-5555-4555-8555-555555555555',
+          captured_at: new Date(now - 120_000).toISOString(),
+          latitude: 32.0809,
+          longitude: 34.7806,
+          accuracy_meters: 1001,
+        }],
+      }),
+    }), { DB: db });
+
+    assert.equal(res.status, 400);
+    assert.equal((await res.json()).code, 'invalid_location_samples');
+    assert.ok(!db.calls.some((call) => call.sql.includes('INSERT OR IGNORE INTO driver_location_samples')));
+  });
 });

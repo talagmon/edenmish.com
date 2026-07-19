@@ -93,9 +93,9 @@ Database name: `edenmish`. Binding: `DB`.
 ### Schema and migrations
 
 `schema.sql` is the **fresh-DB source of truth** — it defines every current table.
-The numbered migrations (`003`–`015`) add tables/columns that were introduced after the
+The numbered migrations (`003`–`016`) add tables/columns that were introduced after the
 initial schema. Tables are idempotent (`CREATE TABLE IF NOT EXISTS`); `ALTER TABLE …
-ADD COLUMN` migrations (`006`–`010` and `015`) must run only on DBs that predate their columns.
+ADD COLUMN` migrations (`006`–`010`, `015`, and `016`) must run only on DBs that predate their columns.
 
 - **Fresh DB:** run `npm run db:init` (schema.sql only).
 - **Existing production DB:** run numbered migrations in order — see **`MIGRATIONS.md`**
@@ -107,6 +107,7 @@ Current tables: `orders`, `status_history`, `gps_pings`, `payments`, `pricing_ru
 `rate_limits`, `delivery_proofs`, `notifications`, `coupons`, `coupon_redemptions`,
 `cancellation_requests`, `drivers`, `driver_sessions`, `driver_shifts`,
 `driver_assignments`, `driver_routes`, `driver_route_stops`, `driver_execution_events`.
+The driver runtime also stores bounded samples in `driver_location_samples` while a shift is active.
 
 ## Secret checklist
 
@@ -176,6 +177,7 @@ wrangler d1 execute edenmish --remote --file=./migrations/010_order_service_sche
 wrangler d1 execute edenmish --remote --file=./migrations/011_cancellation_requests.sql
 wrangler d1 execute edenmish --remote --file=./migrations/014_driver_api_v1.sql
 wrangler d1 execute edenmish --remote --file=./migrations/015_driver_route_tasks.sql
+wrangler d1 execute edenmish --remote --file=./migrations/016_driver_route_integrity.sql
 ```
 
 > Run only migrations that have not already been applied. Several `ALTER TABLE`
