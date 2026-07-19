@@ -50,6 +50,7 @@ Staging uses separate hosts and a separate D1 database:
 | `status.js` | Shared status model: `STATUS`, `STATUS_META` (labels, lifecycle, live-GPS, queue buckets, next-status), `QUEUE_LAYOUT`, helpers. Single source of truth for both UIs. |
 | `security.js` | PII sanitizer (`publicOrderSummary`), `maskEmail`, `corsFor` (CORS allowlist), `clientIp`, `anonKey` (hashed IP rate-limit keys). |
 | `driver-api.js` | Driver mobile boundary: single-use login exchange, installation-bound bearer auth, route snapshots, and idempotent execution events. |
+| `route-optimization.js` | Fail-closed Google Route Optimization adapter for one-driver mixed pickup/drop-off plans, including locked-stop and precedence validation. |
 | `notify.js` | Email notification wrapper (`notifyEmail`): best-effort audit trail in D1 `notifications`; never throws. |
 
 ## Local dev
@@ -122,9 +123,14 @@ See `../docs/ENVIRONMENT.md` for the full list and placeholders.
 | `SHOPIFY_ADMIN_TOKEN` | creating Draft Orders (`shpat_…`) | Worker-side charge |
 | `SHOPIFY_WEBHOOK_SECRET` | verifying Shopify payment/refund webhooks | webhook fails closed (401) if unset |
 | `SENDGRID_API_KEY` | all email notifications | currently SendGrid |
+| `GOOGLE_ROUTE_OPTIMIZATION_API_KEY` | server-side mixed-route optimization | optional; restricted key, never shipped to Flutter; provider remains disabled unless explicitly configured |
 
 Non-secret vars live in `wrangler.toml [vars]`: `BRAND`, `BOOKING_URL`,
 `WHATSAPP_NUMBER`, `OPS_EMAIL`, `SHOPIFY_SHOP`, `SHOPIFY_API_VERSION`.
+Route optimization additionally requires `ROUTE_OPTIMIZATION_PROVIDER=google`
+and `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID`; see
+`../docs/DRIVER_ROUTE_OPTIMIZATION.md`. They are intentionally absent until the
+Google Cloud project, billing guardrail, and restricted credential are approved.
 
 ## Webhook checklist
 

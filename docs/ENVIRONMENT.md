@@ -34,6 +34,7 @@ authentication and OTP flows fail closed when `SESSION_SECRET` is missing.
 | `SHOPIFY_ADMIN_TOKEN` | Creates Shopify Draft Orders (custom app token) | `shpat_replaceme` |
 | `SHOPIFY_WEBHOOK_SECRET` | Verifies `orders/paid`, `orders/updated`, and `refunds/create` webhook HMACs | `replace-me-from-shopify-webhook-page` |
 | `SENDGRID_API_KEY` | All outbound email (customer OTP/confirmation + Eden alerts) | `SG.replaceme` |
+| `GOOGLE_ROUTE_OPTIMIZATION_API_KEY` | Optional server-side driver route optimization; use a restricted key and never ship it to Flutter | `replace-with-restricted-server-key` |
 | `MESH_API_KEY` | **Future** — Mesh/J5 preauth processor. Not used today. | (unset for now) |
 
 > `SESSION_SECRET` is mandatory. The Worker refuses to create sessions or OTP hashes
@@ -52,6 +53,8 @@ These are safe to keep in the repo (non-secret configuration):
 | `SHOPIFY_SHOP` | Shopify shop domain, e.g. `edenmish.myshopify.com` |
 | `SHOPIFY_API_VERSION` | Shopify Admin API version, e.g. `2026-04`. **Set this explicitly in production** — the code's hardcoded fallback (`2026-04` in `worker/src/integrations.js`) will eventually be deprecated by Shopify, and bumping a var beats redeploying code |
 | `ALLOWED_ORIGINS` | **Required in production.** Comma-separated CORS allowlist. Include every storefront/ops page origin that calls the Worker. Credentialed ops-cookie requests require an explicit origin and cannot use the `*` fallback. Local dev may add `http://127.0.0.1:PORT`. |
+| `ROUTE_OPTIMIZATION_PROVIDER` | Optional explicit switch; set to `google` only after billing, quota, and credentials are approved |
+| `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID` | Google Cloud project ID/number with Route Optimization enabled; required only when the provider is `google` |
 
 > Optional future var: `PAYMENT_MODE` (`immediate` today, `preauth` for Mesh later).
 
@@ -157,7 +160,7 @@ it** (per `../AGENTS.md` §2), then move it to a secret/setting.
 |---|---|
 | `SHOPIFY_SHOP`, `SHOPIFY_API_VERSION`, `SHOPIFY_APP_CLIENT_ID` | `SHOPIFY_ADMIN_TOKEN`, `SHOPIFY_CLI_THEME_TOKEN`, `SHOPIFY_WEBHOOK_SECRET` |
 | `BRAND`, `BOOKING_URL`, `WHATSAPP_NUMBER`, `OPS_EMAIL` | `OPS_PIN`, `SESSION_SECRET`, `DRIVER_ONE_TIME_CODE` |
-| brand colors, Hebrew copy | `MAPS_KEY` (Worker + theme), `SENDGRID_API_KEY`, `MESH_API_KEY` |
+| brand colors, Hebrew copy | `MAPS_KEY` (Worker + theme), `SENDGRID_API_KEY`, `GOOGLE_ROUTE_OPTIMIZATION_API_KEY`, `MESH_API_KEY` |
 
 > The public business phone numbers and `eden@edenmish.com` are intentionally
 > public contact info, **not** secrets.
