@@ -99,6 +99,7 @@ jobs:
         run: |
           cd worker
           npm ci
+          node scripts/validate-driver-schema.mjs --database edenmish --config wrangler.toml
           SECRET_LIST=$(npx wrangler secret list)
           if ! grep -q '"name": "DRIVER_ONE_TIME_CODE"' <<< "$SECRET_LIST"; then
             echo "::error::Production Worker secret DRIVER_ONE_TIME_CODE is missing. Configure it before enabling the driver API."
