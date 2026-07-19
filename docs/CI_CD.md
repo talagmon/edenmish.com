@@ -99,6 +99,9 @@ and gated by environment approval.
 - runs the full Worker test suite;
 - renders `worker/wrangler.staging.toml` with the staging D1 database ID from
   the GitHub `staging` environment;
+- performs a read-only remote D1 schema-readiness check for driver migrations
+  014–016 and stops before deployment when a required table, column, or index
+  is missing;
 - deploys `edenmish-ops-staging` to `find-staging.edenmish.com` and
   `ops-staging.edenmish.com` with staging-only auth secrets;
 - verifies `/health` and the credentialed CORS origin for
@@ -407,6 +410,9 @@ npx wrangler d1 execute edenmish-staging --remote \
 
 The GitHub deployment token intentionally does not run D1 migrations; use an
 authorized operator session and verify the migration before triggering the workflow.
+Both staging and production deployment workflows also query the required driver
+schema read-only and fail before `wrangler deploy` if migrations 014–016 are
+incomplete. The guard never applies or repairs migrations automatically.
 
 Then create the GitHub `staging` environment and add:
 

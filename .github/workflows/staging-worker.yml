@@ -48,6 +48,9 @@ jobs:
       - name: Render isolated staging configuration
         working-directory: worker
         run: node scripts/render-staging-config.mjs
+      - name: Verify remote driver schema readiness
+        working-directory: worker
+        run: node scripts/validate-driver-schema.mjs --database edenmish-staging --config wrangler.staging.generated.toml
       - name: Prepare staging secrets
         run: |
           node --input-type=module -e 'import { writeFileSync } from "node:fs"; writeFileSync("/tmp/edenmish-staging-secrets.json", JSON.stringify({ OPS_PIN: process.env.STAGING_OPS_PIN, SESSION_SECRET: process.env.STAGING_SESSION_SECRET, DRIVER_ONE_TIME_CODE: process.env.STAGING_DRIVER_ONE_TIME_CODE, GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON: process.env.STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON }), { mode: 0o600 });'
