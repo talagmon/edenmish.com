@@ -11,6 +11,17 @@ const EVENT_TYPES = new Set([
   'navigation_started', 'arrived', 'pickup_completed', 'delivery_completed',
   'delivery_failed',
 ]);
+const TASK_EVENT_TYPES = new Set([
+  'navigation_started', 'arrived', 'pickup_completed',
+  'delivery_completed', 'delivery_failed',
+]);
+const TASK_STATE_FOR_EVENT = {
+  navigation_started: 'navigating',
+  arrived: 'arrived',
+  pickup_completed: 'completed',
+  delivery_completed: 'completed',
+  delivery_failed: 'failed',
+};
 
 const response = (body, status = 200, requestId = null, extra = {}) => new Response(JSON.stringify(body), {
   status,
@@ -171,7 +182,7 @@ function onboardOrderIds(value) {
   }
 }
 
-function routeTask(stop) {
+function routeTask(stop, executionState = null) {
   const taskType = stop.task_type === 'pickup' ? 'pickup' : 'dropoff';
   const isPickup = taskType === 'pickup';
   const displayText = isPickup ? stop.pickup : stop.dropoff;
@@ -182,7 +193,7 @@ function routeTask(stop) {
     position: stop.position,
     task_type: taskType,
     required_predecessor_stop_id: stop.required_predecessor_stop_id || null,
-    state: stop.state === 'delivered' ? 'completed' : stop.state,
+    state: executionState || (stop.state === 'delivered' ? 'completed' : stop.state),
     contact: { display_name: stop.name, phone: stop.phone },
     address: {
       display_text: [displayText, detail].filter(Boolean).join(' · '),
@@ -208,13 +219,26 @@ async function routeSnapshot(env, auth, meta, shiftId) {
       o.dropoff, o.dropoff_detail, o.dropoff_lat, o.dropoff_lng
     FROM driver_route_stops s JOIN orders o ON o.id = s.order_id
     WHERE s.route_id = ? ORDER BY s.position`).bind(route.id).all();
-  const stops = (rows.results || []).map(routeTask);
+  const executionRows = await env.DB.prepare(`SELECT stop_id, event_type
+    FROM driver_execution_events
+    WHERE shift_id = ? AND status = 'accepted'
+      AND event_type IN ('navigation_started','arrived','pickup_completed','delivery_completed','delivery_failed')
+    ORDER BY server_received_at, event_id`).bind(shiftId).all();
+  const executionStateByStop = new Map();
+  for (const event of executionRows.results || []) {
+    if (event.stop_id && TASK_STATE_FOR_EVENT[event.event_type]) {
+      executionStateByStop.set(event.stop_id, TASK_STATE_FOR_EVENT[event.event_type]);
+    }
+  }
+  const stops = (rows.results || []).map((stop) => routeTask(stop, executionStateByStop.get(stop.stop_id)));
+  const activeStop = stops.find((stop) => !['completed', 'failed', 'cancelled', 'skipped_by_dispatch'].includes(stop.state));
   return response({
     shift_id: shiftId, revision: route.revision, generated_at: new Date(route.generated_at).toISOString(), reason: route.reason,
-    current_stop_id: route.current_stop_id, current_stop_locked: !!route.current_stop_locked,
+    current_stop_id: activeStop?.stop_id || route.current_stop_id,
+    current_stop_locked: !!activeStop && ['navigating', 'arrived'].includes(activeStop.state),
     delay_minutes: route.delay_minutes,
     onboard_order_ids: onboardOrderIds(route.onboard_order_ids_json),
-    progress: { current_position: route.current_position, total_stops: route.total_stops }, stops,
+    progress: { current_position: activeStop?.position || route.total_stops, total_stops: route.total_stops }, stops,
     change_summary: { added_stop_ids: (rows.results || []).filter((s) => s.inserted).map((s) => s.stop_id), removed_stop_ids: [], moved_stop_ids: [] },
   }, 200, meta.requestId, { ETag: `"route-${shiftId}-${route.revision}"` });
 }
@@ -222,6 +246,49 @@ async function routeSnapshot(env, auth, meta, shiftId) {
 function parseOrderId(value) {
   const match = /^ord_(\d+)$/.exec(value || '');
   return match ? Number(match[1]) : null;
+}
+
+async function assignedTask(env, shiftId, stopId, orderId) {
+  return env.DB.prepare(`SELECT s.stop_id, s.task_type
+    FROM driver_route_stops s JOIN driver_routes r ON r.id = s.route_id
+    WHERE r.shift_id = ? AND s.stop_id = ? AND s.order_id = ?
+    ORDER BY r.revision DESC LIMIT 1`).bind(shiftId, stopId, orderId).first();
+}
+
+async function applyTaskEvent(env, eventType, task, order, orderId) {
+  if (!order || order.status === 'cancelled') {
+    return { status: 'accepted_conflict', conflictType: order ? 'order_cancelled' : 'order_missing' };
+  }
+  if (eventType === 'pickup_completed' && task.task_type !== 'pickup') {
+    return { status: 'accepted_conflict', conflictType: 'task_type_mismatch' };
+  }
+  if (['delivery_completed', 'delivery_failed'].includes(eventType) && task.task_type !== 'dropoff') {
+    return { status: 'accepted_conflict', conflictType: 'task_type_mismatch' };
+  }
+
+  const targetStatus = eventType === 'navigation_started'
+    ? task.task_type === 'pickup' ? 'to_pickup' : 'to_dropoff'
+    : eventType === 'pickup_completed' ? 'picked_up'
+    : eventType === 'delivery_completed' ? 'delivered'
+    : eventType === 'delivery_failed' ? 'failed'
+    : null;
+  if (targetStatus == null) return { status: 'accepted', conflictType: null };
+
+  const allowedFrom = targetStatus === 'to_pickup' ? ['paid']
+    : targetStatus === 'to_dropoff' ? ['picked_up']
+    : targetStatus === 'picked_up' ? ['to_pickup']
+    : targetStatus === 'delivered' || targetStatus === 'failed' ? ['to_dropoff']
+    : [];
+  if (order.status === targetStatus) return { status: 'accepted', conflictType: null };
+  if (!allowedFrom.includes(order.status)) {
+    return { status: 'accepted_conflict', conflictType: 'invalid_canonical_state' };
+  }
+
+  const fields = targetStatus === 'picked_up' ? { picked_up_at: Date.now() }
+    : targetStatus === 'delivered' ? { delivered_at: Date.now() }
+    : {};
+  await setOrderStatus(env.DB, orderId, targetStatus, fields);
+  return { status: 'accepted', conflictType: null };
 }
 
 async function processEvent(env, auth, meta, event) {
@@ -250,17 +317,16 @@ async function processEvent(env, auth, meta, event) {
   }
   let status = 'accepted';
   let conflictType = null;
-  if (event.event_type === 'pickup_completed' && orderId != null) {
+  if (TASK_EVENT_TYPES.has(event.event_type)) {
+    if (orderId == null || event.stop_id == null) {
+      return { event_id: event.event_id, status: 'rejected_invalid', server_received_at: new Date().toISOString() };
+    }
+    const task = await assignedTask(env, event.shift_id, event.stop_id, orderId);
+    if (!task) return { event_id: event.event_id, status: 'rejected_auth', server_received_at: new Date().toISOString() };
     const order = await getOrderById(env.DB, orderId);
-    if (!order || order.status === 'cancelled') { status = 'accepted_conflict'; conflictType = order ? 'order_cancelled' : 'order_missing'; }
-    else if (order.status === 'to_pickup') await setOrderStatus(env.DB, orderId, 'picked_up', { picked_up_at: Date.now() });
-    else if (order.status !== 'picked_up') { status = 'accepted_conflict'; conflictType = 'invalid_canonical_state'; }
-  }
-  if (event.event_type === 'delivery_completed' && orderId != null) {
-    const order = await getOrderById(env.DB, orderId);
-    if (!order || order.status === 'cancelled') { status = 'accepted_conflict'; conflictType = order ? 'order_cancelled' : 'order_missing'; }
-    else if (order.status === 'to_dropoff') await setOrderStatus(env.DB, orderId, 'delivered', { delivered_at: Date.now() });
-    else if (order.status !== 'delivered') { status = 'accepted_conflict'; conflictType = 'invalid_canonical_state'; }
+    const applied = await applyTaskEvent(env, event.event_type, task, order, orderId);
+    status = applied.status;
+    conflictType = applied.conflictType;
   }
   const now = Date.now();
   const correlationId = meta.requestId;
