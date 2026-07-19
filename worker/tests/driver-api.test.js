@@ -197,8 +197,11 @@ describe('driver API v1', () => {
         };
         return null;
       },
-      all: (call) => call.sql.includes('FROM driver_route_stops') ? { results: [
-        {
+      all: (call) => {
+        if (call.sql.includes('FROM driver_execution_events')) {
+          return { results: [{ stop_id: 'stop_p1', event_type: 'arrived' }] };
+        }
+        return call.sql.includes('FROM driver_route_stops') ? { results: [{
           stop_id: 'stop_p1', order_id: 9001, position: 1, task_type: 'pickup',
           required_predecessor_stop_id: null, state: 'navigating',
           name: 'נועה לוי', phone: '+972541234567', pickup: 'הרצל 42, תל אביב',
@@ -208,8 +211,7 @@ describe('driver API v1', () => {
           promised_from: '2026-07-18T15:00:00Z', promised_to: '2026-07-18T16:00:00Z',
           eta: '2026-07-18T15:35:00Z', service_duration_seconds: 300,
           urgency: 'normal', inserted: 0,
-        },
-        {
+        }, {
           stop_id: 'stop_d0', order_id: 9000, position: 2, task_type: 'dropoff',
           required_predecessor_stop_id: 'stop_p0', state: 'pending',
           name: 'מיכל רוזן', phone: '+972521234567', pickup: 'הנמל 3, תל אביב',
@@ -219,8 +221,8 @@ describe('driver API v1', () => {
           promised_from: '2026-07-18T15:20:00Z', promised_to: '2026-07-18T16:05:00Z',
           eta: '2026-07-18T15:47:00Z', service_duration_seconds: 420,
           urgency: 'urgent', inserted: 1,
-        },
-      ] } : { results: [] },
+        }] } : { results: [] };
+      },
     });
 
     const res = await handleDriverApi(request('/api/driver/v1/shifts/sh_123/route', {
@@ -233,6 +235,7 @@ describe('driver API v1', () => {
     assert.equal(body.revision, 13);
     assert.deepEqual(body.onboard_order_ids, ['ord_9000']);
     assert.equal(body.stops[0].task_type, 'pickup');
+    assert.equal(body.stops[0].state, 'arrived');
     assert.equal(body.stops[0].contact.display_name, 'נועה לוי');
     assert.equal(body.stops[0].address.display_text, 'הרצל 42, תל אביב · קומה 2');
     assert.equal(body.stops[1].task_type, 'dropoff');
@@ -249,6 +252,9 @@ describe('driver API v1', () => {
         if (call.sql.startsWith('SELECT event_id')) return null;
         if (call.sql.includes('FROM driver_shifts WHERE id')) return { id: 'sh_123' };
         if (call.sql.includes('FROM driver_assignments')) return { order_id: 9001 };
+        if (call.sql.includes('FROM driver_route_stops s JOIN driver_routes')) {
+          return { stop_id: 'stop_p1', task_type: 'pickup' };
+        }
         if (call.sql === 'SELECT * FROM orders WHERE id = ?') return { id: 9001, status: 'to_pickup' };
         return null;
       },
@@ -279,6 +285,45 @@ describe('driver API v1', () => {
     assert.equal(orderUpdate.args[0], 'picked_up');
     assert.equal(orderUpdate.args.at(-1), 9001);
     assert.ok(db.calls.some((call) => call.sql.includes('INSERT INTO status_history')));
+  });
+
+  test('starts drop-off navigation only after the package is picked up', async () => {
+    const db = fakeDb({
+      first: (call) => {
+        const auth = authenticatedFirst(call);
+        if (auth) return auth;
+        if (call.sql.startsWith('SELECT event_id')) return null;
+        if (call.sql.includes('FROM driver_shifts WHERE id')) return { id: 'sh_123' };
+        if (call.sql.includes('FROM driver_assignments')) return { order_id: 9001 };
+        if (call.sql.includes('FROM driver_route_stops s JOIN driver_routes')) {
+          return { stop_id: 'stop_d1', task_type: 'dropoff' };
+        }
+        if (call.sql === 'SELECT * FROM orders WHERE id = ?') return { id: 9001, status: 'picked_up' };
+        return null;
+      },
+    });
+    const event = {
+      event_id: eventId,
+      event_type: 'navigation_started',
+      occurred_at: '2026-07-18T15:00:00Z',
+      recorded_at_monotonic_ms: 42,
+      shift_id: 'sh_123',
+      order_id: 'ord_9001',
+      stop_id: 'stop_d1',
+      route_revision_seen: 13,
+      payload: {},
+    };
+
+    const res = await handleDriverApi(request('/api/driver/v1/execution-events:batch', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ events: [event] }),
+    }), { DB: db });
+    const body = await res.json();
+
+    assert.equal(body.results[0].status, 'accepted');
+    const orderUpdate = db.calls.find((call) => call.sql.startsWith('UPDATE orders SET'));
+    assert.equal(orderUpdate.args[0], 'to_dropoff');
   });
 
   test('treats a replayed execution event as an idempotent duplicate', async () => {
@@ -316,6 +361,9 @@ describe('driver API v1', () => {
         if (call.sql.startsWith('SELECT event_id')) return null;
         if (call.sql.includes('FROM driver_shifts WHERE id')) return { id: 'sh_123' };
         if (call.sql.includes('FROM driver_assignments')) return { order_id: 9001 };
+        if (call.sql.includes('FROM driver_route_stops s JOIN driver_routes')) {
+          return { stop_id: 'stop_d1', task_type: 'dropoff' };
+        }
         if (call.sql === 'SELECT * FROM orders WHERE id = ?') return { id: 9001, status: 'cancelled' };
         return null;
       },
@@ -327,8 +375,8 @@ describe('driver API v1', () => {
       recorded_at_monotonic_ms: 42,
       shift_id: 'sh_123',
       order_id: 'ord_9001',
-      stop_id: 'stop_41',
-      route_revision_seen: 12,
+      stop_id: 'stop_d1',
+      route_revision_seen: 13,
       payload: {},
     };
 
