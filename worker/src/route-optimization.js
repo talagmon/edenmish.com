@@ -1,5 +1,8 @@
 const PROJECT_ID = /^(?:[a-z][a-z0-9-]{4,61}[a-z0-9]|\d{6,20})$/;
 const TASK_ID = /^(?:stop|ord)_[A-Za-z0-9]+$/;
+const GOOGLE_OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const GOOGLE_CLOUD_SCOPE = 'https://www.googleapis.com/auth/cloud-platform';
+const GOOGLE_ACCESS_TOKEN_CACHE = new Map();
 const TERMINAL_STATES = new Set([
   'completed', 'failed', 'cancelled', 'skipped_by_dispatch',
 ]);
@@ -12,6 +15,115 @@ function optimizationError(message, code = 'route_optimization_failed') {
   return Object.assign(new Error(message), { code });
 }
 
+function base64Url(value) {
+  const bytes = typeof value === 'string' ? new TextEncoder().encode(value) : value;
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+}
+
+function serviceAccountCredentials(env) {
+  let credentials;
+  try {
+    credentials = JSON.parse(env.GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON || '');
+  } catch {
+    throw configurationError('Google Route Optimization service-account credentials are invalid.');
+  }
+  if (credentials?.type !== 'service_account'
+    || credentials.project_id !== env.GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID
+    || typeof credentials.client_email !== 'string'
+    || !credentials.client_email.endsWith('.iam.gserviceaccount.com')
+    || typeof credentials.private_key_id !== 'string'
+    || !/^[a-f0-9]{40}$/.test(credentials.private_key_id)
+    || typeof credentials.private_key !== 'string'
+    || !credentials.private_key.includes('BEGIN PRIVATE KEY')) {
+    throw configurationError('Google Route Optimization service-account credentials are invalid.');
+  }
+  return credentials;
+}
+
+async function importPrivateKey(pem) {
+  const encoded = pem
+    .replace('-----BEGIN PRIVATE KEY-----', '')
+    .replace('-----END PRIVATE KEY-----', '')
+    .replace(/\s/g, '');
+  let binary;
+  try { binary = atob(encoded); } catch {
+    throw configurationError('Google Route Optimization private key is invalid.');
+  }
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  try {
+    return await crypto.subtle.importKey(
+      'pkcs8',
+      bytes,
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+      false,
+      ['sign'],
+    );
+  } catch {
+    throw configurationError('Google Route Optimization private key is invalid.');
+  }
+}
+
+function createGoogleAccessTokenProvider(env, fetchFn, options = {}) {
+  const credentials = serviceAccountCredentials(env);
+  const now = options.now || (() => Date.now());
+
+  return async () => {
+    const cached = GOOGLE_ACCESS_TOKEN_CACHE.get(credentials.private_key_id);
+    if (cached?.expiresAt > now() + 60_000) return cached.token;
+    const issuedAt = Math.floor(now() / 1000);
+    const header = base64Url(JSON.stringify({
+      alg: 'RS256',
+      typ: 'JWT',
+      kid: credentials.private_key_id,
+    }));
+    const claims = base64Url(JSON.stringify({
+      iss: credentials.client_email,
+      scope: GOOGLE_CLOUD_SCOPE,
+      aud: GOOGLE_OAUTH_TOKEN_URL,
+      iat: issuedAt,
+      exp: issuedAt + 3600,
+    }));
+    const unsignedAssertion = `${header}.${claims}`;
+    const privateKey = await importPrivateKey(credentials.private_key);
+    const signature = await crypto.subtle.sign(
+      'RSASSA-PKCS1-v1_5',
+      privateKey,
+      new TextEncoder().encode(unsignedAssertion),
+    );
+    let response;
+    try {
+      response = await fetchFn(GOOGLE_OAUTH_TOKEN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          assertion: `${unsignedAssertion}.${base64Url(new Uint8Array(signature))}`,
+        }).toString(),
+      });
+    } catch {
+      throw optimizationError('Google authentication is unavailable.');
+    }
+    if (!response.ok) throw optimizationError('Google authentication failed.');
+    let payload;
+    try { payload = await response.json(); } catch {
+      throw optimizationError('Google authentication returned an invalid response.');
+    }
+    if (typeof payload.access_token !== 'string' || payload.access_token.length < 20
+      || payload.token_type !== 'Bearer') {
+      throw optimizationError('Google authentication returned an invalid response.');
+    }
+    const expiresIn = Number.isFinite(Number(payload.expires_in))
+      ? Math.min(Math.max(Number(payload.expires_in), 60), 3600) : 3600;
+    GOOGLE_ACCESS_TOKEN_CACHE.set(credentials.private_key_id, {
+      token: payload.access_token,
+      expiresAt: now() + expiresIn * 1000,
+    });
+    return payload.access_token;
+  };
+}
+
 function validLocation(location) {
   return location
     && Number.isFinite(location.latitude)
@@ -20,6 +132,10 @@ function validLocation(location) {
     && Number.isFinite(location.longitude)
     && location.longitude >= -180
     && location.longitude <= 180;
+}
+
+function googleTimestamp(timestamp) {
+  return new Date(Math.floor(timestamp / 1000) * 1000).toISOString().replace('.000Z', 'Z');
 }
 
 function waypoint(location) {
@@ -44,8 +160,8 @@ function visitRequest(task, plan) {
       throw optimizationError('A promised window is outside the route horizon.', 'invalid_route_plan');
     }
     visit.timeWindows = [{
-      startTime: new Date(start).toISOString(),
-      endTime: new Date(end).toISOString(),
+      startTime: googleTimestamp(start),
+      endTime: googleTimestamp(end),
     }];
   }
   return visit;
@@ -135,8 +251,8 @@ export function buildRouteOptimizationRequest(plan) {
       searchMode: 'RETURN_FAST',
       considerRoadTraffic: true,
       model: {
-        globalStartTime: new Date(plan.routeStartTime).toISOString(),
-        globalEndTime: new Date(plan.routeEndTime).toISOString(),
+        globalStartTime: googleTimestamp(Date.parse(plan.routeStartTime)),
+        globalEndTime: googleTimestamp(Date.parse(plan.routeEndTime)),
         shipments,
         vehicles: [{
           label: 'eden-driver',
@@ -209,12 +325,13 @@ export function createGoogleRouteOptimizer(env, options = {}) {
   if (!PROJECT_ID.test(env.GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID || '')) {
     throw configurationError('Google Route Optimization project is not configured.');
   }
-  if (!env.GOOGLE_ROUTE_OPTIMIZATION_API_KEY) {
+  const fetchFn = options.fetchFn || ((...args) => globalThis.fetch(...args));
+  if (!options.getAccessToken && !env.GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON) {
     throw configurationError('Google Route Optimization credentials are not configured.');
   }
-  const fetchFn = options.fetchFn || ((...args) => globalThis.fetch(...args));
+  const getAccessToken = options.getAccessToken
+    || createGoogleAccessTokenProvider(env, fetchFn, options);
   const projectId = env.GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID;
-  const apiKey = env.GOOGLE_ROUTE_OPTIMIZATION_API_KEY;
 
   return {
     async optimize(plan) {
@@ -224,13 +341,14 @@ export function createGoogleRouteOptimizer(env, options = {}) {
       }
       let res;
       try {
+        const accessToken = await getAccessToken();
         res = await fetchFn(
           `https://routeoptimization.googleapis.com/v1/projects/${encodeURIComponent(projectId)}:optimizeTours`,
           {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'X-Goog-Api-Key': apiKey,
+              Authorization: `Bearer ${accessToken}`,
             },
             body: JSON.stringify(request),
           },

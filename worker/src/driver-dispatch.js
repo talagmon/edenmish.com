@@ -289,7 +289,7 @@ async function planFingerprint(tasks) {
     serviceDurationSeconds: task.serviceDurationSeconds,
     addressFingerprint: task.addressFingerprint,
     promisedWindowFingerprint: task.promisedWindowFingerprint,
-  }))));
+  })).sort((left, right) => left.stopId.localeCompare(right.stopId))));
 }
 
 async function persistRouteRevision(DB, {
@@ -358,13 +358,10 @@ export async function syncDriverRoute(env, {
   const previousStops = await latestRouteStops(env.DB, latest?.id);
   const preferredCurrentStopId = previousStops.some((stop) => stop.stop_id === latest?.current_stop_id)
     ? latest.current_stop_id : null;
-  const driverLocation = await latestReliableDriverLocation(env.DB, driverId, shiftId, now);
-  const optimized = tasks.length
-    ? await optimizedTaskOrder(env, tasks, preferredCurrentStopId, now, driverLocation)
-    : { tasks: [], etaByStopId: {} };
-  const orderIds = optimized.tasks.map((task) => task.orderId);
+  const fingerprint = tasks.length ? await planFingerprint(tasks) : null;
+  const orderIds = tasks.map((task) => task.orderId);
   await syncAssignments(env.DB, driverId, shiftId, orderIds, now);
-  if (!optimized.tasks.length) {
+  if (!tasks.length) {
     return {
       empty: true,
       route: null,
@@ -373,16 +370,19 @@ export async function syncDriverRoute(env, {
       taskCount: 0,
     };
   }
-  const fingerprint = await planFingerprint(optimized.tasks);
   if (latest && latest.plan_fingerprint === fingerprint) {
     return {
       empty: false,
       route: latest,
       readyOrderCount: orders.length,
       blockedOrderCount: blockedOrderIds.length,
-      taskCount: optimized.tasks.length,
+      taskCount: tasks.length,
     };
   }
+  const driverLocation = await latestReliableDriverLocation(env.DB, driverId, shiftId, now);
+  const optimized = await optimizedTaskOrder(
+    env, tasks, preferredCurrentStopId, now, driverLocation,
+  );
   const revision = Number(latest?.revision || 0) + 1;
   const previousIds = new Set(previousStops.map((stop) => stop.stop_id));
   const onboardOrderIds = [...new Set(orders

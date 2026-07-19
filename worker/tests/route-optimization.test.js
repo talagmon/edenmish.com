@@ -52,6 +52,8 @@ test('keeps the active stop fixed and models onboard deliveries without pickups'
   assert.equal(byOrder.get('ord_2').deliveries[0].label, 'stop_d2');
   assert.equal(request.model.vehicles[0].costPerKilometer, 1);
   assert.equal(request.considerRoadTraffic, true);
+  assert.equal(request.model.globalStartTime, '2026-07-19T08:00:00Z');
+  assert.equal(request.model.globalEndTime, '2026-07-19T18:00:00Z');
 });
 
 test('accepts a mixed optimized pickup and delivery sequence', () => {
@@ -91,13 +93,13 @@ test('rejects an optimizer response that puts a delivery before its pickup', () 
   }), /pickup precedence/);
 });
 
-test('sends the API key only in a header and never sends customer PII', async () => {
+test('sends an OAuth token only in a header and never sends customer PII', async () => {
   let captured;
   const optimizer = createGoogleRouteOptimizer({
     ROUTE_OPTIMIZATION_PROVIDER: 'google',
     GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID: 'edenmish-routing',
-    GOOGLE_ROUTE_OPTIMIZATION_API_KEY: 'test-secret-key',
   }, {
+    getAccessToken: async () => 'test-access-token',
     fetchFn: async (url, init) => {
       captured = { url, init };
       const { context } = buildRouteOptimizationRequest(plan());
@@ -109,8 +111,8 @@ test('sends the API key only in a header and never sends customer PII', async ()
 
   await optimizer.optimize(plan({ customerName: 'Never Send', phone: '0500000000' }));
 
-  assert.equal(captured.url.includes('test-secret-key'), false);
-  assert.equal(captured.init.headers['X-Goog-Api-Key'], 'test-secret-key');
+  assert.equal(captured.url.includes('test-access-token'), false);
+  assert.equal(captured.init.headers.Authorization, 'Bearer test-access-token');
   assert.equal(captured.init.body.includes('Never Send'), false);
   assert.equal(captured.init.body.includes('0500000000'), false);
 });
@@ -120,4 +122,13 @@ test('is disabled by default and fails closed when enabled without credentials',
   assert.throws(() => createGoogleRouteOptimizer({
     ROUTE_OPTIMIZATION_PROVIDER: 'google',
   }), /project is not configured/);
+  assert.throws(() => createGoogleRouteOptimizer({
+    ROUTE_OPTIMIZATION_PROVIDER: 'google',
+    GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID: 'edenmish-routing',
+  }), /credentials are not configured/);
+  assert.throws(() => createGoogleRouteOptimizer({
+    ROUTE_OPTIMIZATION_PROVIDER: 'google',
+    GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID: 'edenmish-routing',
+    GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON: '{}',
+  }), /credentials are invalid/);
 });

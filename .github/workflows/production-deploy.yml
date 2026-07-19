@@ -104,6 +104,10 @@ jobs:
             echo "::error::Production Worker secret DRIVER_ONE_TIME_CODE is missing. Configure it before enabling the driver API."
             exit 1
           fi
+          if ! grep -q '"name": "GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON"' <<< "$SECRET_LIST"; then
+            echo "::error::Production Worker secret GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON is missing."
+            exit 1
+          fi
           npx wrangler deploy
           echo "✅ Worker deployed to find.edenmish.com + ops.edenmish.com"
 

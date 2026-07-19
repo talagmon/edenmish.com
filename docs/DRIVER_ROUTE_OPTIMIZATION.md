@@ -28,16 +28,21 @@ to the Worker:
 |---|---|---|
 | `ROUTE_OPTIMIZATION_PROVIDER=google` | Worker var | Explicit feature switch |
 | `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID` | Worker var | Google Cloud project with Route Optimization enabled |
-| `GOOGLE_ROUTE_OPTIMIZATION_API_KEY` | Worker secret | Restricted server-side credential |
+| `GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON` | Worker secret | Dedicated service-account credential used to mint short-lived OAuth tokens |
 
-Set a low Google Cloud quota and restrict the key to the Route Optimization API.
-Do not put the API key in Flutter, repository files, URLs, or logs.
+The service account must be dedicated to one environment and have
+`roles/routeoptimization.editor` plus `roles/serviceusage.serviceUsageConsumer`.
+The Worker signs a short-lived OAuth assertion, caches the returned access token,
+and sends it only in the authorization header. Set a low Google Cloud quota. Do
+not put the service-account JSON in Flutter, repository files, URLs, or logs.
 
 Authenticated Ops controls the single-driver shift. While a shift is active,
 each driver route poll reconciles paid and in-progress orders into deterministic
-pickup/drop-off tasks and persists a new immutable revision only when task
-membership, order, or execution state changes. The app's existing polling then
-receives the new revision without a manual refresh.
+pickup/drop-off tasks. A stable routing-input fingerprint prevents unchanged
+polls from calling the billable provider. A new immutable revision is optimized
+and persisted only when task membership, coordinates, priority, time windows, or
+execution state changes. The app's existing polling then receives the new
+revision without a manual refresh.
 
 When the Google provider is fully configured, the Worker uses it and validates
 the returned membership and pickup precedence before persisting the revision.
