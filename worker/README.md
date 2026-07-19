@@ -124,15 +124,14 @@ See `../docs/ENVIRONMENT.md` for the full list and placeholders.
 | `SHOPIFY_ADMIN_TOKEN` | creating Draft Orders (`shpat_…`) | Worker-side charge |
 | `SHOPIFY_WEBHOOK_SECRET` | verifying Shopify payment/refund webhooks | webhook fails closed (401) if unset |
 | `SENDGRID_API_KEY` | all email notifications | currently SendGrid |
-| `GOOGLE_ROUTE_OPTIMIZATION_API_KEY` | server-side mixed-route optimization | optional; restricted key, never shipped to Flutter; provider remains disabled unless explicitly configured |
+| `GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON` | server-side mixed-route optimization | dedicated environment-specific service account; encrypted Worker secret, never shipped to Flutter |
 
 Non-secret vars live in `wrangler.toml [vars]`: `BRAND`, `BOOKING_URL`,
 `WHATSAPP_NUMBER`, `OPS_EMAIL`, `AUTO_DRIVER_DISPATCH`, `SHOPIFY_SHOP`,
 `SHOPIFY_API_VERSION`.
 Route optimization additionally requires `ROUTE_OPTIMIZATION_PROVIDER=google`
 and `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID`; see
-`../docs/DRIVER_ROUTE_OPTIMIZATION.md`. They are intentionally absent until the
-Google Cloud project, billing guardrail, and restricted credential are approved.
+`../docs/DRIVER_ROUTE_OPTIMIZATION.md`.
 
 ## Webhook checklist
 
