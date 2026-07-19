@@ -110,7 +110,8 @@ Shopify, payment, email, or webhook credentials.
 **Environment:** `staging`.
 
 **Required configuration:** `STAGING_D1_DATABASE_ID` environment variable;
-`STAGING_OPS_PIN` and `STAGING_SESSION_SECRET` environment secrets; shared
+`STAGING_OPS_PIN`, `STAGING_SESSION_SECRET`, and `STAGING_DRIVER_ONE_TIME_CODE`
+environment secrets; shared
 `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets.
 
 ---
@@ -190,6 +191,11 @@ no self-trigger loop to guard against.
 
 **Never runs automatically on push/merge.**
 
+Worker deployment fails before publishing if the Cloudflare Worker secret
+`DRIVER_ONE_TIME_CODE` is missing. After deployment, CI probes the production
+Driver API with valid request metadata and requires the authenticated `401
+unauthorized` boundary before reporting success.
+
 **Environment:** `production` (requires manual approval if protection rules are set).
 
 **Secrets required:** `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `SHOPIFY_CLI_THEME_TOKEN`, `SHOPIFY_STORE`.
@@ -220,6 +226,7 @@ Add in **GitHub → Settings → Secrets and variables → Actions**:
 | `CLOUDFLARE_ACCOUNT_ID` | staging + production | Cloudflare account ID |
 | `STAGING_OPS_PIN` | staging only | A staging-only PIN; never reuse the production PIN |
 | `STAGING_SESSION_SECRET` | staging only | A unique random staging session secret |
+| `STAGING_DRIVER_ONE_TIME_CODE` | staging only | A 6–12 digit single-use driver bootstrap code; rotate after exchange |
 
 Add `STAGING_D1_DATABASE_ID` as a variable on the GitHub `staging` environment.
 
@@ -297,14 +304,20 @@ git push origin "v$(./scripts/current_version.sh)"
      wrangler d1 execute edenmish --remote --file=./migrations/009_invoice_tracking.sql
      wrangler d1 execute edenmish --remote --file=./migrations/010_order_service_schedule.sql
      wrangler d1 execute edenmish --remote --file=./migrations/011_cancellation_requests.sql
-3. Go to GitHub → Actions → "Production deploy" → Run workflow
+     wrangler d1 execute edenmish --remote --file=./migrations/014_driver_api_v1.sql
+     wrangler d1 execute edenmish --remote --file=./migrations/015_driver_route_tasks.sql
+3. Configure the production Worker bootstrap secret if it is not already present:
+     cd worker
+     wrangler secret put DRIVER_ONE_TIME_CODE
+   Use a unique 6–12 digit one-time code and rotate it after a successful exchange.
+4. Go to GitHub → Actions → "Production deploy" → Run workflow
      - confirm_migrations_ran = "I ran required migrations"
      - deploy_worker = true
-     - deploy_theme = true
+     - deploy_theme = false (the driver API release does not require a theme push)
      - publish_theme = false (preview first)
-4. Test the unpublished theme preview
-5. Re-run with publish_theme = true when ready
-6. Smoke test the full order flow
+5. Confirm the workflow's Driver API smoke test returns the expected authenticated boundary.
+6. Exchange the one-time code in the production driver app and verify the active shift and mixed route.
+7. Rotate `DRIVER_ONE_TIME_CODE` before issuing another bootstrap login.
 ```
 
 ---
@@ -375,12 +388,12 @@ npx wrangler d1 execute edenmish-staging --remote \
 ```
 
 For an existing staging database, apply new numbered migrations manually before
-deploying Worker code that depends on them. For migration 011:
+deploying Worker code that depends on them. For the current driver API migration:
 
 ```bash
 npx wrangler d1 execute edenmish-staging --remote \
   --config wrangler.staging.generated.toml \
-  --file=./migrations/011_cancellation_requests.sql
+  --file=./migrations/014_driver_api_v1.sql
 ```
 
 The GitHub deployment token intentionally does not run D1 migrations; use an
@@ -389,7 +402,7 @@ authorized operator session and verify the migration before triggering the workf
 Then create the GitHub `staging` environment and add:
 
 - variable: `STAGING_D1_DATABASE_ID`
-- secrets: `STAGING_OPS_PIN`, `STAGING_SESSION_SECRET`
+- secrets: `STAGING_OPS_PIN`, `STAGING_SESSION_SECRET`, `STAGING_DRIVER_ONE_TIME_CODE`
 - repository secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
 
 Run **Actions → Staging Worker → Run workflow** once. Subsequent Worker changes

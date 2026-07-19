@@ -36,5 +36,6 @@ database_id = "f2f51b54-0170-4594-a41c-7a6037c902aa"
 # Secrets (set with `wrangler secret put`): OPS_PIN, SESSION_SECRET, MAPS_KEY,
 #   SHOPIFY_ADMIN_TOKEN (shpat_...), SHOPIFY_WEBHOOK_SECRET,
 #   RESEND_API_KEY (or SENDGRID_API_KEY),
-#   GREENINVOICE_API_KEY, GREENINVOICE_SECRET_KEY.
+#   GREENINVOICE_API_KEY, GREENINVOICE_SECRET_KEY,
+#   GOOGLE_ROUTE_OPTIMIZATION_API_KEY (only when route optimization is enabled).
 # Optional for future Mesh/J5 pre-auth: PAYMENT_MODE=preauth, MESH_API_KEY.

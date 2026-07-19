@@ -26,6 +26,7 @@ jobs:
       STAGING_D1_DATABASE_ID: ${{ vars.STAGING_D1_DATABASE_ID }}
       STAGING_OPS_PIN: ${{ secrets.STAGING_OPS_PIN }}
       STAGING_SESSION_SECRET: ${{ secrets.STAGING_SESSION_SECRET }}
+      STAGING_DRIVER_ONE_TIME_CODE: ${{ secrets.STAGING_DRIVER_ONE_TIME_CODE }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,6 +39,7 @@ jobs:
           test -n "$STAGING_D1_DATABASE_ID" || { echo "::error::Missing STAGING_D1_DATABASE_ID environment variable"; exit 1; }
           test -n "$STAGING_OPS_PIN" || { echo "::error::Missing STAGING_OPS_PIN"; exit 1; }
           test -n "$STAGING_SESSION_SECRET" || { echo "::error::Missing STAGING_SESSION_SECRET"; exit 1; }
+          test -n "$STAGING_DRIVER_ONE_TIME_CODE" || { echo "::error::Missing STAGING_DRIVER_ONE_TIME_CODE"; exit 1; }
       - name: Install and test Worker
         working-directory: worker
         run: npm ci && npm test
@@ -46,7 +48,7 @@ jobs:
         run: node scripts/render-staging-config.mjs
       - name: Prepare staging secrets
         run: |
-          node --input-type=module -e 'import { writeFileSync } from "node:fs"; writeFileSync("/tmp/edenmish-staging-secrets.json", JSON.stringify({ OPS_PIN: process.env.STAGING_OPS_PIN, SESSION_SECRET: process.env.STAGING_SESSION_SECRET }), { mode: 0o600 });'
+          node --input-type=module -e 'import { writeFileSync } from "node:fs"; writeFileSync("/tmp/edenmish-staging-secrets.json", JSON.stringify({ OPS_PIN: process.env.STAGING_OPS_PIN, SESSION_SECRET: process.env.STAGING_SESSION_SECRET, DRIVER_ONE_TIME_CODE: process.env.STAGING_DRIVER_ONE_TIME_CODE }), { mode: 0o600 });'
       - name: Deploy staging Worker
         working-directory: worker
         run: npx wrangler deploy --config wrangler.staging.generated.toml --secrets-file /tmp/edenmish-staging-secrets.json
