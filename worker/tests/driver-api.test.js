@@ -177,7 +177,7 @@ describe('driver API v1', () => {
     });
   });
 
-  test('returns a revisioned route snapshot with Hebrew customer data intact', async () => {
+  test('returns a revisioned mixed pickup/drop-off task route', async () => {
     const db = fakeDb({
       first: (call) => {
         const auth = authenticatedFirst(call);
@@ -185,24 +185,42 @@ describe('driver API v1', () => {
         if (call.sql === 'SELECT id FROM driver_shifts WHERE id = ? AND driver_id = ?') return { id: 'sh_123' };
         if (call.sql.includes('FROM driver_routes')) return {
           id: 7,
-          revision: 12,
+          revision: 13,
           generated_at: Date.parse('2026-07-18T15:31:22Z'),
           reason: 'new_order_inserted',
-          current_stop_id: 'stop_41',
+          current_stop_id: 'stop_p1',
           current_stop_locked: 1,
-          delay_minutes: 6,
-          current_position: 2,
-          total_stops: 5,
+          delay_minutes: 4,
+          current_position: 1,
+          total_stops: 7,
+          onboard_order_ids_json: '[9000]',
         };
         return null;
       },
-      all: (call) => call.sql.includes('FROM driver_route_stops') ? { results: [{
-        stop_id: 'stop_41', order_id: 9001, position: 2, state: 'navigating',
-        name: 'נועה לוי', phone: '+972541234567', dropoff: 'הרצל 42, תל אביב',
-        dropoff_lat: 32.0632, dropoff_lng: 34.7708,
-        promised_from: '2026-07-18T15:00:00Z', promised_to: '2026-07-18T16:00:00Z',
-        eta: '2026-07-18T15:35:00Z', urgency: 'normal', inserted: 1,
-      }] } : { results: [] },
+      all: (call) => call.sql.includes('FROM driver_route_stops') ? { results: [
+        {
+          stop_id: 'stop_p1', order_id: 9001, position: 1, task_type: 'pickup',
+          required_predecessor_stop_id: null, state: 'navigating',
+          name: 'נועה לוי', phone: '+972541234567', pickup: 'הרצל 42, תל אביב',
+          pickup_detail: 'קומה 2', pickup_lat: 32.0632, pickup_lng: 34.7708,
+          dropoff: 'אבן גבירול 81, תל אביב', dropoff_detail: null,
+          dropoff_lat: 32.0801, dropoff_lng: 34.7813,
+          promised_from: '2026-07-18T15:00:00Z', promised_to: '2026-07-18T16:00:00Z',
+          eta: '2026-07-18T15:35:00Z', service_duration_seconds: 300,
+          urgency: 'normal', inserted: 0,
+        },
+        {
+          stop_id: 'stop_d0', order_id: 9000, position: 2, task_type: 'dropoff',
+          required_predecessor_stop_id: 'stop_p0', state: 'pending',
+          name: 'מיכל רוזן', phone: '+972521234567', pickup: 'הנמל 3, תל אביב',
+          pickup_detail: null, pickup_lat: 32.0983, pickup_lng: 34.7749,
+          dropoff: 'בן גוריון 97, תל אביב', dropoff_detail: 'כניסה ב',
+          dropoff_lat: 32.0861, dropoff_lng: 34.7806,
+          promised_from: '2026-07-18T15:20:00Z', promised_to: '2026-07-18T16:05:00Z',
+          eta: '2026-07-18T15:47:00Z', service_duration_seconds: 420,
+          urgency: 'urgent', inserted: 1,
+        },
+      ] } : { results: [] },
     });
 
     const res = await handleDriverApi(request('/api/driver/v1/shifts/sh_123/route', {
@@ -211,10 +229,56 @@ describe('driver API v1', () => {
     const body = await res.json();
 
     assert.equal(res.status, 200);
-    assert.equal(res.headers.get('etag'), '"route-sh_123-12"');
-    assert.equal(body.revision, 12);
-    assert.equal(body.stops[0].customer.display_name, 'נועה לוי');
-    assert.deepEqual(body.change_summary.added_stop_ids, ['stop_41']);
+    assert.equal(res.headers.get('etag'), '"route-sh_123-13"');
+    assert.equal(body.revision, 13);
+    assert.deepEqual(body.onboard_order_ids, ['ord_9000']);
+    assert.equal(body.stops[0].task_type, 'pickup');
+    assert.equal(body.stops[0].contact.display_name, 'נועה לוי');
+    assert.equal(body.stops[0].address.display_text, 'הרצל 42, תל אביב · קומה 2');
+    assert.equal(body.stops[1].task_type, 'dropoff');
+    assert.equal(body.stops[1].required_predecessor_stop_id, 'stop_p0');
+    assert.equal(body.stops[1].service_duration_seconds, 420);
+    assert.deepEqual(body.change_summary.added_stop_ids, ['stop_d0']);
+  });
+
+  test('advances the canonical order when a pickup task completes', async () => {
+    const db = fakeDb({
+      first: (call) => {
+        const auth = authenticatedFirst(call);
+        if (auth) return auth;
+        if (call.sql.startsWith('SELECT event_id')) return null;
+        if (call.sql.includes('FROM driver_shifts WHERE id')) return { id: 'sh_123' };
+        if (call.sql.includes('FROM driver_assignments')) return { order_id: 9001 };
+        if (call.sql === 'SELECT * FROM orders WHERE id = ?') return { id: 9001, status: 'to_pickup' };
+        return null;
+      },
+    });
+    const event = {
+      event_id: eventId,
+      event_type: 'pickup_completed',
+      occurred_at: '2026-07-18T15:00:00Z',
+      recorded_at_monotonic_ms: 42,
+      shift_id: 'sh_123',
+      order_id: 'ord_9001',
+      stop_id: 'stop_p1',
+      route_revision_seen: 13,
+      payload: {},
+    };
+
+    const res = await handleDriverApi(request('/api/driver/v1/execution-events:batch', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ events: [event] }),
+    }), { DB: db });
+    const body = await res.json();
+
+    assert.equal(res.status, 200);
+    assert.equal(body.results[0].status, 'accepted');
+    const orderUpdate = db.calls.find((call) => call.sql.startsWith('UPDATE orders SET'));
+    assert.ok(orderUpdate);
+    assert.equal(orderUpdate.args[0], 'picked_up');
+    assert.equal(orderUpdate.args.at(-1), 9001);
+    assert.ok(db.calls.some((call) => call.sql.includes('INSERT INTO status_history')));
   });
 
   test('treats a replayed execution event as an idempotent duplicate', async () => {

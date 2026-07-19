@@ -248,6 +248,38 @@ WHERE type='table' AND name IN (
 
 ---
 
+### 015_driver_route_tasks.sql
+
+**Purpose:** Extends immutable driver-route revisions so one order can contribute
+independent pickup and drop-off tasks. Adds the task type, pickup-precedence
+reference, expected service duration, and the revision's onboard-order snapshot.
+Existing drop-off-only route revisions are treated as already collected and are
+backfilled into that onboard snapshot.
+
+**Commands:**
+```bash
+# Staging (render the config first; run from worker/):
+npx wrangler d1 execute edenmish-staging --remote \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/015_driver_route_tasks.sql
+
+# Production (only after the production release is approved):
+wrangler d1 execute edenmish --remote --file=./migrations/015_driver_route_tasks.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM pragma_table_info('driver_routes')
+WHERE name='onboard_order_ids_json';
+
+SELECT name FROM pragma_table_info('driver_route_stops')
+WHERE name IN (
+  'task_type', 'required_predecessor_stop_id', 'service_duration_seconds'
+);
+```
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -264,6 +296,7 @@ WHERE type='table' AND name IN (
 - [ ] Run `010_order_service_schedule.sql` after merge and before deploying the Worker.
 - [ ] Run `011_cancellation_requests.sql` after merge and before deploying the Worker.
 - [ ] Run `014_driver_api_v1.sql` after merge and before enabling the driver app.
+- [ ] Run `015_driver_route_tasks.sql` after 014 and before enabling mixed pickup/drop-off routes.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).

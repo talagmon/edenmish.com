@@ -7,8 +7,9 @@ const MAX_BODY_BYTES = 64 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ID = /^(drv|sh|stop)_[A-Za-z0-9]+$/;
 const EVENT_TYPES = new Set([
-  'route_revision_acknowledged', 'inserted_stop_rejected', 'navigation_started',
-  'arrived', 'delivery_completed', 'delivery_failed',
+  'route_revision_acknowledged', 'inserted_order_rejected', 'inserted_stop_rejected',
+  'navigation_started', 'arrived', 'pickup_completed', 'delivery_completed',
+  'delivery_failed',
 ]);
 
 const response = (body, status = 200, requestId = null, extra = {}) => new Response(JSON.stringify(body), {
@@ -155,25 +156,65 @@ async function currentShift(env, auth, meta) {
   return response({ shift_id: shift.id, state: shift.state, started_at: new Date(shift.started_at).toISOString(), ended_at: shift.ended_at ? new Date(shift.ended_at).toISOString() : null, location_expected: !!shift.location_expected }, 200, meta.requestId);
 }
 
+function onboardOrderIds(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return [...new Set(parsed.map((orderId) => {
+      if (Number.isInteger(orderId) && orderId > 0) return `ord_${orderId}`;
+      if (/^ord_[A-Za-z0-9]+$/.test(orderId || '')) return orderId;
+      return null;
+    }).filter(Boolean))];
+  } catch {
+    return [];
+  }
+}
+
+function routeTask(stop) {
+  const taskType = stop.task_type === 'pickup' ? 'pickup' : 'dropoff';
+  const isPickup = taskType === 'pickup';
+  const displayText = isPickup ? stop.pickup : stop.dropoff;
+  const detail = isPickup ? stop.pickup_detail : stop.dropoff_detail;
+  return {
+    stop_id: stop.stop_id,
+    order_id: `ord_${stop.order_id}`,
+    position: stop.position,
+    task_type: taskType,
+    required_predecessor_stop_id: stop.required_predecessor_stop_id || null,
+    state: stop.state === 'delivered' ? 'completed' : stop.state,
+    contact: { display_name: stop.name, phone: stop.phone },
+    address: {
+      display_text: [displayText, detail].filter(Boolean).join(' · '),
+      latitude: isPickup ? stop.pickup_lat : stop.dropoff_lat,
+      longitude: isPickup ? stop.pickup_lng : stop.dropoff_lng,
+    },
+    promised_window: { from: stop.promised_from, to: stop.promised_to },
+    eta: stop.eta,
+    service_duration_seconds: Number.isInteger(stop.service_duration_seconds)
+      ? stop.service_duration_seconds : 300,
+    urgency: stop.urgency,
+  };
+}
+
 async function routeSnapshot(env, auth, meta, shiftId) {
   if (!ID.test(shiftId)) return response({ code: 'not_found', message: 'Route not found.', request_id: meta.requestId }, 404, meta.requestId);
   const shift = await env.DB.prepare('SELECT id FROM driver_shifts WHERE id = ? AND driver_id = ?').bind(shiftId, auth.driver_id).first();
   if (!shift) return response({ code: 'not_found', message: 'Route not found.', request_id: meta.requestId }, 404, meta.requestId);
   const route = await env.DB.prepare(`SELECT * FROM driver_routes WHERE shift_id = ? ORDER BY revision DESC LIMIT 1`).bind(shiftId).first();
   if (!route) return response({ code: 'route_not_found', message: 'Route not found.', request_id: meta.requestId }, 404, meta.requestId);
-  const rows = await env.DB.prepare(`SELECT s.*, o.name, o.phone, o.dropoff, o.dropoff_lat, o.dropoff_lng
+  const rows = await env.DB.prepare(`SELECT s.*, o.name, o.phone,
+      o.pickup, o.pickup_detail, o.pickup_lat, o.pickup_lng,
+      o.dropoff, o.dropoff_detail, o.dropoff_lat, o.dropoff_lng
     FROM driver_route_stops s JOIN orders o ON o.id = s.order_id
     WHERE s.route_id = ? ORDER BY s.position`).bind(route.id).all();
-  const stops = (rows.results || []).map((stop) => ({
-    stop_id: stop.stop_id, order_id: `ord_${stop.order_id}`, position: stop.position, state: stop.state,
-    customer: { display_name: stop.name, phone: stop.phone },
-    address: { display_text: stop.dropoff, latitude: stop.dropoff_lat, longitude: stop.dropoff_lng },
-    promised_window: { from: stop.promised_from, to: stop.promised_to }, eta: stop.eta, urgency: stop.urgency,
-  }));
+  const stops = (rows.results || []).map(routeTask);
   return response({
     shift_id: shiftId, revision: route.revision, generated_at: new Date(route.generated_at).toISOString(), reason: route.reason,
     current_stop_id: route.current_stop_id, current_stop_locked: !!route.current_stop_locked,
-    delay_minutes: route.delay_minutes, progress: { current_position: route.current_position, total_stops: route.total_stops }, stops,
+    delay_minutes: route.delay_minutes,
+    onboard_order_ids: onboardOrderIds(route.onboard_order_ids_json),
+    progress: { current_position: route.current_position, total_stops: route.total_stops }, stops,
     change_summary: { added_stop_ids: (rows.results || []).filter((s) => s.inserted).map((s) => s.stop_id), removed_stop_ids: [], moved_stop_ids: [] },
   }, 200, meta.requestId, { ETag: `"route-${shiftId}-${route.revision}"` });
 }
@@ -209,6 +250,12 @@ async function processEvent(env, auth, meta, event) {
   }
   let status = 'accepted';
   let conflictType = null;
+  if (event.event_type === 'pickup_completed' && orderId != null) {
+    const order = await getOrderById(env.DB, orderId);
+    if (!order || order.status === 'cancelled') { status = 'accepted_conflict'; conflictType = order ? 'order_cancelled' : 'order_missing'; }
+    else if (order.status === 'to_pickup') await setOrderStatus(env.DB, orderId, 'picked_up', { picked_up_at: Date.now() });
+    else if (order.status !== 'picked_up') { status = 'accepted_conflict'; conflictType = 'invalid_canonical_state'; }
+  }
   if (event.event_type === 'delivery_completed' && orderId != null) {
     const order = await getOrderById(env.DB, orderId);
     if (!order || order.status === 'cancelled') { status = 'accepted_conflict'; conflictType = order ? 'order_cancelled' : 'order_missing'; }
