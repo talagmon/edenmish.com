@@ -63,6 +63,25 @@ describe('driver API v1', () => {
     assert.equal((await res.json()).code, 'invalid_installation_id');
   });
 
+  test('accepts a client version with the app Git revision suffix', async () => {
+    const db = fakeDb();
+    const res = await handleDriverApi(request('/api/driver/v1/shifts/current', {
+      headers: { 'x-client-version': '1.0.0+287583 (ac2a166d9a12)' },
+    }), { DB: db });
+
+    assert.equal(res.status, 401);
+    assert.equal((await res.json()).code, 'unauthorized');
+  });
+
+  test('rejects arbitrary client version annotations', async () => {
+    const res = await handleDriverApi(request('/api/driver/v1/shifts/current', {
+      headers: { 'x-client-version': '1.0.0+287583 (production)' },
+    }), {});
+
+    assert.equal(res.status, 400);
+    assert.equal((await res.json()).code, 'invalid_client_version');
+  });
+
   test('rejects an invalid bearer token without revealing session details', async () => {
     const db = fakeDb();
     const res = await handleDriverApi(request('/api/driver/v1/shifts/current', {
