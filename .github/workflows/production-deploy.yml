@@ -121,7 +121,7 @@ jobs:
               --write-out '%{http_code}' \
               --header 'X-Request-Id: 00000000-0000-4000-8000-000000000001' \
               --header 'X-Device-Installation-Id: 00000000-0000-4000-8000-000000000002' \
-              --header 'X-Client-Version: 1.0.0+1' \
+              --header 'X-Client-Version: 1.0.0+1 (abc1234)' \
               https://ops.edenmish.com/api/driver/v1/shifts/current)"
             if [[ "$HTTP_STATUS" == "401" ]] && grep -Fq '"code":"unauthorized"' "$RESPONSE_FILE"; then
               echo "✅ Production Driver API is live and enforcing bearer authentication"
