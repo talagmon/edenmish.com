@@ -126,7 +126,8 @@ See `../docs/ENVIRONMENT.md` for the full list and placeholders.
 | `GOOGLE_ROUTE_OPTIMIZATION_API_KEY` | server-side mixed-route optimization | optional; restricted key, never shipped to Flutter; provider remains disabled unless explicitly configured |
 
 Non-secret vars live in `wrangler.toml [vars]`: `BRAND`, `BOOKING_URL`,
-`WHATSAPP_NUMBER`, `OPS_EMAIL`, `SHOPIFY_SHOP`, `SHOPIFY_API_VERSION`.
+`WHATSAPP_NUMBER`, `OPS_EMAIL`, `AUTO_DRIVER_DISPATCH`, `SHOPIFY_SHOP`,
+`SHOPIFY_API_VERSION`.
 Route optimization additionally requires `ROUTE_OPTIMIZATION_PROVIDER=google`
 and `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID`; see
 `../docs/DRIVER_ROUTE_OPTIMIZATION.md`. They are intentionally absent until the

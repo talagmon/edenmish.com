@@ -33,7 +33,15 @@ to the Worker:
 Set a low Google Cloud quota and restrict the key to the Route Optimization API.
 Do not put the API key in Flutter, repository files, URLs, or logs.
 
-The current module is the provider and validation boundary. A following PR must
-wire it to authenticated ops dispatch, persist a new immutable route revision,
-and notify the driver app. No production service or billing is enabled by this
-change.
+Authenticated Ops controls the single-driver shift. While a shift is active,
+each driver route poll reconciles paid and in-progress orders into deterministic
+pickup/drop-off tasks and persists a new immutable revision only when task
+membership, order, or execution state changes. The app's existing polling then
+receives the new revision without a manual refresh.
+
+When the Google provider is fully configured, the Worker uses it and validates
+the returned membership and pickup precedence before persisting the revision.
+When it is disabled or unavailable, a deterministic nearest-neighbour fallback
+keeps the locked current stop first and preserves pickup-before-delivery. This
+fallback makes dispatch operational without exposing customer PII or requiring
+Google billing for the one-driver pilot.
