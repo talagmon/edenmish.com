@@ -215,6 +215,7 @@ CREATE TABLE IF NOT EXISTS driver_routes (
   delay_minutes INTEGER NOT NULL DEFAULT 0,
   current_position INTEGER NOT NULL DEFAULT 1,
   total_stops INTEGER NOT NULL,
+  onboard_order_ids_json TEXT NOT NULL DEFAULT '[]',
   UNIQUE (shift_id, revision),
   FOREIGN KEY (shift_id) REFERENCES driver_shifts(id)
 );
@@ -224,12 +225,16 @@ CREATE TABLE IF NOT EXISTS driver_route_stops (
   stop_id TEXT NOT NULL,
   order_id INTEGER NOT NULL,
   position INTEGER NOT NULL,
+  task_type TEXT NOT NULL DEFAULT 'dropoff' CHECK(task_type IN ('pickup','dropoff')),
+  required_predecessor_stop_id TEXT,
   state TEXT NOT NULL,
   eta TEXT NOT NULL,
   promised_from TEXT NOT NULL,
   promised_to TEXT NOT NULL,
   urgency TEXT NOT NULL DEFAULT 'normal',
   inserted INTEGER NOT NULL DEFAULT 0,
+  service_duration_seconds INTEGER NOT NULL DEFAULT 300
+    CHECK(service_duration_seconds >= 0 AND service_duration_seconds <= 7200),
   PRIMARY KEY (route_id, stop_id),
   FOREIGN KEY (route_id) REFERENCES driver_routes(id),
   FOREIGN KEY (order_id) REFERENCES orders(id)
