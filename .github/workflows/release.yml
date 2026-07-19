@@ -30,7 +30,7 @@ jobs:
     name: Create vX.Y.Z tag from conventional commits
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0      # full history + tags for bump_version.sh
           token: ${{ secrets.GITHUB_TOKEN }}
