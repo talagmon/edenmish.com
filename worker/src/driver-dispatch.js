@@ -7,6 +7,8 @@ const NAVIGATING_STATUSES = new Set(['to_pickup', 'to_dropoff']);
 const ROUTE_HORIZON_MS = 12 * 60 * 60 * 1000;
 const DEFAULT_SERVICE_SECONDS = 300;
 const AVERAGE_SPEED_METERS_PER_SECOND = 25_000 / 3_600;
+const DRIVER_LOCATION_MAX_AGE_MS = 5 * 60 * 1000;
+const DRIVER_LOCATION_MAX_ACCURACY_METERS = 100;
 
 function validCoordinate(value, min, max) {
   return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
@@ -56,6 +58,10 @@ function routeTasksForOrder(order) {
       location: pickupLocation,
       urgency: order.urgent ? 'urgent' : 'normal',
       serviceDurationSeconds: DEFAULT_SERVICE_SECONDS,
+      addressFingerprint: [order.pickup, order.pickup_detail, order.pickup_city]
+        .map((value) => value ?? null),
+      promisedWindowFingerprint: [order.when_date, order.when_hour, order.service]
+        .map((value) => value ?? null),
     });
   }
   tasks.push({
@@ -67,6 +73,10 @@ function routeTasksForOrder(order) {
     location: dropoffLocation,
     urgency: order.urgent ? 'urgent' : 'normal',
     serviceDurationSeconds: DEFAULT_SERVICE_SECONDS,
+    addressFingerprint: [order.dropoff, order.dropoff_detail, order.dropoff_city]
+      .map((value) => value ?? null),
+    promisedWindowFingerprint: [order.when_date, order.when_hour, order.service]
+      .map((value) => value ?? null),
   });
   return { tasks, blocked: false };
 }
@@ -82,14 +92,19 @@ export function buildDispatchTasks(orders) {
   return { tasks, blockedOrderIds };
 }
 
-export function orderTasksByDistance(tasks, preferredCurrentStopId = null) {
+export function orderTasksByDistance(
+  tasks,
+  preferredCurrentStopId = null,
+  vehicleLocation = null,
+) {
   if (!tasks.length) return [];
   const remaining = new Map(tasks.map((task) => [task.stopId, task]));
   const completed = new Set();
   const ordered = [];
   let current = remaining.get(preferredCurrentStopId)
     || tasks.find((task) => task.state === 'navigating')
-    || tasks[0];
+    || (vehicleLocation ? null : tasks[0]);
+  let currentLocation = current?.location || vehicleLocation;
   while (remaining.size > 0) {
     let next = remaining.get(current?.stopId);
     if (!next || (next.requiredPredecessorStopId && !completed.has(next.requiredPredecessorStopId))) {
@@ -98,8 +113,8 @@ export function orderTasksByDistance(tasks, preferredCurrentStopId = null) {
       ));
       if (!available.length) throw new Error('driver_route_precedence_invalid');
       available.sort((left, right) => {
-        const distanceDifference = haversineMeters(current?.location, left.location)
-          - haversineMeters(current?.location, right.location);
+        const distanceDifference = haversineMeters(currentLocation, left.location)
+          - haversineMeters(currentLocation, right.location);
         if (Math.abs(distanceDifference) > 1) return distanceDifference;
         if (left.urgency !== right.urgency) return left.urgency === 'urgent' ? -1 : 1;
         return left.stopId.localeCompare(right.stopId);
@@ -110,34 +125,37 @@ export function orderTasksByDistance(tasks, preferredCurrentStopId = null) {
     completed.add(next.stopId);
     remaining.delete(next.stopId);
     current = next;
+    currentLocation = next.location;
   }
   return ordered;
 }
 
-function localEtaByStopId(tasks, now) {
+function localEtaByStopId(tasks, now, vehicleLocation = null) {
   const etaByStopId = {};
   let cursor = now;
-  let previous = tasks[0]?.location || null;
+  let previous = vehicleLocation || tasks[0]?.location || null;
   for (const task of tasks) {
     const distance = Number.isFinite(haversineMeters(previous, task.location))
       ? haversineMeters(previous, task.location) : 0;
-    cursor += Math.round((distance / AVERAGE_SPEED_METERS_PER_SECOND) * 1_000)
-      + task.serviceDurationSeconds * 1_000;
+    cursor += Math.round((distance / AVERAGE_SPEED_METERS_PER_SECOND) * 1_000);
     etaByStopId[task.stopId] = new Date(cursor).toISOString();
+    cursor += task.serviceDurationSeconds * 1_000;
     previous = task.location;
   }
   return etaByStopId;
 }
 
-async function optimizedTaskOrder(env, tasks, preferredCurrentStopId, now) {
-  const fallback = orderTasksByDistance(tasks, preferredCurrentStopId);
+async function optimizedTaskOrder(env, tasks, preferredCurrentStopId, now, vehicleLocation) {
+  const fallback = orderTasksByDistance(tasks, preferredCurrentStopId, vehicleLocation);
   let optimizer;
   try {
     optimizer = createGoogleRouteOptimizer(env);
   } catch {
-    return { tasks: fallback, etaByStopId: localEtaByStopId(fallback, now) };
+    return { tasks: fallback, etaByStopId: localEtaByStopId(fallback, now, vehicleLocation) };
   }
-  if (!optimizer) return { tasks: fallback, etaByStopId: localEtaByStopId(fallback, now) };
+  if (!optimizer) {
+    return { tasks: fallback, etaByStopId: localEtaByStopId(fallback, now, vehicleLocation) };
+  }
   const locked = tasks.find((task) => task.stopId === preferredCurrentStopId && task.state === 'navigating')
     || tasks.find((task) => task.state === 'navigating');
   const onboardOrderIds = [...new Set(tasks
@@ -147,7 +165,7 @@ async function optimizedTaskOrder(env, tasks, preferredCurrentStopId, now) {
     const result = await optimizer.optimize({
       routeStartTime: new Date(now).toISOString(),
       routeEndTime: new Date(now + ROUTE_HORIZON_MS).toISOString(),
-      vehicleLocation: (locked || fallback[0]).location,
+      vehicleLocation: locked?.location || vehicleLocation || fallback[0].location,
       currentStopLocked: !!locked,
       currentStopId: locked?.stopId || null,
       onboardOrderIds,
@@ -166,16 +184,24 @@ async function optimizedTaskOrder(env, tasks, preferredCurrentStopId, now) {
     if (ordered.length !== tasks.length) throw new Error('driver_route_optimizer_incomplete');
     return {
       tasks: ordered,
-      etaByStopId: { ...localEtaByStopId(ordered, now), ...result.etaByStopId },
+      etaByStopId: {
+        ...localEtaByStopId(ordered, now, locked?.location || vehicleLocation),
+        ...result.etaByStopId,
+      },
     };
   } catch {
-    return { tasks: fallback, etaByStopId: localEtaByStopId(fallback, now) };
+    return {
+      tasks: fallback,
+      etaByStopId: localEtaByStopId(fallback, now, locked?.location || vehicleLocation),
+    };
   }
 }
 
 async function eligibleOrders(DB, shiftId = null) {
   const result = await DB.prepare(`SELECT id, status, urgent,
-      pickup_lat, pickup_lng, dropoff_lat, dropoff_lng
+      pickup, pickup_detail, pickup_city, pickup_lat, pickup_lng,
+      dropoff, dropoff_detail, dropoff_city, dropoff_lat, dropoff_lng,
+      when_date, when_hour, service
     FROM orders
     WHERE status IN ('paid','to_pickup','picked_up','to_dropoff')
       AND (? IS NULL OR NOT EXISTS (
@@ -226,16 +252,105 @@ async function latestRouteStops(DB, routeId) {
   return result.results || [];
 }
 
-function samePlan(previousStops, tasks) {
-  return previousStops.length === tasks.length && previousStops.every((stop, index) => (
-    stop.stop_id === tasks[index].stopId && stop.state === tasks[index].state
-  ));
+async function latestReliableDriverLocation(DB, driverId, shiftId, now) {
+  const sample = await DB.prepare(`SELECT latitude, longitude
+    FROM driver_location_samples
+    WHERE driver_id = ? AND shift_id = ? AND captured_at >= ?
+      AND accuracy_meters <= ?
+    ORDER BY captured_at DESC LIMIT 1`)
+    .bind(
+      driverId,
+      shiftId,
+      new Date(now - DRIVER_LOCATION_MAX_AGE_MS).toISOString(),
+      DRIVER_LOCATION_MAX_ACCURACY_METERS,
+    ).first();
+  return location(sample?.latitude, sample?.longitude);
+}
+
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(String(value)),
+  );
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function planFingerprint(tasks) {
+  return sha256Hex(JSON.stringify(tasks.map((task) => ({
+    stopId: task.stopId,
+    orderId: task.orderId,
+    taskType: task.taskType,
+    requiredPredecessorStopId: task.requiredPredecessorStopId,
+    state: task.state,
+    latitude: task.location.latitude,
+    longitude: task.location.longitude,
+    urgency: task.urgency,
+    serviceDurationSeconds: task.serviceDurationSeconds,
+    addressFingerprint: task.addressFingerprint,
+    promisedWindowFingerprint: task.promisedWindowFingerprint,
+  }))));
+}
+
+async function persistRouteRevision(DB, {
+  shiftId,
+  revision,
+  now,
+  latest,
+  current,
+  tasks,
+  etaByStopId,
+  onboardOrderIds,
+  previousIds,
+  fingerprint,
+}) {
+  const statements = [
+    DB.prepare(`INSERT INTO driver_routes
+        (shift_id, revision, generated_at, reason, current_stop_id, current_stop_locked,
+         delay_minutes, current_position, total_stops, onboard_order_ids_json, plan_fingerprint)
+      VALUES (?, ?, ?, ?, ?, ?, 0, 1, ?, ?, ?)`)
+      .bind(
+        shiftId,
+        revision,
+        now,
+        latest ? 'queue_changed' : 'shift_started',
+        current.stopId,
+        current.state === 'navigating' ? 1 : 0,
+        tasks.length,
+        JSON.stringify(onboardOrderIds),
+        fingerprint,
+      ),
+    ...tasks.map((task, index) => DB.prepare(`INSERT INTO driver_route_stops
+        (route_id, stop_id, order_id, position, task_type, required_predecessor_stop_id,
+         state, eta, promised_from, promised_to, urgency, inserted, service_duration_seconds)
+      VALUES ((SELECT id FROM driver_routes WHERE shift_id = ? AND revision = ?),
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(
+        shiftId,
+        revision,
+        task.stopId,
+        task.orderId,
+        index + 1,
+        task.taskType,
+        task.requiredPredecessorStopId,
+        task.state,
+        etaByStopId[task.stopId],
+        new Date(now).toISOString(),
+        new Date(now + ROUTE_HORIZON_MS).toISOString(),
+        task.urgency,
+        latest && !previousIds.has(task.stopId) ? 1 : 0,
+        task.serviceDurationSeconds,
+      )),
+  ];
+  await DB.batch(statements);
+  return latestRoute(DB, shiftId);
 }
 
 export async function syncDriverRoute(env, {
   driverId = DRIVER_ID,
   shiftId,
   now = Date.now(),
+  retryCount = 0,
 } = {}) {
   const orders = await eligibleOrders(env.DB, shiftId);
   const { tasks, blockedOrderIds } = buildDispatchTasks(orders);
@@ -243,8 +358,9 @@ export async function syncDriverRoute(env, {
   const previousStops = await latestRouteStops(env.DB, latest?.id);
   const preferredCurrentStopId = previousStops.some((stop) => stop.stop_id === latest?.current_stop_id)
     ? latest.current_stop_id : null;
+  const driverLocation = await latestReliableDriverLocation(env.DB, driverId, shiftId, now);
   const optimized = tasks.length
-    ? await optimizedTaskOrder(env, tasks, preferredCurrentStopId, now)
+    ? await optimizedTaskOrder(env, tasks, preferredCurrentStopId, now, driverLocation)
     : { tasks: [], etaByStopId: {} };
   const orderIds = optimized.tasks.map((task) => task.orderId);
   await syncAssignments(env.DB, driverId, shiftId, orderIds, now);
@@ -257,7 +373,8 @@ export async function syncDriverRoute(env, {
       taskCount: 0,
     };
   }
-  if (latest && samePlan(previousStops, optimized.tasks)) {
+  const fingerprint = await planFingerprint(optimized.tasks);
+  if (latest && latest.plan_fingerprint === fingerprint) {
     return {
       empty: false,
       route: latest,
@@ -272,45 +389,36 @@ export async function syncDriverRoute(env, {
     .filter((order) => ['picked_up', 'to_dropoff'].includes(order.status))
     .map((order) => Number(order.id)))];
   const current = optimized.tasks[0];
-  const inserted = await env.DB.prepare(`INSERT INTO driver_routes
-      (shift_id, revision, generated_at, reason, current_stop_id, current_stop_locked,
-       delay_minutes, current_position, total_stops, onboard_order_ids_json)
-    VALUES (?, ?, ?, ?, ?, ?, 0, 1, ?, ?) RETURNING id`)
-    .bind(
+  let inserted;
+  try {
+    inserted = await persistRouteRevision(env.DB, {
       shiftId,
       revision,
       now,
-      latest ? 'queue_changed' : 'shift_started',
-      current.stopId,
-      current.state === 'navigating' ? 1 : 0,
-      optimized.tasks.length,
-      JSON.stringify(onboardOrderIds),
-    ).first();
-  for (let index = 0; index < optimized.tasks.length; index += 1) {
-    const task = optimized.tasks[index];
-    await env.DB.prepare(`INSERT INTO driver_route_stops
-        (route_id, stop_id, order_id, position, task_type, required_predecessor_stop_id,
-         state, eta, promised_from, promised_to, urgency, inserted, service_duration_seconds)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(
-        inserted.id,
-        task.stopId,
-        task.orderId,
-        index + 1,
-        task.taskType,
-        task.requiredPredecessorStopId,
-        task.state,
-        optimized.etaByStopId[task.stopId],
-        new Date(now).toISOString(),
-        new Date(now + ROUTE_HORIZON_MS).toISOString(),
-        task.urgency,
-        latest && !previousIds.has(task.stopId) ? 1 : 0,
-        task.serviceDurationSeconds,
-      ).run();
+      latest,
+      current,
+      tasks: optimized.tasks,
+      etaByStopId: optimized.etaByStopId,
+      onboardOrderIds,
+      previousIds,
+      fingerprint,
+    });
+  } catch (error) {
+    const concurrent = await latestRoute(env.DB, shiftId);
+    if (Number(concurrent?.revision || 0) < revision || retryCount >= 2) throw error;
+    if (concurrent.plan_fingerprint === fingerprint) inserted = concurrent;
+    else {
+      return syncDriverRoute(env, {
+        driverId,
+        shiftId,
+        now,
+        retryCount: retryCount + 1,
+      });
+    }
   }
   return {
     empty: false,
-    route: { id: inserted.id, revision },
+    route: { id: inserted.id, revision: inserted.revision },
     readyOrderCount: orders.length,
     blockedOrderCount: blockedOrderIds.length,
     taskCount: optimized.tasks.length,
@@ -375,4 +483,5 @@ export async function driverDispatchStatus(env) {
 export const driverDispatchTest = {
   haversineMeters,
   routeTasksForOrder,
+  planFingerprint,
 };

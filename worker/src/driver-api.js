@@ -5,6 +5,9 @@ import { syncDriverRoute } from './driver-dispatch.js';
 const ACCESS_TTL_MS = 15 * 60 * 1000;
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 64 * 1024;
+const MAX_LOCATION_BATCH_SIZE = 100;
+const LOCATION_FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
+const LOCATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CLIENT_VERSION = /^\d+\.\d+\.\d+\+\d+(?: \([0-9a-f]{7,40}\))?$/i;
 const ID = /^(drv|sh|stop)_[A-Za-z0-9]+$/;
@@ -360,6 +363,96 @@ async function eventBatch(req, env, auth, meta) {
   return response({ results }, 200, meta.requestId);
 }
 
+function validLocationSample(sample, shiftStartedAt, now) {
+  if (!sample || typeof sample !== 'object' || Array.isArray(sample)) return false;
+  const allowedKeys = new Set([
+    'sample_id',
+    'captured_at',
+    'latitude',
+    'longitude',
+    'accuracy_meters',
+    'speed_meters_per_second',
+  ]);
+  if (Object.keys(sample).some((key) => !allowedKeys.has(key))) return false;
+  const capturedAt = Date.parse(sample.captured_at);
+  return UUID.test(sample.sample_id || '')
+    && Number.isFinite(capturedAt)
+    && capturedAt >= shiftStartedAt
+    && capturedAt <= now + LOCATION_FUTURE_TOLERANCE_MS
+    && Number.isFinite(sample.latitude)
+    && sample.latitude >= -90 && sample.latitude <= 90
+    && Number.isFinite(sample.longitude)
+    && sample.longitude >= -180 && sample.longitude <= 180
+    && Number.isFinite(sample.accuracy_meters)
+    && sample.accuracy_meters >= 0 && sample.accuracy_meters <= 1000
+    && (sample.speed_meters_per_second == null
+      || (Number.isFinite(sample.speed_meters_per_second)
+        && sample.speed_meters_per_second >= 0));
+}
+
+async function locationBatch(req, env, auth, meta) {
+  let body;
+  try {
+    body = await readJson(req);
+  } catch (error) {
+    return response(
+      { code: error.message, message: 'Invalid request.', request_id: meta.requestId },
+      error.status || 400,
+      meta.requestId,
+    );
+  }
+  if (!body || !ID.test(body.shift_id || '')
+    || !Array.isArray(body.samples) || body.samples.length < 1
+    || body.samples.length > MAX_LOCATION_BATCH_SIZE
+    || Object.keys(body).some((key) => !['shift_id', 'samples'].includes(key))) {
+    return response({
+      code: 'invalid_location_samples',
+      message: 'Expected 1-100 valid location samples.',
+      request_id: meta.requestId,
+    }, 400, meta.requestId);
+  }
+  const shift = await env.DB.prepare(`SELECT id, started_at FROM driver_shifts
+    WHERE id = ? AND driver_id = ? AND state IN ('active','ending','recovery_required')`)
+    .bind(body.shift_id, auth.driver_id).first();
+  if (!shift) {
+    return response({
+      code: 'shift_conflict',
+      message: 'The shift is not active.',
+      request_id: meta.requestId,
+    }, 409, meta.requestId);
+  }
+  const now = Date.now();
+  if (body.samples.some((sample) => !validLocationSample(sample, shift.started_at, now))) {
+    return response({
+      code: 'invalid_location_samples',
+      message: 'Expected 1-100 valid location samples.',
+      request_id: meta.requestId,
+    }, 400, meta.requestId);
+  }
+  let acceptedCount = 0;
+  for (const sample of body.samples) {
+    const inserted = await env.DB.prepare(`INSERT OR IGNORE INTO driver_location_samples
+      (sample_id, driver_id, shift_id, captured_at, latitude, longitude,
+       accuracy_meters, speed_meters_per_second, recorded_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(
+        sample.sample_id,
+        auth.driver_id,
+        body.shift_id,
+        new Date(sample.captured_at).toISOString(),
+        sample.latitude,
+        sample.longitude,
+        sample.accuracy_meters,
+        sample.speed_meters_per_second ?? null,
+        now,
+      ).run();
+    acceptedCount += Number(inserted?.meta?.changes || 0);
+  }
+  await env.DB.prepare('DELETE FROM driver_location_samples WHERE recorded_at < ?')
+    .bind(now - LOCATION_RETENTION_MS).run();
+  return response({ accepted_count: acceptedCount }, 202, meta.requestId);
+}
+
 export async function handleDriverApi(req, env, path = new URL(req.url).pathname) {
   if (!path.startsWith('/api/driver/v1/')) return null;
   const meta = metadata(req);
@@ -372,7 +465,14 @@ export async function handleDriverApi(req, env, path = new URL(req.url).pathname
   const routeMatch = /^\/api\/driver\/v1\/shifts\/([^/]+)\/route$/.exec(path);
   if (routeMatch && req.method === 'GET') return routeSnapshot(env, auth, meta, decodeURIComponent(routeMatch[1]));
   if (path === '/api/driver/v1/execution-events:batch' && req.method === 'POST') return eventBatch(req, env, auth, meta);
+  if (path === '/api/driver/v1/location:batch' && req.method === 'POST') return locationBatch(req, env, auth, meta);
   return response({ code: 'not_found', message: 'Driver API endpoint not found.', request_id: meta.requestId }, 404, meta.requestId);
 }
 
-export const driverApiTest = { metadata, sha256Hex, hmacHex, parseOrderId };
+export const driverApiTest = {
+  metadata,
+  sha256Hex,
+  hmacHex,
+  parseOrderId,
+  validLocationSample,
+};
