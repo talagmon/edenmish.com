@@ -34,7 +34,7 @@ authentication and OTP flows fail closed when `SESSION_SECRET` is missing.
 | `SHOPIFY_ADMIN_TOKEN` | Creates Shopify Draft Orders (custom app token) | `shpat_replaceme` |
 | `SHOPIFY_WEBHOOK_SECRET` | Verifies `orders/paid`, `orders/updated`, and `refunds/create` webhook HMACs | `replace-me-from-shopify-webhook-page` |
 | `SENDGRID_API_KEY` | All outbound email (customer OTP/confirmation + Eden alerts) | `SG.replaceme` |
-| `GOOGLE_ROUTE_OPTIMIZATION_API_KEY` | Optional server-side driver route optimization; use a restricted key and never ship it to Flutter | `replace-with-restricted-server-key` |
+| `GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON` | Server-side driver route optimization; use a dedicated environment-specific service account and never ship it to Flutter | `{"type":"service_account",…}` |
 | `MESH_API_KEY` | **Future** — Mesh/J5 preauth processor. Not used today. | (unset for now) |
 
 > `SESSION_SECRET` is mandatory. The Worker refuses to create sessions or OTP hashes
@@ -73,6 +73,7 @@ The GitHub `staging` environment contains only:
 | `STAGING_OPS_PIN` | environment secret | Staging-only dashboard PIN |
 | `STAGING_SESSION_SECRET` | environment secret | Staging-only cookie/OTP signing key |
 | `STAGING_DRIVER_ONE_TIME_CODE` | environment secret | Staging-only single-use driver bootstrap code |
+| `STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON` | environment secret | Staging-only Google service-account JSON; never reuse production credentials |
 
 Never copy production Shopify, payment, webhook, email, or customer-data
 credentials into the staging Worker. See `CI_CD.md` for one-time setup.
@@ -161,7 +162,7 @@ it** (per `../AGENTS.md` §2), then move it to a secret/setting.
 |---|---|
 | `SHOPIFY_SHOP`, `SHOPIFY_API_VERSION`, `SHOPIFY_APP_CLIENT_ID` | `SHOPIFY_ADMIN_TOKEN`, `SHOPIFY_CLI_THEME_TOKEN`, `SHOPIFY_WEBHOOK_SECRET` |
 | `BRAND`, `BOOKING_URL`, `WHATSAPP_NUMBER`, `OPS_EMAIL` | `OPS_PIN`, `SESSION_SECRET`, `DRIVER_ONE_TIME_CODE` |
-| brand colors, Hebrew copy | `MAPS_KEY` (Worker + theme), `SENDGRID_API_KEY`, `GOOGLE_ROUTE_OPTIMIZATION_API_KEY`, `MESH_API_KEY` |
+| brand colors, Hebrew copy | `MAPS_KEY` (Worker + theme), `SENDGRID_API_KEY`, `GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON`, `MESH_API_KEY` |
 
 > The public business phone numbers and `eden@edenmish.com` are intentionally
 > public contact info, **not** secrets.

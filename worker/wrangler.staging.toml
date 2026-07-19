@@ -17,10 +17,12 @@ STOREFRONT_BASE = "https://staging.edenmish.com"
 WHATSAPP_NUMBER = "972534058498"
 OPS_EMAIL = "eden@edenmish.com"
 AUTO_DRIVER_DISPATCH = "on"
+ROUTE_OPTIMIZATION_PROVIDER = "google"
+GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID = "gen-lang-client-0008834106"
 ALLOWED_ORIGINS = "https://staging.edenmish.com,https://edenmish-staging.pages.dev,https://*.edenmish-staging.pages.dev,https://edenmish-v2.pages.dev,https://*.edenmish-v2.pages.dev"
 
 [secrets]
-required = ["OPS_PIN", "SESSION_SECRET", "DRIVER_ONE_TIME_CODE"]
+required = ["OPS_PIN", "SESSION_SECRET", "DRIVER_ONE_TIME_CODE", "GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON"]
 
 [[d1_databases]]
 binding = "DB"

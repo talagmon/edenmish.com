@@ -110,7 +110,8 @@ Shopify, payment, email, or webhook credentials.
 **Environment:** `staging`.
 
 **Required configuration:** `STAGING_D1_DATABASE_ID` environment variable;
-`STAGING_OPS_PIN`, `STAGING_SESSION_SECRET`, and `STAGING_DRIVER_ONE_TIME_CODE`
+`STAGING_OPS_PIN`, `STAGING_SESSION_SECRET`, `STAGING_DRIVER_ONE_TIME_CODE`, and
+`STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON`
 environment secrets; shared
 `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets.
 
@@ -227,6 +228,7 @@ Add in **GitHub → Settings → Secrets and variables → Actions**:
 | `STAGING_OPS_PIN` | staging only | A staging-only PIN; never reuse the production PIN |
 | `STAGING_SESSION_SECRET` | staging only | A unique random staging session secret |
 | `STAGING_DRIVER_ONE_TIME_CODE` | staging only | A 6–12 digit single-use driver bootstrap code; rotate after exchange |
+| `STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON` | staging only | Dedicated staging OAuth credential for Google Route Optimization |
 
 Add `STAGING_D1_DATABASE_ID` as a variable on the GitHub `staging` environment.
 
@@ -409,7 +411,7 @@ authorized operator session and verify the migration before triggering the workf
 Then create the GitHub `staging` environment and add:
 
 - variable: `STAGING_D1_DATABASE_ID`
-- secrets: `STAGING_OPS_PIN`, `STAGING_SESSION_SECRET`, `STAGING_DRIVER_ONE_TIME_CODE`
+- secrets: `STAGING_OPS_PIN`, `STAGING_SESSION_SECRET`, `STAGING_DRIVER_ONE_TIME_CODE`, `STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON`
 - repository secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
 
 Run **Actions → Staging Worker → Run workflow** once. Subsequent Worker changes
