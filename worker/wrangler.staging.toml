@@ -16,6 +16,7 @@ BOOKING_URL = "https://staging.edenmish.com"
 STOREFRONT_BASE = "https://staging.edenmish.com"
 WHATSAPP_NUMBER = "972534058498"
 OPS_EMAIL = "eden@edenmish.com"
+AUTO_DRIVER_DISPATCH = "on"
 ALLOWED_ORIGINS = "https://staging.edenmish.com,https://edenmish-staging.pages.dev,https://*.edenmish-staging.pages.dev,https://edenmish-v2.pages.dev,https://*.edenmish-v2.pages.dev"
 
 [secrets]

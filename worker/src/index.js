@@ -10,6 +10,7 @@ import { validateCoupon, recordRedemption, listCoupons, createCoupon, updateCoup
 import { getStatusMeta, getNextStatuses, isTerminalStatus } from './status.js';
 import { shopifyWebhookRegistrar } from './shopify-webhooks.js';
 import { handleDriverApi } from './driver-api.js';
+import { driverDispatchStatus, startDriverShift, endDriverShift } from './driver-dispatch.js';
 
 const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra } });
 const html = (s) => new Response(s, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -718,6 +719,23 @@ export default {
 
     if (onOps && path === '/api/ops/logout' && req.method === 'POST') {
       return json({ ok: true }, 200, { 'Set-Cookie': 'ops_sess=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0' });
+    }
+
+    if (onOps && path === '/api/ops/driver' && req.method === 'GET') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      return json(await driverDispatchStatus(env));
+    }
+
+    if (onOps && path === '/api/ops/driver/shift/start' && req.method === 'POST') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      const result = await startDriverShift(env);
+      return json({ ok: true, ...result }, result.unchanged ? 200 : 201);
+    }
+
+    if (onOps && path === '/api/ops/driver/shift/end' && req.method === 'POST') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      const result = await endDriverShift(env);
+      return json({ ok: true, ...result });
     }
 
     if (onOps && path === '/api/ops/orders' && req.method === 'GET') {

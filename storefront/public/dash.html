@@ -24,7 +24,7 @@ var LIVE = ["to_pickup","to_dropoff"];
 var ACTIVE = ["to_pickup","picked_up","to_dropoff"];
 var NEXT = {paid:"to_pickup",to_pickup:"picked_up",picked_up:"to_dropoff"};
 var NEXTLBL = {paid:"אשר יציאה לאיסוף",to_pickup:"אשר איסוף ✓",picked_up:"אשר יציאה למסירה"};
-var orders = [], coupons = [], webhookHealth = null, activeOrder = null, podOrderId = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, gpsOrderId = null, gpsState = "idle", activeFilter = "active", currentView = "queue";
+var orders = [], coupons = [], webhookHealth = null, driverDispatch = null, activeOrder = null, podOrderId = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, gpsOrderId = null, gpsState = "idle", activeFilter = "active", currentView = "queue";
 
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
 function fmt(t){return t?new Date(t).toLocaleString("he-IL",{timeZone:"Asia/Jerusalem",hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"}):"—";}
@@ -121,6 +121,10 @@ async function refresh(){
   var payload = await r.json();
   orders = payload.orders || [];
   webhookHealth = payload.integrations && payload.integrations.shopify_webhooks || null;
+  try{
+    var dr = await api("/api/ops/driver");
+    if(dr.ok) driverDispatch = await dr.json();
+  }catch(e){}
   if(activeOrder){
     var u = orders.find(function(o){return o.id===activeOrder.id;});
     if(u){activeOrder=u;return renderDetail(u);}
@@ -173,6 +177,19 @@ function renderQueue(){
     return '<div class="glass-card border border-alert-amber/40 bg-alert-amber/10 rounded-xl p-3 flex items-start gap-2 text-alert-amber" role="alert">'+
       '<span class="material-symbols-outlined shrink-0">warning</span><span class="text-label-sm">'+text+'</span></div>';
   }
+  function driverPanel(){
+    var d=driverDispatch;
+    if(!d)return '<div class="glass-card rounded-xl p-3 text-on-surface-variant">סטטוס השליח נטען…</div>';
+    var active=!!d.active;
+    var blocked=Number(d.blockedOrderCount||0);
+    return '<section class="glass-card rounded-2xl p-4 border '+(active?'border-success-mint/40':'border-outline-variant')+'">'+
+      '<div class="flex items-center justify-between gap-3">'+
+      '<div class="flex items-center gap-3 min-w-0"><span class="material-symbols-outlined text-3xl '+(active?'text-success-mint':'text-on-surface-variant')+'">two_wheeler</span><div class="min-w-0">'+
+      '<div class="font-label-bold text-primary">משמרת Eden</div><div class="text-label-sm text-on-surface-variant">'+(active?'פעילה · המסלול מתעדכן אוטומטית':'לא פעילה · האפליקציה ממתינה')+'</div></div></div>'+
+      '<button onclick="setDriverShift('+(!active)+')" class="px-4 py-2 rounded-xl font-label-bold '+(active?'glass-card text-error':'bg-primary text-on-primary')+'">'+(active?'סיום משמרת':'התחלת משמרת')+'</button></div>'+
+      '<div class="grid grid-cols-3 gap-2 mt-3 text-center"><div class="bg-surface-container-low rounded-xl p-2"><div class="font-label-bold text-primary">'+Number(d.readyOrderCount||0)+'</div><div class="text-label-sm text-on-surface-variant">הזמנות זמינות</div></div><div class="bg-surface-container-low rounded-xl p-2"><div class="font-label-bold text-secondary">'+Number(d.taskCount||0)+'</div><div class="text-label-sm text-on-surface-variant">תחנות במסלול</div></div><div class="bg-surface-container-low rounded-xl p-2"><div class="font-label-bold '+(blocked?'text-error':'text-success-mint')+'">'+blocked+'</div><div class="text-label-sm text-on-surface-variant">חסרות נקודות</div></div></div>'+
+      (blocked?'<div class="mt-3 text-label-sm text-error">יש הזמנות ללא קואורדינטות מלאות. הן לא יישלחו לשליח עד לתיקון הכתובת.</div>':'')+'</section>';
+  }
 
   $("app").innerHTML =
     '<div class="sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm">'+
@@ -193,10 +210,21 @@ function renderQueue(){
     tabBtn("all","הכל",counts.all)+tabBtn("inbox","חדשות",counts.inbox)+tabBtn("active","פעילות",counts.active)+tabBtn("done","הושלם",counts.done)+tabBtn("cancelled","בוטלו",counts.cancelled)+tabBtn("problems","תקלות",counts.problems)+
     '</div></div>'+
     '<div class="px-gutter-mobile py-stack-sm max-w-lg mx-auto space-y-3 pb-24">'+
+    driverPanel()+
     webhookWarning()+
     (cards || '<div class="glass-card rounded-2xl p-stack-lg text-center text-on-surface-variant">אין הזמנות בקטגוריה זו.</div>')+
     '</div>';
   attachSwipeHandlers();
+}
+async function setDriverShift(start){
+  var message=start?'להתחיל משמרת ולעדכן את אפליקציית השליח?':'לסיים את המשמרת הפעילה?';
+  if(!confirm(message))return;
+  try{
+    var path=start?'/api/ops/driver/shift/start':'/api/ops/driver/shift/end';
+    var r=await api(path,{method:'POST',body:'{}'});
+    if(!r.ok)return showTransientError('לא הצלחנו לעדכן את המשמרת.');
+    await refresh();
+  }catch(e){showTransientError('לא הצלחנו לעדכן את המשמרת. בדקו את החיבור.');}
 }
 function attachSwipeHandlers(){
   document.querySelectorAll("div[data-oid]").forEach(function(el){

@@ -1,5 +1,6 @@
 import { anonKey, clientIp } from './security.js';
 import { incrRateLimit, resetRateLimit, getOrderById, setOrderStatus } from './db.js';
+import { syncDriverRoute } from './driver-dispatch.js';
 
 const ACCESS_TTL_MS = 15 * 60 * 1000;
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -213,6 +214,12 @@ async function routeSnapshot(env, auth, meta, shiftId) {
   if (!ID.test(shiftId)) return response({ code: 'not_found', message: 'Route not found.', request_id: meta.requestId }, 404, meta.requestId);
   const shift = await env.DB.prepare('SELECT id FROM driver_shifts WHERE id = ? AND driver_id = ?').bind(shiftId, auth.driver_id).first();
   if (!shift) return response({ code: 'not_found', message: 'Route not found.', request_id: meta.requestId }, 404, meta.requestId);
+  if (env.AUTO_DRIVER_DISPATCH === 'on') {
+    const dispatch = await syncDriverRoute(env, { driverId: auth.driver_id, shiftId });
+    if (dispatch.empty) {
+      return response({ code: 'route_not_found', message: 'No active route tasks.', request_id: meta.requestId }, 404, meta.requestId);
+    }
+  }
   const route = await env.DB.prepare(`SELECT * FROM driver_routes WHERE shift_id = ? ORDER BY revision DESC LIMIT 1`).bind(shiftId).first();
   if (!route) return response({ code: 'route_not_found', message: 'Route not found.', request_id: meta.requestId }, 404, meta.requestId);
   const rows = await env.DB.prepare(`SELECT s.*, o.name, o.phone,
