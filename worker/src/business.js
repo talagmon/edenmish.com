@@ -5,6 +5,7 @@ import { getCookie, genOtp, timingSafeEqual } from './integrations.js';
 import { incrRateLimit } from './db.js';
 import { anonKey, clientIp } from './security.js';
 import { notifyEmail } from './notify.js';
+import { DEFAULT_PRICING_RULES } from './pricing.js';
 
 const enc = new TextEncoder();
 const DAY = 24 * 60 * 60 * 1000;
@@ -25,6 +26,67 @@ const MEMBER_BASE_RATES = Object.freeze({
   platinum: Object.freeze({ '1:eco': 30, '1:standard': 45, '1:flash': 80, '2:eco': 48, '2:standard': 63, '2:flash': 105, '3:eco': 68, '3:standard': 104 }),
 });
 
+const BUSINESS_PLAN_VALUE = Object.freeze({
+  silver: Object.freeze({
+    best_for: 'לעסקים עם משלוחים קבועים במרכז תל אביב וגוש דן',
+    example_rate_key: '1:standard',
+    benefits: Object.freeze(['מחירי עסק באזור 1', 'משלוחים חסכוניים ורגילים', 'מעקב מלא אחרי היתרה והחיובים']),
+  }),
+  gold: Object.freeze({
+    best_for: 'לעסקים שצריכים יותר כיסוי, גמישות ועדיפות',
+    example_rate_key: '2:standard',
+    recommended: true,
+    benefits: Object.freeze(['כיסוי אזורים 1–2', 'כולל משלוח מהיר', 'עדיפות בתור המשלוחים']),
+  }),
+  platinum: Object.freeze({
+    best_for: 'לעסקים עם נפח גבוה שצריכים את כל אזורי השירות',
+    example_rate_key: '3:standard',
+    benefits: Object.freeze(['כיסוי מלא באזורים 1–3', 'המחירים העסקיים הטובים ביותר', 'עדיפות ראשונה וזמני טיפול מהירים']),
+  }),
+});
+
+const SERVICE_LABELS_HE = Object.freeze({ eco: 'חסכוני', standard: 'רגיל', flash: 'מהיר' });
+
+function publicBaseRate(rateKey) {
+  const [zone, service] = String(rateKey).split(':');
+  const prefix = service === 'standard' ? 'std' : service;
+  const value = DEFAULT_PRICING_RULES[`${prefix}_z${zone}`];
+  return Number.isFinite(Number(value)) ? Number(value) : null;
+}
+
+function planValue(plan) {
+  const value = BUSINESS_PLAN_VALUE[plan.id];
+  const memberRates = MEMBER_BASE_RATES[plan.id];
+  const [zone, service] = value.example_rate_key.split(':');
+  const memberRate = Number(memberRates[value.example_rate_key]);
+  const publicRate = publicBaseRate(value.example_rate_key);
+  const amount = plan.amount_agorot / 100;
+  const deliveries = Math.floor(amount / memberRate);
+  const savingsPerDelivery = Math.max(0, publicRate - memberRate);
+  const maxDiscountPercent = Math.max(...Object.entries(memberRates).map(([key, rate]) => {
+    const regular = publicBaseRate(key);
+    return regular ? Math.round(((regular - Number(rate)) / regular) * 100) : 0;
+  }));
+  return {
+    best_for: value.best_for,
+    recommended: Boolean(value.recommended),
+    benefits: [...value.benefits],
+    credit_valid_days: 60,
+    max_discount_percent: maxDiscountPercent,
+    example: {
+      zone: Number(zone),
+      service,
+      service_he: SERVICE_LABELS_HE[service],
+      public_rate: publicRate,
+      member_rate: memberRate,
+      saving_per_delivery: savingsPerDelivery,
+      deliveries,
+      estimated_savings: deliveries * savingsPerDelivery,
+      credit_remaining: amount - deliveries * memberRate,
+    },
+  };
+}
+
 export function publicBusinessPlans() {
   return Object.values(BUSINESS_PLANS).map((plan) => ({
     id: plan.id,
@@ -33,6 +95,7 @@ export function publicBusinessPlans() {
     zones: plan.zones,
     priority: plan.priority,
     rates: { ...MEMBER_BASE_RATES[plan.id] },
+    value: planValue(plan),
   }));
 }
 
