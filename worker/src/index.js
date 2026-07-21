@@ -860,6 +860,17 @@ export default {
       return json({ ok: true, order: o, proof });
     }
 
+    if (onOps && path.includes('/api/ops/orders/') && path.endsWith('/driver-proofs') && req.method === 'GET') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      const id = Number(path.split('/')[4]);
+      if (!Number.isSafeInteger(id) || id <= 0) return json({ error: 'invalid id' }, 400);
+      const proofs = await env.DB.prepare(`SELECT stop_id, task_type, signer_name, note,
+          photo_url, signature, created_at, updated_at
+        FROM driver_task_proofs WHERE order_id = ? ORDER BY created_at`)
+        .bind(id).all();
+      return json({ ok: true, proofs: proofs.results || [] });
+    }
+
     // ---- PR8: recent notification failures (ops-only, for the dashboard panel) ----
     if (onOps && path === '/api/ops/notifications/failures' && req.method === 'GET') {
       if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);

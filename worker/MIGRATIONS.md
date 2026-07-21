@@ -309,6 +309,34 @@ WHERE type='table' AND name='driver_location_samples';
 
 ---
 
+### 017_driver_task_proofs.sql
+
+**Purpose:** Stores photo/signature evidence separately for every assigned pickup
+and drop-off task. Drop-off evidence is also mirrored to the existing customer
+delivery-proof record so the tracking experience remains compatible.
+
+**Commands:**
+```bash
+# Staging (render the config first; run from worker/):
+npx wrangler d1 execute edenmish-staging --remote \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/017_driver_task_proofs.sql
+
+# Production (only after the production release is approved):
+wrangler d1 execute edenmish --remote --file=./migrations/017_driver_task_proofs.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM sqlite_master
+WHERE type='table' AND name='driver_task_proofs';
+
+SELECT name FROM pragma_index_list('driver_task_proofs')
+WHERE name='idx_driver_task_proofs_order';
+```
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -327,6 +355,7 @@ WHERE type='table' AND name='driver_location_samples';
 - [ ] Run `014_driver_api_v1.sql` after merge and before enabling the driver app.
 - [ ] Run `015_driver_route_tasks.sql` after 014 and before enabling mixed pickup/drop-off routes.
 - [ ] Run `016_driver_route_integrity.sql` after 015 and before enabling GPS-origin route optimization.
+- [ ] Run `017_driver_task_proofs.sql` after 016 and before enabling driver photo/signature capture.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).

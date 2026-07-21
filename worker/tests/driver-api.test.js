@@ -263,6 +263,103 @@ describe('driver API v1', () => {
     assert.deepEqual(body.change_summary.added_stop_ids, ['stop_d0']);
   });
 
+  test('stores authenticated pickup proof against the assigned route task', async () => {
+    const db = fakeDb({
+      first: (call) => {
+        const auth = authenticatedFirst(call);
+        if (auth) return auth;
+        if (call.sql.includes('FROM driver_shifts') && call.sql.includes("state IN")) {
+          return { id: 'sh_123' };
+        }
+        if (call.sql.includes('FROM driver_assignments')) return { order_id: 9001 };
+        if (call.sql.includes('FROM driver_route_stops s JOIN driver_routes')) {
+          return { stop_id: 'stop_p1', task_type: 'pickup' };
+        }
+        return null;
+      },
+    });
+
+    const res = await handleDriverApi(request(
+      '/api/driver/v1/shifts/sh_123/stops/stop_p1/proof',
+      {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({
+          order_id: 'ord_9001',
+          signer_name: 'Eden',
+          note: 'Collected from reception',
+          photo_data_url: 'data:image/jpeg;base64,AA==',
+          signature_data_url: 'data:image/png;base64,AA==',
+        }),
+      },
+    ), { DB: db });
+
+    assert.equal(res.status, 201);
+    const body = await res.json();
+    assert.equal(body.proof.task_type, 'pickup');
+    assert.equal(body.proof.stop_id, 'stop_p1');
+    const insert = db.calls.find((call) => call.sql.includes('INSERT INTO driver_task_proofs'));
+    assert.ok(insert);
+    assert.deepEqual(insert.args.slice(0, 9), [
+      'drv_eden',
+      'sh_123',
+      'stop_p1',
+      9001,
+      'pickup',
+      'Eden',
+      'Collected from reception',
+      'data:image/jpeg;base64,AA==',
+      'data:image/png;base64,AA==',
+    ]);
+  });
+
+  test('rejects proof for an order not assigned to the driver', async () => {
+    const db = fakeDb({
+      first: (call) => {
+        const auth = authenticatedFirst(call);
+        if (auth) return auth;
+        if (call.sql.includes('FROM driver_shifts') && call.sql.includes("state IN")) {
+          return { id: 'sh_123' };
+        }
+        return null;
+      },
+    });
+
+    const res = await handleDriverApi(request(
+      '/api/driver/v1/shifts/sh_123/stops/stop_p1/proof',
+      {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({
+          order_id: 'ord_9001',
+          photo_data_url: 'data:image/jpeg;base64,AA==',
+        }),
+      },
+    ), { DB: db });
+
+    assert.equal(res.status, 403);
+    assert.equal((await res.json()).code, 'forbidden');
+    assert.equal(
+      db.calls.some((call) => call.sql.includes('INSERT INTO driver_task_proofs')),
+      false,
+    );
+  });
+
+  test('requires a valid photo or signature for task proof', async () => {
+    const db = fakeDb({ first: authenticatedFirst });
+    const res = await handleDriverApi(request(
+      '/api/driver/v1/shifts/sh_123/stops/stop_p1/proof',
+      {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({ order_id: 'ord_9001', note: 'No evidence' }),
+      },
+    ), { DB: db });
+
+    assert.equal(res.status, 400);
+    assert.equal((await res.json()).code, 'invalid_proof');
+  });
+
   test('advances the canonical order when a pickup task completes', async () => {
     const db = fakeDb({
       first: (call) => {

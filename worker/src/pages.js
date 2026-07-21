@@ -223,6 +223,10 @@ input:focus{outline:none;border-color:#dfb7ff;box-shadow:0 0 10px rgba(223,183,2
 .pod-sig{position:relative;height:160px;border:1px solid rgba(255,255,255,.15);border-radius:14px;overflow:hidden;background:rgba(13,8,20,.4)}
 .pod-sig canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
 .pod-sig-clear{position:absolute;top:6px;left:6px;font-size:.7rem;background:rgba(255,255,255,.1);color:#cec3d2;border:0;padding:3px 8px;border-radius:6px;cursor:pointer}
+.driver-proof-item{border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:14px;background:rgba(13,8,20,.35)}
+.driver-proof-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.driver-proof-media{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:10px}
+.driver-proof-media img{display:block;width:100%;max-height:260px;object-fit:contain;border-radius:10px;background:#090d24;border:1px solid rgba(255,255,255,.1)}
 </style></head><body><div class="wrap">
 <div id="app"></div>
 </div>
@@ -234,6 +238,12 @@ input:focus{outline:none;border-color:#dfb7ff;box-shadow:0 0 10px rgba(223,183,2
 <label class="pod-photo" for="pod-photo"><span id="pod-photo-ph">📸 לחצו לצלם את החבילה ביעד</span><input type="file" accept="image/*" capture="environment" id="pod-photo" hidden onchange="podPreview()"></label>
 <div class="pod-sig"><canvas id="pod-sig-canvas"></canvas><button class="pod-sig-clear" onclick="clearSig()" type="button">נקה</button></div>
 <button class="btn go" id="pod-submit" onclick="submitPod()" type="button">אשר מסירה וסגור משימה</button>
+</div>
+</div>
+<div id="driver-proofs" class="pod-overlay" hidden>
+<div class="pod-card">
+<div class="pod-head"><b>הוכחות מהשליח</b><button class="pod-x" onclick="hideDriverProofs()" aria-label="סגור">✕</button></div>
+<div id="driver-proofs-content" class="muted">טוען…</div>
 </div>
 </div>
 <script>
@@ -306,6 +316,7 @@ function actions(o){
   }else if(NEXT[s]){
     h+='<button class="btn sm go" data-act="advance" data-id="'+id+'" data-next="'+NEXT[s]+'">'+NEXTLBL[s]+'</button><button class="btn sm danger" data-act="fail" data-id="'+id+'">סמן כנכשל</button>';
   }
+  if(['picked_up','to_dropoff','delivered','failed'].indexOf(s)>=0)h+='<button class="btn sm alt" data-act="driverproofs" data-id="'+id+'"><span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle">verified</span> הוכחות מהשליח</button>';
   h+='<button class="btn sm alt" data-act="notifs" data-id="'+id+'">'+(notifOrderId===id?'▲ הסתר הודעות':'▼ הצגת הודעות')+'</button>';
   return h+'</div>';
 }
@@ -365,6 +376,20 @@ async function submitPod(){
     if(d&&d.ok){hidePod();refresh();}else{throw 0;}
   }catch(e){btn.disabled=false;btn.textContent=orig;alert('שגיאה בשמירת הוכחת המסירה. נסו שוב.');}
 }
+function hideDriverProofs(){document.getElementById('driver-proofs').hidden=true;}
+async function showDriverProofs(id){
+  var modal=document.getElementById('driver-proofs'),content=document.getElementById('driver-proofs-content');modal.hidden=false;content.innerHTML='טוען…';
+  try{
+    var r=await api('/api/ops/orders/'+id+'/driver-proofs'),d=await r.json();if(!r.ok)throw 0;
+    var list=d.proofs||[];if(!list.length){content.innerHTML='<div class="muted">עדיין לא נשמרה הוכחה מהשליח להזמנה הזו.</div>';return;}
+    content.innerHTML=list.map(function(p){
+      var task=p.task_type==='pickup'?'איסוף':'מסירה',media='';
+      if(p.photo_url)media+='<div><div class="muted" style="margin-bottom:4px">צילום</div><img src="'+esc(p.photo_url)+'" alt="צילום הוכחת '+task+'"></div>';
+      if(p.signature)media+='<div><div class="muted" style="margin-bottom:4px">חתימה</div><img src="'+esc(p.signature)+'" alt="חתימת הוכחת '+task+'"></div>';
+      return '<div class="driver-proof-item"><div class="driver-proof-head"><b style="color:'+(p.task_type==='pickup'?'#91d3c8':'#dfb7ff')+'">'+task+'</b><span class="muted">'+fmt(p.updated_at||p.created_at)+'</span></div>'+(p.signer_name?'<div>חותם/ת: <b>'+esc(p.signer_name)+'</b></div>':'')+(p.note?'<div class="muted" style="margin-top:4px">'+esc(p.note)+'</div>':'')+(media?'<div class="driver-proof-media">'+media+'</div>':'')+'</div>';
+    }).join('');
+  }catch(e){content.innerHTML='<div class="stale">לא הצלחנו לטעון את ההוכחות. נסו שוב.</div>';}
+}
 function toggleDone(){doneOpen=!doneOpen;render();}
 function gpsControlHtml(id){var state=gpsOrderId===id?gpsState:'idle',sharing=watchId!==null&&state==='active',requesting=state==='requesting',status=sharing?'מיקום פעיל':requesting?'ממתין לאישור':state==='denied'?'ההרשאה נדחתה':state==='error'?'המיקום אינו זמין':'מיקום כבוי',label=sharing||requesting?'הפסקת שיתוף מיקום':'התחלת שיתוף מיקום';return '<div id="gps-control-'+id+'" style="width:100%"><span id="gps-status-'+id+'" aria-live="polite" class="muted" style="display:block;margin-bottom:5px">'+status+'</span><button class="btn sm '+(sharing||requesting?'danger':'alt')+'" data-act="gps" data-id="'+id+'">'+label+'</button></div>';}
 function updateGpsControl(id){var el=document.getElementById('gps-control-'+id);if(el)el.outerHTML=gpsControlHtml(id);}
@@ -380,6 +405,7 @@ document.getElementById('app').addEventListener('click',function(e){
   else if(act==='fail'){if(confirm('לסמן את ההזמנה כנכשלת?'))setStatus(id,'failed');}
   else if(act==='markpaid')markPaid(id);
   else if(act==='pod')showPod(id);
+  else if(act==='driverproofs')showDriverProofs(id);
   else if(act==='copy'){copyPay(b.getAttribute('data-pay'));alert('הקישור הועתק ללוח ✓');}
   else if(act==='refresh')refresh();
   else if(act==='logout')logout();

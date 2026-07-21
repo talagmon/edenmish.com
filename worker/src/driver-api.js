@@ -1,5 +1,11 @@
 import { anonKey, clientIp } from './security.js';
-import { incrRateLimit, resetRateLimit, getOrderById, setOrderStatus } from './db.js';
+import {
+  incrRateLimit,
+  resetRateLimit,
+  getOrderById,
+  setOrderStatus,
+  upsertDeliveryProof,
+} from './db.js';
 import { syncDriverRoute } from './driver-dispatch.js';
 
 const ACCESS_TTL_MS = 15 * 60 * 1000;
@@ -38,11 +44,11 @@ const response = (body, status = 200, requestId = null, extra = {}) => new Respo
   },
 });
 
-async function readJson(req) {
+async function readJson(req, maxBodyBytes = MAX_BODY_BYTES) {
   const declared = Number(req.headers.get('content-length'));
-  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) throw Object.assign(new Error('payload_too_large'), { status: 413 });
+  if (Number.isFinite(declared) && declared > maxBodyBytes) throw Object.assign(new Error('payload_too_large'), { status: 413 });
   const raw = await req.text();
-  if (new TextEncoder().encode(raw).byteLength > MAX_BODY_BYTES) throw Object.assign(new Error('payload_too_large'), { status: 413 });
+  if (new TextEncoder().encode(raw).byteLength > maxBodyBytes) throw Object.assign(new Error('payload_too_large'), { status: 413 });
   try { return JSON.parse(raw); } catch { throw Object.assign(new Error('invalid_body'), { status: 400 }); }
 }
 
@@ -266,6 +272,93 @@ async function assignedTask(env, shiftId, stopId, orderId) {
     ORDER BY r.revision DESC LIMIT 1`).bind(shiftId, stopId, orderId).first();
 }
 
+function validProofData(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  if (body.order_id != null && parseOrderId(body.order_id) == null) return false;
+  if (body.signer_name != null && (typeof body.signer_name !== 'string' || body.signer_name.length > 120)) return false;
+  if (body.note != null && (typeof body.note !== 'string' || body.note.length > 1000)) return false;
+  if (body.photo_data_url != null && (
+    typeof body.photo_data_url !== 'string'
+    || !body.photo_data_url.startsWith('data:image/jpeg;base64,')
+    || body.photo_data_url.length > 1_500_000
+  )) return false;
+  if (body.signature_data_url != null && (
+    typeof body.signature_data_url !== 'string'
+    || !body.signature_data_url.startsWith('data:image/png;base64,')
+    || body.signature_data_url.length > 500_000
+  )) return false;
+  return !!(body.photo_data_url || body.signature_data_url);
+}
+
+async function taskProof(req, env, auth, meta, shiftId, stopId) {
+  if (!ID.test(shiftId) || !ID.test(stopId)) {
+    return response({ code: 'not_found', message: 'Route task not found.', request_id: meta.requestId }, 404, meta.requestId);
+  }
+  let body;
+  try { body = await readJson(req, 2_100_000); } catch (error) {
+    return response({ code: error.message, message: 'Invalid proof.', request_id: meta.requestId }, error.status || 400, meta.requestId);
+  }
+  if (!validProofData(body)) {
+    return response({ code: 'invalid_proof', message: 'A valid photo or signature is required.', request_id: meta.requestId }, 400, meta.requestId);
+  }
+  const shift = await env.DB.prepare(`SELECT id FROM driver_shifts
+    WHERE id = ? AND driver_id = ? AND state IN ('active','ending','recovery_required')`)
+    .bind(shiftId, auth.driver_id).first();
+  if (!shift) return response({ code: 'shift_conflict', message: 'The shift is not active.', request_id: meta.requestId }, 409, meta.requestId);
+
+  const orderId = parseOrderId(body.order_id);
+  const assignment = await env.DB.prepare(`SELECT order_id FROM driver_assignments
+    WHERE driver_id = ? AND shift_id = ? AND order_id = ? AND active = 1`)
+    .bind(auth.driver_id, shiftId, orderId).first();
+  if (!assignment) return response({ code: 'forbidden', message: 'The route task is not assigned to this driver.', request_id: meta.requestId }, 403, meta.requestId);
+  const task = await assignedTask(env, shiftId, stopId, orderId);
+  if (!task) return response({ code: 'not_found', message: 'Route task not found.', request_id: meta.requestId }, 404, meta.requestId);
+
+  const now = Date.now();
+  await env.DB.prepare(`INSERT INTO driver_task_proofs
+    (driver_id, shift_id, stop_id, order_id, task_type, signer_name, note,
+     photo_url, signature, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(shift_id, stop_id) DO UPDATE SET
+      signer_name = excluded.signer_name,
+      note = excluded.note,
+      photo_url = excluded.photo_url,
+      signature = excluded.signature,
+      updated_at = excluded.updated_at`)
+    .bind(
+      auth.driver_id,
+      shiftId,
+      stopId,
+      orderId,
+      task.task_type,
+      body.signer_name || null,
+      body.note || null,
+      body.photo_data_url || null,
+      body.signature_data_url || null,
+      now,
+      now,
+    ).run();
+
+  if (task.task_type === 'dropoff') {
+    await upsertDeliveryProof(env.DB, orderId, {
+      receiver_name: body.signer_name,
+      delivery_note: body.note,
+      photo_url: body.photo_data_url,
+      signature: body.signature_data_url,
+    });
+  }
+  return response({
+    ok: true,
+    proof: {
+      shift_id: shiftId,
+      stop_id: stopId,
+      order_id: body.order_id,
+      task_type: task.task_type,
+      synced_at: new Date(now).toISOString(),
+    },
+  }, 201, meta.requestId);
+}
+
 async function applyTaskEvent(env, eventType, task, order, orderId) {
   if (!order || order.status === 'cancelled') {
     return { status: 'accepted_conflict', conflictType: order ? 'order_cancelled' : 'order_missing' };
@@ -464,6 +557,15 @@ export async function handleDriverApi(req, env, path = new URL(req.url).pathname
   if (path === '/api/driver/v1/shifts/current' && req.method === 'GET') return currentShift(env, auth, meta);
   const routeMatch = /^\/api\/driver\/v1\/shifts\/([^/]+)\/route$/.exec(path);
   if (routeMatch && req.method === 'GET') return routeSnapshot(env, auth, meta, decodeURIComponent(routeMatch[1]));
+  const proofMatch = /^\/api\/driver\/v1\/shifts\/([^/]+)\/stops\/([^/]+)\/proof$/.exec(path);
+  if (proofMatch && req.method === 'POST') return taskProof(
+    req,
+    env,
+    auth,
+    meta,
+    decodeURIComponent(proofMatch[1]),
+    decodeURIComponent(proofMatch[2]),
+  );
   if (path === '/api/driver/v1/execution-events:batch' && req.method === 'POST') return eventBatch(req, env, auth, meta);
   if (path === '/api/driver/v1/location:batch' && req.method === 'POST') return locationBatch(req, env, auth, meta);
   return response({ code: 'not_found', message: 'Driver API endpoint not found.', request_id: meta.requestId }, 404, meta.requestId);
