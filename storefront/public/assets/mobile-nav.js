@@ -5,6 +5,16 @@
   var bar = headerEl.querySelector('div, nav');
   var desk = bar && bar.querySelector('[class*="md:flex"]');
   if (!desk) return;
+  var hasBusiness = Array.prototype.some.call(desk.querySelectorAll('a'), function (a) { return (a.textContent || '').trim() === 'לעסקים'; });
+  if (!hasBusiness) {
+    var aboutLink = Array.prototype.find.call(desk.querySelectorAll('a'), function (a) { return (a.textContent || '').trim() === 'אודות'; });
+    if (aboutLink) {
+      var businessLink = aboutLink.cloneNode(true);
+      businessLink.textContent = 'לעסקים';
+      businessLink.setAttribute('href', '/business');
+      desk.insertBefore(businessLink, aboutLink);
+    }
+  }
   var links = [];
   desk.querySelectorAll('a').forEach(function (a) { links.push(a.outerHTML); });
   if (!links.length) return;
@@ -50,10 +60,16 @@
     if (refundPolicy) { var cancellation = refundPolicy.cloneNode(true); cancellation.textContent = 'ביטול עסקה'; cancellation.setAttribute('href', '/cancel.html'); refundPolicy.parentNode.insertBefore(cancellation, refundPolicy.nextSibling); }
   }
   var linksAfterRefund = footer.querySelectorAll('a');
-  var hasAccessibility = Array.prototype.some.call(linksAfterRefund, function (a) { return (a.textContent || '').trim() === 'נגישות'; });
+  var hasBusiness = Array.prototype.some.call(linksAfterRefund, function (a) { return (a.textContent || '').trim() === 'לעסקים'; });
+  if (!hasBusiness) {
+    var aboutForBusiness = Array.prototype.find.call(linksAfterRefund, function (a) { return (a.textContent || '').trim() === 'אודות'; });
+    if (aboutForBusiness) { var business = aboutForBusiness.cloneNode(true); business.textContent = 'לעסקים'; business.setAttribute('href', '/business'); aboutForBusiness.parentNode.insertBefore(business, aboutForBusiness.nextSibling); }
+  }
+  var linksAfterBusiness = footer.querySelectorAll('a');
+  var hasAccessibility = Array.prototype.some.call(linksAfterBusiness, function (a) { return (a.textContent || '').trim() === 'נגישות'; });
   if (!hasAccessibility) {
-    var refund = Array.prototype.find.call(linksAfterRefund, function (a) { return (a.textContent || '').trim() === 'מדיניות ביטול'; });
-    var privacyForAccessibility = Array.prototype.find.call(linksAfterRefund, function (a) { return (a.textContent || '').trim() === 'מדיניות פרטיות'; });
+    var refund = Array.prototype.find.call(linksAfterBusiness, function (a) { return (a.textContent || '').trim() === 'מדיניות ביטול'; });
+    var privacyForAccessibility = Array.prototype.find.call(linksAfterBusiness, function (a) { return (a.textContent || '').trim() === 'מדיניות פרטיות'; });
     var anchor = refund || privacyForAccessibility;
     if (anchor) { var accessibility = anchor.cloneNode(true); accessibility.textContent = 'נגישות'; accessibility.setAttribute('href', '/accessibility.html'); anchor.parentNode.insertBefore(accessibility, anchor.nextSibling); }
   }

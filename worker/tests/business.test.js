@@ -39,6 +39,28 @@ describe('business plan catalog and pricing', () => {
     assert.equal(BUSINESS_PLANS.platinum.amount_agorot, 300_000);
   });
 
+  test('publishes a truthful value breakdown for each plan', () => {
+    const plans = Object.fromEntries(publicBusinessPlans().map((plan) => [plan.id, plan]));
+
+    assert.deepEqual(plans.silver.value.example, {
+      zone: 1,
+      service: 'standard',
+      service_he: 'רגיל',
+      public_rate: 50,
+      member_rate: 45,
+      saving_per_delivery: 5,
+      deliveries: 13,
+      estimated_savings: 65,
+      credit_remaining: 15,
+    });
+    assert.equal(plans.gold.value.example.estimated_savings, 115);
+    assert.equal(plans.gold.value.recommended, true);
+    assert.equal(plans.platinum.value.example.estimated_savings, 308);
+    assert.equal(plans.platinum.value.example.credit_remaining, 88);
+    assert.equal(plans.platinum.value.credit_valid_days, 60);
+    assert.equal(plans.platinum.value.max_discount_percent, 14);
+  });
+
   test('applies the Gold Zone 2 member base and keeps existing surcharges', () => {
     const quote = applyBusinessPlanPricing(publicQuote({
       price: 128,

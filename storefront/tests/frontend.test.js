@@ -88,7 +88,7 @@ function opsQueueHelpers() {
 }
 
 describe('Frontend: Pages exist', () => {
-  for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'blog/edenmish-information-security.html', 'business-account.html', 'success.html', 'error.html', 'terms.html', 'privacy.html', 'refund.html', 'accessibility.html', 'cancel.html']) {
+  for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'blog/edenmish-information-security.html', 'business.html', 'business-account.html', 'success.html', 'error.html', 'terms.html', 'privacy.html', 'refund.html', 'accessibility.html', 'cancel.html']) {
     test(`${page} exists`, () => {
       assert.ok(existsSync(join(PUB, page)), `${page} not found in public/`);
     });
@@ -103,9 +103,26 @@ describe('Frontend: SEO foundations', () => {
     assertContains(robots, 'Disallow: /dash', 'ops dashboard exclusion');
     assertContains(sitemap, '<loc>https://edenmish.com/</loc>', 'homepage sitemap entry');
     assertContains(sitemap, '<loc>https://edenmish.com/booking.html</loc>', 'booking sitemap entry');
+    assertContains(sitemap, '<loc>https://edenmish.com/business</loc>', 'business plans sitemap entry');
     assertContains(sitemap, '<loc>https://edenmish.com/blog/edenmish-information-security</loc>', 'security article sitemap entry');
     assert.ok(!sitemap.includes('/dash'), 'ops dashboard must not be listed in the sitemap');
     assert.ok(!sitemap.includes('/success'), 'transaction result pages must not be listed in the sitemap');
+  });
+
+  test('Business page preserves both original offers and adds three account plans', () => {
+    const html = readPage('business.html');
+    for (const offer of ['חבילת ניסיון', 'ארנק עסקי', 'Silver · כסף', 'Gold · זהב', 'Platinum · פלטינום']) {
+      assertContains(html, offer, `${offer} offer`);
+    }
+    for (const proof of ['חיסכון כולל ₪25', 'חיסכון כולל ₪250', 'חיסכון מוערך ₪65', 'חיסכון מוערך ₪115', 'חיסכון מוערך ₪308']) {
+      assertContains(html, proof, `${proof} breakdown`);
+    }
+    for (const art of ['business-trial.webp', 'business-wallet.webp', 'business-silver.webp', 'business-gold.webp', 'business-platinum.webp']) {
+      assertContains(html, art, `${art} plan artwork`);
+      assert.ok(existsSync(join(PUB, 'assets', art)), `${art} not found in public assets`);
+    }
+    assertContains(html, 'ללא דמי מנוי', 'business value pitch');
+    assertContains(html, 'href="/business-account.html"', 'business account CTA');
   });
 
   test('Homepage exposes valid LocalBusiness structured data', () => {
