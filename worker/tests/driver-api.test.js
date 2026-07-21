@@ -442,6 +442,93 @@ describe('driver API v1', () => {
     assert.equal(orderUpdate.args[0], 'to_dropoff');
   });
 
+  test('runs delivery notifications once after a driver completes a drop-off', async () => {
+    const order = {
+      id: 9001,
+      token: 'deliverytoken9001',
+      status: 'to_dropoff',
+      payment_mode: 'immediate',
+      email: 'customer@example.com',
+      phone: '+972541234567',
+      pickup: 'Pickup address',
+      dropoff: 'Drop-off address',
+      price: 50,
+    };
+    let eventStored = false;
+    let notificationId = 0;
+    const db = fakeDb({
+      first: (call) => {
+        const auth = authenticatedFirst(call);
+        if (auth) return auth;
+        if (call.sql.startsWith('SELECT event_id')) {
+          return eventStored
+            ? {
+              event_id: eventId,
+              status: 'accepted',
+              conflict_type: null,
+              server_received_at: Date.parse('2026-07-18T15:00:01Z'),
+              correlation_id: requestId,
+            }
+            : null;
+        }
+        if (call.sql.includes('FROM driver_shifts WHERE id')) return { id: 'sh_123' };
+        if (call.sql.includes('FROM driver_assignments')) return { order_id: 9001 };
+        if (call.sql.includes('FROM driver_route_stops s JOIN driver_routes')) {
+          return { stop_id: 'stop_d1', task_type: 'dropoff' };
+        }
+        if (call.sql === 'SELECT * FROM orders WHERE id = ?') return order;
+        if (call.sql.startsWith('INSERT INTO notifications')) {
+          notificationId += 1;
+          return { id: notificationId };
+        }
+        return null;
+      },
+      run: (call) => {
+        if (call.sql.startsWith('UPDATE orders SET')) order.status = call.args[0];
+        if (call.sql.includes('INSERT OR IGNORE INTO driver_execution_events')) {
+          eventStored = true;
+        }
+        return { meta: { changes: 1 } };
+      },
+    });
+    const event = {
+      event_id: eventId,
+      event_type: 'delivery_completed',
+      occurred_at: '2026-07-18T15:00:00Z',
+      recorded_at_monotonic_ms: 42,
+      shift_id: 'sh_123',
+      order_id: 'ord_9001',
+      stop_id: 'stop_d1',
+      route_revision_seen: 13,
+      payload: {},
+    };
+    const send = () => handleDriverApi(request('/api/driver/v1/execution-events:batch', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ events: [event] }),
+    }), { DB: db });
+
+    const firstResponse = await send();
+    assert.equal((await firstResponse.json()).results[0].status, 'accepted');
+    assert.equal(order.status, 'delivered');
+    const notificationAttempts = db.calls.filter((call) => call.sql.startsWith('INSERT INTO notifications'));
+    assert.equal(notificationAttempts.length, 2);
+    assert.deepEqual(
+      notificationAttempts.map((call) => [call.args[1], call.args[2]]),
+      [
+        ['email', 'customer_delivery_summary'],
+        ['whatsapp', 'customer_delivery_summary'],
+      ],
+    );
+
+    const replayResponse = await send();
+    assert.equal((await replayResponse.json()).results[0].status, 'duplicate');
+    assert.equal(
+      db.calls.filter((call) => call.sql.startsWith('INSERT INTO notifications')).length,
+      2,
+    );
+  });
+
   test('treats a replayed execution event as an idempotent duplicate', async () => {
     const receivedAt = Date.parse('2026-07-18T15:00:01Z');
     const db = fakeDb({
@@ -467,6 +554,59 @@ describe('driver API v1', () => {
     assert.equal(body.results[0].server_received_at, '2026-07-18T15:00:01.000Z');
     const lookup = db.calls.find((call) => call.sql.startsWith('SELECT event_id'));
     assert.deepEqual(lookup.args, [eventId, 'drv_eden']);
+  });
+
+  test('refreshes auto-dispatch after an accepted terminal task transition', async () => {
+    const order = { id: 9001, status: 'to_dropoff' };
+    const db = fakeDb({
+      first: (call) => {
+        const auth = authenticatedFirst(call);
+        if (auth) return auth;
+        if (call.sql.startsWith('SELECT event_id')) return null;
+        if (call.sql.includes('FROM driver_shifts WHERE id')) return { id: 'sh_123' };
+        if (call.sql.includes('FROM driver_assignments')) return { order_id: 9001 };
+        if (call.sql.includes('FROM driver_route_stops s JOIN driver_routes')) {
+          return { stop_id: 'stop_d1', task_type: 'dropoff' };
+        }
+        if (call.sql === 'SELECT * FROM orders WHERE id = ?') return order;
+        if (call.sql.startsWith('SELECT * FROM driver_routes')) {
+          return {
+            id: 7,
+            revision: 13,
+            current_stop_id: 'stop_d1',
+            plan_fingerprint: 'previous-plan',
+          };
+        }
+        return null;
+      },
+      all: (call) => call.sql.startsWith('SELECT order_id FROM driver_assignments')
+        ? { results: [{ order_id: 9001 }] }
+        : { results: [] },
+      run: (call) => {
+        if (call.sql.startsWith('UPDATE orders SET')) order.status = call.args[0];
+        return { meta: { changes: 1 } };
+      },
+    });
+    const res = await handleDriverApi(request('/api/driver/v1/execution-events:batch', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ events: [{
+        event_id: eventId,
+        event_type: 'delivery_failed',
+        occurred_at: '2026-07-18T15:00:00Z',
+        recorded_at_monotonic_ms: 42,
+        shift_id: 'sh_123',
+        order_id: 'ord_9001',
+        stop_id: 'stop_d1',
+        route_revision_seen: 13,
+        payload: {},
+      }] }),
+    }), { DB: db, AUTO_DRIVER_DISPATCH: 'on' });
+
+    assert.equal((await res.json()).results[0].status, 'accepted');
+    assert.equal(order.status, 'failed');
+    assert.ok(db.calls.some((call) => call.sql.includes("FROM orders WHERE status IN ('paid','to_pickup','picked_up','to_dropoff')")));
+    assert.ok(db.calls.some((call) => call.sql.startsWith('UPDATE driver_assignments SET active = 0')));
   });
 
   test('records a cancelled-order completion as a conflict without changing the order', async () => {
