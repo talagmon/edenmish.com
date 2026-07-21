@@ -41,7 +41,7 @@ gmp-place-autocomplete.eden-places{display:block;width:100%;color-scheme:dark}
 <main class="pt-24 pb-stack-lg px-gutter-mobile md:px-gutter-desktop max-w-container-max mx-auto">
 <section id="business-wallet-banner" class="hidden glass-panel rounded-xl p-stack-md mb-stack-lg border border-secondary/40" aria-live="polite">
   <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-    <div><p class="font-headline-md text-secondary mb-1">הזמנה מהחשבון העסקי</p><p id="business-wallet-copy" class="text-on-surface-variant mb-0">טוען את היתרה והמסלול…</p></div>
+    <div><p class="font-headline-md text-secondary mb-1">הזמנה מהחשבון העסקי</p><p id="business-wallet-copy" class="text-on-surface-variant mb-0">טוען את היתרה והמסלול…</p><p id="business-wallet-estimate" class="text-label-sm text-on-surface-variant opacity-80 mt-1 mb-0"></p></div>
     <a id="business-account-link" class="text-primary font-label-bold underline" href="#">לחשבון העסקי</a>
   </div>
 </section>
@@ -416,22 +416,26 @@ gmp-place-autocomplete.eden-places{display:block;width:100%;color-scheme:dark}
 <script>
 // Existing Worker backend (sibling repo). Public order endpoint only.
 const API = window.EDEN_API.find;
-const BUSINESS_MODE = new URLSearchParams(location.search).get("business") === "1";
+const BUSINESS_REQUESTED = new URLSearchParams(location.search).get("business") === "1";
+let BUSINESS_MODE = BUSINESS_REQUESTED;
 let businessAccount = null;
 let walletIdempotencyKey = null;
+let businessModeReady = Promise.resolve(false);
 
 async function initBusinessMode(){
-  if(!BUSINESS_MODE)return;
-  const banner=document.getElementById("business-wallet-banner");if(banner)banner.classList.remove("hidden");
-  const accountLink=document.getElementById("business-account-link");if(accountLink)accountLink.href=API+"/business";
-  const coupon=document.getElementById("coupon-section");if(coupon)coupon.hidden=true;
   try{
     const res=await fetch(API+"/api/business/me",{credentials:"include"});
-    if(!res.ok){location.assign(API+"/business");return;}
+    if(!res.ok){if(BUSINESS_REQUESTED)location.assign(API+"/business");return false;}
     businessAccount=await res.json();
+    BUSINESS_MODE=true;
+    const banner=document.getElementById("business-wallet-banner");if(banner)banner.classList.remove("hidden");
+    const accountLink=document.getElementById("business-account-link");if(accountLink)accountLink.href=API+"/business";
+    const coupon=document.getElementById("coupon-section");if(coupon)coupon.hidden=true;
     const planNames={silver:"כסף",gold:"זהב",platinum:"פלטינום"};
     const planName=planNames[businessAccount.account.plan_id]||"ללא מסלול";
     const copy=document.getElementById("business-wallet-copy");if(copy)copy.textContent="מסלול "+planName+" · יתרה זמינה ₪"+Number(businessAccount.wallet.available||0).toLocaleString("he-IL");
+    const deliveryEstimate=businessAccount.wallet.delivery_estimate;
+    const estimateCopy=document.getElementById("business-wallet-estimate");if(estimateCopy)estimateCopy.textContent=deliveryEstimate?"כ־"+Number(deliveryEstimate.count||0).toLocaleString("he-IL")+" משלוחים נותרים לפי "+deliveryEstimate.service_he+" באזור "+deliveryEstimate.zone+" · יתרת ₪ היא הקובעת":"";
     const activePlan=(businessAccount.plans||[]).find((plan)=>plan.id===businessAccount.account.plan_id);
     if(activePlan){
       const title=document.getElementById("price-table-title");if(title)title.textContent="מחירי מסלול "+planName;
@@ -443,7 +447,8 @@ async function initBusinessMode(){
     const name=document.getElementById("f-name");if(name&&!name.value)name.value=businessAccount.user.name||businessAccount.account.company_name||"";
     const phone=document.getElementById("f-phone");if(phone&&!phone.value)phone.value=businessAccount.user.phone||"";
     computeEstimate();
-  }catch(e){location.assign(API+"/business")}
+    return true;
+  }catch(e){if(BUSINESS_REQUESTED)location.assign(API+"/business");return false}
 }
 
 // ---- Google Maps: address autocomplete + authoritative Worker quote ----
@@ -1109,6 +1114,7 @@ function cityOf(address) {
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   clearError();
+  await businessModeReady;
   const fd = new FormData(form);
   const name = (fd.get("name") || "").toString().trim();
   const phone = (fd.get("phone") || "").toString().trim();
@@ -1256,7 +1262,7 @@ form.addEventListener("submit", async (e) => {
     submitBtn.textContent = original;
   }
 });
-initBusinessMode();
+businessModeReady=initBusinessMode();
 </script>
 <script src="/assets/mobile-nav.js" defer></script>
 </body>

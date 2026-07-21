@@ -311,8 +311,11 @@ describe('Frontend: Booking form', () => {
   });
 
   test('Supports authenticated business-wallet quotes and one-tap reservations', () => {
-    assertContains(html, 'BUSINESS_MODE', 'business booking mode');
+    assertContains(html, 'BUSINESS_REQUESTED', 'explicit business entry mode');
+    assertContains(html, 'let BUSINESS_MODE = BUSINESS_REQUESTED', 'automatic business mode state');
     assertContains(html, '/api/business/me', 'business session lookup');
+    assertContains(html, 'if(BUSINESS_REQUESTED)location.assign', 'explicit-login redirect only');
+    assertContains(html, 'await businessModeReady', 'submit waits for automatic session lookup');
     assertContains(html, '/api/business/quote', 'plan-rate quote');
     assertContains(html, 'payload.use_wallet = true', 'wallet order marker');
     assertContains(html, '"Idempotency-Key"', 'wallet idempotency header');
@@ -320,6 +323,8 @@ describe('Frontend: Booking form', () => {
     assertContains(html, 'insufficient_credit', 'top-up recovery state');
     assertContains(html, 'data-rate-key="2:standard"', 'plan-specific price table cells');
     assertContains(html, 'price-table-title', 'active plan price-table title');
+    assertContains(html, 'business-wallet-estimate', 'estimated deliveries remaining copy');
+    assertContains(html, 'יתרת ₪ היא הקובעת', 'authoritative credit disclaimer');
   });
 
   test('Has terms acceptance separated from operational notifications', () => {
