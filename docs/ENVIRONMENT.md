@@ -86,15 +86,16 @@ credentials into the staging Worker. See `CI_CD.md` for one-time setup.
 |---|---|---|
 | `MAPS_KEY` | Returned by the server-side `/maps-key` function for booking address autocomplete, route distance, and customer maps | Maps JavaScript API, **Places API (New)**, and **Routes API** |
 
-Optional analytics identifiers are public, non-secret Cloudflare Pages variables.
-Leave both unset to disable analytics completely; staging should remain unset or use
-separate test properties. The browser fetches these values from `/analytics-config`,
-but loads no Google or Meta script until the visitor explicitly opts in.
+The optional Google Tag Manager container identifier is a public, non-secret
+Cloudflare Pages variable. Leave it unset to disable analytics completely; staging
+should remain unset or use a separate test container. The browser fetches this value
+from `/analytics-config`, but loads no GTM, Google Analytics, or Meta script until
+the visitor explicitly opts in. GA4 and Meta identifiers are configured in GTM and
+must not be embedded in the storefront repository.
 
 | Variable | Purpose |
 |---|---|
-| `GA4_MEASUREMENT_ID` | GA4 web-stream measurement ID (`G-…`) |
-| `META_PIXEL_ID` | Meta Pixel numeric ID |
+| `GTM_CONTAINER_ID` | Google Tag Manager web-container ID (`GTM-…`) |
 
 The canonical booking page uses `PlaceAutocompleteElement`, `gmp-select`, and
 `Place.fetchFields()` for addresses, plus the Maps JavaScript Routes library's
