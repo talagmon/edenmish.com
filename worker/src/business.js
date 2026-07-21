@@ -87,6 +87,20 @@ function planValue(plan) {
   };
 }
 
+export function estimateBusinessDeliveries(availableAgorot, planId) {
+  const plan = BUSINESS_PLANS[planId];
+  if (!plan) return null;
+  const example = planValue(plan).example;
+  const available = Math.max(0, Number(availableAgorot) || 0) / 100;
+  return {
+    count: Math.floor(available / example.member_rate),
+    rate: example.member_rate,
+    zone: example.zone,
+    service: example.service,
+    service_he: example.service_he,
+  };
+}
+
 export function publicBusinessPlans() {
   return Object.values(BUSINESS_PLANS).map((plan) => ({
     id: plan.id,
@@ -331,6 +345,7 @@ export async function getBusinessSnapshot(DB, session) {
       available: Number(wallet && wallet.available_agorot || 0) / 100,
       reserved: Number(wallet && wallet.reserved_agorot || 0) / 100,
       next_expiry: lots ? { amount: Number(lots.remaining_agorot) / 100, at: Number(lots.expires_at) } : null,
+      delivery_estimate: estimateBusinessDeliveries(wallet && wallet.available_agorot, session.plan_id),
     },
     orders: orders.results || [],
     entries: (entries.results || []).map((entry) => ({ ...entry, available_delta: entry.available_delta_agorot / 100, reserved_delta: entry.reserved_delta_agorot / 100 })),
