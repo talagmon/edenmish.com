@@ -7,6 +7,7 @@ import {
   upsertDeliveryProof,
 } from './db.js';
 import { syncDriverRoute } from './driver-dispatch.js';
+import { runDeliveryCompletionSideEffects } from './delivery-completion.js';
 
 const ACCESS_TTL_MS = 15 * 60 * 1000;
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -361,13 +362,13 @@ async function taskProof(req, env, auth, meta, shiftId, stopId) {
 
 async function applyTaskEvent(env, eventType, task, order, orderId) {
   if (!order || order.status === 'cancelled') {
-    return { status: 'accepted_conflict', conflictType: order ? 'order_cancelled' : 'order_missing' };
+    return { status: 'accepted_conflict', conflictType: order ? 'order_cancelled' : 'order_missing', transitioned: false };
   }
   if (eventType === 'pickup_completed' && task.task_type !== 'pickup') {
-    return { status: 'accepted_conflict', conflictType: 'task_type_mismatch' };
+    return { status: 'accepted_conflict', conflictType: 'task_type_mismatch', transitioned: false };
   }
   if (['delivery_completed', 'delivery_failed'].includes(eventType) && task.task_type !== 'dropoff') {
-    return { status: 'accepted_conflict', conflictType: 'task_type_mismatch' };
+    return { status: 'accepted_conflict', conflictType: 'task_type_mismatch', transitioned: false };
   }
 
   const targetStatus = eventType === 'navigation_started'
@@ -376,23 +377,23 @@ async function applyTaskEvent(env, eventType, task, order, orderId) {
     : eventType === 'delivery_completed' ? 'delivered'
     : eventType === 'delivery_failed' ? 'failed'
     : null;
-  if (targetStatus == null) return { status: 'accepted', conflictType: null };
+  if (targetStatus == null) return { status: 'accepted', conflictType: null, transitioned: false };
 
   const allowedFrom = targetStatus === 'to_pickup' ? ['paid']
     : targetStatus === 'to_dropoff' ? ['picked_up']
     : targetStatus === 'picked_up' ? ['to_pickup']
     : targetStatus === 'delivered' || targetStatus === 'failed' ? ['to_dropoff']
     : [];
-  if (order.status === targetStatus) return { status: 'accepted', conflictType: null };
+  if (order.status === targetStatus) return { status: 'accepted', conflictType: null, transitioned: false };
   if (!allowedFrom.includes(order.status)) {
-    return { status: 'accepted_conflict', conflictType: 'invalid_canonical_state' };
+    return { status: 'accepted_conflict', conflictType: 'invalid_canonical_state', transitioned: false };
   }
 
   const fields = targetStatus === 'picked_up' ? { picked_up_at: Date.now() }
     : targetStatus === 'delivered' ? { delivered_at: Date.now() }
     : {};
   await setOrderStatus(env.DB, orderId, targetStatus, fields);
-  return { status: 'accepted', conflictType: null };
+  return { status: 'accepted', conflictType: null, transitioned: true };
 }
 
 async function processEvent(env, auth, meta, event) {
@@ -421,6 +422,7 @@ async function processEvent(env, auth, meta, event) {
   }
   let status = 'accepted';
   let conflictType = null;
+  let transitioned = false;
   if (TASK_EVENT_TYPES.has(event.event_type)) {
     if (orderId == null || event.stop_id == null) {
       return { event_id: event.event_id, status: 'rejected_invalid', server_received_at: new Date().toISOString() };
@@ -431,6 +433,7 @@ async function processEvent(env, auth, meta, event) {
     const applied = await applyTaskEvent(env, event.event_type, task, order, orderId);
     status = applied.status;
     conflictType = applied.conflictType;
+    transitioned = applied.transitioned;
   }
   const now = Date.now();
   const correlationId = meta.requestId;
@@ -443,6 +446,12 @@ async function processEvent(env, auth, meta, event) {
       FROM driver_execution_events WHERE event_id = ? AND driver_id = ?`).bind(event.event_id, auth.driver_id).first();
     if (replay) return { event_id: replay.event_id, status: 'duplicate', server_received_at: new Date(replay.server_received_at).toISOString(), conflict_type: replay.conflict_type, correlation_id: replay.correlation_id };
     return { event_id: event.event_id, status: 'retry_later', server_received_at: new Date(now).toISOString(), correlation_id: correlationId };
+  }
+  if (event.event_type === 'delivery_completed' && status === 'accepted' && transitioned) {
+    const deliveredOrder = await getOrderById(env.DB, orderId);
+    if (deliveredOrder) {
+      await runDeliveryCompletionSideEffects(env, deliveredOrder, { sendWhatsApp: true });
+    }
   }
   return { event_id: event.event_id, status, server_received_at: new Date(now).toISOString(), conflict_type: conflictType, correlation_id: correlationId };
 }
