@@ -5,6 +5,7 @@ import {
   applyBusinessPlanPricing,
   businessSessionCookie,
   BUSINESS_PLANS,
+  estimateBusinessDeliveries,
   normalizeBusinessEmail,
   publicBusinessPlans,
 } from '../src/business.js';
@@ -59,6 +60,21 @@ describe('business plan catalog and pricing', () => {
     assert.equal(plans.platinum.value.example.credit_remaining, 88);
     assert.equal(plans.platinum.value.credit_valid_days, 60);
     assert.equal(plans.platinum.value.max_discount_percent, 14);
+  });
+
+  test('estimates deliveries remaining from the authoritative available credit', () => {
+    assert.deepEqual(estimateBusinessDeliveries(60_000, 'silver'), {
+      count: 13,
+      rate: 45,
+      zone: 1,
+      service: 'standard',
+      service_he: 'רגיל',
+    });
+    assert.equal(estimateBusinessDeliveries(55_500, 'silver').count, 12);
+    assert.equal(estimateBusinessDeliveries(150_000, 'gold').count, 23);
+    assert.equal(estimateBusinessDeliveries(300_000, 'platinum').count, 28);
+    assert.equal(estimateBusinessDeliveries(-500, 'gold').count, 0);
+    assert.equal(estimateBusinessDeliveries(60_000, 'unknown'), null);
   });
 
   test('applies the Gold Zone 2 member base and keeps existing surcharges', () => {
