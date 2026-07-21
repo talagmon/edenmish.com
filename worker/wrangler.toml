@@ -23,6 +23,9 @@ STOREFRONT_BASE = "https://edenmish.com"
 # MAPS_KEY is a Worker secret (set via `wrangler secret put MAPS_KEY`) — injected into the tracking page.
 WHATSAPP_NUMBER = "972534058498"
 OPS_EMAIL = "eden@edenmish.com"
+AUTO_DRIVER_DISPATCH = "on"
+ROUTE_OPTIMIZATION_PROVIDER = "google"
+GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID = "gen-lang-client-0008834106"
 SHOPIFY_SHOP = "edenmish.myshopify.com"
 SHOPIFY_API_VERSION = "2026-04"
 ALLOWED_ORIGINS = "https://edenmish.com,https://www.edenmish.com,https://v2.edenmish.com,https://track.edenmish.com,https://dash.edenmish.com,https://edenmish-v2.pages.dev"
@@ -36,5 +39,6 @@ database_id = "f2f51b54-0170-4594-a41c-7a6037c902aa"
 # Secrets (set with `wrangler secret put`): OPS_PIN, SESSION_SECRET, MAPS_KEY,
 #   SHOPIFY_ADMIN_TOKEN (shpat_...), SHOPIFY_WEBHOOK_SECRET,
 #   RESEND_API_KEY (or SENDGRID_API_KEY),
-#   GREENINVOICE_API_KEY, GREENINVOICE_SECRET_KEY.
+#   GREENINVOICE_API_KEY, GREENINVOICE_SECRET_KEY,
+#   GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON (only when route optimization is enabled).
 # Optional for future Mesh/J5 pre-auth: PAYMENT_MODE=preauth, MESH_API_KEY.

@@ -69,4 +69,71 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* On desktop, flatten the content wrappers so the map and every city card
+     share one grid. The map keeps its height while its vertical center is
+     anchored to the span from Bnei Brak (row 2) through Kfar Saba (row 6).
+     Mobile keeps its original content flow. */
+  @media (min-width: 1024px) {
+    .service-areas-layout.service-areas-layout {
+      grid-template-columns: repeat(3, minmax(0, 1fr)) 16px repeat(3, minmax(0, 1fr));
+      grid-template-rows: auto repeat(7, minmax(0, auto));
+      column-gap: 8px;
+      row-gap: 8px;
+    }
+    .service-areas-content {
+      display: contents;
+    }
+    .service-areas-intro {
+      grid-column: 5 / 8;
+      grid-row: 1;
+      margin-bottom: 24px;
+    }
+    .service-areas-layout .service-areas-cities {
+      display: contents;
+    }
+    .service-areas-cities > :nth-child(3n + 1) {
+      grid-column: 5;
+    }
+    .service-areas-cities > :nth-child(3n + 2) {
+      grid-column: 6;
+    }
+    .service-areas-cities > :nth-child(3n) {
+      grid-column: 7;
+    }
+    .service-areas-cities > :nth-child(-n + 3) {
+      grid-row: 2;
+    }
+    .service-areas-cities > :nth-child(n + 4):nth-child(-n + 6) {
+      grid-row: 3;
+    }
+    .service-areas-cities > :nth-child(n + 7):nth-child(-n + 9) {
+      grid-row: 4;
+    }
+    .service-areas-cities > :nth-child(n + 10):nth-child(-n + 12) {
+      grid-row: 5;
+    }
+    .service-areas-cities > :nth-child(n + 13):nth-child(-n + 15) {
+      grid-row: 6;
+    }
+    .service-areas-cities > :nth-child(n + 16):nth-child(-n + 18) {
+      grid-row: 7;
+    }
+    .service-areas-cities > :nth-child(n + 19) {
+      grid-row: 8;
+    }
+    .service-areas-map-slot {
+      align-self: stretch;
+      grid-column: 1 / 4;
+      grid-row: 3 / 8;
+      min-height: 0;
+      position: relative;
+    }
+    .service-areas-map-slot .service-areas-map {
+      inset-inline: 0;
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+  }
 }

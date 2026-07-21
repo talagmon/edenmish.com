@@ -88,7 +88,7 @@ function opsQueueHelpers() {
 }
 
 describe('Frontend: Pages exist', () => {
-  for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'success.html', 'error.html', 'terms.html', 'privacy.html', 'refund.html', 'accessibility.html', 'cancel.html']) {
+  for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'blog/edenmish-information-security.html', 'success.html', 'error.html', 'terms.html', 'privacy.html', 'refund.html', 'accessibility.html', 'cancel.html']) {
     test(`${page} exists`, () => {
       assert.ok(existsSync(join(PUB, page)), `${page} not found in public/`);
     });
@@ -103,6 +103,7 @@ describe('Frontend: SEO foundations', () => {
     assertContains(robots, 'Disallow: /dash', 'ops dashboard exclusion');
     assertContains(sitemap, '<loc>https://edenmish.com/</loc>', 'homepage sitemap entry');
     assertContains(sitemap, '<loc>https://edenmish.com/booking.html</loc>', 'booking sitemap entry');
+    assertContains(sitemap, '<loc>https://edenmish.com/blog/edenmish-information-security</loc>', 'security article sitemap entry');
     assert.ok(!sitemap.includes('/dash'), 'ops dashboard must not be listed in the sitemap');
     assert.ok(!sitemap.includes('/success'), 'transaction result pages must not be listed in the sitemap');
   });
@@ -119,6 +120,65 @@ describe('Frontend: SEO foundations', () => {
     assert.equal(schema.address.addressLocality, 'רמת גן');
     assert.equal(schema.address.addressCountry, 'IL');
     assert.equal(schema.makesOffer.itemOffered['@type'], 'Service');
+    assert.deepEqual(schema.areaServed.map(area => area.name), [
+      'תל אביב-יפו', 'רמת גן', 'גבעתיים', 'בני ברק', 'הרצליה', 'רמת השרון',
+      'חולון', 'בת ים', 'קריית אונו', 'גבעת שמואל', 'אזור', 'גני תקווה',
+      'סביון', 'אור יהודה', 'ראשון לציון', 'כפר סבא', 'רעננה', 'פתח תקווה',
+      'הוד השרון', 'רמלה', 'לוד'
+    ]);
+  });
+
+  test('Homepage visibly lists every supported service city', () => {
+    const html = readPage('index.html');
+    const styles = readFileSync(join(process.cwd(), 'src', 'styles.css'), 'utf8');
+    const cities = [
+      'תל אביב-יפו', 'רמת גן', 'גבעתיים', 'בני ברק', 'הרצליה', 'רמת השרון',
+      'חולון', 'בת ים', 'קריית אונו', 'גבעת שמואל', 'אזור', 'גני תקווה',
+      'סביון', 'אור יהודה', 'ראשון לציון', 'כפר סבא', 'רעננה', 'פתח תקווה',
+      'הוד השרון', 'רמלה', 'לוד'
+    ];
+    assertContains(html, 'aria-label="כל אזורי השירות של EdenMish"');
+    assertContains(html, 'class="service-areas-layout', 'desktop service-area grid');
+    assertContains(html, 'class="service-areas-map-slot', 'desktop map anchor slot');
+    assertContains(html, 'class="service-areas-map', 'desktop-centered service map');
+    assertContains(html, 'class="service-areas-intro', 'service-area intro row');
+    assertContains(html, 'class="service-areas-cities', 'service city-card row');
+    assertContains(styles, '.service-areas-layout .service-areas-cities {\n      display: contents;', 'city cards join the desktop parent grid');
+    assertContains(styles, '.service-areas-cities > :nth-child(n + 4):nth-child(-n + 6) {\n      grid-row: 3;', 'Bnei Brak group uses the second city row');
+    assertContains(styles, '.service-areas-cities > :nth-child(n + 16):nth-child(-n + 18) {\n      grid-row: 7;', 'Kfar Saba group uses the sixth city row');
+    assertContains(styles, '.service-areas-map-slot {', 'map anchor slot styles');
+    assertContains(styles, 'align-self: stretch;', 'map anchor spans the target city rows');
+    assertContains(styles, 'grid-row: 3 / 8;', 'map spans Bnei Brak through Kfar Saba rows');
+    assertContains(styles, 'transform: translateY(-50%);', 'map center uses the target city-row span as its anchor');
+    for (const city of cities) assertContains(html, `>${city}</span>`, `${city} service-area card`);
+  });
+
+  test('Publishes the EdenMish platform story with professional attribution and honest launch copy', () => {
+    const homepage = readPage('index.html');
+    const about = readPage('about.html');
+    const articleUrl = 'https://talagmon.com/2026/07/16/building-edenmish-delivery-operations-system/';
+    const securityArticleUrl = '/blog/edenmish-information-security';
+    const technicalReviewUrl = 'https://talagmon.com/2026/07/17/edenmish-security-review-what-we-fixed/';
+    const securityArticle = readPage('blog/edenmish-information-security.html');
+    assertContains(homepage, 'id="behind-the-scenes"', 'homepage story section');
+    assertContains(homepage, articleUrl, 'homepage article link');
+    assertContains(homepage, securityArticleUrl, 'homepage security article link');
+    assertContains(homepage, 'במאמר נוסף בעברית', 'article language disclosure');
+    assertContains(homepage, 'איך אנחנו שומרים על המידע שלכם', 'homepage security article label');
+    assertContains(homepage, 'טל אגמון משתף', 'homepage author credit');
+    assertContains(about, articleUrl, 'about-page article link');
+    assertContains(about, securityArticleUrl, 'about-page security article link');
+    assertContains(about, 'איך אנחנו שומרים על המידע שלכם', 'about-page security article label');
+    assertContains(about, 'טל אגמון כתב', 'about-page author credit');
+    assertContains(securityArticle, '<link rel="canonical" href="https://edenmish.com/blog/edenmish-information-security"', 'security article canonical URL');
+    assertContains(securityArticle, 'https://github.com/usestrix/strix', 'Strix project credit');
+    assertContains(securityArticle, technicalReviewUrl, 'technical security review link');
+    assertContains(securityArticle, '"@type": "BlogPosting"', 'security article structured data');
+    assert.ok(!securityArticle.includes('—'), 'security article must not use em dashes');
+    assert.ok(!homepage.includes('Sol'), 'homepage must not present the AI model as a public co-author');
+    assert.ok(!about.includes('Sol'), 'about page must not present the AI model as a public co-author');
+    assert.ok(!homepage.includes('הצטרפו למאות עסקים'), 'homepage must not claim hundreds of customers during launch');
+    assertContains(homepage, 'הצטרפו ללקוחות הראשונים של EdenMish', 'honest launch-stage CTA');
   });
 });
 
@@ -207,6 +267,9 @@ describe('Frontend: Stylesheet + fonts', () => {
       assertContains(h, 'Hanken+Grotesk');
     });
   }
+  test('Homepage cache-busts the current compiled stylesheet', () => {
+    assertContains(readPage('index.html'), '/assets/styles.css?v=1af9999');
+  });
 });
 
 describe('Frontend: Booking form', () => {
@@ -533,6 +596,17 @@ describe('Frontend: Security and accessibility hardening', () => {
     assert.ok(!html.includes('(Eco)'), 'customer FAQ must not expose English service labels');
   });
 
+  test('homepage exposes right-side WhatsApp and keyboard-accessible accessibility tools', () => {
+    const html = readPage('index.html');
+    assertContains(html, 'class="eden-floating-tools"', 'floating tools container');
+    assertContains(html, 'https://wa.me/972534058498', 'business WhatsApp destination');
+    assertContains(html, 'aria-label="שליחת הודעת וואטסאפ לעדן"');
+    assertContains(html, 'aria-controls="eden-a11y-panel"');
+    assertContains(html, 'aria-label="פתיחת כלי נגישות"');
+    assertContains(html, 'if (event.key === \'Escape\'', 'Escape close behavior');
+    assertContains(html, 'href="/accessibility.html">הצהרת הנגישות</a>');
+  });
+
   test('staging and preview pages use isolated Worker origins', () => {
     const routing = readFileSync(join(PUB, 'assets', 'api-origin.js'), 'utf8');
     assertContains(routing, "host === 'staging.edenmish.com'");
@@ -560,6 +634,16 @@ describe('Frontend: Security and accessibility hardening', () => {
     assertContains(html, 'function toggleGps(id)');
     assert.ok(!html.includes('if(isLive && watchId===null) startWatch(o.id)'), 'detail rendering must not request location');
     assert.ok(!html.includes('if(st==="to_pickup"||st==="to_dropoff")startWatch(id)'), 'status changes must not request location');
+  });
+
+  test('proof-of-delivery preserves the first selected image while its modal is open', () => {
+    const html = readPage('dash.html');
+    assertContains(html, 'podOrderId=id;', 'proof modal active state');
+    assertContains(html, 'if(podOrderId!==null)return;', 'background refresh pause');
+    assertContains(html, 'function closePod(id)', 'proof modal close reset');
+    assertContains(html, 'if(d.ok){podOrderId=null;', 'successful delivery reset');
+    assertContains(html, 'var input=this,f=input.files[0],ph=$("pod-photo-ph")', 'stable preview reference');
+    assertContains(html, 'ph.isConnected&&input.files[0]===f', 'stale FileReader result guard');
   });
 });
 
@@ -590,9 +674,16 @@ describe('Frontend: Ops daily summary and queue ordering', () => {
     assert.equal(summary.stalePayment, 2);
   });
 
-  test('active queue includes picked-up orders and sorts urgent then scheduled windows', () => {
+  test('new paid orders stay in the inbox until dispatch starts', () => {
     const helpers = opsQueueHelpers();
     assert.equal(helpers.isActiveOrder({ status: 'picked_up' }), true);
+    assert.equal(helpers.isActiveOrder({ status: 'paid' }), false);
+    const html = readPage('dash.html');
+    assertContains(html, '["received","priced","review","payment_sent","paid"]', 'new-order inbox statuses');
+  });
+
+  test('sorts urgent then scheduled queue windows', () => {
+    const helpers = opsQueueHelpers();
     const orders = [
       { id: 4, status: 'paid', when_date: null, when_hour: null, created_at: 4 },
       { id: 3, status: 'paid', when_date: '2026-07-12', when_hour: 12, created_at: 3 },
@@ -601,6 +692,12 @@ describe('Frontend: Ops daily summary and queue ordering', () => {
     ];
     const sorted = orders.slice().sort((a, b) => helpers.compareQueueOrders(a, b, true));
     assert.deepEqual(sorted.map(o => o.id), [1, 2, 3, 4]);
+  });
+
+  test('uses the correctly spelled empty-category message', () => {
+    const html = readPage('dash.html');
+    assertContains(html, 'אין הזמנות בקטגוריה זו.');
+    assert.ok(!html.includes('בקטטגוריה'));
   });
 
   test('renders the Hebrew daily summary strip in the canonical dashboard', () => {

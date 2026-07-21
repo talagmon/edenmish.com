@@ -47,17 +47,21 @@ jobs:
             echo "  wrangler d1 execute edenmish --remote --file=./migrations/009_invoice_tracking.sql"
             echo "  wrangler d1 execute edenmish --remote --file=./migrations/010_order_service_schedule.sql"
             echo "  wrangler d1 execute edenmish --remote --file=./migrations/011_cancellation_requests.sql"
+            echo "  wrangler d1 execute edenmish --remote --file=./migrations/014_driver_api_v1.sql"
+            echo "  wrangler d1 execute edenmish --remote --file=./migrations/015_driver_route_tasks.sql"
+            echo "  wrangler d1 execute edenmish --remote --file=./migrations/016_driver_route_integrity.sql"
+            echo "  wrangler d1 execute edenmish --remote --file=./migrations/017_driver_task_proofs.sql"
             echo ""
             echo "See worker/MIGRATIONS.md for verification queries."
             exit 1
           fi
           echo "✅ Migration confirmation received."
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # bump_version.sh needs tag history
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
 
@@ -97,8 +101,46 @@ jobs:
         run: |
           cd worker
           npm ci
+          node scripts/validate-driver-schema.mjs --database edenmish --config wrangler.toml
+          SECRET_LIST=$(npx wrangler secret list)
+          if ! grep -q '"name": "DRIVER_ONE_TIME_CODE"' <<< "$SECRET_LIST"; then
+            echo "::error::Production Worker secret DRIVER_ONE_TIME_CODE is missing. Configure it before enabling the driver API."
+            exit 1
+          fi
+          if ! grep -q '"name": "GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON"' <<< "$SECRET_LIST"; then
+            echo "::error::Production Worker secret GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON is missing."
+            exit 1
+          fi
           npx wrangler deploy
           echo "✅ Worker deployed to find.edenmish.com + ops.edenmish.com"
+
+      - name: Verify production Driver API boundary
+        if: ${{ inputs.deploy_worker }}
+        run: |
+          set -euo pipefail
+          RESPONSE_FILE="$RUNNER_TEMP/driver-api-smoke.json"
+          for attempt in 1 2 3 4 5 6; do
+            HTTP_STATUS="$(curl \
+              --silent \
+              --show-error \
+              --max-time 20 \
+              --output "$RESPONSE_FILE" \
+              --write-out '%{http_code}' \
+              --header 'X-Request-Id: 00000000-0000-4000-8000-000000000001' \
+              --header 'X-Device-Installation-Id: 00000000-0000-4000-8000-000000000002' \
+              --header 'X-Client-Version: 1.0.0+1 (abc1234)' \
+              https://ops.edenmish.com/api/driver/v1/shifts/current)"
+            if [[ "$HTTP_STATUS" == "401" ]] && grep -Fq '"code":"unauthorized"' "$RESPONSE_FILE"; then
+              echo "✅ Production Driver API is live and enforcing bearer authentication"
+              exit 0
+            fi
+            if [[ "$attempt" == "6" ]]; then
+              echo "::error::Production Driver API smoke test expected 401 unauthorized but received HTTP $HTTP_STATUS."
+              exit 1
+            fi
+            echo "Driver API is not ready yet; retrying in 10 seconds ($attempt/6)."
+            sleep 10
+          done
 
       - name: Install Shopify CLI
         if: ${{ inputs.deploy_theme }}
@@ -107,7 +149,9 @@ jobs:
       - name: Push unpublished theme
         if: ${{ inputs.deploy_theme }}
         run: |
+          # Name the preview theme so Shopify CLI never prompts in CI.
           shopify theme push --path theme --unpublished \
+            --theme "Production preview" \
             --store "${{ secrets.SHOPIFY_STORE }}" \
             --password "${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}"
           echo "✅ Theme pushed as unpublished preview"
@@ -118,7 +162,7 @@ jobs:
           echo "::warning::Publishing theme LIVE. This cannot be undone from this workflow."
           # Merchant settings in the live theme editor are production data. Keep
           # preview pushes complete, but never overwrite those files on a live push.
-          shopify theme push --path theme --live \
+          shopify theme push --path theme --live --allow-live \
             --ignore "config/settings_data.json" \
             --ignore "templates/*.json" \
             --store "${{ secrets.SHOPIFY_STORE }}" \

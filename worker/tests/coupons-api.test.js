@@ -681,8 +681,10 @@ describe('manual paid confirmation', () => {
       dropoff: 'מסירה',
     };
     const db = apiDb({ orderRow });
-    globalThis.fetch = async (url) => {
+    const sentEmails = [];
+    globalThis.fetch = async (url, init) => {
       assert.equal(url, 'https://api.sendgrid.com/v3/mail/send');
+      sentEmails.push(JSON.parse(init.body));
       return new Response(null, { status: 202 });
     };
     const env = {
@@ -714,6 +716,14 @@ describe('manual paid confirmation', () => {
     assert.ok(attempts.some(c => c.args[1] === 'email' && c.args[2] === 'customer_payment_confirmation'));
     assert.ok(attempts.some(c => c.args[1] === 'email' && c.args[2] === 'ops_payment_received'));
     assert.ok(attempts.some(c => c.args[1] === 'whatsapp' && c.args[2] === 'ops_payment_received'));
+
+    const customerEmail = sentEmails.find(message => message.subject === 'התשלום התקבל ✓ — קוד אימות וקישור למעקב');
+    assert.ok(customerEmail, 'customer payment confirmation should be sent');
+    const customerHtml = customerEmail.content[0].value;
+    assert.match(customerHtml, /background:#ffffff/);
+    assert.match(customerHtml, /color:#1f2937/);
+    assert.match(customerHtml, /color-scheme:light/);
+    assert.doesNotMatch(customerHtml, /#0b1326|#dae2fd|#dfb7ff/);
 
     const runCount = db.state.runs.length;
     res = await worker.fetch(await opsPost('/api/ops/orders/12/status', { status: 'paid' }), env);
