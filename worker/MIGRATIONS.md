@@ -337,6 +337,40 @@ WHERE name='idx_driver_task_proofs_order';
 
 ---
 
+### 018_business_wallet.sql
+
+**Purpose:** Adds passwordless business users/accounts, revocable account sessions,
+prepaid wallets, Shopify top-up records, expiring credit lots, immutable ledger entries,
+wallet reservations, plan enrollment history, and the delivery-order references needed
+for wallet payment. It follows the driver-platform migrations `014`–`017`.
+
+**Command:**
+```bash
+# Staging (render the config first; run from worker/):
+npx wrangler d1 execute edenmish-staging --remote --yes \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/018_business_wallet.sql
+
+# Local verification:
+wrangler d1 execute edenmish --local --file=./migrations/018_business_wallet.sql
+# Production (after merge, before Worker deploy):
+wrangler d1 execute edenmish --remote --file=./migrations/018_business_wallet.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM sqlite_master WHERE type='table' AND name IN (
+  'business_users','business_accounts','business_members','business_auth_challenges',
+  'business_sessions','business_wallets','wallet_topups','wallet_credit_lots',
+  'wallet_reservations','wallet_entries','business_plan_enrollments'
+) ORDER BY name;
+
+SELECT name FROM pragma_table_info('orders')
+WHERE name IN ('business_account_id','wallet_reservation_id','payment_method');
+```
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -356,6 +390,7 @@ WHERE name='idx_driver_task_proofs_order';
 - [ ] Run `015_driver_route_tasks.sql` after 014 and before enabling mixed pickup/drop-off routes.
 - [ ] Run `016_driver_route_integrity.sql` after 015 and before enabling GPS-origin route optimization.
 - [ ] Run `017_driver_task_proofs.sql` after 016 and before enabling driver photo/signature capture.
+- [ ] Run `018_business_wallet.sql` after merge and before deploying the Worker.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).
@@ -372,7 +407,7 @@ whether each table exists:
 ```sql
 SELECT name FROM sqlite_master
 WHERE type='table'
-AND name IN ('rate_limits', 'delivery_proofs', 'notifications', 'coupons', 'coupon_redemptions')
+AND name IN ('rate_limits', 'delivery_proofs', 'notifications', 'coupons', 'coupon_redemptions', 'business_accounts', 'business_wallets', 'wallet_entries')
 ORDER BY name;
 ```
 

@@ -54,9 +54,33 @@ jobs:
           npx wrangler d1 execute edenmish-staging --remote --yes
           --config wrangler.staging.generated.toml
           --file=./migrations/017_driver_task_proofs.sql
+      - name: Apply staging business wallet migration when needed
+        working-directory: worker
+        run: |
+          readiness_json="$(npx wrangler d1 execute edenmish-staging --remote --yes --json \
+            --config wrangler.staging.generated.toml \
+            --command "SELECT COUNT(*) AS ready FROM pragma_table_info('orders') WHERE name IN ('business_account_id','wallet_reservation_id','payment_method')")"
+          ready="$(printf '%s' "$readiness_json" | jq -r '.[0].results[0].ready')"
+          if [ "$ready" = "0" ]; then
+            npx wrangler d1 execute edenmish-staging --remote --yes \
+              --config wrangler.staging.generated.toml \
+              --file=./migrations/018_business_wallet.sql
+          elif [ "$ready" != "3" ]; then
+            echo "::error::Business wallet migration is only partially applied ($ready/3 order columns)."
+            exit 1
+          else
+            echo "Business wallet migration 018 is already applied."
+          fi
       - name: Verify remote driver schema readiness
         working-directory: worker
         run: node scripts/validate-driver-schema.mjs --database edenmish-staging --config wrangler.staging.generated.toml
+      - name: Verify remote business wallet schema readiness
+        working-directory: worker
+        run: |
+          readiness_json="$(npx wrangler d1 execute edenmish-staging --remote --yes --json \
+            --config wrangler.staging.generated.toml \
+            --command "SELECT (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('business_users','business_accounts','business_members','business_auth_challenges','business_sessions','business_wallets','wallet_topups','wallet_credit_lots','wallet_reservations','wallet_entries','business_plan_enrollments')) AS tables, (SELECT COUNT(*) FROM pragma_table_info('orders') WHERE name IN ('business_account_id','wallet_reservation_id','payment_method')) AS columns")"
+          printf '%s' "$readiness_json" | jq -e '.[0].results[0] | .tables == 11 and .columns == 3'
       - name: Prepare staging secrets
         run: |
           node --input-type=module -e 'import { writeFileSync } from "node:fs"; writeFileSync("/tmp/edenmish-staging-secrets.json", JSON.stringify({ OPS_PIN: process.env.STAGING_OPS_PIN, SESSION_SECRET: process.env.STAGING_SESSION_SECRET, DRIVER_ONE_TIME_CODE: process.env.STAGING_DRIVER_ONE_TIME_CODE, GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON: process.env.STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON }), { mode: 0o600 });'

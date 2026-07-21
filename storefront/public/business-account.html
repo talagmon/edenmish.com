@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#0F172A">
+  <title>EdenMish | כניסה לחשבון העסקי</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body class="antialiased min-h-screen flex items-center justify-center p-6">
+  <main class="glass-panel rounded-xl p-8 max-w-md text-center">
+    <h1 class="text-headline-lg text-primary mb-3">החשבון העסקי של EdenMish</h1>
+    <p class="text-on-surface-variant">מעבירים אתכם לכניסה המאובטחת…</p>
+    <a id="continue" class="inline-block mt-5 bg-primary-container text-on-primary-container px-6 py-3 rounded-lg font-label-bold" href="#">להמשך</a>
+  </main>
+  <script src="/assets/api-origin.js"></script>
+  <script>
+    const target=window.EDEN_API.find+"/business";
+    document.getElementById("continue").href=target;
+    window.location.replace(target);
+  </script>
+</body>
+</html>

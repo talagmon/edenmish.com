@@ -88,7 +88,7 @@ function opsQueueHelpers() {
 }
 
 describe('Frontend: Pages exist', () => {
-  for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'blog/edenmish-information-security.html', 'success.html', 'error.html', 'terms.html', 'privacy.html', 'refund.html', 'accessibility.html', 'cancel.html']) {
+  for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'blog/edenmish-information-security.html', 'business-account.html', 'success.html', 'error.html', 'terms.html', 'privacy.html', 'refund.html', 'accessibility.html', 'cancel.html']) {
     test(`${page} exists`, () => {
       assert.ok(existsSync(join(PUB, page)), `${page} not found in public/`);
     });
@@ -182,6 +182,69 @@ describe('Frontend: SEO foundations', () => {
   });
 });
 
+describe('Frontend: consent-aware analytics', () => {
+  const analytics = readFileSync(join(PUB, 'assets', 'analytics.js'), 'utf8');
+  const analyticsConfig = readFileSync(join(process.cwd(), 'functions', 'analytics-config.js'), 'utf8');
+  const headers = readPage('_headers');
+  const customerPages = [
+    'index.html', 'about.html', 'accessibility.html', 'booking.html', 'cancel.html',
+    'delivered.html', 'error.html', 'privacy.html', 'refund.html', 'success.html',
+    'terms.html', 'track.html'
+  ];
+
+  test('Loads the shared consent boundary on customer pages but not the ops dashboard', () => {
+    for (const page of customerPages) {
+      assertContains(readPage(page), '<script src="/assets/analytics.js" defer></script>', `${page} analytics boundary`);
+    }
+    assert.ok(!readPage('dash.html').includes('/assets/analytics.js'), 'ops dashboard must not load marketing analytics');
+  });
+
+  test('Fails closed and loads vendor scripts only after an explicit opt-in', () => {
+    assertContains(analytics, 'edenmish_analytics_consent_v1', 'versioned consent storage');
+    assertContains(analytics, 'fetch("/analytics-config"', 'first-party analytics configuration');
+    assertContains(analytics, 'if (consent === "granted") initializeProviders()', 'stored opt-in gate');
+    assertContains(analytics, 'else if (consent === "unknown") renderBanner()', 'unknown-consent banner gate');
+    assertContains(analytics, 'https://www.googletagmanager.com/gtag/js?id=', 'GA4 loader');
+    assertContains(analytics, 'https://connect.facebook.net/en_US/fbevents.js', 'Meta loader');
+    assertContains(analytics, 'analytics_storage: "denied"', 'Google consent default');
+    assertContains(analytics, 'granted ? "grant" : "revoke"', 'Meta consent updates');
+    assertContains(analytics, 'רק חיוניות', 'Hebrew reject choice');
+    assertContains(analytics, 'אישור מדידה', 'Hebrew accept choice');
+  });
+
+  test('Uses environment-provided public IDs and excludes personal/order identifiers', () => {
+    assertContains(analyticsConfig, 'env.GA4_MEASUREMENT_ID', 'GA4 Pages variable');
+    assertContains(analyticsConfig, 'env.META_PIXEL_ID', 'Meta Pages variable');
+    assertContains(analyticsConfig, '/^G-[A-Z0-9]+$/', 'GA4 identifier validation');
+    assertContains(analyticsConfig, '/^\\d{5,20}$/', 'Meta identifier validation');
+    for (const forbidden of ['order_id', 'tracking_token', 'email', 'phone', 'address']) {
+      assert.ok(!analytics.includes(forbidden), `analytics boundary must not reference ${forbidden}`);
+    }
+  });
+
+  test('Instruments the agreed funnel events without treating payment start as purchase', () => {
+    const booking = readPage('booking.html');
+    const tracking = readPage('track.html');
+    const cancellation = readPage('cancel.html');
+    assertContains(analytics, '"booking_started"', 'booking start event');
+    assertContains(booking, 'track("booking_submitted"', 'successful booking event');
+    assertContains(booking, 'track("payment_started"', 'payment redirect event');
+    assertContains(tracking, 'track("tracking_opened"', 'verified tracking event');
+    assertContains(cancellation, "track('cancellation_submitted'", 'cancellation event');
+    assertContains(analytics, 'track("whatsapp_clicked"', 'WhatsApp click event');
+    assert.ok(!analytics.includes('"purchase"'), 'browser analytics must not infer paid orders');
+  });
+
+  test('Publishes disclosure, preference controls, and the required CSP allowlist', () => {
+    const privacy = readPage('privacy.html');
+    assertContains(privacy, 'Google Analytics ו‑Meta Pixel אינם נטענים לפני הסכמה מפורשת', 'opt-in disclosure');
+    assertContains(privacy, 'data-analytics-settings', 'preference control');
+    assertContains(headers, 'https://www.googletagmanager.com', 'Google script CSP');
+    assertContains(headers, 'https://connect.facebook.net', 'Meta script CSP');
+    assertContains(headers, 'https://www.google-analytics.com', 'Google collection CSP');
+  });
+});
+
 describe('Frontend: RTL + accessible viewport', () => {
   for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'success.html', 'error.html', 'accessibility.html', 'cancel.html']) {
     test(`${page} is RTL Hebrew and allows browser zoom`, () => {
@@ -228,6 +291,18 @@ describe('Frontend: Booking form', () => {
   test('Has special instructions textarea', () => {
     assertContains(html, 'name="notes"', 'notes textarea');
     assertContains(html, 'הוראות מיוחדות', 'instructions heading');
+  });
+
+  test('Supports authenticated business-wallet quotes and one-tap reservations', () => {
+    assertContains(html, 'BUSINESS_MODE', 'business booking mode');
+    assertContains(html, '/api/business/me', 'business session lookup');
+    assertContains(html, '/api/business/quote', 'plan-rate quote');
+    assertContains(html, 'payload.use_wallet = true', 'wallet order marker');
+    assertContains(html, '"Idempotency-Key"', 'wallet idempotency header');
+    assertContains(html, 'credentials: BUSINESS_MODE ? "include"', 'credentialed business request');
+    assertContains(html, 'insufficient_credit', 'top-up recovery state');
+    assertContains(html, 'data-rate-key="2:standard"', 'plan-specific price table cells');
+    assertContains(html, 'price-table-title', 'active plan price-table title');
   });
 
   test('Has terms acceptance separated from operational notifications', () => {

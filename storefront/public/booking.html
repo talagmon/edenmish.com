@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="/assets/styles.css"/>
+<script src="/assets/analytics.js" defer></script>
 <style>
 gmp-place-autocomplete.eden-places{display:block;width:100%;color-scheme:dark}
 </style>
@@ -38,6 +39,12 @@ gmp-place-autocomplete.eden-places{display:block;width:100%;color-scheme:dark}
 </div>
 </header>
 <main class="pt-24 pb-stack-lg px-gutter-mobile md:px-gutter-desktop max-w-container-max mx-auto">
+<section id="business-wallet-banner" class="hidden glass-panel rounded-xl p-stack-md mb-stack-lg border border-secondary/40" aria-live="polite">
+  <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+    <div><p class="font-headline-md text-secondary mb-1">הזמנה מהחשבון העסקי</p><p id="business-wallet-copy" class="text-on-surface-variant mb-0">טוען את היתרה והמסלול…</p></div>
+    <a id="business-account-link" class="text-primary font-label-bold underline" href="#">לחשבון העסקי</a>
+  </div>
+</section>
 <div class="grid grid-cols-1 lg:grid-cols-12 gap-stack-lg">
 <!-- Left: Order summary (estimator) -->
 <aside class="lg:col-span-4 order-2 lg:order-1">
@@ -126,7 +133,7 @@ gmp-place-autocomplete.eden-places{display:block;width:100%;color-scheme:dark}
 <section class="glass-panel rounded-xl p-stack-md mb-stack-lg">
 <div class="flex items-center gap-stack-sm mb-stack-md">
 <span class="w-8 h-8 rounded-full bg-surface-container-high text-on-surface flex items-center justify-center font-label-bold"><span class="material-symbols-outlined text-lg">payments</span></span>
-<h2 class="font-headline-md text-on-surface">טבלת מחירים</h2>
+<h2 id="price-table-title" class="font-headline-md text-on-surface">טבלת מחירים</h2>
 </div>
 <div class="overflow-x-auto -mx-2 px-2">
 <table class="w-full text-center border-collapse" style="min-width:400px">
@@ -144,27 +151,27 @@ gmp-place-autocomplete.eden-places{display:block;width:100%;color-scheme:dark}
 <span class="font-label-bold text-on-surface block">אזור 1</span>
 <span class="text-label-sm text-on-surface-variant">תל אביב · רמת גן · גבעתיים · בני ברק</span>
 </td>
-<td class="p-2 font-headline-md text-secondary" style="background:rgba(145,211,200,.04)">₪35</td>
-<td class="p-2 font-headline-md text-primary" style="background:rgba(223,183,255,.04)">₪50</td>
-<td class="p-2 font-headline-md text-error" style="background:rgba(239,68,68,.03)">₪85</td>
+<td data-rate-key="1:eco" class="p-2 font-headline-md text-secondary" style="background:rgba(145,211,200,.04)">₪35</td>
+<td data-rate-key="1:standard" class="p-2 font-headline-md text-primary" style="background:rgba(223,183,255,.04)">₪50</td>
+<td data-rate-key="1:flash" class="p-2 font-headline-md text-error" style="background:rgba(239,68,68,.03)">₪85</td>
 </tr>
 <tr>
 <td class="p-2 text-right">
 <span class="font-label-bold text-on-surface block">אזור 2</span>
 <span class="text-label-sm text-on-surface-variant">הרצליה · חולון · בת ים · אור יהודה</span>
 </td>
-<td class="p-2 font-headline-md text-secondary" style="background:rgba(145,211,200,.04)">₪55</td>
-<td class="p-2 font-headline-md text-primary" style="background:rgba(223,183,255,.04)">₪70</td>
-<td class="p-2 font-headline-md text-error" style="background:rgba(239,68,68,.03)">₪110</td>
+<td data-rate-key="2:eco" class="p-2 font-headline-md text-secondary" style="background:rgba(145,211,200,.04)">₪55</td>
+<td data-rate-key="2:standard" class="p-2 font-headline-md text-primary" style="background:rgba(223,183,255,.04)">₪70</td>
+<td data-rate-key="2:flash" class="p-2 font-headline-md text-error" style="background:rgba(239,68,68,.03)">₪110</td>
 </tr>
 <tr>
 <td class="p-2 text-right">
 <span class="font-label-bold text-on-surface block">אזור 3</span>
 <span class="text-label-sm text-on-surface-variant">ראשון · כפר סבא · פתח תקווה · הוד השרון</span>
 </td>
-<td class="p-2 font-headline-md text-secondary" style="background:rgba(145,211,200,.04)">₪75</td>
-<td class="p-2 font-headline-md text-primary" style="background:rgba(223,183,255,.04)">₪115</td>
-<td class="p-2 font-headline-md text-on-surface-variant">—</td>
+<td data-rate-key="3:eco" class="p-2 font-headline-md text-secondary" style="background:rgba(145,211,200,.04)">₪75</td>
+<td data-rate-key="3:standard" class="p-2 font-headline-md text-primary" style="background:rgba(223,183,255,.04)">₪115</td>
+<td data-rate-key="3:flash" class="p-2 font-headline-md text-on-surface-variant">—</td>
 </tr>
 </tbody>
 </table>
@@ -305,7 +312,7 @@ gmp-place-autocomplete.eden-places{display:block;width:100%;color-scheme:dark}
 <p class="text-label-sm text-on-surface-variant">מסירה עד סוף היום</p>
 <p class="text-label-sm text-on-surface-variant opacity-60">איסוף בשעות הבוקר בלבד (עד 13:00)</p>
 <p class="text-label-sm text-secondary mt-1">הזמנה לאותו היום עד 09:00 כולל</p>
-<p class="text-primary font-label-bold mt-2">החל מ₪35</p>
+<p data-service-rate="eco" class="text-primary font-label-bold mt-2">החל מ₪35</p>
 </div>
 </label>
 <label class="cursor-pointer group">
@@ -314,7 +321,7 @@ gmp-place-autocomplete.eden-places{display:block;width:100%;color-scheme:dark}
 <span class="material-symbols-outlined text-4xl mb-2 text-on-surface-variant peer-checked:text-secondary">two_wheeler</span>
 <h4 class="font-label-bold text-on-surface">רגיל</h4>
 <p class="text-label-sm text-on-surface-variant">מסירה תוך 4 שעות</p>
-<p class="text-primary font-label-bold mt-2">החל מ₪50</p>
+<p data-service-rate="standard" class="text-primary font-label-bold mt-2">החל מ₪50</p>
 </div>
 </label>
 <label class="cursor-pointer group">
@@ -323,7 +330,7 @@ gmp-place-autocomplete.eden-places{display:block;width:100%;color-scheme:dark}
 <span class="material-symbols-outlined text-4xl mb-2 text-on-surface-variant peer-checked:text-secondary">bolt</span>
 <h4 class="font-label-bold text-on-surface">מהיר</h4>
 <p class="text-label-sm text-on-surface-variant">90 דקות, נקודה לנקודה</p>
-<p class="text-secondary font-label-bold mt-2">החל מ₪85</p>
+<p data-service-rate="flash" class="text-secondary font-label-bold mt-2">החל מ₪85</p>
 </div>
 </label>
 </div>
@@ -409,6 +416,35 @@ gmp-place-autocomplete.eden-places{display:block;width:100%;color-scheme:dark}
 <script>
 // Existing Worker backend (sibling repo). Public order endpoint only.
 const API = window.EDEN_API.find;
+const BUSINESS_MODE = new URLSearchParams(location.search).get("business") === "1";
+let businessAccount = null;
+let walletIdempotencyKey = null;
+
+async function initBusinessMode(){
+  if(!BUSINESS_MODE)return;
+  const banner=document.getElementById("business-wallet-banner");if(banner)banner.classList.remove("hidden");
+  const accountLink=document.getElementById("business-account-link");if(accountLink)accountLink.href=API+"/business";
+  const coupon=document.getElementById("coupon-section");if(coupon)coupon.hidden=true;
+  try{
+    const res=await fetch(API+"/api/business/me",{credentials:"include"});
+    if(!res.ok){location.assign(API+"/business");return;}
+    businessAccount=await res.json();
+    const planNames={silver:"כסף",gold:"זהב",platinum:"פלטינום"};
+    const planName=planNames[businessAccount.account.plan_id]||"ללא מסלול";
+    const copy=document.getElementById("business-wallet-copy");if(copy)copy.textContent="מסלול "+planName+" · יתרה זמינה ₪"+Number(businessAccount.wallet.available||0).toLocaleString("he-IL");
+    const activePlan=(businessAccount.plans||[]).find((plan)=>plan.id===businessAccount.account.plan_id);
+    if(activePlan){
+      const title=document.getElementById("price-table-title");if(title)title.textContent="מחירי מסלול "+planName;
+      document.querySelectorAll("[data-rate-key]").forEach((cell)=>{const rate=activePlan.rates&&activePlan.rates[cell.dataset.rateKey];cell.textContent=Number.isFinite(rate)?"₪"+rate:"—";});
+      FALLBACK_BASE={eco:activePlan.rates["1:eco"]||35,standard:activePlan.rates["1:standard"]||50,flash:activePlan.rates["1:flash"]||85};
+      document.querySelectorAll("[data-service-rate]").forEach((label)=>{label.textContent="החל מ₪"+FALLBACK_BASE[label.dataset.serviceRate];});
+    }
+    const email=document.getElementById("f-email");if(email){email.value=businessAccount.user.email||"";email.readOnly=true;emailState.value=email.value;emailState.resolved=true;}
+    const name=document.getElementById("f-name");if(name&&!name.value)name.value=businessAccount.user.name||businessAccount.account.company_name||"";
+    const phone=document.getElementById("f-phone");if(phone&&!phone.value)phone.value=businessAccount.user.phone||"";
+    computeEstimate();
+  }catch(e){location.assign(API+"/business")}
+}
 
 // ---- Google Maps: address autocomplete + authoritative Worker quote ----
 const geo = { pickupLat:null, pickupLng:null, pickupCity:null, dropoffLat:null, dropoffLng:null, dropoffCity:null, distanceKm:null };
@@ -416,7 +452,7 @@ let placesAutocompleteReady = false;
 const distEl = document.getElementById("dist-val");
 // These minimums are display-only offline fallbacks. Exact route pricing, zones,
 // surcharges, and D1 overrides come exclusively from POST /api/quote.
-const FALLBACK_BASE = { eco:35, standard:50, flash:85 };
+let FALLBACK_BASE = { eco:35, standard:50, flash:85 };
 const FALLBACK_MEDIUM = 15;
 const quoteState = { timer:null, sequence:0, fingerprint:"", data:null };
 function isoDate(d){ return d ? (d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate())) : ""; }
@@ -477,7 +513,7 @@ function requestAuthoritativeQuote(fields){
   quoteState.fingerprint=fingerprint; quoteState.data=null;
   quoteState.timer=setTimeout(async()=>{
     try{
-      const res=await fetch(API+"/api/quote",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(fields)});
+      const res=await fetch(API+(BUSINESS_MODE?"/api/business/quote":"/api/quote"),{method:"POST",credentials:BUSINESS_MODE?"include":"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(fields)});
       const data=await res.json();
       if(sequence!==quoteState.sequence||fingerprint!==quoteFingerprint(getCouponPricingFields()))return;
       if(!res.ok)throw new Error(data.error||"quote_failed");
@@ -1137,6 +1173,10 @@ form.addEventListener("submit", async (e) => {
   if (geo.dropoffLat != null) { payload.dropoff_lat = geo.dropoffLat; payload.dropoff_lng = geo.dropoffLng; }
   if (geo.distanceKm != null) payload.distance_km = geo.distanceKm;
   if (couponState.code) payload.coupon_code = couponState.code;
+  if (BUSINESS_MODE) {
+    payload.use_wallet = true;
+    walletIdempotencyKey = walletIdempotencyKey || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())+Math.random());
+  }
 
   submitBtn.disabled = true;
   const original = submitBtn.textContent;
@@ -1144,7 +1184,8 @@ form.addEventListener("submit", async (e) => {
   try {
     const res = await fetch(API + "/api/orders", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      credentials: BUSINESS_MODE ? "include" : "same-origin",
+      headers: { "Content-Type": "application/json", ...(BUSINESS_MODE ? { "Idempotency-Key": walletIdempotencyKey } : {}) },
       body: JSON.stringify(payload)
     });
     let data = {};
@@ -1155,6 +1196,10 @@ form.addEventListener("submit", async (e) => {
       if (data && data.error && data.error.startsWith("invalid email")) return showError("כתובת האימייל אינה תקינה.");
       if (data && data.error === "out_of_zone") return showError("אחת הכתובות מחוץ לאזור השירות שלנו.");
       if (data && data.error === "flash_unavailable_z3") return showError("שירות מהיר אינו זמין באזור 3. בחרו שירות רגיל או חסכוני.");
+      if (data && data.error === "plan_service_unavailable") return showError("השירות או האזור אינם כלולים במסלול העסקי הנוכחי.");
+      if (data && data.error === "plan_required") return showError("יש לבחור ולטעון מסלול עסקי לפני יצירת משלוח.");
+      if (data && data.error === "business_login_required") { location.assign(API+"/business"); return; }
+      if (data && data.error === "insufficient_credit") return showError("אין מספיק יתרה. חסרים ₪"+Number(data.shortfall||0).toLocaleString("he-IL")+" — טענו יתרה בחשבון העסקי ונסו שוב.");
       if (data && ["closed_saturday","outside_hours"].includes(data.error)) return showError("המועד שנבחר אינו זמין. בחרו מועד אחר.");
       if (data && data.error && data.error === "invalid_coupon") {
         showCouponError(data.message || "קוד הקופון אינו תקף.");
@@ -1164,10 +1209,26 @@ form.addEventListener("submit", async (e) => {
       if (data && data.error && data.error.startsWith("missing")) return showError("חסר שדה חובה: " + data.error.replace("missing ", ""));
       return showError("שגיאה בשליחת ההזמנה. נא לנסות שוב או לפנות אלינו.");
     }
+    if (window.edenAnalytics) {
+      window.edenAnalytics.track("booking_submitted", { service, size, review: Boolean(data.review) });
+    }
     // Exact-price orders continue directly to Shopify's secure checkout. Tracking is
     // intentionally unavailable until the signed paid webhook confirms the payment.
     if (data.payment_url) {
+      if (window.edenAnalytics) {
+        window.edenAnalytics.track("payment_started", {
+          service,
+          size,
+          currency: "ILS",
+          value: Number(data.price) || 0
+        });
+      }
       window.location.assign(data.payment_url);
+      return;
+    }
+    if (data.wallet && data.tracking_url) {
+      walletIdempotencyKey = null;
+      window.location.assign(data.tracking_url);
       return;
     }
     const q = new URLSearchParams({
@@ -1195,6 +1256,7 @@ form.addEventListener("submit", async (e) => {
     submitBtn.textContent = original;
   }
 });
+initBusinessMode();
 </script>
 <script src="/assets/mobile-nav.js" defer></script>
 </body>

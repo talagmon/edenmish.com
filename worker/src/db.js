@@ -10,8 +10,9 @@ export async function createOrder(DB, o) {
        dropoff, dropoff_detail, dropoff_lat, dropoff_lng, dropoff_city,
        when_text, when_date, when_hour, service, size, package, urgent, notes, distance_km,
        price, currency, review_flag, review_reason, payment_url, payment_status, created_at,
-       subtotal_price, discount_code, discount_amount, discount_title
-     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       subtotal_price, discount_code, discount_amount, discount_title,
+       business_account_id, wallet_reservation_id, payment_method
+     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
      RETURNING id, token`
   ).bind(
     token, o.status ?? 'received', o.name ?? null, o.phone ?? null, o.customer_type ?? null,
@@ -21,7 +22,8 @@ export async function createOrder(DB, o) {
     o.service ?? null, o.size ?? null, o.package ?? null, o.urgent ? 1 : 0, o.notes ?? null, o.distance_km ?? null,
     o.price ?? null, 'ILS', o.review_flag ? 1 : 0, o.review_reason ?? null, o.payment_url ?? null, o.payment_status ?? 'none', now,
     // Coupon snapshot (migration 008): NULL/0 when no coupon — identical to the old row shape.
-    o.subtotal_price ?? null, o.discount_code ?? null, o.discount_amount ?? 0, o.discount_title ?? null
+    o.subtotal_price ?? null, o.discount_code ?? null, o.discount_amount ?? 0, o.discount_title ?? null,
+    o.business_account_id ?? null, o.wallet_reservation_id ?? null, o.payment_method ?? null
   ).first();
   await addStatus(DB, r.id, o.status || 'received');
   return r; // { id, token }
