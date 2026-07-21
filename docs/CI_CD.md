@@ -312,6 +312,8 @@ git push origin "v$(./scripts/current_version.sh)"
      wrangler d1 execute edenmish --remote --file=./migrations/014_driver_api_v1.sql
      wrangler d1 execute edenmish --remote --file=./migrations/015_driver_route_tasks.sql
      wrangler d1 execute edenmish --remote --file=./migrations/016_driver_route_integrity.sql
+     wrangler d1 execute edenmish --remote --file=./migrations/017_driver_task_proofs.sql
+     wrangler d1 execute edenmish --remote --file=./migrations/018_business_wallet.sql
 3. Configure the production Worker bootstrap secret if it is not already present:
      cd worker
      wrangler secret put DRIVER_ONE_TIME_CODE

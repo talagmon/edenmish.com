@@ -88,7 +88,7 @@ function opsQueueHelpers() {
 }
 
 describe('Frontend: Pages exist', () => {
-  for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'blog/edenmish-information-security.html', 'success.html', 'error.html', 'terms.html', 'privacy.html', 'refund.html', 'accessibility.html', 'cancel.html']) {
+  for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'blog/edenmish-information-security.html', 'business-account.html', 'success.html', 'error.html', 'terms.html', 'privacy.html', 'refund.html', 'accessibility.html', 'cancel.html']) {
     test(`${page} exists`, () => {
       assert.ok(existsSync(join(PUB, page)), `${page} not found in public/`);
     });
@@ -291,6 +291,18 @@ describe('Frontend: Booking form', () => {
   test('Has special instructions textarea', () => {
     assertContains(html, 'name="notes"', 'notes textarea');
     assertContains(html, 'הוראות מיוחדות', 'instructions heading');
+  });
+
+  test('Supports authenticated business-wallet quotes and one-tap reservations', () => {
+    assertContains(html, 'BUSINESS_MODE', 'business booking mode');
+    assertContains(html, '/api/business/me', 'business session lookup');
+    assertContains(html, '/api/business/quote', 'plan-rate quote');
+    assertContains(html, 'payload.use_wallet = true', 'wallet order marker');
+    assertContains(html, '"Idempotency-Key"', 'wallet idempotency header');
+    assertContains(html, 'credentials: BUSINESS_MODE ? "include"', 'credentialed business request');
+    assertContains(html, 'insufficient_credit', 'top-up recovery state');
+    assertContains(html, 'data-rate-key="2:standard"', 'plan-specific price table cells');
+    assertContains(html, 'price-table-title', 'active plan price-table title');
   });
 
   test('Has terms acceptance separated from operational notifications', () => {

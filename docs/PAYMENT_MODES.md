@@ -63,13 +63,24 @@ processor boundaries so future work stays clean.
 - **Blocked on `EXACT_CAPTURE` / `QUOTE_THEN_PAY` being stable first.** This is the
   last planned payment PR.
 
-### 4. `BUSINESS_POSTPAID` — monthly/business billing *(future)*
+### 4. `BUSINESS_PREPAID` — prepaid business wallet *(implemented)*
+
+- Business buys Silver, Gold, or Platinum credit through a Shopify Draft Order.
+- PayPlus captures inside Shopify checkout; the Worker never calls PayPlus.
+- A verified `orders/paid` webhook credits the D1 wallet exactly once.
+- Eligible delivery requests reserve credit, then ops acceptance captures it.
+- Cancellation before capture releases the reservation.
+- Maps to `payment_mode = 'wallet'` and `payment_method = 'wallet'`.
+
+See `BUSINESS_WALLET.md`.
+
+### 5. `BUSINESS_POSTPAID` — monthly/business billing *(future)*
 
 - For repeat business clients on a monthly plan.
 - No per-delivery charge at checkout; invoiced later.
 - Not designed yet (needs a `customers`/`accounts` concept). Do not start.
 
-### 5. `MANUAL` — fallback
+### 6. `MANUAL` — fallback
 
 - Eden handles the payment out of band (cash, manual transfer, etc.).
 - The ops dashboard already has a **"mark paid manually"** action that sets
@@ -84,6 +95,7 @@ processor boundaries so future work stays clean.
 |---|---|---|
 | `EXACT_CAPTURE` | ✅ implemented via Draft Orders with checkout-before-tracking | Path B |
 | `QUOTE_THEN_PAY` | ✅ implemented via Draft Orders (ops "approve") | Path B |
+| `BUSINESS_PREPAID` | ✅ implemented via Draft Order top-ups + D1 wallet | Path B + wallet ledger |
 | `PREAUTH_MAX_HOLD` | ⛔ stubbed only (`settleOrder` no-op, `MESH_API_KEY` unset) | future Mesh adapter |
 | `BUSINESS_POSTPAID` | ⛔ not started | future |
 | `MANUAL` | ✅ ops "mark paid manually" | fallback |

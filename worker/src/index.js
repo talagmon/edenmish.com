@@ -1,8 +1,9 @@
 import { createOrder, getOrderByToken, getOrderById, getOrderByShopifyOrderId, listOrders, setOrderStatus, setOrderRating, getStatusHistory, addGps, latestGps, getGpsTrail, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof, listRecentNotificationFailures, listNotificationsForOrder, createCancellationRequest, listCancellationRequests, runRetentionCleanup } from './db.js';
 import { priceOrder, ZONE_CITIES, DEFAULT_PRICING_RULES } from './pricing.js';
 import { makeSession, checkSession, getCookie, genOtp, hashOtp, timingSafeEqual } from './integrations.js';
-import { createCharge, settleOrder, verifyShopifyWebhook, parseShopifyOrderWebhook, parseShopifyRefundWebhook } from './payment.js';
+import { createCharge, createWalletCharge, settleOrder, verifyShopifyWebhook, parseShopifyOrderWebhook, parseShopifyRefundWebhook } from './payment.js';
 import { trackingHtml, opsHtml } from './pages.js';
+import { businessAccountHtml } from './business-page.js';
 import { corsFor, maskEmail, publicOrderSummary, clientIp, anonKey } from './security.js';
 import { notifyEmail, notifyWhatsApp } from './notify.js';
 import { normalizeIlPhone, scheduleError, validIsraeliId } from './validate.js';
@@ -11,6 +12,7 @@ import { getStatusMeta, getNextStatuses, isTerminalStatus } from './status.js';
 import { shopifyWebhookRegistrar } from './shopify-webhooks.js';
 import { handleDriverApi } from './driver-api.js';
 import { driverDispatchStatus, startDriverShift, endDriverShift } from './driver-dispatch.js';
+import { applyBusinessPlanPricing, businessSessionCookie, captureWalletReservation, cleanupBusinessSecurity, clearBusinessSessionCookie, createWalletTopup, creditWalletTopup, getBusinessSession, getBusinessSnapshot, getWalletTopup, linkWalletReservationToOrder, markWalletTopupCheckout, publicBusinessPlans, releaseWalletReservation, requestBusinessLogin, reserveWalletCredit, revokeBusinessSession, updateBusinessProfile, verifyBusinessLogin } from './business.js';
 
 const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra } });
 const html = (s) => new Response(s, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -26,6 +28,8 @@ const validCoordinate = (v, min, max) => typeof v === 'number' && Number.isFinit
 const trackingIsAvailable = (order) => order && (
   order.payment_status === 'paid' ||
   order.payment_status === 'paid_manual' ||
+  order.payment_status === 'wallet_reserved' ||
+  order.payment_status === 'wallet_paid' ||
   ['paid', 'to_pickup', 'picked_up', 'to_dropoff', 'delivered'].includes(order.status)
 );
 const canTransition = (from, to) => {
@@ -73,6 +77,7 @@ const paymentLinkHtml = (env, o, url) => `<div dir="rtl" style="font-family:sans
 // validation before entering this helper. payment_status is the idempotency guard.
 async function confirmPaidOrder(env, order, opts = {}) {
   if (!order) return { order: null, unchanged: true };
+  if (order.payment_method === 'wallet') return { order, unchanged: true };
   if (order.payment_status === 'paid') return { order, unchanged: true };
 
   const paidAt = Date.now();
@@ -247,7 +252,9 @@ async function isOps(req, env) {
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
-    if (url.protocol === 'http:') {
+    // Wrangler's local HTTPS certificate is self-signed. TEST_MODE may use
+    // loopback HTTP for browser QA; every non-test environment stays HTTPS-only.
+    if (url.protocol === 'http:' && env.TEST_MODE !== '1') {
       url.protocol = 'https:';
       return Response.redirect(url.toString(), 301);
     }
@@ -267,6 +274,91 @@ export default {
 
     const driverResponse = await handleDriverApi(req, env, path);
     if (driverResponse) return driverResponse;
+
+    // ---- passwordless business account + prepaid wallet ----
+    if (path === '/business' && req.method === 'GET') {
+      return html(businessAccountHtml(storefrontBase(env)));
+    }
+
+    if (path === '/api/business/plans' && req.method === 'GET') {
+      return json({ plans: publicBusinessPlans() });
+    }
+
+    if (path === '/api/business/auth/request' && req.method === 'POST') {
+      let b; try { b = await readJson(req); } catch (e) { return json({ error: e.message }, e.status || 400); }
+      try {
+        const result = await requestBusinessLogin(env, req, b.email, `${url.origin}/business`);
+        return json(result.ok ? { ok: true, challenge: result.challenge, ...(result.test_code ? { test_code: result.test_code, test_token: result.test_token } : {}) } : { error: result.error }, result.status || 200);
+      } catch (error) {
+        console.error('business_login_request_failed', error && error.message || String(error));
+        return json({ error: 'login_unavailable' }, 503);
+      }
+    }
+
+    if (path === '/api/business/auth/verify' && req.method === 'POST') {
+      let b; try { b = await readJson(req); } catch (e) { return json({ error: e.message }, e.status || 400); }
+      try {
+        const result = await verifyBusinessLogin(env, b);
+        if (!result.ok) return json({ error: result.error }, result.status || 401);
+        return json({ ok: true }, 200, { 'Set-Cookie': businessSessionCookie(result.session) });
+      } catch (error) {
+        console.error('business_login_verify_failed', error && error.message || String(error));
+        return json({ error: 'login_unavailable' }, 503);
+      }
+    }
+
+    if (path === '/api/business/logout' && req.method === 'POST') {
+      await revokeBusinessSession(req, env).catch(() => {});
+      return json({ ok: true }, 200, { 'Set-Cookie': clearBusinessSessionCookie() });
+    }
+
+    if (path === '/api/business/me' && req.method === 'GET') {
+      const session = await getBusinessSession(req, env);
+      if (!session) return json({ error: 'unauthorized' }, 401);
+      return json(await getBusinessSnapshot(env.DB, session));
+    }
+
+    if (path === '/api/business/profile' && req.method === 'PUT') {
+      const session = await getBusinessSession(req, env);
+      if (!session) return json({ error: 'unauthorized' }, 401);
+      let b; try { b = await readJson(req); } catch (e) { return json({ error: e.message }, e.status || 400); }
+      return json({ ok: true, profile: await updateBusinessProfile(env.DB, session, b) });
+    }
+
+    if (path === '/api/business/quote' && req.method === 'POST') {
+      const session = await getBusinessSession(req, env);
+      if (!session) return json({ error: 'unauthorized' }, 401);
+      if (!session.plan_id) return json({ error: 'plan_required' }, 409);
+      let raw; try { raw = await readJson(req); } catch (e) { return json({ error: e.message }, e.status || 400); }
+      const b = normalizeQuoteInput(raw);
+      const inputError = quoteInputError(b);
+      if (inputError) return json({ error: inputError }, 400);
+      const quote = applyBusinessPlanPricing(await authoritativeQuote(env, b), session.plan_id);
+      return json({ ...quote, currency: 'ILS', balance: Number(session.available_agorot || 0) / 100, balance_after: quote.available ? (Number(session.available_agorot || 0) / 100 - quote.price) : null });
+    }
+
+    if (path === '/api/business/topups' && req.method === 'POST') {
+      const session = await getBusinessSession(req, env);
+      if (!session) return json({ error: 'unauthorized' }, 401);
+      let b; try { b = await readJson(req); } catch (e) { return json({ error: e.message }, e.status || 400); }
+      const topup = await createWalletTopup(env.DB, session, b.plan_id);
+      if (!topup) return json({ error: 'invalid_plan' }, 400);
+      try {
+        const charge = await createWalletCharge(env, {
+          id: topup.id,
+          plan_id: topup.plan.id,
+          plan_name_he: topup.plan.name_he,
+          email: topup.email,
+          company_name: topup.company_name,
+        }, topup.amount);
+        if (!charge || !charge.checkoutUrl) return json({ error: 'checkout_unavailable' }, 503);
+        await markWalletTopupCheckout(env.DB, topup.id, charge);
+        return json({ ok: true, topup_id: topup.id, checkout_url: charge.checkoutUrl });
+      } catch (error) {
+        console.error('business_topup_checkout_failed', error && error.message || String(error));
+        return json({ error: 'checkout_unavailable' }, 503);
+      }
+    }
 
     // Verify Shopify payment/refund subscriptions. Failures are sanitized, logged,
     // exposed to authenticated ops, and retried after a cooldown.
@@ -388,6 +480,14 @@ export default {
       } catch (rlErr) { console.error('rate_limit_error', rlErr && rlErr.message ? rlErr.message : String(rlErr)); }
 
       let b; try { b = await readJson(req); } catch (e) { return json({ error: e.message }, e.status || 400, cors); }
+      const businessSession = b.use_wallet ? await getBusinessSession(req, env) : null;
+      if (b.use_wallet && !businessSession) return json({ error: 'business_login_required' }, 401, cors);
+      if (businessSession) {
+        if (!businessSession.plan_id) return json({ error: 'plan_required' }, 409, cors);
+        b.email = businessSession.email;
+        b.customer_type = 'business';
+        if (!b.name) b.name = businessSession.name || businessSession.company_name || businessSession.email;
+      }
       // Part A — email is required for new public orders (tracking link + OTP go by email).
       const required = ['name', 'phone', 'email', 'pickup', 'dropoff'];
       for (const f of required) if (!b[f]) return json({ error: 'missing ' + f }, 400, cors);
@@ -423,12 +523,14 @@ export default {
         }
       }
 
-      const pr = await authoritativeQuote(env, b);
+      let pr = await authoritativeQuote(env, b);
+      if (businessSession) pr = applyBusinessPlanPricing(pr, businessSession.plan_id);
       const isReview = pr.review;
 
       // Server-side hard gates: reject out-of-zone, Flash Zone 3, outside business hours.
       if (pr.reasons.includes('out_of_zone')) return json({ error: 'out_of_zone' }, 400, cors);
       if (pr.reasons.includes('flash_unavailable_z3')) return json({ error: 'flash_unavailable_z3' }, 400, cors);
+      if (pr.reasons.includes('plan_service_unavailable')) return json({ error: 'plan_service_unavailable' }, 400, cors);
       const day = date.getUTCDay();
       const invalidSchedule = scheduleError(b.service, day, hour);
       if (invalidSchedule) return json({ error: invalidSchedule }, 400, cors);
@@ -437,6 +539,7 @@ export default {
       // An invalid code REJECTS the order — never silently create at full price; the
       // customer must not be charged more than the total they were shown.
       let coupon = null;
+      if (b.coupon_code && businessSession) return json({ error: 'coupon_not_available_with_wallet' }, 400, cors);
       if (b.coupon_code) {
         const v = await validateCoupon(env.DB, b.coupon_code, pr.price, couponCustomerKey(b));
         if (!v.valid) return json({ valid: false, error: 'invalid_coupon', reason: v.reason, message: couponMessage(v.reason) }, 400, cors);
@@ -452,21 +555,54 @@ export default {
         discount_title: coupon ? coupon.title : null,
       };
 
+      let walletReservation = null;
+      if (businessSession) {
+        const idempotencyKey = req.headers.get('Idempotency-Key') || b.idempotency_key;
+        if (!idempotencyKey) return json({ error: 'idempotency_key_required' }, 400, cors);
+        const reservationResult = await reserveWalletCredit(env.DB, businessSession.account_id, Math.round(finalPrice * 100), idempotencyKey);
+        if (!reservationResult.reserved) {
+          return json({
+            error: 'insufficient_credit',
+            available: Number(reservationResult.available_agorot || 0) / 100,
+            shortfall: Number(reservationResult.shortfall_agorot || 0) / 100,
+          }, 402, cors);
+        }
+        walletReservation = reservationResult.reservation;
+        if (walletReservation && walletReservation.order_id) {
+          const existingOrder = await getOrderById(env.DB, walletReservation.order_id);
+          if (existingOrder) return json({ order_id: existingOrder.id, token: existingOrder.token, tracking_url: trackingUrl(env, existingOrder.token), status: existingOrder.status, price: existingOrder.price, wallet: true, idempotent: true }, 200, cors);
+        }
+      }
+
       // 1. Create the D1 order. For exact-price orders a Shopify Draft Order is created
       //    below (PR4); the customer pays its invoice URL through Shopify + PayPlus. The
       //    Shopify webhook links the order back via _tracking_token (line property) / note.
-      const created = await createOrder(env.DB, {
-        ...b,
-        status: isReview ? 'review' : 'priced',
-        price: finalPrice,
-        review_flag: isReview ? 1 : 0,
-        review_reason: isReview ? pr.reasons.join(',') : null,
-        payment_status: 'none',
-        payment_mode: 'immediate',
-        ...discountFields
-      });
+      let created;
+      try {
+        created = await createOrder(env.DB, {
+          ...b,
+          status: businessSession ? 'paid' : (isReview ? 'review' : 'priced'),
+          price: finalPrice,
+          review_flag: isReview ? 1 : 0,
+          review_reason: isReview ? pr.reasons.join(',') : null,
+          payment_status: businessSession ? 'wallet_reserved' : 'none',
+          payment_mode: businessSession ? 'wallet' : 'immediate',
+          business_account_id: businessSession ? businessSession.account_id : null,
+          wallet_reservation_id: walletReservation ? walletReservation.id : null,
+          payment_method: businessSession ? 'wallet' : null,
+          email_verified: businessSession ? 1 : 0,
+          ...discountFields
+        });
+      } catch (error) {
+        if (walletReservation) await releaseWalletReservation(env.DB, walletReservation.id).catch(() => {});
+        throw error;
+      }
       const token = created.token;
       const finalUrl = trackingUrl(env, token);
+      if (walletReservation) {
+        await linkWalletReservationToOrder(env.DB, walletReservation.id, created.id);
+        await env.DB.prepare(`UPDATE orders SET email = ?, email_verified = 1, payment_mode = 'wallet' WHERE id = ?`).bind(b.email, created.id).run();
+      }
       // Redemption row = what usage limits count. For limited coupons the insert is an
       // atomic guard (see recordRedemption) that closes the validate→insert TOCTOU race:
       // if a concurrent order consumed the last use, the guard rejects (recorded: false)
@@ -492,7 +628,7 @@ export default {
 
       // Set OTP hash to gate the tracking page, but DON'T email the code yet.
       // The code is regenerated and emailed AFTER payment is confirmed (webhook handler).
-      if (b.email) {
+      if (b.email && !businessSession) {
         const otp = genOtp();
         await setEmailAndOtp(env.DB, created.id, b.email, await hashOtp(env, otp), Date.now() + 2 * 60 * 60 * 1000);
       }
@@ -507,6 +643,25 @@ export default {
       // until after payment — most would assume the order vanished.
       if (isReview && b.email) {
         try { await notifyEmail(env, env.DB, { orderId: created.id, template: 'customer_request_received', recipient: b.email, subject: `קיבלנו את הבקשה ✓ — הזמנה #${created.id} ב-EdenMish`, html: requestReceivedHtml(env, { ...b, id: created.id, price: finalPrice, price_is_estimate: true }) }); } catch {}
+      }
+
+      if (businessSession) {
+        try {
+          await notifyEmail(env, env.DB, { orderId: created.id, template: 'ops_new_business_order', recipient: env.OPS_EMAIL, subject: `הזמנה עסקית חדשה #${created.id} — יתרה שמורה ₪${finalPrice}`, html: `${escHtml(b.name)} · ${escHtml(b.pickup)} → ${escHtml(b.dropoff)} · מסלול ${escHtml(businessSession.plan_id)} · יתרה שמורה ₪${escHtml(finalPrice)}<br><a href="${escHtml(finalUrl)}">${escHtml(finalUrl)}</a>` });
+        } catch {}
+        const refreshed = await getBusinessSession(req, env);
+        return json({
+          order_id: created.id,
+          token,
+          tracking_url: finalUrl,
+          status: 'paid',
+          price: finalPrice,
+          wallet: true,
+          wallet_status: 'reserved',
+          balance: refreshed ? Number(refreshed.available_agorot || 0) / 100 : undefined,
+          review: false,
+          reasons: [],
+        }, 200, cors);
       }
 
       // 2. PR4 — exact-price path: Worker creates a Shopify Draft Order and returns its
@@ -757,12 +912,24 @@ export default {
       if (!canTransition(before.status, b.status)) return json({ error: 'invalid transition', from: before.status, to: b.status }, 409);
       if (before.status === b.status && b.status !== 'paid') return json({ ok: true, unchanged: true });
       if (b.status === 'paid') {
+        if (before.payment_method === 'wallet') return json({ ok: true, unchanged: true });
         const paid = await confirmPaidOrder(env, before);
         return paid.unchanged ? json({ ok: true, unchanged: true }) : json({ ok: true, order: paid.order });
       }
       const fields = {};
+      if (before.wallet_reservation_id) {
+        if (b.status === 'cancelled') {
+          const released = await releaseWalletReservation(env.DB, before.wallet_reservation_id, before.id);
+          if (!released.released && !released.unchanged) return json({ error: 'wallet_release_failed' }, 409);
+          fields.payment_status = 'wallet_released';
+        } else if (['to_pickup', 'picked_up', 'to_dropoff', 'delivered'].includes(b.status)) {
+          const captured = await captureWalletReservation(env.DB, before.wallet_reservation_id, before.id);
+          if (!captured.captured && !captured.unchanged) return json({ error: 'wallet_capture_failed' }, 409);
+          fields.payment_status = 'wallet_paid';
+        }
+      }
       if (b.status === 'picked_up') fields.picked_up_at = Date.now();
-      if (b.status === 'delivered') { fields.delivered_at = Date.now(); fields.payment_status = fields.payment_status || 'paid'; }
+      if (b.status === 'delivered') { fields.delivered_at = Date.now(); fields.payment_status = fields.payment_status || (before.payment_method === 'wallet' ? 'wallet_paid' : 'paid'); }
       await setOrderStatus(env.DB, id, b.status, fields);
       if (b.status === 'delivered') {
         const o = await getOrderById(env.DB, id);
@@ -847,7 +1014,11 @@ export default {
       if (b.signature && (!String(b.signature).startsWith('data:image/png;base64,') || String(b.signature).length > 500_000)) return json({ error: 'invalid signature' }, 400);
       await upsertDeliveryProof(env.DB, id, { receiver_name: b.receiver_name, delivery_note: b.delivery_note, photo_url: b.photo_url, signature: b.signature });
       const wasDelivered = !!(before && before.status === 'delivered');
-      if (!wasDelivered) await setOrderStatus(env.DB, id, 'delivered', { delivered_at: before.delivered_at || Date.now(), payment_status: 'paid' });
+      if (!wasDelivered && before.wallet_reservation_id) {
+        const captured = await captureWalletReservation(env.DB, before.wallet_reservation_id, before.id);
+        if (!captured.captured && !captured.unchanged) return json({ error: 'wallet_capture_failed' }, 409);
+      }
+      if (!wasDelivered) await setOrderStatus(env.DB, id, 'delivered', { delivered_at: before.delivered_at || Date.now(), payment_status: before.payment_method === 'wallet' ? 'wallet_paid' : 'paid' });
       const o = await getOrderById(env.DB, id);
       if (!wasDelivered && o) {
         await settleOrder(env, o); // no-op in 'immediate' mode; captures in future 'preauth' (Mesh) mode
@@ -954,6 +1125,40 @@ export default {
       }
 
       const parsed = parseShopifyOrderWebhook(b);
+      if (parsed.walletTopupToken) {
+        const topup = await getWalletTopup(env.DB, parsed.walletTopupToken);
+        if (!topup) return json({ received: true, reconciled: false });
+        const financialStatus = String(parsed.financial_status || '').toLowerCase();
+        if (financialStatus === 'refunded' || financialStatus === 'partially_refunded') {
+          // A card refund and a wallet reversal are separate money movements. Freeze
+          // spending for manual reconciliation instead of silently leaving spendable credit.
+          await env.DB.batch([
+            env.DB.prepare(`UPDATE wallet_topups SET status = 'mismatch' WHERE id = ?`).bind(topup.id),
+            env.DB.prepare(`UPDATE business_accounts SET status = 'suspended', updated_at = ? WHERE id = ?`).bind(Date.now(), topup.account_id),
+          ]);
+          console.error('wallet_topup_refund_requires_reconciliation', { topup: topup.id, account: topup.account_id });
+          return json({ received: true, reconciled: false });
+        }
+        const credited = await creditWalletTopup(env.DB, topup, parsed);
+        if (credited.credited && !credited.unchanged) {
+          const owner = await env.DB.prepare(
+            `SELECT u.email FROM business_members m JOIN business_users u ON u.id = m.user_id
+             WHERE m.account_id = ? AND m.role = 'owner' LIMIT 1`
+          ).bind(topup.account_id).first();
+          if (owner && owner.email) {
+            try {
+              await notifyEmail(env, env.DB, {
+                orderId: null,
+                template: 'business_wallet_credited',
+                recipient: owner.email,
+                subject: `היתרה העסקית נטענה — ₪${Number(topup.amount_agorot) / 100}`,
+                html: `<div dir="rtl" style="font-family:Arial,sans-serif;line-height:1.7;max-width:480px;margin:auto;padding:28px;background:#fff;color:#0F172A"><h1 style="color:#5B2A86">היתרה מוכנה ✓</h1><p>הוספנו <b style="color:#246b62">₪${Number(topup.amount_agorot) / 100}</b> לחשבון העסקי שלך.</p><p><a href="${url.origin}/business" style="display:inline-block;background:#5B2A86;color:#fff;padding:12px 24px;border-radius:9px;text-decoration:none;font-weight:700">לחשבון העסקי</a></p></div>`,
+              });
+            } catch {}
+          }
+        }
+        return json({ received: true, reconciled: !!credited.credited });
+      }
       if (parsed.token || parsed.shopifyOrderId) {
         const o = parsed.token
           ? await getOrderByToken(env.DB, parsed.token)
@@ -1002,7 +1207,7 @@ export default {
     return new Response('Not found', { status: 404 });
   },
   async scheduled(_event, env, ctx) {
-    ctx.waitUntil(runRetentionCleanup(env.DB).catch((error) => {
+    ctx.waitUntil(Promise.all([runRetentionCleanup(env.DB), cleanupBusinessSecurity(env.DB)]).catch((error) => {
       console.error('retention_cleanup_failed', error && error.message ? error.message : String(error));
     }));
   }
