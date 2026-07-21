@@ -447,6 +447,26 @@ async function processEvent(env, auth, meta, event) {
     if (replay) return { event_id: replay.event_id, status: 'duplicate', server_received_at: new Date(replay.server_received_at).toISOString(), conflict_type: replay.conflict_type, correlation_id: replay.correlation_id };
     return { event_id: event.event_id, status: 'retry_later', server_received_at: new Date(now).toISOString(), correlation_id: correlationId };
   }
+  if (env.AUTO_DRIVER_DISPATCH === 'on'
+    && status === 'accepted'
+    && transitioned
+    && ['pickup_completed', 'delivery_completed', 'delivery_failed'].includes(event.event_type)) {
+    try {
+      await syncDriverRoute(env, {
+        driverId: auth.driver_id,
+        shiftId: event.shift_id,
+        now,
+      });
+    } catch (error) {
+      // The canonical task transition is already durable. A later route poll
+      // retries dispatch, so an optimizer outage must not reject completion.
+      console.error('driver_route_sync_after_transition_failed', {
+        eventId: event.event_id,
+        shiftId: event.shift_id,
+        message: error?.message || String(error),
+      });
+    }
+  }
   if (event.event_type === 'delivery_completed' && status === 'accepted' && transitioned) {
     const deliveredOrder = await getOrderById(env.DB, orderId);
     if (deliveredOrder) {
