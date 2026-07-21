@@ -60,6 +60,10 @@ Implemented in `worker/src/`:
 - **GPS pings** — `gps_pings` written from the ops dashboard during live legs.
 - **Shopify webhook handling** — `POST /webhooks/shopify`, HMAC-verified, reconciles `orders/paid`, `refunds/create`, and refund completion from `orders/updated`.
 - **Coupon management, validation & redemption** — codes are managed D1-only from the ops dashboard (`/api/ops/coupons` CRUD); the Worker validates them straight from D1, applies the discount to its own computed price, and counts redemptions in D1 (`coupon_redemptions` is authoritative). See `COUPONS.md`.
+- **Business accounts and prepaid credit** — passwordless account sessions, plan-rate quotes,
+  wallet balances, immutable ledger entries, reservations, and delivery deductions are D1
+  state. Shopify Draft Orders collect wallet top-up payments; only verified paid webhooks
+  credit D1. See `BUSINESS_WALLET.md`.
 - **Future Mesh/J5 webhook handling** — payment boundary already stubbed (`payment_mode`, `authorized_amount`, `settleOrder`).
 
 ---
@@ -118,6 +122,7 @@ a late `orders/paid` retry.
 
 - `PAYMENT_MODES.md` — the five payment modes and processor boundaries.
 - `COUPONS.md` — discount codes: ops-dashboard management, Worker/D1 enforcement.
+- `BUSINESS_WALLET.md` — business login, prepaid credit, ledger and plan-rate flow.
 - `STATUS_MODEL.md` — current statuses, future normalized model, queue buckets.
 - `ENVIRONMENT.md` — secrets, vars, and Shopify/theme settings.
 - `../worker/README.md` — Worker files, commands, D1, secret/webhook checklists.

@@ -93,7 +93,7 @@ Database name: `edenmish`. Binding: `DB`.
 ### Schema and migrations
 
 `schema.sql` is the **fresh-DB source of truth** — it defines every current table.
-The numbered migrations (`003`–`017`) add tables/columns that were introduced after the
+The numbered migrations (`003`–`018`) add tables/columns that were introduced after the
 initial schema. Tables are idempotent (`CREATE TABLE IF NOT EXISTS`); `ALTER TABLE …
 ADD COLUMN` migrations (`006`–`010`, `015`, and `016`) must run only on DBs that predate their columns.
 
@@ -108,6 +108,9 @@ Current tables: `orders`, `status_history`, `gps_pings`, `payments`, `pricing_ru
 `cancellation_requests`, `drivers`, `driver_sessions`, `driver_shifts`,
 `driver_assignments`, `driver_routes`, `driver_route_stops`, `driver_execution_events`.
 The driver runtime also stores bounded samples in `driver_location_samples` while a shift is active.
+Business-account tables are `business_users`, `business_accounts`, `business_members`,
+`business_auth_challenges`, `business_sessions`, `business_wallets`, `wallet_topups`,
+`wallet_credit_lots`, `wallet_reservations`, `wallet_entries`, `business_plan_enrollments`.
 
 ## Secret checklist
 
@@ -118,7 +121,7 @@ See `../docs/ENVIRONMENT.md` for the full list and placeholders.
 | Secret | Required for | Notes |
 |---|---|---|
 | `OPS_PIN` | ops dashboard login | shared PIN today |
-| `SESSION_SECRET` | signed ops cookie + OTP hashing | mandatory; auth/order OTP flows fail closed if unset |
+| `SESSION_SECRET` | signed/hashed ops + business sessions, links and OTPs | mandatory; auth flows fail closed if unset |
 | `DRIVER_ONE_TIME_CODE` | driver app bootstrap login | single use; 6–12 digits; rotate after every successful exchange |
 | `MAPS_KEY` | tracking page live map (injected into HTML) | Google Maps JS key |
 | `SHOPIFY_ADMIN_TOKEN` | creating Draft Orders (`shpat_…`) | Worker-side charge |
@@ -145,6 +148,8 @@ Shopify admin → **Settings → Notifications → Webhooks**:
   trusting the payload. It recovers the tracking token from the line-item
   `_tracking_token` property (legacy cart path) **or** the draft-order
   metafield/note (Draft Order path).
+- Business wallet Draft Orders use a separate `_edenmish_wallet_topup` property and
+  `wallet_topup_token` metafield. A matching signed paid webhook credits D1 exactly once.
 
 See `../doc/payplus-setup.md` for the step-by-step Shopify + PayPlus setup.
 
@@ -178,6 +183,7 @@ wrangler d1 execute edenmish --remote --file=./migrations/014_driver_api_v1.sql
 wrangler d1 execute edenmish --remote --file=./migrations/015_driver_route_tasks.sql
 wrangler d1 execute edenmish --remote --file=./migrations/016_driver_route_integrity.sql
 wrangler d1 execute edenmish --remote --file=./migrations/017_driver_task_proofs.sql
+wrangler d1 execute edenmish --remote --file=./migrations/018_business_wallet.sql
 ```
 
 > Run only migrations that have not already been applied. Several `ALTER TABLE`

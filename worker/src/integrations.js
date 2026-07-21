@@ -95,6 +95,49 @@ export async function createDraftOrder(env, order, priceNis) {
   return draft; // { id, invoice_url, ... }
 }
 
+// Business wallet top-up. This intentionally has its own Draft Order shape so a
+// prepaid credit purchase can never be mistaken for a delivery order.
+export async function createWalletDraftOrder(env, topup, priceNis) {
+  if (!env.SHOPIFY_SHOP || !env.SHOPIFY_ADMIN_TOKEN) return null;
+  const apiVersion = env.SHOPIFY_API_VERSION || '2026-04';
+  const url = `https://${env.SHOPIFY_SHOP}/admin/api/${apiVersion}/draft_orders.json`;
+  const planName = topup.plan_name_he || topup.plan_id || 'עסקי';
+  const body = {
+    draft_order: {
+      line_items: [{
+        title: `יתרת משלוחים לעסקים — מסלול ${planName}`,
+        price: Number(priceNis).toFixed(2),
+        quantity: 1,
+        requires_shipping: false,
+        taxable: false,
+        properties: [
+          { name: '_edenmish_wallet_topup', value: topup.id },
+          { name: 'מסלול', value: planName },
+          { name: 'יתרה', value: `₪${Number(priceNis).toFixed(0)}` },
+        ],
+      }],
+      tags: 'edenmish-wallet-topup',
+      note: `EdenMish wallet topup: ${topup.id}`,
+      metafields: [{
+        namespace: 'edenmish',
+        key: 'wallet_topup_token',
+        value: topup.id,
+        type: 'single_line_text_field',
+      }],
+      customer: topup.email ? { email: topup.email } : undefined,
+    },
+  };
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'X-Shopify-Access-Token': env.SHOPIFY_ADMIN_TOKEN, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch(() => null);
+  if (!res || !res.ok) return null;
+  const data = await res.json().catch(() => ({}));
+  const draft = data && data.draft_order;
+  return draft && draft.invoice_url ? draft : null;
+}
+
 // ---- Shopify webhook HMAC verification (REQUIRED before trusting any webhook) ----
 // Shopify signs every webhook with HMAC-SHA256 over the raw body, sent in the
 // X-Shopify-Hmac-SHA256 header (base64). Compare in constant time.
@@ -115,12 +158,14 @@ export async function verifyShopifyWebhook(env, rawBody, hmacHeader) {
 export function parseShopifyOrderWebhook(body) {
   const o = body || {};
   let token = null;
+  let walletTopupToken = null;
   // The funnel embeds _tracking_token in line item properties
   const lines = o.line_items || [];
   for (const li of lines) {
     const props = li.properties || [];
     for (const p of props) {
       if (p.name === '_tracking_token' && p.value) { token = p.value; break; }
+      if (p.name === '_edenmish_wallet_topup' && p.value) walletTopupToken = p.value;
     }
     if (token) break;
   }
@@ -133,6 +178,14 @@ export function parseShopifyOrderWebhook(body) {
     const m = o.note.match(/token:\s*([a-f0-9]+)/i);
     if (m) token = m[1];
   }
+  if (!walletTopupToken) {
+    const meta = (o.metafields || []).find(m => m.namespace === 'edenmish' && m.key === 'wallet_topup_token');
+    walletTopupToken = (meta && meta.value) || null;
+  }
+  if (!walletTopupToken && typeof o.note === 'string') {
+    const m = o.note.match(/wallet\s+topup:\s*([A-Za-z0-9_-]+)/i);
+    if (m) walletTopupToken = m[1];
+  }
   // Conservative reconciliation: only a clearly paid/captured Shopify order is treated
   // as paid. `pending` / `authorized` / `partially_paid` / `voided` / `refunded` /
   // `partially_refunded` must NOT mark the internal order paid — the webhook handler's
@@ -140,6 +193,7 @@ export function parseShopifyOrderWebhook(body) {
   const paid = /^paid$/i.test((o.financial_status || '').trim());
   return {
     token,
+    walletTopupToken,
     shopifyOrderId: o.id || null,
     draftOrderId: o.draft_order_id || null,
     paid,

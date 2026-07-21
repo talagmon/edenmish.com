@@ -7,7 +7,7 @@
 // The rest of the app calls createCharge() / settleOrder() and never knows
 // which processor is behind them. Swapping to Mesh = rewrite this file only.
 
-import { createDraftOrder, verifyShopifyWebhook, parseShopifyOrderWebhook, parseShopifyRefundWebhook } from './integrations.js';
+import { createDraftOrder, createWalletDraftOrder, verifyShopifyWebhook, parseShopifyOrderWebhook, parseShopifyRefundWebhook } from './integrations.js';
 
 // createCharge(env, order, priceNis) → { checkoutUrl, mode, processorRef } | null
 // - 'immediate' mode: returns a Shopify checkout URL; payment is captured at checkout.
@@ -37,6 +37,25 @@ export async function createCharge(env, order, priceNis) {
   return {
     checkoutUrl,
     mode: 'immediate',
+    processorRef: String(draft.id),
+    draftOrderId: draft.id,
+  };
+}
+
+// Prepaid business wallet top-up. Shopify + PayPlus capture the money; the
+// signed orders/paid webhook is what authorizes D1 to credit the wallet.
+export async function createWalletCharge(env, topup, priceNis) {
+  const draft = await createWalletDraftOrder(env, topup, priceNis);
+  if (!draft) return null;
+  let checkoutUrl = draft.invoice_url;
+  try {
+    const url = new URL(checkoutUrl);
+    url.searchParams.set('locale', 'he');
+    checkoutUrl = url.toString();
+  } catch {}
+  return {
+    checkoutUrl,
+    mode: 'wallet_topup',
     processorRef: String(draft.id),
     draftOrderId: draft.id,
   };

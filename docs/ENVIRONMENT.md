@@ -28,7 +28,7 @@ authentication and OTP flows fail closed when `SESSION_SECRET` is missing.
 | Secret | Purpose | Placeholder example |
 |---|---|---|
 | `OPS_PIN` | Ops dashboard login PIN | `replace-me-strong-pin` |
-| `SESSION_SECRET` | Signs the ops session cookie + hashes OTPs | `replace-me-long-random-string` |
+| `SESSION_SECRET` | Signs/hashes ops, driver and business sessions, magic links, OTPs, and rate-limit identifiers | `replace-me-long-random-string` |
 | `DRIVER_ONE_TIME_CODE` | Single-use bootstrap code exchanged by the driver app; rotate after each successful exchange | `replace-with-6-to-12-digits` |
 | `MAPS_KEY` | Google Maps JS key, injected into the tracking page HTML | `AIza…` (set as a secret; do **not** put in `wrangler.toml`) |
 | `SHOPIFY_ADMIN_TOKEN` | Creates Shopify Draft Orders (custom app token) | `shpat_replaceme` |
@@ -52,7 +52,7 @@ These are safe to keep in the repo (non-secret configuration):
 | `OPS_EMAIL` | Eden's ops alert address |
 | `SHOPIFY_SHOP` | Shopify shop domain, e.g. `edenmish.myshopify.com` |
 | `SHOPIFY_API_VERSION` | Shopify Admin API version, e.g. `2026-04`. **Set this explicitly in production** — the code's hardcoded fallback (`2026-04` in `worker/src/integrations.js`) will eventually be deprecated by Shopify, and bumping a var beats redeploying code |
-| `ALLOWED_ORIGINS` | **Required in production.** Comma-separated CORS allowlist. Include every storefront/ops page origin that calls the Worker. Credentialed ops-cookie requests require an explicit origin and cannot use the `*` fallback. Local dev may add `http://127.0.0.1:PORT`. |
+| `ALLOWED_ORIGINS` | **Required in production.** Comma-separated CORS allowlist. Include every storefront/ops page origin that calls the Worker. Credentialed ops and business-account requests require an explicit origin and cannot use the `*` fallback. Local dev may add `http://127.0.0.1:PORT`. |
 | `AUTO_DRIVER_DISPATCH` | Set to `on` to reconcile the active driver's immutable route revisions from the canonical paid/in-progress order queue on each route poll |
 | `ROUTE_OPTIMIZATION_PROVIDER` | Optional explicit switch; set to `google` only after billing, quota, and credentials are approved |
 | `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID` | Google Cloud project ID/number with Route Optimization enabled; required only when the provider is `google` |
