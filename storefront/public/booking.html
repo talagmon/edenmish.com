@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="/assets/styles.css"/>
+<script src="/assets/analytics.js" defer></script>
 <style>
 gmp-place-autocomplete.eden-places{display:block;width:100%;color-scheme:dark}
 </style>
@@ -1164,9 +1165,20 @@ form.addEventListener("submit", async (e) => {
       if (data && data.error && data.error.startsWith("missing")) return showError("חסר שדה חובה: " + data.error.replace("missing ", ""));
       return showError("שגיאה בשליחת ההזמנה. נא לנסות שוב או לפנות אלינו.");
     }
+    if (window.edenAnalytics) {
+      window.edenAnalytics.track("booking_submitted", { service, size, review: Boolean(data.review) });
+    }
     // Exact-price orders continue directly to Shopify's secure checkout. Tracking is
     // intentionally unavailable until the signed paid webhook confirms the payment.
     if (data.payment_url) {
+      if (window.edenAnalytics) {
+        window.edenAnalytics.track("payment_started", {
+          service,
+          size,
+          currency: "ILS",
+          value: Number(data.price) || 0
+        });
+      }
       window.location.assign(data.payment_url);
       return;
     }
