@@ -49,6 +49,8 @@ jobs:
             echo "  wrangler d1 execute edenmish --remote --file=./migrations/011_cancellation_requests.sql"
             echo "  wrangler d1 execute edenmish --remote --file=./migrations/014_driver_api_v1.sql"
             echo "  wrangler d1 execute edenmish --remote --file=./migrations/015_driver_route_tasks.sql"
+            echo "  wrangler d1 execute edenmish --remote --file=./migrations/016_driver_route_integrity.sql"
+            echo "  wrangler d1 execute edenmish --remote --file=./migrations/017_driver_task_proofs.sql"
             echo ""
             echo "See worker/MIGRATIONS.md for verification queries."
             exit 1

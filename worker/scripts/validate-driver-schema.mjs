@@ -25,12 +25,18 @@ const READINESS_SQL = `SELECT
    (SELECT COUNT(*) FROM sqlite_master
       WHERE type = 'index' AND name IN (
         'idx_driver_location_shift', 'idx_driver_location_retention'
-      ))) AS migration_016_items;`;
+      ))) AS migration_016_items,
+  ((SELECT COUNT(*) FROM sqlite_master
+      WHERE type = 'table' AND name = 'driver_task_proofs') +
+   (SELECT COUNT(*) FROM sqlite_master
+      WHERE type = 'index' AND name = 'idx_driver_task_proofs_order'))
+    AS migration_017_items;`;
 
 const EXPECTED = Object.freeze({
   migration_014_items: 10,
   migration_015_columns: 4,
   migration_016_items: 4,
+  migration_017_items: 2,
 });
 
 export function validateDriverSchemaSnapshot(snapshot) {
@@ -88,7 +94,8 @@ function main() {
   const snapshot = parseWranglerResult(result.stdout);
   console.log(
     `Driver schema ready: migration 014 (${snapshot.migration_014_items}/10), `
-    + `015 (${snapshot.migration_015_columns}/4), 016 (${snapshot.migration_016_items}/4).`,
+    + `015 (${snapshot.migration_015_columns}/4), 016 (${snapshot.migration_016_items}/4), `
+    + `017 (${snapshot.migration_017_items}/2).`,
   );
 }
 

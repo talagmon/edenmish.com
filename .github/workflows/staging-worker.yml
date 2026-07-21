@@ -48,6 +48,12 @@ jobs:
       - name: Render isolated staging configuration
         working-directory: worker
         run: node scripts/render-staging-config.mjs
+      - name: Apply staging driver proof migration
+        working-directory: worker
+        run: >-
+          npx wrangler d1 execute edenmish-staging --remote --yes
+          --config wrangler.staging.generated.toml
+          --file=./migrations/017_driver_task_proofs.sql
       - name: Verify remote driver schema readiness
         working-directory: worker
         run: node scripts/validate-driver-schema.mjs --database edenmish-staging --config wrangler.staging.generated.toml
