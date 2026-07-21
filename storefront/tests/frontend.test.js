@@ -16,6 +16,44 @@ function assertContains(html, needle, label) {
   assert.ok(html.includes(needle), `${label || needle} missing from page`);
 }
 
+async function analyticsHarness(consent) {
+  const source = readFileSync(join(PUB, 'assets', 'analytics.js'), 'utf8');
+  const appended = [];
+  const window = {
+    localStorage: {
+      getItem() { return consent; },
+      setItem() {},
+    },
+    location: { pathname: '/booking' },
+  };
+  const document = {
+    head: { appendChild(node) { appended.push(node); return node; } },
+    body: { appendChild() {} },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    getElementById() { return null; },
+    createElement(tag) {
+      return {
+        tagName: tag.toUpperCase(),
+        async: false,
+        src: '',
+        setAttribute() {},
+        addEventListener() {},
+        remove() {},
+      };
+    },
+  };
+  runInNewContext(source, {
+    window,
+    document,
+    fetch: async () => ({ ok: true, json: async () => ({ gtmContainerId: 'GTM-TEST123' }) }),
+    URL,
+    Set,
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  return { window, appended };
+}
+
 function trackingOtpHarness(response = { verified: true }) {
   const html = readPage('track.html');
   const source = html.split('// ---- OTP ----')[1].split('// ---- init ----')[0];
@@ -202,21 +240,40 @@ describe('Frontend: consent-aware analytics', () => {
   test('Fails closed and loads vendor scripts only after an explicit opt-in', () => {
     assertContains(analytics, 'edenmish_analytics_consent_v1', 'versioned consent storage');
     assertContains(analytics, 'fetch("/analytics-config"', 'first-party analytics configuration');
-    assertContains(analytics, 'if (consent === "granted") initializeProviders()', 'stored opt-in gate');
+    assertContains(analytics, 'if (consent === "granted") initializeContainer()', 'stored opt-in gate');
     assertContains(analytics, 'else if (consent === "unknown") renderBanner()', 'unknown-consent banner gate');
-    assertContains(analytics, 'https://www.googletagmanager.com/gtag/js?id=', 'GA4 loader');
-    assertContains(analytics, 'https://connect.facebook.net/en_US/fbevents.js', 'Meta loader');
-    assertContains(analytics, 'analytics_storage: "denied"', 'Google consent default');
-    assertContains(analytics, 'granted ? "grant" : "revoke"', 'Meta consent updates');
+    assertContains(analytics, 'https://www.googletagmanager.com/gtm.js?id=', 'GTM loader');
+    assert.ok(!analytics.includes('https://connect.facebook.net/en_US/fbevents.js'), 'vendors must be configured inside GTM');
+    assertContains(analytics, 'updateGoogleConsent("default", "denied")', 'Google consent default');
+    assertContains(analytics, 'analytics_storage: granted ? "granted" : "denied"', 'Google consent state');
+    assertContains(analytics, 'event: "eden_consent_updated"', 'GTM consent update event');
     assertContains(analytics, 'רק חיוניות', 'Hebrew reject choice');
     assertContains(analytics, 'אישור מדידה', 'Hebrew accept choice');
   });
 
+  test('Queues namespaced GTM events only after stored opt-in', async () => {
+    const denied = await analyticsHarness('denied');
+    assert.equal(denied.appended.length, 0, 'GTM must remain unloaded after rejection');
+    assert.ok(!denied.window.dataLayer.some(item => item?.event), 'rejected visits must queue no events');
+
+    const granted = await analyticsHarness('granted');
+    assert.equal(granted.appended.length, 1, 'GTM must load exactly once after opt-in');
+    assert.equal(granted.appended[0].src, 'https://www.googletagmanager.com/gtm.js?id=GTM-TEST123');
+    assert.ok(granted.window.dataLayer.some(item => item?.event === 'gtm.js'), 'GTM bootstrap event missing');
+    assert.ok(granted.window.dataLayer.some(item => item?.event === 'eden_booking_started'), 'booking start event missing');
+
+    assert.equal(granted.window.edenAnalytics.track('whatsapp_clicked', { source: 'booking', email: 'blocked@example.com' }), true);
+    const contact = granted.window.dataLayer.at(-1);
+    assert.equal(contact.event, 'eden_whatsapp_clicked');
+    assert.equal(contact.eden_source, 'booking');
+    assert.ok(!('eden_email' in contact), 'non-allowlisted fields must be discarded');
+  });
+
   test('Uses environment-provided public IDs and excludes personal/order identifiers', () => {
-    assertContains(analyticsConfig, 'env.GA4_MEASUREMENT_ID', 'GA4 Pages variable');
-    assertContains(analyticsConfig, 'env.META_PIXEL_ID', 'Meta Pages variable');
-    assertContains(analyticsConfig, '/^G-[A-Z0-9]+$/', 'GA4 identifier validation');
-    assertContains(analyticsConfig, '/^\\d{5,20}$/', 'Meta identifier validation');
+    assertContains(analyticsConfig, 'env.GTM_CONTAINER_ID', 'GTM Pages variable');
+    assertContains(analyticsConfig, '/^GTM-[A-Z0-9]+$/', 'GTM identifier validation');
+    assert.ok(!analyticsConfig.includes('GA4_MEASUREMENT_ID'), 'GA4 ID belongs in GTM');
+    assert.ok(!analyticsConfig.includes('META_PIXEL_ID'), 'Meta ID belongs in GTM');
     for (const forbidden of ['order_id', 'tracking_token', 'email', 'phone', 'address']) {
       assert.ok(!analytics.includes(forbidden), `analytics boundary must not reference ${forbidden}`);
     }
@@ -232,12 +289,14 @@ describe('Frontend: consent-aware analytics', () => {
     assertContains(tracking, 'track("tracking_opened"', 'verified tracking event');
     assertContains(cancellation, "track('cancellation_submitted'", 'cancellation event');
     assertContains(analytics, 'track("whatsapp_clicked"', 'WhatsApp click event');
+    assertContains(analytics, 'clean.event = "eden_" + name', 'namespaced dataLayer event');
+    assertContains(analytics, 'eden_page_path', 'namespaced dataLayer field');
     assert.ok(!analytics.includes('"purchase"'), 'browser analytics must not infer paid orders');
   });
 
   test('Publishes disclosure, preference controls, and the required CSP allowlist', () => {
     const privacy = readPage('privacy.html');
-    assertContains(privacy, 'Google Analytics ו‑Meta Pixel אינם נטענים לפני הסכמה מפורשת', 'opt-in disclosure');
+    assertContains(privacy, 'Google Tag Manager וכלי המדידה הלא חיוניים', 'opt-in disclosure');
     assertContains(privacy, 'data-analytics-settings', 'preference control');
     assertContains(headers, 'https://www.googletagmanager.com', 'Google script CSP');
     assertContains(headers, 'https://connect.facebook.net', 'Meta script CSP');
