@@ -346,6 +346,11 @@ for wallet payment. It follows the driver-platform migrations `014`–`017`.
 
 **Command:**
 ```bash
+# Staging (render the config first; run from worker/):
+npx wrangler d1 execute edenmish-staging --remote --yes \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/018_business_wallet.sql
+
 # Local verification:
 wrangler d1 execute edenmish --local --file=./migrations/018_business_wallet.sql
 # Production (after merge, before Worker deploy):
