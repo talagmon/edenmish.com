@@ -93,7 +93,7 @@ Database name: `edenmish`. Binding: `DB`.
 ### Schema and migrations
 
 `schema.sql` is the **fresh-DB source of truth** — it defines every current table.
-The numbered migrations (`003`–`016`) add tables/columns that were introduced after the
+The numbered migrations (`003`–`017`) add tables/columns that were introduced after the
 initial schema. Tables are idempotent (`CREATE TABLE IF NOT EXISTS`); `ALTER TABLE …
 ADD COLUMN` migrations (`006`–`010`, `015`, and `016`) must run only on DBs that predate their columns.
 
@@ -177,6 +177,7 @@ wrangler d1 execute edenmish --remote --file=./migrations/011_cancellation_reque
 wrangler d1 execute edenmish --remote --file=./migrations/014_driver_api_v1.sql
 wrangler d1 execute edenmish --remote --file=./migrations/015_driver_route_tasks.sql
 wrangler d1 execute edenmish --remote --file=./migrations/016_driver_route_integrity.sql
+wrangler d1 execute edenmish --remote --file=./migrations/017_driver_task_proofs.sql
 ```
 
 > Run only migrations that have not already been applied. Several `ALTER TABLE`
