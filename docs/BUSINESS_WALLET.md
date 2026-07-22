@@ -56,8 +56,11 @@ Implemented and deployed through the guarded staging and production workflow.
 - Reservation writes use one D1 batch: reservation row, conditional balance update,
   and ledger entry succeed or roll back together.
 - Capture/release is idempotent and changes only a `reserved` reservation.
-- Credit lots expire 60 days after purchase (the purchased month plus one rollover
-  month). Captures consume the oldest-expiring lot first.
+- Credit lots expire at the plan-specific date recorded at purchase (14, 30, or 60
+  days). Captures consume the oldest-expiring lot first.
+- Before a wallet balance is displayed or a new delivery reserves credit, the Worker
+  posts unused expired credit to the immutable ledger. Credit already reserved for an
+  existing delivery remains protected until that reservation is captured or released.
 - A refunded wallet top-up freezes the account for manual reconciliation; card
   refunds and wallet reversals are intentionally separate operations.
 
@@ -88,7 +91,7 @@ business UI before the Worker migration and Worker release are complete.
 
 - Optional WebAuthn/passkeys for repeat users.
 - Staff invitations and roles beyond the single owner.
-- Automated expiry posting and advance expiry notifications.
+- Advance credit-expiry notifications.
 - Exact-shortfall top-up that resumes a saved draft booking.
 - Ops UI for wallet adjustments, account suspension review, and reconciliation.
 - True recurring billing or automatic top-up. MVP top-ups are customer-initiated.

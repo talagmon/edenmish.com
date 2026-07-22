@@ -1,5 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
 
 import {
   applyBusinessPlanPricing,
@@ -11,10 +12,12 @@ import {
   createWalletTopup,
   creditWalletTopup,
   estimateBusinessDeliveries,
+  expireWalletCredit,
   getBusinessSession,
   hydrateBusinessProfileFromPayment,
   normalizeBusinessEmail,
   publicBusinessPlans,
+  reserveWalletCredit,
   shouldHydrateBusinessProfile,
   updateBusinessProfile,
 } from '../src/business.js';
@@ -37,6 +40,80 @@ const publicQuote = (overrides = {}) => ({
   },
   ...overrides,
 });
+
+function walletTestDB() {
+  const sqlite = new DatabaseSync(':memory:');
+  sqlite.exec(`
+    CREATE TABLE business_wallets (
+      account_id INTEGER PRIMARY KEY,
+      available_agorot INTEGER NOT NULL,
+      reserved_agorot INTEGER NOT NULL,
+      version INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE wallet_credit_lots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER NOT NULL,
+      topup_id TEXT NOT NULL UNIQUE,
+      original_agorot INTEGER NOT NULL,
+      remaining_agorot INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE wallet_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER NOT NULL,
+      entry_type TEXT NOT NULL,
+      available_delta_agorot INTEGER NOT NULL DEFAULT 0,
+      reserved_delta_agorot INTEGER NOT NULL DEFAULT 0,
+      topup_id TEXT,
+      reservation_id TEXT,
+      order_id INTEGER,
+      idempotency_key TEXT NOT NULL UNIQUE,
+      note TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE wallet_reservations (
+      id TEXT PRIMARY KEY,
+      account_id INTEGER NOT NULL,
+      order_id INTEGER UNIQUE,
+      idempotency_key TEXT NOT NULL,
+      amount_agorot INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      captured_at INTEGER,
+      released_at INTEGER,
+      UNIQUE(account_id, idempotency_key)
+    );
+  `);
+  const wrap = (statement) => {
+    let values = [];
+    return {
+      bind(...bound) { values = bound; return this; },
+      run() {
+        const result = statement.run(...values);
+        return { meta: { changes: Number(result.changes) } };
+      },
+      first() { return statement.get(...values) || null; },
+      all() { return { results: statement.all(...values) }; },
+    };
+  };
+  return {
+    sqlite,
+    prepare(sql) { return wrap(sqlite.prepare(sql)); },
+    batch(statements) {
+      sqlite.exec('BEGIN');
+      try {
+        const results = statements.map((statement) => statement.run());
+        sqlite.exec('COMMIT');
+        return results;
+      } catch (error) {
+        sqlite.exec('ROLLBACK');
+        throw error;
+      }
+    },
+  };
+}
 
 describe('business plan catalog and pricing', () => {
   test('publishes the approved wallet commitments without exposing agorot internals', () => {
@@ -219,6 +296,96 @@ describe('business plan catalog and pricing', () => {
     await cancelWalletTopup(DB, 'trial-topup');
     assert.match(statement.sql, /status = 'cancelled'.*status = 'created'/);
     assert.deepEqual(statement.values, ['trial-topup']);
+  });
+});
+
+describe('business wallet credit expiry', () => {
+  test('posts unused expired credit once and leaves active credit available', async () => {
+    const DB = walletTestDB();
+    const now = 1_000_000;
+    DB.sqlite.prepare('INSERT INTO business_wallets VALUES (?, ?, ?, ?, ?)').run(7, 15_000, 0, 0, now - 1);
+    DB.sqlite.prepare(`INSERT INTO wallet_credit_lots
+      (account_id, topup_id, original_agorot, remaining_agorot, expires_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)`).run(7, 'expired', 10_000, 10_000, now, 1);
+    DB.sqlite.prepare(`INSERT INTO wallet_credit_lots
+      (account_id, topup_id, original_agorot, remaining_agorot, expires_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)`).run(7, 'active', 5_000, 5_000, now + 10_000, 2);
+
+    const first = await expireWalletCredit(DB, 7, now);
+    const second = await expireWalletCredit(DB, 7, now + 1);
+    const wallet = DB.sqlite.prepare('SELECT * FROM business_wallets WHERE account_id = 7').get();
+    const lots = DB.sqlite.prepare('SELECT topup_id, remaining_agorot FROM wallet_credit_lots ORDER BY id').all().map((lot) => ({ ...lot }));
+    const entries = DB.sqlite.prepare("SELECT entry_type, available_delta_agorot FROM wallet_entries WHERE entry_type = 'expiry'").all().map((entry) => ({ ...entry }));
+
+    assert.deepEqual(first, { expired_agorot: 10_000 });
+    assert.deepEqual(second, { expired_agorot: 0 });
+    assert.equal(wallet.available_agorot, 5_000);
+    assert.equal(wallet.reserved_agorot, 0);
+    assert.deepEqual(lots, [
+      { topup_id: 'expired', remaining_agorot: 0 },
+      { topup_id: 'active', remaining_agorot: 5_000 },
+    ]);
+    assert.deepEqual(entries, [{ entry_type: 'expiry', available_delta_agorot: -10_000 }]);
+  });
+
+  test('protects expired credit already reserved for an existing delivery', async () => {
+    const DB = walletTestDB();
+    const now = 2_000_000;
+    DB.sqlite.prepare('INSERT INTO business_wallets VALUES (?, ?, ?, ?, ?)').run(8, 10_000, 5_000, 0, now - 1);
+    DB.sqlite.prepare(`INSERT INTO wallet_credit_lots
+      (account_id, topup_id, original_agorot, remaining_agorot, expires_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)`).run(8, 'expired', 10_000, 10_000, now, 1);
+    DB.sqlite.prepare(`INSERT INTO wallet_credit_lots
+      (account_id, topup_id, original_agorot, remaining_agorot, expires_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)`).run(8, 'active', 5_000, 5_000, now + 10_000, 2);
+
+    const result = await expireWalletCredit(DB, 8, now);
+    const wallet = DB.sqlite.prepare('SELECT * FROM business_wallets WHERE account_id = 8').get();
+    const lots = DB.sqlite.prepare('SELECT topup_id, remaining_agorot FROM wallet_credit_lots ORDER BY id').all().map((lot) => ({ ...lot }));
+
+    assert.deepEqual(result, { expired_agorot: 5_000 });
+    assert.equal(wallet.available_agorot, 5_000);
+    assert.equal(wallet.reserved_agorot, 5_000);
+    assert.deepEqual(lots, [
+      { topup_id: 'expired', remaining_agorot: 5_000 },
+      { topup_id: 'active', remaining_agorot: 5_000 },
+    ]);
+  });
+
+  test('expires stale credit before deciding whether a new reservation can be funded', async () => {
+    const DB = walletTestDB();
+    const now = Date.now();
+    DB.sqlite.prepare('INSERT INTO business_wallets VALUES (?, ?, ?, ?, ?)').run(9, 10_000, 0, 0, now - 1);
+    DB.sqlite.prepare(`INSERT INTO wallet_credit_lots
+      (account_id, topup_id, original_agorot, remaining_agorot, expires_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)`).run(9, 'expired', 6_000, 6_000, now - 1, 1);
+    DB.sqlite.prepare(`INSERT INTO wallet_credit_lots
+      (account_id, topup_id, original_agorot, remaining_agorot, expires_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)`).run(9, 'active', 4_000, 4_000, now + 10_000, 2);
+
+    const result = await reserveWalletCredit(DB, 9, 5_000, 'booking-1');
+
+    assert.equal(result.reserved, false);
+    assert.equal(result.available_agorot, 4_000);
+    assert.equal(result.shortfall_agorot, 1_000);
+    assert.equal(DB.sqlite.prepare('SELECT COUNT(*) AS count FROM wallet_reservations').get().count, 0);
+  });
+
+  test('fails closed instead of spending when stored wallet totals are inconsistent', async () => {
+    const DB = walletTestDB();
+    const now = 3_000_000;
+    DB.sqlite.prepare('INSERT INTO business_wallets VALUES (?, ?, ?, ?, ?)').run(10, 4_000, 5_000, 0, now - 1);
+    DB.sqlite.prepare(`INSERT INTO wallet_credit_lots
+      (account_id, topup_id, original_agorot, remaining_agorot, expires_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)`).run(10, 'expired', 10_000, 10_000, now, 1);
+
+    await assert.rejects(
+      () => expireWalletCredit(DB, 10, now),
+      /wallet_expiry_invariant_failed/,
+    );
+    assert.equal(DB.sqlite.prepare('SELECT available_agorot FROM business_wallets WHERE account_id = 10').get().available_agorot, 4_000);
+    assert.equal(DB.sqlite.prepare('SELECT remaining_agorot FROM wallet_credit_lots WHERE account_id = 10').get().remaining_agorot, 10_000);
+    assert.equal(DB.sqlite.prepare('SELECT COUNT(*) AS count FROM wallet_entries').get().count, 0);
   });
 });
 

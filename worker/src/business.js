@@ -384,6 +384,8 @@ export async function hydrateBusinessProfileFromPayment(DB, accountId, payment) 
 }
 
 export async function getBusinessSnapshot(DB, session) {
+  const now = Date.now();
+  await expireWalletCredit(DB, session.account_id, now);
   const [wallet, orders, entries, topups, lots] = await Promise.all([
     DB.prepare('SELECT currency, available_agorot, reserved_agorot, updated_at FROM business_wallets WHERE account_id = ?').bind(session.account_id).first(),
     DB.prepare(`SELECT id, token, status, pickup, dropoff, service, price, payment_status, created_at
@@ -393,7 +395,8 @@ export async function getBusinessSnapshot(DB, session) {
     DB.prepare(`SELECT id, plan_id, amount_agorot, status, checkout_url, created_at, paid_at
                 FROM wallet_topups WHERE account_id = ? ORDER BY created_at DESC LIMIT 10`).bind(session.account_id).all(),
     DB.prepare(`SELECT remaining_agorot, expires_at FROM wallet_credit_lots
-                WHERE account_id = ? AND remaining_agorot > 0 ORDER BY expires_at ASC LIMIT 1`).bind(session.account_id).first(),
+                WHERE account_id = ? AND remaining_agorot > 0 AND expires_at > ?
+                ORDER BY expires_at ASC LIMIT 1`).bind(session.account_id, now).first(),
   ]);
   return {
     user: { email: session.email, name: session.name, phone: session.phone, role: session.role },
@@ -503,6 +506,79 @@ export function shouldHydrateBusinessProfile(creditResult) {
   return Boolean(creditResult?.paymentValidated && !creditResult?.unchanged);
 }
 
+export async function expireWalletCredit(DB, accountId, now = Date.now()) {
+  const state = await DB.prepare(`SELECT w.available_agorot, w.reserved_agorot,
+      COALESCE(SUM(l.remaining_agorot), 0) AS expired_agorot
+    FROM business_wallets w
+    LEFT JOIN wallet_credit_lots l
+      ON l.account_id = w.account_id AND l.expires_at <= ? AND l.remaining_agorot > 0
+    WHERE w.account_id = ?
+    GROUP BY w.account_id, w.available_agorot, w.reserved_agorot`)
+    .bind(now, accountId).first();
+  const expiredAgorot = Number(state?.expired_agorot || 0);
+  const amountToExpire = Math.max(0, expiredAgorot - Number(state?.reserved_agorot || 0));
+  if (amountToExpire === 0) return { expired_agorot: 0 };
+  if (Number(state?.available_agorot || 0) < amountToExpire) {
+    throw new Error('wallet_expiry_invariant_failed');
+  }
+
+  const runKey = `expiry:${accountId}:${now}:${randomToken(8)}`;
+  const note = 'Unused wallet credit expired';
+  await DB.batch([
+    DB.prepare(`WITH expired AS (
+        SELECT COALESCE(SUM(remaining_agorot), 0) AS total_agorot
+        FROM wallet_credit_lots
+        WHERE account_id = ? AND expires_at <= ? AND remaining_agorot > 0
+      ), amount AS (
+        SELECT MAX(0, expired.total_agorot - w.reserved_agorot) AS value
+        FROM business_wallets w CROSS JOIN expired
+        WHERE w.account_id = ?
+      )
+      INSERT INTO wallet_entries
+        (account_id, entry_type, available_delta_agorot, reserved_delta_agorot, idempotency_key, note, created_at)
+      SELECT ?, 'expiry', -amount.value, 0, ?, ?, ?
+      FROM amount JOIN business_wallets w ON w.account_id = ?
+      WHERE amount.value > 0 AND w.available_agorot >= amount.value`)
+      .bind(accountId, now, accountId, accountId, runKey, note, now, accountId),
+    DB.prepare(`UPDATE business_wallets
+      SET available_agorot = available_agorot + (
+            SELECT available_delta_agorot FROM wallet_entries WHERE idempotency_key = ?
+          ),
+          version = version + 1,
+          updated_at = ?
+      WHERE account_id = ?
+        AND EXISTS (SELECT 1 FROM wallet_entries WHERE idempotency_key = ?)
+        AND available_agorot >= -(
+          SELECT available_delta_agorot FROM wallet_entries WHERE idempotency_key = ?
+        )`).bind(runKey, now, accountId, runKey, runKey),
+    DB.prepare(`WITH ordered AS (
+        SELECT l.id, l.remaining_agorot, w.reserved_agorot,
+          COALESCE(SUM(l.remaining_agorot) OVER (
+            ORDER BY l.expires_at, l.id
+            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+          ), 0) AS before_agorot
+        FROM wallet_credit_lots l
+        JOIN business_wallets w ON w.account_id = l.account_id
+        WHERE l.account_id = ? AND l.expires_at <= ? AND l.remaining_agorot > 0
+      ), protected AS (
+        SELECT id,
+          MIN(remaining_agorot, MAX(0, reserved_agorot - before_agorot)) AS kept_agorot
+        FROM ordered
+      )
+      UPDATE wallet_credit_lots
+      SET remaining_agorot = (
+        SELECT kept_agorot FROM protected WHERE protected.id = wallet_credit_lots.id
+      )
+      WHERE id IN (SELECT id FROM protected)
+        AND EXISTS (SELECT 1 FROM wallet_entries WHERE idempotency_key = ?)`)
+      .bind(accountId, now, runKey),
+  ]);
+  const entry = await DB.prepare(
+    'SELECT available_delta_agorot FROM wallet_entries WHERE idempotency_key = ?'
+  ).bind(runKey).first();
+  return { expired_agorot: Math.max(0, -Number(entry?.available_delta_agorot || 0)) };
+}
+
 export async function reserveWalletCredit(DB, accountId, amountAgorot, idempotencyKey) {
   if (!Number.isSafeInteger(amountAgorot) || amountAgorot <= 0) throw new Error('invalid_wallet_amount');
   const safeKey = String(idempotencyKey || '').trim().slice(0, 120);
@@ -512,6 +588,7 @@ export async function reserveWalletCredit(DB, accountId, amountAgorot, idempoten
 
   const id = randomToken(22);
   const now = Date.now();
+  await expireWalletCredit(DB, accountId, now);
   try {
     const results = await DB.batch([
       DB.prepare(`INSERT INTO wallet_reservations (id, account_id, idempotency_key, amount_agorot, status, created_at)
