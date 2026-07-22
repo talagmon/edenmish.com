@@ -35,7 +35,7 @@ const trackingIsAvailable = (order) => order && (
   order.payment_status === 'paid_manual' ||
   order.payment_status === 'wallet_reserved' ||
   order.payment_status === 'wallet_paid' ||
-  ['paid', 'to_pickup', 'picked_up', 'to_dropoff', 'delivered'].includes(order.status)
+  ['paid', 'to_pickup', 'picked_up', 'to_dropoff', 'delivered', 'cancelled'].includes(order.status)
 );
 const canTransition = (from, to) => {
   if (!getStatusMeta(to)) return false;
