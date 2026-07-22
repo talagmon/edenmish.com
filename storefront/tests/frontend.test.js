@@ -138,7 +138,7 @@ describe('Frontend: Shopify post-payment exit', () => {
     const html = readPage('thank-you.html');
     assertContains(html, 'התשלום התקבל בהצלחה', 'payment confirmation');
     assertContains(html, 'תודה שבחרתם ב-EdenMish', 'thank-you message');
-    assertContains(html, '/assets/edenmish-thank-you-bike.webp', 'thank-you artwork');
+    assertContains(html, 'src="./assets/edenmish-thank-you-bike.webp"', 'local- and web-safe thank-you artwork URL');
     assertContains(html, 'href="https://edenmish.com/"', 'main-site CTA');
     assertContains(html, 'direction: ltr;', 'desktop image-left composition');
     assertContains(html, '.message { min-height: 610px; direction: rtl; }', 'RTL message direction');
