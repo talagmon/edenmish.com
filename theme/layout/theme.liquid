@@ -10,13 +10,23 @@
     {%- comment -%}
       pay.edenmish.com is the trusted Shopify checkout shell, not a public
       storefront. Checkout, invoice, Thank You and Order Status routes are
-      rendered outside this theme; any route that reaches this layout is a
-      storefront visit and should continue to the branded EdenMish thank-you
-      page. That page has a single next destination: the main website.
+      rendered outside this theme. An explicit payment-failed path is routed
+      to EdenMish's retry page; every other theme-rendered visit continues to
+      the branded thank-you exit. The browser-side path check also works when
+      Shopify renders its 404 template for the explicit failure route.
     {%- endcomment -%}
     {%- if request.host == 'pay.edenmish.com' -%}
-      <meta http-equiv="refresh" content="0;url=https://edenmish.com/thank-you.html">
-      <script>window.location.replace('https://edenmish.com/thank-you.html');</script>
+      <script>
+        (function () {
+          var path = window.location.pathname.replace(/\/+$/, '') || '/';
+          var failurePaths = ['/payment-failed', '/payment-error', '/pages/payment-failed'];
+          var destination = failurePaths.indexOf(path) !== -1
+            ? 'https://edenmish.com/payment-failed.html' + window.location.search
+            : 'https://edenmish.com/thank-you.html';
+          window.location.replace(destination);
+        })();
+      </script>
+      <noscript><meta http-equiv="refresh" content="0;url=https://edenmish.com/"></noscript>
     {%- endif -%}
 
     {%- if settings.favicon != blank -%}

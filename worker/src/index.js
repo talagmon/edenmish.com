@@ -7,7 +7,7 @@ import { businessAccountHtml } from './business-page.js';
 import { corsFor, maskEmail, publicOrderSummary, clientIp, anonKey } from './security.js';
 import { notifyEmail, notifyWhatsApp } from './notify.js';
 import { normalizeIlPhone, scheduleError, validIsraeliId } from './validate.js';
-import { validateCoupon, recordRedemption, listCoupons, createCoupon, updateCoupon, deleteCoupon } from './coupons.js';
+import { validateCoupon, recordRedemption, recordBusinessRedemption, releaseBusinessRedemption, listCoupons, createCoupon, updateCoupon, deleteCoupon } from './coupons.js';
 import { getStatusMeta, getNextStatuses, isTerminalStatus } from './status.js';
 import { shopifyWebhookRegistrar } from './shopify-webhooks.js';
 import { handleDriverApi } from './driver-api.js';
@@ -211,6 +211,7 @@ const COUPON_MESSAGES = {
   expired: 'פג תוקף הקופון',
   usage_limit_reached: 'הקופון מוצה',
   already_used: 'הקופון כבר מומש',
+  not_applicable: 'הקופון אינו תקף לרכישה זו',
 };
 const couponMessage = (reason) => COUPON_MESSAGES[reason] || COUPON_MESSAGES.not_found;
 // Stable customer identifier for once-per-customer coupon enforcement.
@@ -348,9 +349,42 @@ export default {
       const session = await getBusinessSession(req, env);
       if (!session) return json({ error: 'unauthorized' }, 401);
       let b; try { b = await readJson(req); } catch (e) { return json({ error: e.message }, e.status || 400); }
-      const topup = await createWalletTopup(env.DB, session, b.plan_id);
+      const selectedPlan = publicBusinessPlans().find((plan) => plan.id === b.plan_id);
+      if (!selectedPlan) return json({ error: 'invalid_plan' }, 400);
+      let coupon = null;
+      if (b.coupon_code) {
+        const v = await validateCoupon(env.DB, b.coupon_code, selectedPlan.amount, session.email, { scope: 'business_plan', planId: selectedPlan.id });
+        if (!v.valid) return json({ valid: false, error: 'invalid_coupon', reason: v.reason, message: couponMessage(v.reason) }, 400);
+        coupon = v;
+      }
+      const topup = await createWalletTopup(env.DB, session, b.plan_id, coupon);
       if (!topup) return json({ error: 'invalid_plan' }, 400);
       if (topup.error) return json({ error: topup.error }, topup.error === 'trial_already_used' ? 409 : 503);
+      let redemptionRecorded = false;
+      if (coupon) {
+        try {
+          const redemption = await recordBusinessRedemption(env.DB, {
+            topupId: topup.id,
+            code: coupon.code,
+            customerKey: session.email,
+            priceBefore: coupon.subtotal,
+            discountAmount: coupon.discountAmount,
+            priceAfter: coupon.price,
+            usageLimit: coupon.usageLimit,
+            oncePerCustomer: coupon.appliesOncePerCustomer,
+          });
+          if (!redemption.recorded) {
+            await cancelWalletTopup(env.DB, topup.id);
+            const reason = coupon.usageLimit != null ? 'usage_limit_reached' : 'already_used';
+            return json({ valid: false, error: 'invalid_coupon', reason, message: couponMessage(reason) }, 400);
+          }
+          redemptionRecorded = true;
+        } catch (error) {
+          await cancelWalletTopup(env.DB, topup.id).catch(() => {});
+          console.error('business_coupon_redemption_failed', error && error.message || String(error));
+          return json({ error: 'coupon_unavailable' }, 503);
+        }
+      }
       try {
         const charge = await createWalletCharge(env, {
           id: topup.id,
@@ -358,11 +392,26 @@ export default {
           plan_name_he: topup.plan.name_he,
           email: topup.email,
           company_name: topup.company_name,
+          subtotal: topup.subtotal,
+          credit_amount: topup.credit_amount,
+          discount_code: topup.discount_code,
+          discount_amount: topup.discount_amount,
+          discount_title: topup.discount_title,
         }, topup.amount);
         if (!charge || !charge.checkoutUrl) throw new Error('checkout_unavailable');
         await markWalletTopupCheckout(env.DB, topup.id, charge);
-        return json({ ok: true, topup_id: topup.id, checkout_url: charge.checkoutUrl });
+        return json({
+          ok: true,
+          topup_id: topup.id,
+          checkout_url: charge.checkoutUrl,
+          subtotal_price: topup.subtotal,
+          discount_code: topup.discount_code,
+          discount_amount: topup.discount_amount,
+          price: topup.amount,
+          credit_amount: topup.credit_amount,
+        });
       } catch (error) {
+        if (redemptionRecorded) await releaseBusinessRedemption(env.DB, topup.id).catch(() => {});
         await cancelWalletTopup(env.DB, topup.id).catch(() => {});
         console.error('business_topup_checkout_failed', error && error.message || String(error));
         return json({ error: 'checkout_unavailable' }, 503);

@@ -7,6 +7,53 @@
 
 const enc = new TextEncoder();
 
+// Technical Shopify variants used only as the payment shell. Their catalog
+// images make the selected delivery level / business plan visible in checkout;
+// priceOverride keeps Worker pricing authoritative.
+const DELIVERY_VARIANT_IDS = Object.freeze({
+  eco: 'gid://shopify/ProductVariant/52017093312829',
+  standard: 'gid://shopify/ProductVariant/52017093345597',
+  flash: 'gid://shopify/ProductVariant/52017093378365',
+});
+
+const BUSINESS_PLAN_VARIANT_IDS = Object.freeze({
+  trial: 'gid://shopify/ProductVariant/52017114972477',
+  wallet: 'gid://shopify/ProductVariant/52017115005245',
+  silver: 'gid://shopify/ProductVariant/52017115038013',
+  gold: 'gid://shopify/ProductVariant/52017115070781',
+  platinum: 'gid://shopify/ProductVariant/52017115103549',
+});
+
+const DRAFT_ORDER_CREATE = `mutation draftOrderCreate($input: DraftOrderInput!) {
+  draftOrderCreate(input: $input) {
+    draftOrder { id legacyResourceId invoiceUrl }
+    userErrors { field message }
+  }
+}`;
+
+async function createShopifyDraftOrder(env, input) {
+  const apiVersion = env.SHOPIFY_API_VERSION || '2026-04';
+  const url = `https://${env.SHOPIFY_SHOP}/admin/api/${apiVersion}/graphql.json`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'X-Shopify-Access-Token': env.SHOPIFY_ADMIN_TOKEN,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ query: DRAFT_ORDER_CREATE, variables: { input } }),
+  }).catch(() => null);
+  if (!res || !res.ok) return null;
+  const data = await res.json().catch(() => ({}));
+  const payload = data && data.data && data.data.draftOrderCreate;
+  if (!payload || (payload.userErrors && payload.userErrors.length)) return null;
+  const draft = payload.draftOrder;
+  if (!draft || !draft.invoiceUrl) return null;
+  return {
+    id: draft.legacyResourceId || draft.id,
+    invoice_url: draft.invoiceUrl,
+  };
+}
+
 // ---- Shopify Admin API: create a Draft Order at the given price ----
 // The customer pays on the returned invoice_url via Shopify checkout (PayPlus app).
 // `priceNis` is the FINAL amount. When a coupon was applied, the order carries
@@ -16,8 +63,6 @@ const enc = new TextEncoder();
 // Requires: env.SHOPIFY_SHOP, env.SHOPIFY_ADMIN_TOKEN.
 export async function createDraftOrder(env, order, priceNis) {
   if (!env.SHOPIFY_SHOP || !env.SHOPIFY_ADMIN_TOKEN) return null;
-  const apiVersion = env.SHOPIFY_API_VERSION || '2026-04';
-  const url = `https://${env.SHOPIFY_SHOP}/admin/api/${apiVersion}/draft_orders.json`;
 
   const SERVICE_HE = {
     eco: 'חסכוני (מסירה עד סוף היום)',
@@ -25,7 +70,8 @@ export async function createDraftOrder(env, order, priceNis) {
     flash: 'מהיר (מסירה בתוך 90 דקות)',
   };
   const SIZE_HE = { small: 'קטן', medium: 'בינוני' };
-  const pkgTitle = 'שליחות — ' + (SERVICE_HE[order.service] || 'שליחות') + (order.size === 'medium' ? ' · עד גודל קופסת נעלים' : '');
+  const variantId = DELIVERY_VARIANT_IDS[order.service];
+  if (!variantId) return null;
 
   const discountAmount = Math.max(0, Math.round(Number(order.discount_amount) || 0));
   const hasDiscount = !!(order.discount_code && discountAmount > 0);
@@ -42,100 +88,85 @@ export async function createDraftOrder(env, order, priceNis) {
   if (order.when_text) properties.push({ name: 'מועד', value: order.when_text });
   if (order.notes) properties.push({ name: 'הערות', value: order.notes });
 
-  const body = {
-    draft_order: {
-      line_items: [{
-        title: pkgTitle,
-        price: lineItemPrice.toFixed(2),
-        quantity: 1,
-        requires_shipping: false,
-        taxable: false,
-        properties,
-      }],
-      tags: 'edenmish-delivery',
-      note: `EdenMish token: ${order.token}`,
-      metafields: [{
-        namespace: 'edenmish',
-        key: 'tracking_token',
-        value: order.token,
-        type: 'single_line_text_field',
-      }],
-    },
+  const currencyCode = env.SHOPIFY_CURRENCY || 'ILS';
+  const input = {
+    lineItems: [{
+      variantId,
+      quantity: 1,
+      priceOverride: { amount: lineItemPrice.toFixed(2), currencyCode },
+      customAttributes: properties.map(({ name, value }) => ({ key: name, value: String(value) })),
+    }],
+    presentmentCurrencyCode: currencyCode,
+    tags: ['edenmish-delivery'],
+    note: `EdenMish token: ${order.token}`,
+    metafields: [{
+      namespace: 'edenmish',
+      key: 'tracking_token',
+      value: order.token,
+      type: 'single_line_text_field',
+    }],
   };
 
   if (hasDiscount) {
-    body.draft_order.applied_discount = {
+    input.appliedDiscount = {
       title: order.discount_code,
       description: 'EdenMish coupon',
-      value_type: 'fixed_amount',
-      value: discountAmount.toFixed(2),
-      amount: discountAmount.toFixed(2),
+      valueType: 'FIXED_AMOUNT',
+      value: discountAmount,
+      amountWithCurrency: { amount: discountAmount.toFixed(2), currencyCode },
     };
   }
 
-  if (order.name || order.phone || (order.email && order.email_verified)) {
-    body.draft_order.customer = {};
-    if (order.name) body.draft_order.customer.first_name = order.name;
-    if (order.phone) body.draft_order.customer.phone = order.phone;
-    if (order.email && order.email_verified) body.draft_order.customer.email = order.email;
-  }
+  if (order.phone) input.phone = order.phone;
+  if (order.email && order.email_verified) input.email = order.email;
+  if (order.name) input.customAttributes = [{ key: 'שם המזמין', value: String(order.name) }];
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'X-Shopify-Access-Token': env.SHOPIFY_ADMIN_TOKEN,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  }).catch(() => null);
-  if (!res || !res.ok) return null;
-  const data = await res.json().catch(() => ({}));
-  const draft = data && data.draft_order;
-  if (!draft || !draft.invoice_url) return null;
-  return draft; // { id, invoice_url, ... }
+  return createShopifyDraftOrder(env, input);
 }
 
 // Business wallet top-up. This intentionally has its own Draft Order shape so a
 // prepaid credit purchase can never be mistaken for a delivery order.
 export async function createWalletDraftOrder(env, topup, priceNis) {
   if (!env.SHOPIFY_SHOP || !env.SHOPIFY_ADMIN_TOKEN) return null;
-  const apiVersion = env.SHOPIFY_API_VERSION || '2026-04';
-  const url = `https://${env.SHOPIFY_SHOP}/admin/api/${apiVersion}/draft_orders.json`;
   const planName = topup.plan_name_he || topup.plan_id || 'עסקי';
-  const body = {
-    draft_order: {
-      line_items: [{
-        title: `יתרת משלוחים לעסקים — מסלול ${planName}`,
-        price: Number(priceNis).toFixed(2),
-        quantity: 1,
-        requires_shipping: false,
-        taxable: false,
-        properties: [
-          { name: '_edenmish_wallet_topup', value: topup.id },
-          { name: 'מסלול', value: planName },
-          { name: 'יתרה', value: `₪${Number(priceNis).toFixed(0)}` },
-        ],
-      }],
-      tags: 'edenmish-wallet-topup',
-      note: `EdenMish wallet topup: ${topup.id}`,
-      metafields: [{
-        namespace: 'edenmish',
-        key: 'wallet_topup_token',
-        value: topup.id,
-        type: 'single_line_text_field',
-      }],
-      customer: topup.email ? { email: topup.email } : undefined,
-    },
+  const variantId = BUSINESS_PLAN_VARIANT_IDS[topup.plan_id];
+  if (!variantId) return null;
+  const currencyCode = env.SHOPIFY_CURRENCY || 'ILS';
+  const discountAmount = Math.max(0, Number(topup.discount_amount) || 0);
+  const hasDiscount = !!(topup.discount_code && discountAmount > 0);
+  const lineItemPrice = hasDiscount ? Number(topup.subtotal) || (Number(priceNis) + discountAmount) : Number(priceNis);
+  const input = {
+    lineItems: [{
+      variantId,
+      quantity: 1,
+      priceOverride: { amount: lineItemPrice.toFixed(2), currencyCode },
+      customAttributes: [
+        { key: '_edenmish_wallet_topup', value: String(topup.id) },
+        { key: 'מסלול', value: String(planName) },
+        { key: 'יתרה', value: `₪${Number(topup.credit_amount ?? topup.subtotal ?? priceNis).toFixed(0)}` },
+      ],
+    }],
+    presentmentCurrencyCode: currencyCode,
+    tags: ['edenmish-wallet-topup'],
+    note: `EdenMish wallet topup: ${topup.id}`,
+    metafields: [{
+      namespace: 'edenmish',
+      key: 'wallet_topup_token',
+      value: topup.id,
+      type: 'single_line_text_field',
+    }],
   };
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'X-Shopify-Access-Token': env.SHOPIFY_ADMIN_TOKEN, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  }).catch(() => null);
-  if (!res || !res.ok) return null;
-  const data = await res.json().catch(() => ({}));
-  const draft = data && data.draft_order;
-  return draft && draft.invoice_url ? draft : null;
+  if (hasDiscount) {
+    input.appliedDiscount = {
+      title: topup.discount_code,
+      description: 'EdenMish business-plan coupon',
+      valueType: 'FIXED_AMOUNT',
+      value: discountAmount,
+      amountWithCurrency: { amount: discountAmount.toFixed(2), currencyCode },
+    };
+  }
+  if (topup.email) input.email = topup.email;
+  return createShopifyDraftOrder(env, input);
 }
 
 // ---- Shopify webhook HMAC verification (REQUIRED before trusting any webhook) ----
