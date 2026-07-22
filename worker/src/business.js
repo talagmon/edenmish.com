@@ -392,7 +392,7 @@ export async function getBusinessSnapshot(DB, session) {
                 FROM orders WHERE business_account_id = ? ORDER BY id DESC LIMIT 20`).bind(session.account_id).all(),
     DB.prepare(`SELECT entry_type, available_delta_agorot, reserved_delta_agorot, order_id, note, created_at
                 FROM wallet_entries WHERE account_id = ? ORDER BY id DESC LIMIT 30`).bind(session.account_id).all(),
-    DB.prepare(`SELECT id, plan_id, amount_agorot, status, checkout_url, created_at, paid_at
+    DB.prepare(`SELECT id, plan_id, amount_agorot, payment_amount_agorot, discount_code, discount_amount_agorot, discount_title, status, checkout_url, created_at, paid_at
                 FROM wallet_topups WHERE account_id = ? ORDER BY created_at DESC LIMIT 10`).bind(session.account_id).all(),
     DB.prepare(`SELECT remaining_agorot, expires_at FROM wallet_credit_lots
                 WHERE account_id = ? AND remaining_agorot > 0 AND expires_at > ?
@@ -410,28 +410,58 @@ export async function getBusinessSnapshot(DB, session) {
     },
     orders: orders.results || [],
     entries: (entries.results || []).map((entry) => ({ ...entry, available_delta: entry.available_delta_agorot / 100, reserved_delta: entry.reserved_delta_agorot / 100 })),
-    topups: (topups.results || []).map((topup) => ({ ...topup, amount: topup.amount_agorot / 100 })),
+    topups: (topups.results || []).map((topup) => ({
+      ...topup,
+      amount: topup.amount_agorot / 100,
+      payment_amount: Number(topup.payment_amount_agorot ?? topup.amount_agorot) / 100,
+      discount_amount: Number(topup.discount_amount_agorot || 0) / 100,
+    })),
     plans: publicBusinessPlans(),
   };
 }
 
-export async function createWalletTopup(DB, session, planId) {
+export async function createWalletTopup(DB, session, planId, coupon = null) {
   const plan = BUSINESS_PLANS[planId];
   if (!plan) return null;
   const id = randomToken(22);
   const now = Date.now();
+  const paymentAmountAgorot = coupon ? Math.round(Number(coupon.price) * 100) : plan.amount_agorot;
+  const discountAmountAgorot = coupon ? Math.round(Number(coupon.discountAmount) * 100) : 0;
   if (plan.one_per_account) {
     await DB.prepare(`UPDATE wallet_topups SET status = 'cancelled'
       WHERE account_id = ? AND plan_id = ? AND status IN ('created','checkout_ready') AND created_at < ?`)
       .bind(session.account_id, plan.id, now - DAY).run();
   }
   const inserted = await DB.prepare(
-    `INSERT OR IGNORE INTO wallet_topups (id, account_id, plan_id, amount_agorot, currency, status, created_at)
-     VALUES (?, ?, ?, ?, 'ILS', 'created', ?)
+    `INSERT OR IGNORE INTO wallet_topups
+      (id, account_id, plan_id, amount_agorot, payment_amount_agorot, discount_code, discount_amount_agorot, discount_title, currency, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ILS', 'created', ?)
      RETURNING id`
-  ).bind(id, session.account_id, plan.id, plan.amount_agorot, now).first();
+  ).bind(
+    id,
+    session.account_id,
+    plan.id,
+    plan.amount_agorot,
+    paymentAmountAgorot,
+    coupon ? coupon.code : null,
+    discountAmountAgorot,
+    coupon ? coupon.title : null,
+    now,
+  ).first();
   if (!inserted) return { error: plan.one_per_account ? 'trial_already_used' : 'topup_unavailable' };
-  return { id, account_id: session.account_id, email: session.email, company_name: session.company_name, plan, amount: plan.amount_agorot / 100 };
+  return {
+    id,
+    account_id: session.account_id,
+    email: session.email,
+    company_name: session.company_name,
+    plan,
+    amount: paymentAmountAgorot / 100,
+    subtotal: plan.amount_agorot / 100,
+    credit_amount: plan.amount_agorot / 100,
+    discount_code: coupon ? coupon.code : null,
+    discount_amount: discountAmountAgorot / 100,
+    discount_title: coupon ? coupon.title : null,
+  };
 }
 
 export async function markWalletTopupCheckout(DB, topupId, charge) {
@@ -453,7 +483,8 @@ export async function getWalletTopup(DB, id) {
 export async function creditWalletTopup(DB, topup, payment) {
   if (!topup) return { credited: false, reason: 'not_found' };
   const amountAgorot = Math.round(Number(payment.total) * 100);
-  const amountMatches = Number.isSafeInteger(amountAgorot) && amountAgorot === Number(topup.amount_agorot);
+  const expectedPaymentAgorot = Number(topup.payment_amount_agorot ?? topup.amount_agorot);
+  const amountMatches = Number.isSafeInteger(amountAgorot) && amountAgorot === expectedPaymentAgorot;
   const currencyMatches = String(payment.currency || '').toUpperCase() === String(topup.currency || 'ILS').toUpperCase();
   const draftMatches = !topup.shopify_draft_order_id || !payment.draftOrderId || String(topup.shopify_draft_order_id) === String(payment.draftOrderId);
   if (topup.status === 'paid') {

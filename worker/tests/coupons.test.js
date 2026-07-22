@@ -4,7 +4,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  normalizeCode, computeDiscount, validateCoupon, recordRedemption,
+  normalizeCode, normalizeBusinessPlanIds, computeDiscount, validateCoupon, recordRedemption, recordBusinessRedemption, releaseBusinessRedemption,
   listCoupons, createCoupon, updateCoupon, deleteCoupon,
 } from '../src/coupons.js';
 
@@ -48,6 +48,8 @@ function d1Coupon(overrides = {}) {
     ends_at: null,
     usage_limit: null,
     applies_once_per_customer: 0,
+    scope: 'delivery',
+    business_plan_ids: null,
     synced_at: Date.now(),
     ...overrides,
   };
@@ -65,6 +67,13 @@ describe('normalizeCode', () => {
   test('handles null/undefined', () => {
     assert.equal(normalizeCode(null), '');
     assert.equal(normalizeCode(undefined), '');
+  });
+});
+
+describe('normalizeBusinessPlanIds', () => {
+  test('accepts arrays or stored JSON and removes invalid plans', () => {
+    assert.deepEqual(normalizeBusinessPlanIds(['gold', 'trial', 'gold', 'unknown']), ['gold', 'trial']);
+    assert.deepEqual(normalizeBusinessPlanIds('["silver","platinum"]'), ['silver', 'platinum']);
   });
 });
 
@@ -183,6 +192,15 @@ describe('validateCoupon', () => {
     assert.deepEqual(r, { valid: false, reason: 'not_found' });
     assert.equal(db.calls.selects.length, 0);
   });
+
+  test('business-plan coupons are scoped and can target selected plans', async () => {
+    const coupon = d1Coupon({ scope: 'business_plan', business_plan_ids: '["gold","platinum"]' });
+    assert.equal((await validateCoupon(mockDb({ coupon }), 'SAVE10', 1500, 'owner@example.com')).reason, 'not_applicable');
+    assert.equal((await validateCoupon(mockDb({ coupon }), 'SAVE10', 1500, 'owner@example.com', { scope: 'business_plan', planId: 'silver' })).reason, 'not_applicable');
+    const valid = await validateCoupon(mockDb({ coupon }), 'SAVE10', 1500, 'owner@example.com', { scope: 'business_plan', planId: 'gold' });
+    assert.equal(valid.valid, true);
+    assert.equal(valid.price, 1350);
+  });
 });
 
 // ---- CRUD (ops dashboard) ----
@@ -221,8 +239,8 @@ function crudDb({ coupons = [], redemptions = [] } = {}) {
         },
         async run() {
           if (/INSERT INTO coupons/.test(sql)) {
-            const [code, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, synced_at] = this.args;
-            store.set(code, { code, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, synced_at });
+            const [code, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, scope, business_plan_ids, synced_at] = this.args;
+            store.set(code, { code, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, scope, business_plan_ids, synced_at });
           } else if (/UPDATE coupons SET/.test(sql)) {
             const cols = [...sql.split(' WHERE ')[0].matchAll(/(\w+) = \?/g)].map(m => m[1]);
             const row = store.get(this.args[this.args.length - 1]);
@@ -265,6 +283,16 @@ describe('createCoupon', () => {
     assert.equal(c.ends_at, ends);
     assert.equal(c.usage_limit, 5);
     assert.equal(c.applies_once_per_customer, 1);
+  });
+
+  test('stores business-plan scope and selected plan IDs', async () => {
+    const db = crudDb();
+    const c = await createCoupon(db, {
+      code: 'BIZ20', title: 'Business 20', value_type: 'fixed_amount', value: 20,
+      scope: 'business_plan', business_plan_ids: ['trial', 'gold', 'unknown'],
+    });
+    assert.equal(c.scope, 'business_plan');
+    assert.equal(c.business_plan_ids, '["trial","gold"]');
   });
 
   test('duplicate code → throws coupon_exists', async () => {
@@ -451,5 +479,22 @@ describe('recordRedemption', () => {
     const db = guardDb([{ order_id: 1, code: 'SAVE10', customer_key: 'a@b.com' }]);
     const r = await recordRedemption(db, { orderId: 2, code: 'SAVE10', customerKey: null, oncePerCustomer: true });
     assert.deepEqual(r, { recorded: true });
+  });
+});
+
+describe('business coupon redemptions', () => {
+  test('records against a wallet top-up and can release a failed checkout reservation', async () => {
+    const db = mockDb();
+    const result = await recordBusinessRedemption(db, {
+      topupId: 'topup-gold', code: ' biz10 ', customerKey: 'owner@example.com',
+      priceBefore: 1500, discountAmount: 150, priceAfter: 1350,
+    });
+    assert.deepEqual(result, { recorded: true });
+    const insert = db.calls.runs.find((call) => /INSERT INTO business_coupon_redemptions/.test(call.sql));
+    assert.deepEqual(insert.args.slice(0, 6), ['topup-gold', 'BIZ10', 'owner@example.com', 1500, 150, 1350]);
+
+    await releaseBusinessRedemption(db, 'topup-gold');
+    const removal = db.calls.runs.find((call) => /DELETE FROM business_coupon_redemptions/.test(call.sql));
+    assert.deepEqual(removal.args, ['topup-gold']);
   });
 });

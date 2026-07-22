@@ -492,6 +492,44 @@ Trial guard index exists, and `foreign_key_check` returns no rows.
 
 ---
 
+### 022_business_plan_coupons.sql
+
+**Purpose:** Adds coupon scope and optional plan targeting, stores the discounted
+payment separately from the full wallet-credit amount, and records business coupon
+redemptions against wallet top-ups. A ₪150 package therefore remains ₪150 of credit
+even when the Shopify payment is reduced by a coupon.
+
+**Command:**
+```bash
+# Staging (render the config first; run from worker/):
+npx wrangler d1 execute edenmish-staging --remote --yes \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/022_business_plan_coupons.sql
+
+# Local verification:
+wrangler d1 execute edenmish --local \
+  --file=./migrations/022_business_plan_coupons.sql
+
+# Production (after merge, before Worker deploy):
+wrangler d1 execute edenmish --remote \
+  --file=./migrations/022_business_plan_coupons.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM pragma_table_info('coupons')
+WHERE name IN ('scope','business_plan_ids');
+SELECT name FROM pragma_table_info('wallet_topups')
+WHERE name IN ('payment_amount_agorot','discount_code','discount_amount_agorot','discount_title');
+SELECT name FROM sqlite_master
+WHERE type='table' AND name='business_coupon_redemptions';
+```
+
+Expected result: two coupon columns, four top-up payment snapshot columns, and the
+business redemption table.
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -515,6 +553,7 @@ Trial guard index exists, and `foreign_key_check` returns no rows.
 - [ ] Run `019_delivery_notification_outbox.sql` after 018 and before enabling native driver completion.
 - [ ] Run `020_business_wallet_schema_repair.sql` only when migration 018 readiness is incomplete.
 - [ ] Run `021_business_entry_plans.sql` after 018/020 and before enabling Trial or Business Wallet checkout.
+- [ ] Run `022_business_plan_coupons.sql` after 021 and before enabling business-plan coupons.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).

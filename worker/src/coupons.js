@@ -15,6 +15,21 @@ export function normalizeCode(code) {
   return String(code == null ? '' : code).trim().toUpperCase();
 }
 
+const BUSINESS_PLAN_IDS = new Set(['trial', 'wallet', 'silver', 'gold', 'platinum']);
+
+function normalizeScope(scope) {
+  return scope === 'business_plan' ? 'business_plan' : 'delivery';
+}
+
+export function normalizeBusinessPlanIds(value) {
+  let values = value;
+  if (typeof values === 'string') {
+    try { values = JSON.parse(values); } catch { values = values.split(','); }
+  }
+  if (!Array.isArray(values)) return [];
+  return [...new Set(values.map((id) => String(id).trim().toLowerCase()).filter((id) => BUSINESS_PLAN_IDS.has(id)))];
+}
+
 // Integer discount amount (ILS), clamped to [0, subtotal].
 // percentage  → Math.round(subtotal * value / 100)
 // fixed_amount → min(value, subtotal)
@@ -33,13 +48,14 @@ async function getCoupon(db, code) {
   return db.prepare('SELECT * FROM coupons WHERE code = ?').bind(code).first();
 }
 
-async function countRedemptions(db, code, customerKey) {
+async function countRedemptions(db, code, customerKey, scope = 'delivery') {
+  const table = normalizeScope(scope) === 'business_plan' ? 'business_coupon_redemptions' : 'coupon_redemptions';
   let r;
   if (customerKey != null) {
-    r = await db.prepare('SELECT COUNT(*) AS n FROM coupon_redemptions WHERE code = ? AND customer_key = ?')
+    r = await db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE code = ? AND customer_key = ?`)
       .bind(code, customerKey).first();
   } else {
-    r = await db.prepare('SELECT COUNT(*) AS n FROM coupon_redemptions WHERE code = ?')
+    r = await db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE code = ?`)
       .bind(code).first();
   }
   return (r && Number(r.n)) || 0;
@@ -50,12 +66,19 @@ async function countRedemptions(db, code, customerKey) {
 // or { valid: false, reason } with reason one of:
 //   'not_found' | 'inactive' | 'not_started' | 'expired' |
 //   'usage_limit_reached' | 'already_used'
-export async function validateCoupon(db, code, subtotal, customerKey) {
+export async function validateCoupon(db, code, subtotal, customerKey, options = {}) {
   const norm = normalizeCode(code);
   if (!norm) return { valid: false, reason: 'not_found' };
 
   const row = await getCoupon(db, norm);
   if (!row) return { valid: false, reason: 'not_found' };
+
+  const scope = normalizeScope(options.scope);
+  if (normalizeScope(row.scope) !== scope) return { valid: false, reason: 'not_applicable' };
+  const businessPlanIds = normalizeBusinessPlanIds(row.business_plan_ids);
+  if (scope === 'business_plan' && businessPlanIds.length && !businessPlanIds.includes(String(options.planId || ''))) {
+    return { valid: false, reason: 'not_applicable' };
+  }
 
   const now = Date.now();
   const status = String(row.status || '').toLowerCase();
@@ -69,11 +92,11 @@ export async function validateCoupon(db, code, subtotal, customerKey) {
   }
 
   if (row.usage_limit != null) {
-    const used = await countRedemptions(db, norm);
+    const used = await countRedemptions(db, norm, null, scope);
     if (used >= Number(row.usage_limit)) return { valid: false, reason: 'usage_limit_reached' };
   }
   if (row.applies_once_per_customer && customerKey) {
-    const usedByCustomer = await countRedemptions(db, norm, customerKey);
+    const usedByCustomer = await countRedemptions(db, norm, customerKey, scope);
     if (usedByCustomer > 0) return { valid: false, reason: 'already_used' };
   }
 
@@ -98,16 +121,26 @@ export async function validateCoupon(db, code, subtotal, customerKey) {
 
 export async function listCoupons(db) {
   const r = await db.prepare(
-    `SELECT c.*, COALESCE(cr.redemptions, 0) AS redemption_count
+    `SELECT c.*, COALESCE(cr.redemptions, 0) AS redemption_count,
+       COALESCE(br.redemptions, 0) AS business_redemption_count
      FROM coupons c
      LEFT JOIN (
        SELECT code, COUNT(*) AS redemptions
        FROM coupon_redemptions
        GROUP BY code
      ) cr ON cr.code = c.code
+     LEFT JOIN (
+       SELECT code, COUNT(*) AS redemptions
+       FROM business_coupon_redemptions
+       GROUP BY code
+     ) br ON br.code = c.code
      ORDER BY c.synced_at DESC`
   ).all();
-  return (r && r.results) ? r.results : [];
+  return (r && r.results) ? r.results.map((row) => ({
+    ...row,
+    redemption_count: Number(row.redemption_count || 0) + Number(row.business_redemption_count || 0),
+    business_plan_ids: normalizeBusinessPlanIds(row.business_plan_ids),
+  })) : [];
 }
 
 export async function createCoupon(db, fields) {
@@ -123,8 +156,8 @@ export async function createCoupon(db, fields) {
   const now = Date.now();
   try {
     await db.prepare(
-      `INSERT INTO coupons (code, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, synced_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`
+      `INSERT INTO coupons (code, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, scope, business_plan_ids, synced_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
     ).bind(
       code,
       String(fields.title || '').trim() || null,
@@ -135,6 +168,8 @@ export async function createCoupon(db, fields) {
       fields.ends_at ? Number(fields.ends_at) : null,
       fields.usage_limit ? Number(fields.usage_limit) : null,
       fields.applies_once_per_customer ? 1 : 0,
+      normalizeScope(fields.scope),
+      normalizeBusinessPlanIds(fields.business_plan_ids).length ? JSON.stringify(normalizeBusinessPlanIds(fields.business_plan_ids)) : null,
       now
     ).run();
   } catch (e) {
@@ -152,7 +187,7 @@ export async function updateCoupon(db, code, fields) {
   if (!row) return null;
   const sets = [];
   const binds = [];
-  const allowed = ['title', 'value_type', 'value', 'status', 'starts_at', 'ends_at', 'usage_limit', 'applies_once_per_customer'];
+  const allowed = ['title', 'value_type', 'value', 'status', 'starts_at', 'ends_at', 'usage_limit', 'applies_once_per_customer', 'scope', 'business_plan_ids'];
   if (fields.value_type !== undefined && fields.value_type !== 'percentage' && fields.value_type !== 'fixed_amount') {
     throw new Error('invalid value_type');
   }
@@ -160,6 +195,11 @@ export async function updateCoupon(db, code, fields) {
     if (fields[f] !== undefined) {
       sets.push(`${f} = ?`);
       if (f === 'applies_once_per_customer') binds.push(fields[f] ? 1 : 0);
+      else if (f === 'scope') binds.push(normalizeScope(fields[f]));
+      else if (f === 'business_plan_ids') {
+        const planIds = normalizeBusinessPlanIds(fields[f]);
+        binds.push(planIds.length ? JSON.stringify(planIds) : null);
+      }
       else if (f === 'starts_at' || f === 'ends_at' || f === 'usage_limit') binds.push(fields[f] != null ? Number(fields[f]) : null);
       else binds.push(fields[f]);
     }
@@ -222,4 +262,43 @@ export async function recordRedemption(db, { orderId, code, customerKey, priceBe
   ).bind(...binds).run();
   const changes = r && r.meta ? Number(r.meta.changes) : Number(r && r.changes);
   return { recorded: changes === 1 };
+}
+
+// Business-plan coupons are reserved when the top-up checkout is created. They
+// use a separate table because delivery redemptions require an orders.id, while
+// plan purchases are correlated by wallet_topups.id.
+export async function recordBusinessRedemption(db, { topupId, code, customerKey, priceBefore, discountAmount, priceAfter, usageLimit = null, oncePerCustomer = false }) {
+  const norm = normalizeCode(code);
+  const key = customerKey ?? null;
+  const values = [topupId, norm, key, priceBefore ?? null, discountAmount ?? null, priceAfter ?? null, Date.now()];
+  const hasLimit = usageLimit != null && Number.isFinite(Number(usageLimit));
+  const hasCustomerGuard = !!(oncePerCustomer && key);
+  if (!hasLimit && !hasCustomerGuard) {
+    await db.prepare(
+      `INSERT INTO business_coupon_redemptions (topup_id, code, customer_key, price_before, discount_amount, price_after, created_at)
+       VALUES (?,?,?,?,?,?,?)`
+    ).bind(...values).run();
+    return { recorded: true };
+  }
+  const guards = [];
+  const binds = [...values];
+  if (hasLimit) {
+    guards.push('(SELECT COUNT(*) FROM business_coupon_redemptions WHERE code = ?) < ?');
+    binds.push(norm, Number(usageLimit));
+  }
+  if (hasCustomerGuard) {
+    guards.push('(SELECT COUNT(*) FROM business_coupon_redemptions WHERE code = ? AND customer_key = ?) = 0');
+    binds.push(norm, key);
+  }
+  const r = await db.prepare(
+    `INSERT INTO business_coupon_redemptions (topup_id, code, customer_key, price_before, discount_amount, price_after, created_at)
+     SELECT ?,?,?,?,?,?,?
+     WHERE ${guards.join(' AND ')}`
+  ).bind(...binds).run();
+  const changes = r && r.meta ? Number(r.meta.changes) : Number(r && r.changes);
+  return { recorded: changes === 1 };
+}
+
+export async function releaseBusinessRedemption(db, topupId) {
+  await db.prepare('DELETE FROM business_coupon_redemptions WHERE topup_id = ?').bind(topupId).run();
 }

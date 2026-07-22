@@ -94,7 +94,7 @@ Database name: `edenmish`. Binding: `DB`.
 ### Schema and migrations
 
 `schema.sql` is the **fresh-DB source of truth** — it defines every current table.
-The numbered migrations (`003`–`020`) add tables/columns that were introduced after the
+The numbered migrations (`003`–`022`) add tables/columns that were introduced after the
 initial schema. Tables are idempotent (`CREATE TABLE IF NOT EXISTS`); `ALTER TABLE …
 ADD COLUMN` migrations (`006`–`010`, `015`, and `016`) must run only on DBs that predate their columns.
 
@@ -106,6 +106,7 @@ ADD COLUMN` migrations (`006`–`010`, `015`, and `016`) must run only on DBs th
 
 Current tables: `orders`, `status_history`, `gps_pings`, `payments`, `pricing_rules`,
 `rate_limits`, `delivery_proofs`, `notifications`, `coupons`, `coupon_redemptions`,
+`business_coupon_redemptions`,
 `cancellation_requests`, `drivers`, `driver_sessions`, `driver_shifts`,
 `driver_assignments`, `driver_routes`, `driver_route_stops`, `driver_execution_events`.
 The driver runtime also stores bounded samples in `driver_location_samples` while a shift is active.
@@ -192,6 +193,7 @@ wrangler d1 execute edenmish --remote --file=./migrations/019_delivery_notificat
 # Repair only when the migration 018 readiness query is incomplete:
 wrangler d1 execute edenmish --remote --file=./migrations/020_business_wallet_schema_repair.sql
 wrangler d1 execute edenmish --remote --file=./migrations/021_business_entry_plans.sql
+wrangler d1 execute edenmish --remote --file=./migrations/022_business_plan_coupons.sql
 ```
 
 > Run only migrations that have not already been applied. Several `ALTER TABLE`
