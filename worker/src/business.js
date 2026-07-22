@@ -10,7 +10,7 @@ import { DEFAULT_PRICING_RULES } from './pricing.js';
 const enc = new TextEncoder();
 const DAY = 24 * 60 * 60 * 1000;
 const AUTH_TTL_MS = 10 * 60 * 1000;
-const SESSION_TTL_MS = 30 * DAY;
+export const BUSINESS_SESSION_TTL_MS = 3 * DAY;
 export const BUSINESS_SESSION_COOKIE = 'business_session';
 export const RATE_PLAN_VERSION = '2026-07-v2';
 
@@ -296,12 +296,12 @@ export async function verifyBusinessLogin(env, input) {
   await env.DB.prepare(
     `INSERT INTO business_sessions (id_hash, user_id, created_at, expires_at, revoked_at)
      VALUES (?, ?, ?, ?, NULL)`
-  ).bind(await hmacHex(env, 'session', rawSession), identity.user.id, now, now + SESSION_TTL_MS).run();
+  ).bind(await hmacHex(env, 'session', rawSession), identity.user.id, now, now + BUSINESS_SESSION_TTL_MS).run();
   return { ok: true, session: rawSession, account_id: identity.membership.account_id };
 }
 
 export function businessSessionCookie(rawSession) {
-  return `${BUSINESS_SESSION_COOKIE}=${rawSession}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`;
+  return `${BUSINESS_SESSION_COOKIE}=${rawSession}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.floor(BUSINESS_SESSION_TTL_MS / 1000)}`;
 }
 
 export function clearBusinessSessionCookie() {
@@ -311,6 +311,7 @@ export function clearBusinessSessionCookie() {
 export async function getBusinessSession(req, env) {
   const raw = getCookie(req, BUSINESS_SESSION_COOKIE);
   if (!raw) return null;
+  const now = Date.now();
   const row = await env.DB.prepare(
     `SELECT s.id_hash, s.user_id, s.expires_at,
             u.email, u.name, u.phone,
@@ -322,9 +323,10 @@ export async function getBusinessSession(req, env) {
      JOIN business_members m ON m.user_id = u.id
      JOIN business_accounts a ON a.id = m.account_id
      JOIN business_wallets w ON w.account_id = a.id
-     WHERE s.id_hash = ? AND s.revoked_at IS NULL AND s.expires_at > ? AND a.status = 'active'
+     WHERE s.id_hash = ? AND s.revoked_at IS NULL
+       AND s.expires_at > ? AND s.created_at >= ? AND a.status = 'active'
      LIMIT 1`
-  ).bind(await hmacHex(env, 'session', raw), Date.now()).first();
+  ).bind(await hmacHex(env, 'session', raw), now, now - BUSINESS_SESSION_TTL_MS).first();
   return row || null;
 }
 
