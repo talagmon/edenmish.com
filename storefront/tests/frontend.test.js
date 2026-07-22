@@ -16,6 +16,50 @@ function assertContains(html, needle, label) {
   assert.ok(html.includes(needle), `${label || needle} missing from page`);
 }
 
+function paymentFailureRetryHarness({ search = '', referrer = '' } = {}) {
+  const html = readPage('payment-failed.html');
+  const source = html.match(/<script>\s*([\s\S]*?)<\/script>\s*<\/body>/)?.[1];
+  assert.ok(source, 'payment failure retry script missing');
+  const retry = {
+    href: 'https://edenmish.com/',
+    listeners: {},
+    addEventListener(type, handler) { this.listeners[type] = handler; },
+  };
+  runInNewContext(source, {
+    window: {
+      location: {
+        href: `https://edenmish.com/payment-failed.html${search}`,
+        search,
+        assign() {},
+      },
+      history: { length: 1, back() {} },
+      setTimeout() {},
+    },
+    document: { referrer, getElementById: () => retry },
+    URL,
+    URLSearchParams,
+    Set,
+  });
+  return retry;
+}
+
+function themePaymentExit(pathname, search = '') {
+  const theme = readFileSync(join(process.cwd(), '..', 'theme', 'layout', 'theme.liquid'), 'utf8');
+  const source = theme.match(/<script>\s*(\(function \(\) \{[\s\S]*?\}\)\(\);)\s*<\/script>/)?.[1];
+  assert.ok(source, 'payment-host redirect script missing');
+  let destination = null;
+  runInNewContext(source, {
+    window: {
+      location: {
+        pathname,
+        search,
+        replace(value) { destination = value; },
+      },
+    },
+  });
+  return destination;
+}
+
 async function analyticsHarness(consent) {
   const source = readFileSync(join(PUB, 'assets', 'analytics.js'), 'utf8');
   const appended = [];
@@ -126,7 +170,7 @@ function opsQueueHelpers() {
 }
 
 describe('Frontend: Pages exist', () => {
-  for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'blog/edenmish-information-security.html', 'business.html', 'business-account.html', 'success.html', 'thank-you.html', 'error.html', 'terms.html', 'privacy.html', 'refund.html', 'accessibility.html', 'cancel.html']) {
+  for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'blog/edenmish-information-security.html', 'business.html', 'business-account.html', 'success.html', 'thank-you.html', 'payment-failed.html', '404.html', 'error.html', 'terms.html', 'privacy.html', 'refund.html', 'accessibility.html', 'cancel.html']) {
     test(`${page} exists`, () => {
       assert.ok(existsSync(join(PUB, page)), `${page} not found in public/`);
     });
@@ -134,6 +178,17 @@ describe('Frontend: Pages exist', () => {
 });
 
 describe('Frontend: Shopify post-payment exit', () => {
+  test('ships responsive EdenMish payment branding artwork', () => {
+    for (const asset of [
+      'edenmish-payment-background-desktop.webp',
+      'edenmish-payment-background-mobile.webp',
+    ]) {
+      const path = join(PUB, 'assets', asset);
+      assert.ok(existsSync(path), `${asset} not found`);
+      assert.ok(readFileSync(path).byteLength > 20_000, `${asset} is unexpectedly small`);
+    }
+  });
+
   test('publishes a branded thank-you page with one safe destination', () => {
     const html = readPage('thank-you.html');
     assertContains(html, 'התשלום התקבל בהצלחה', 'payment confirmation');
@@ -142,15 +197,71 @@ describe('Frontend: Shopify post-payment exit', () => {
     assertContains(html, 'href="https://edenmish.com/"', 'main-site CTA');
     assertContains(html, 'direction: ltr;', 'desktop image-left composition');
     assertContains(html, '.message { min-height: 610px; direction: rtl; }', 'RTL message direction');
+    assertContains(html, 'width: min(calc(100% - 2rem), 1120px);', 'mobile-safe page width');
     assert.ok(existsSync(join(PUB, 'assets', 'edenmish-thank-you-bike.webp')), 'thank-you artwork not found');
     assert.ok(!html.includes('pay.edenmish.com'), 'thank-you page must not link back to the payment storefront');
   });
 
-  test('redirects Shopify storefront visits to the main EdenMish site', () => {
+  test('publishes a distinct failure page with a guarded retry destination', () => {
+    const html = readPage('payment-failed.html');
+    assertContains(html, 'התשלום לא הושלם', 'payment failure message');
+    assertContains(html, 'לא בוצע חיוב מאושר', 'no confirmed charge message');
+    assertContains(html, 'src="./assets/edenmish-payment-retry-bike.webp"', 'local failure artwork URL');
+    assertContains(html, 'name="robots" content="noindex, nofollow"', 'transaction-page crawler exclusion');
+    assertContains(html, "url.protocol !== 'https:'", 'HTTPS retry guard');
+    assertContains(html, "url.port !== '443'", 'standard HTTPS port guard');
+    assertContains(html, "allowedHosts.has(url.hostname)", 'retry host allowlist');
+    assertContains(html, "params.get('retry_url')", 'explicit retry URL support');
+    assertContains(html, 'safePaymentUrl(document.referrer)', 'checkout referrer retry support');
+    assertContains(html, 'width: min(calc(100% - 2rem), 1120px);', 'mobile-safe failure page width');
+    assert.ok(existsSync(join(PUB, 'assets', 'edenmish-payment-retry-bike.webp')), 'failure artwork not found');
+  });
+
+  test('only exposes retry links that return to an EdenMish Shopify checkout host', () => {
+    const checkout = 'https://pay.edenmish.com/checkouts/cn/example?key=test-value';
+    const explicit = paymentFailureRetryHarness({ search: `?retry_url=${encodeURIComponent(checkout)}` });
+    assert.equal(explicit.href, checkout);
+
+    const fromCheckout = paymentFailureRetryHarness({ referrer: 'https://r013gt-fc.myshopify.com/123/invoices/example' });
+    assert.equal(fromCheckout.href, 'https://r013gt-fc.myshopify.com/123/invoices/example');
+
+    const malicious = paymentFailureRetryHarness({ search: `?retry_url=${encodeURIComponent('https://attacker.example/pay')}` });
+    assert.equal(malicious.href, 'https://edenmish.com/');
+    assert.equal(typeof malicious.listeners.click, 'function', 'unsafe retry URL must fall back to browser history');
+
+    const paymentRoot = paymentFailureRetryHarness({ referrer: 'https://pay.edenmish.com/' });
+    assert.equal(paymentRoot.href, 'https://edenmish.com/', 'payment root must not be offered as a retry destination');
+
+    const nonstandardPort = paymentFailureRetryHarness({
+      search: `?retry_url=${encodeURIComponent('https://pay.edenmish.com:8443/checkouts/example')}`,
+    });
+    assert.equal(nonstandardPort.href, 'https://edenmish.com/', 'nonstandard payment ports must be rejected');
+  });
+
+  test('routes explicit payment failures separately from successful Shopify exits', () => {
     const theme = readFileSync(join(process.cwd(), '..', 'theme', 'layout', 'theme.liquid'), 'utf8');
     assertContains(theme, "request.host == 'pay.edenmish.com'", 'payment-host guard');
-    assertContains(theme, '<meta http-equiv="refresh" content="0;url=https://edenmish.com/thank-you.html">', 'no-script redirect');
-    assertContains(theme, "window.location.replace('https://edenmish.com/thank-you.html');", 'browser redirect');
+    assertContains(theme, "'/payment-failed'", 'explicit failure route');
+    assertContains(theme, "'https://edenmish.com/payment-failed.html' + window.location.search", 'failure redirect');
+    assertContains(theme, ": 'https://edenmish.com/thank-you.html'", 'success redirect');
+    assertContains(theme, '<noscript><meta http-equiv="refresh" content="0;url=https://edenmish.com/"></noscript>', 'safe no-script fallback');
+    assert.equal(themePaymentExit('/payment-failed', '?retry_url=example'), 'https://edenmish.com/payment-failed.html?retry_url=example');
+    assert.equal(themePaymentExit('/pages/payment-failed'), 'https://edenmish.com/payment-failed.html');
+    assert.equal(themePaymentExit('/'), 'https://edenmish.com/thank-you.html');
+  });
+});
+
+describe('Frontend: Branded static error recovery', () => {
+  test('publishes a noindex 404 page with the shared recovery artwork', () => {
+    const html = readPage('404.html');
+    assertContains(html, 'שגיאה 404', '404 status');
+    assertContains(html, 'העמוד לא נמצא', '404 heading');
+    assertContains(html, 'src="./assets/edenmish-payment-retry-bike.webp"', 'shared recovery artwork');
+    assertContains(html, 'name="robots" content="noindex, nofollow"', '404 crawler exclusion');
+    assertContains(html, 'id="back-cta"', 'back recovery action');
+    assertContains(html, 'direction: ltr;', 'desktop image-left composition');
+    assertContains(html, '.message { direction: rtl; }', 'right-side RTL message');
+    assertContains(html, 'width: min(calc(100% - 2rem), 1120px);', 'mobile-safe 404 page width');
   });
 });
 
