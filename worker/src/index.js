@@ -12,7 +12,7 @@ import { getStatusMeta, getNextStatuses, isTerminalStatus } from './status.js';
 import { shopifyWebhookRegistrar } from './shopify-webhooks.js';
 import { handleDriverApi } from './driver-api.js';
 import { driverDispatchStatus, startDriverShift, endDriverShift } from './driver-dispatch.js';
-import { applyBusinessPlanPricing, businessSessionCookie, cancelWalletTopup, captureWalletReservation, cleanupBusinessSecurity, clearBusinessSessionCookie, createWalletTopup, creditWalletTopup, getBusinessSession, getBusinessSnapshot, getWalletTopup, hydrateBusinessProfileFromPayment, linkWalletReservationToOrder, markWalletTopupCheckout, publicBusinessPlans, releaseWalletReservation, requestBusinessLogin, reserveWalletCredit, revokeBusinessSession, shouldHydrateBusinessProfile, updateBusinessProfile, verifyBusinessLogin } from './business.js';
+import { applyBusinessPlanPricing, businessCouponCustomerKey, businessSessionCookie, cancelWalletTopup, captureWalletReservation, cleanupBusinessSecurity, clearBusinessSessionCookie, createWalletTopup, creditWalletTopup, getBusinessSession, getBusinessSnapshot, getWalletTopup, hydrateBusinessProfileFromPayment, linkWalletReservationToOrder, markWalletTopupCheckout, publicBusinessPlans, releaseWalletReservation, requestBusinessLogin, reserveWalletCredit, revokeBusinessSession, shouldHydrateBusinessProfile, updateBusinessProfile, verifyBusinessLogin } from './business.js';
 import { runDeliveryCompletionSideEffects } from './delivery-completion.js';
 import {
   persistOpsDeliveryCompletion,
@@ -351,9 +351,10 @@ export default {
       let b; try { b = await readJson(req); } catch (e) { return json({ error: e.message }, e.status || 400); }
       const selectedPlan = publicBusinessPlans().find((plan) => plan.id === b.plan_id);
       if (!selectedPlan) return json({ error: 'invalid_plan' }, 400);
+      const couponAccountKey = businessCouponCustomerKey(session);
       let coupon = null;
       if (b.coupon_code) {
-        const v = await validateCoupon(env.DB, b.coupon_code, selectedPlan.amount, session.email, { scope: 'business_plan', planId: selectedPlan.id });
+        const v = await validateCoupon(env.DB, b.coupon_code, selectedPlan.amount, couponAccountKey, { scope: 'business_plan', planId: selectedPlan.id });
         if (!v.valid) return json({ valid: false, error: 'invalid_coupon', reason: v.reason, message: couponMessage(v.reason) }, 400);
         coupon = v;
       }
@@ -366,7 +367,7 @@ export default {
           const redemption = await recordBusinessRedemption(env.DB, {
             topupId: topup.id,
             code: coupon.code,
-            customerKey: session.email,
+            customerKey: couponAccountKey,
             priceBefore: coupon.subtotal,
             discountAmount: coupon.discountAmount,
             priceAfter: coupon.price,
