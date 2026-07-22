@@ -6,7 +6,7 @@
 // backward compatibility — set ALLOWED_ORIGINS in production (see docs/ENVIRONMENT.md).
 export function corsFor(req, env) {
   const methods = 'GET,POST,PUT,DELETE,OPTIONS';
-  const hdrs = 'Content-Type, X-Ops';
+  const hdrs = 'Content-Type, Idempotency-Key, X-Ops';
   const configured = (env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
   if (!configured.length) {
     return { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': methods, 'Access-Control-Allow-Headers': hdrs };

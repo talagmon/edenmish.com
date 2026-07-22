@@ -336,15 +336,49 @@ export async function revokeBusinessSession(req, env) {
 }
 
 export async function updateBusinessProfile(DB, session, input) {
-  const company = String(input.company_name || '').trim().slice(0, 160) || null;
-  const name = String(input.name || '').trim().slice(0, 120) || null;
-  const phone = String(input.phone || '').trim().slice(0, 30) || null;
+  const has = (key) => Object.prototype.hasOwnProperty.call(input || {}, key);
+  const company = has('company_name') ? String(input.company_name || '').trim().slice(0, 160) || null : undefined;
+  const name = has('name') ? String(input.name || '').trim().slice(0, 120) || null : undefined;
+  const phone = has('phone') ? String(input.phone || '').trim().slice(0, 30) || null : undefined;
+  const now = Date.now();
+  const statements = [];
+  if (company !== undefined) {
+    statements.push(DB.prepare('UPDATE business_accounts SET company_name = ?, updated_at = ? WHERE id = ?').bind(company, now, session.account_id));
+  }
+  const userAssignments = [];
+  const userValues = [];
+  if (name !== undefined) { userAssignments.push('name = ?'); userValues.push(name); }
+  if (phone !== undefined) { userAssignments.push('phone = ?'); userValues.push(phone); }
+  if (userAssignments.length) {
+    statements.push(DB.prepare(`UPDATE business_users SET ${userAssignments.join(', ')}, updated_at = ? WHERE id = ?`).bind(...userValues, now, session.user_id));
+  }
+  if (statements.length) await DB.batch(statements);
+  return { company_name: company, name, phone };
+}
+
+export async function hydrateBusinessProfileFromPayment(DB, accountId, payment) {
+  const company = String(payment?.billingCompany || '').trim().slice(0, 160) || null;
+  const name = String(payment?.customerName || '').trim().slice(0, 120) || null;
+  const phone = String(payment?.customerPhone || '').trim().slice(0, 30) || null;
+  const email = normalizeBusinessEmail(payment?.email);
+  if (!company && !name && !phone) return { updated: false };
+
   const now = Date.now();
   await DB.batch([
-    DB.prepare('UPDATE business_accounts SET company_name = ?, updated_at = ? WHERE id = ?').bind(company, now, session.account_id),
-    DB.prepare('UPDATE business_users SET name = ?, phone = ?, updated_at = ? WHERE id = ?').bind(name, phone, now, session.user_id),
+    DB.prepare(`UPDATE business_accounts
+      SET company_name = COALESCE(NULLIF(TRIM(company_name), ''), ?), updated_at = ?
+      WHERE id = ?`).bind(company, now, accountId),
+    DB.prepare(`UPDATE business_users
+      SET name = COALESCE(NULLIF(TRIM(name), ''), ?),
+          phone = COALESCE(NULLIF(TRIM(phone), ''), ?),
+          updated_at = ?
+      WHERE email = ? AND EXISTS (
+        SELECT 1 FROM business_members
+        WHERE account_id = ? AND user_id = business_users.id
+      )`)
+      .bind(name, phone, now, email, accountId),
   ]);
-  return { company_name: company, name, phone };
+  return { updated: true, company_name: company, name, phone };
 }
 
 export async function getBusinessSnapshot(DB, session) {
@@ -413,11 +447,20 @@ export async function getWalletTopup(DB, id) {
 
 export async function creditWalletTopup(DB, topup, payment) {
   if (!topup) return { credited: false, reason: 'not_found' };
-  if (topup.status === 'paid') return { credited: true, unchanged: true };
   const amountAgorot = Math.round(Number(payment.total) * 100);
   const amountMatches = Number.isSafeInteger(amountAgorot) && amountAgorot === Number(topup.amount_agorot);
   const currencyMatches = String(payment.currency || '').toUpperCase() === String(topup.currency || 'ILS').toUpperCase();
   const draftMatches = !topup.shopify_draft_order_id || !payment.draftOrderId || String(topup.shopify_draft_order_id) === String(payment.draftOrderId);
+  if (topup.status === 'paid') {
+    const orderMatches = topup.shopify_order_id != null
+      && payment.shopifyOrderId != null
+      && String(topup.shopify_order_id) === String(payment.shopifyOrderId);
+    return {
+      credited: true,
+      unchanged: true,
+      paymentValidated: Boolean(payment.paid && amountMatches && currencyMatches && draftMatches && orderMatches),
+    };
+  }
   if (!payment.paid || !amountMatches || !currencyMatches || !draftMatches) {
     await DB.prepare(`UPDATE wallet_topups SET status = 'mismatch', shopify_order_id = ? WHERE id = ? AND status != 'paid'`)
       .bind(payment.shopifyOrderId == null ? null : String(payment.shopifyOrderId), topup.id).run();
@@ -450,7 +493,12 @@ export async function creditWalletTopup(DB, topup, payment) {
       .bind(payment.shopifyOrderId == null ? null : String(payment.shopifyOrderId), now, topup.id),
   ];
   const results = await DB.batch(statements);
-  return { credited: Number(results && results[0] && results[0].meta && results[0].meta.changes || 0) === 1, expires_at: expiresAt };
+  const credited = Number(results && results[0] && results[0].meta && results[0].meta.changes || 0) === 1;
+  return { credited, paymentValidated: credited, expires_at: expiresAt };
+}
+
+export function shouldHydrateBusinessProfile(creditResult) {
+  return Boolean(creditResult?.paymentValidated && !creditResult?.unchanged);
 }
 
 export async function reserveWalletCredit(DB, accountId, amountAgorot, idempotencyKey) {
