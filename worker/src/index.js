@@ -14,6 +14,10 @@ import { handleDriverApi } from './driver-api.js';
 import { driverDispatchStatus, startDriverShift, endDriverShift } from './driver-dispatch.js';
 import { applyBusinessPlanPricing, businessSessionCookie, captureWalletReservation, cleanupBusinessSecurity, clearBusinessSessionCookie, createWalletTopup, creditWalletTopup, getBusinessSession, getBusinessSnapshot, getWalletTopup, linkWalletReservationToOrder, markWalletTopupCheckout, publicBusinessPlans, releaseWalletReservation, requestBusinessLogin, reserveWalletCredit, revokeBusinessSession, updateBusinessProfile, verifyBusinessLogin } from './business.js';
 import { runDeliveryCompletionSideEffects } from './delivery-completion.js';
+import {
+  persistOpsDeliveryCompletion,
+  processDeliveryNotificationOutbox,
+} from './delivery-notification-outbox.js';
 
 const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra } });
 const html = (s) => new Response(s, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -250,7 +254,7 @@ async function isOps(req, env) {
 }
 
 export default {
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
     const url = new URL(req.url);
     // Wrangler's local HTTPS certificate is self-signed. TEST_MODE may use
     // loopback HTTP for browser QA; every non-test environment stays HTTPS-only.
@@ -272,7 +276,7 @@ export default {
       return json({ ok: true, service: 'edenmish-worker' });
     }
 
-    const driverResponse = await handleDriverApi(req, env, path);
+    const driverResponse = await handleDriverApi(req, env, path, ctx);
     if (driverResponse) return driverResponse;
 
     // ---- passwordless business account + prepaid wallet ----
@@ -930,13 +934,24 @@ export default {
       }
       if (b.status === 'picked_up') fields.picked_up_at = Date.now();
       if (b.status === 'delivered') { fields.delivered_at = Date.now(); fields.payment_status = fields.payment_status || (before.payment_method === 'wallet' ? 'wallet_paid' : 'paid'); }
-      await setOrderStatus(env.DB, id, b.status, fields);
       if (b.status === 'delivered') {
+        const completion = await persistOpsDeliveryCompletion(env.DB, before, {
+          deliveredAt: fields.delivered_at,
+          paymentStatus: fields.payment_status,
+        });
         const o = await getOrderById(env.DB, id);
-        if (o) {
-          const { settlement } = await runDeliveryCompletionSideEffects(env, o);
+        if (o && completion.transitioned) {
+          const { settlement } = await runDeliveryCompletionSideEffects(env, o, {
+            notificationsAlreadyEnqueued: true,
+            processNotifications: false,
+            eventId: completion.eventId,
+          });
+          ctx?.waitUntil?.(processDeliveryNotificationOutbox(env));
           return json({ ok: true, settlement });
         }
+        if (o) return json({ ok: true, unchanged: true });
+      } else {
+        await setOrderStatus(env.DB, id, b.status, fields);
       }
       return json({ ok: true });
     }
@@ -1014,10 +1029,22 @@ export default {
         const captured = await captureWalletReservation(env.DB, before.wallet_reservation_id, before.id);
         if (!captured.captured && !captured.unchanged) return json({ error: 'wallet_capture_failed' }, 409);
       }
-      if (!wasDelivered) await setOrderStatus(env.DB, id, 'delivered', { delivered_at: before.delivered_at || Date.now(), payment_status: before.payment_method === 'wallet' ? 'wallet_paid' : 'paid' });
+      let completion = null;
+      if (!wasDelivered) {
+        completion = await persistOpsDeliveryCompletion(env.DB, before, {
+          deliveredAt: before.delivered_at || Date.now(),
+          sendWhatsApp: true,
+        });
+      }
       const o = await getOrderById(env.DB, id);
-      if (!wasDelivered && o) {
-        await runDeliveryCompletionSideEffects(env, o, { sendWhatsApp: true });
+      if (!wasDelivered && o && completion?.transitioned) {
+        await runDeliveryCompletionSideEffects(env, o, {
+          sendWhatsApp: true,
+          notificationsAlreadyEnqueued: true,
+          processNotifications: false,
+          eventId: completion?.eventId,
+        });
+        ctx?.waitUntil?.(processDeliveryNotificationOutbox(env));
       }
       const proof = await getDeliveryProof(env.DB, id);
       return json({ ok: true, order: o, proof });
@@ -1198,9 +1225,13 @@ export default {
 
     return new Response('Not found', { status: 404 });
   },
-  async scheduled(_event, env, ctx) {
-    ctx.waitUntil(Promise.all([runRetentionCleanup(env.DB), cleanupBusinessSecurity(env.DB)]).catch((error) => {
-      console.error('retention_cleanup_failed', error && error.message ? error.message : String(error));
+  async scheduled(event, env, ctx) {
+    const tasks = [processDeliveryNotificationOutbox(env)];
+    if (event.cron === '17 2 * * *') {
+      tasks.push(runRetentionCleanup(env.DB), cleanupBusinessSecurity(env.DB));
+    }
+    ctx.waitUntil(Promise.all(tasks).catch((error) => {
+      console.error('scheduled_worker_failed', error && error.message ? error.message : String(error));
     }));
   }
 };

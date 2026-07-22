@@ -67,6 +67,11 @@ function apiDb({ coupon = null, raceRedemptions = false, orderRow = null } = {})
           return { results: [] };
         },
         async run() {
+          if (/UPDATE orders\s+SET status = 'delivered'/.test(sql) && orderRow) {
+            orderRow.status = 'delivered';
+            orderRow.delivered_at = this.args[0];
+            orderRow.payment_status = this.args[1];
+          }
           if (/UPDATE orders SET status = \?/.test(sql) && orderRow) {
             orderRow.status = this.args[0];
             const columns = [...sql.matchAll(/(\w+) = \?/g)].map(m => m[1]);
@@ -108,6 +113,11 @@ function apiDb({ coupon = null, raceRedemptions = false, orderRow = null } = {})
           return { meta: { changes: 1 } };
         },
       };
+    },
+    async batch(statements) {
+      const results = [];
+      for (const statement of statements) results.push(await statement.run());
+      return results;
     },
   };
 }
