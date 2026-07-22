@@ -71,6 +71,12 @@ jobs:
           else
             echo "Business wallet migration 018 is already applied."
           fi
+      - name: Repair partially applied staging business wallet schema
+        working-directory: worker
+        run: >-
+          npx wrangler d1 execute edenmish-staging --remote --yes
+          --config wrangler.staging.generated.toml
+          --file=./migrations/020_business_wallet_schema_repair.sql
       - name: Apply staging delivery notification outbox migration
         working-directory: worker
         run: >-
