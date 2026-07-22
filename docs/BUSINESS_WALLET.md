@@ -2,8 +2,7 @@
 
 ## Status
 
-Implemented locally on the business-wallet feature branch. No migration or deploy
-has been run against production.
+Implemented and deployed through the guarded staging and production workflow.
 
 ## Product flow
 
@@ -11,7 +10,9 @@ has been run against production.
 2. The Worker sends one email containing a one-tap, single-use magic link and a
    six-digit fallback code. Both expire after 10 minutes.
 3. Verification creates or finds a business user/account and sets a revocable,
-   30-day `Secure`, `HttpOnly`, `SameSite=Lax` session cookie.
+   three-day `Secure`, `HttpOnly`, `SameSite=Lax` session cookie. The Worker also
+   enforces the three-day maximum from the session creation timestamp, including
+   sessions issued before the current policy.
 4. The user chooses Silver (₪600), Gold (₪1,500), or Platinum (₪3,000).
 5. `payment.js#createWalletCharge()` creates a non-shipping Shopify Draft Order.
    PayPlus remains the gateway inside Shopify checkout.
