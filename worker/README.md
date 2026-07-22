@@ -51,7 +51,8 @@ Staging uses separate hosts and a separate D1 database:
 | `security.js` | PII sanitizer (`publicOrderSummary`), `maskEmail`, `corsFor` (CORS allowlist), `clientIp`, `anonKey` (hashed IP rate-limit keys). |
 | `driver-api.js` | Driver mobile boundary: single-use login exchange, installation-bound bearer auth, route snapshots, and idempotent execution events. |
 | `route-optimization.js` | Fail-closed Google Route Optimization adapter for one-driver mixed pickup/drop-off plans, including locked-stop and precedence validation. |
-| `notify.js` | Email notification wrapper (`notifyEmail`): best-effort audit trail in D1 `notifications`; never throws. |
+| `notify.js` | Provider notification wrapper: best-effort per-attempt audit trail in D1 `notifications`; never throws. |
+| `delivery-notification-outbox.js` | Unique logical delivery-completion jobs, expiring leases, and bounded at-least-once retry processing. |
 
 ## Local dev
 
@@ -93,7 +94,7 @@ Database name: `edenmish`. Binding: `DB`.
 ### Schema and migrations
 
 `schema.sql` is the **fresh-DB source of truth** — it defines every current table.
-The numbered migrations (`003`–`018`) add tables/columns that were introduced after the
+The numbered migrations (`003`–`020`) add tables/columns that were introduced after the
 initial schema. Tables are idempotent (`CREATE TABLE IF NOT EXISTS`); `ALTER TABLE …
 ADD COLUMN` migrations (`006`–`010`, `015`, and `016`) must run only on DBs that predate their columns.
 
@@ -108,6 +109,9 @@ Current tables: `orders`, `status_history`, `gps_pings`, `payments`, `pricing_ru
 `cancellation_requests`, `drivers`, `driver_sessions`, `driver_shifts`,
 `driver_assignments`, `driver_routes`, `driver_route_stops`, `driver_execution_events`.
 The driver runtime also stores bounded samples in `driver_location_samples` while a shift is active.
+Delivery completion uses `delivery_completion_transitions` and
+`delivery_notification_outbox`; the five-minute cron retries due jobs with expiring
+leases. Logical jobs are unique, while provider delivery remains at-least-once.
 Business-account tables are `business_users`, `business_accounts`, `business_members`,
 `business_auth_challenges`, `business_sessions`, `business_wallets`, `wallet_topups`,
 `wallet_credit_lots`, `wallet_reservations`, `wallet_entries`, `business_plan_enrollments`.
@@ -184,6 +188,9 @@ wrangler d1 execute edenmish --remote --file=./migrations/015_driver_route_tasks
 wrangler d1 execute edenmish --remote --file=./migrations/016_driver_route_integrity.sql
 wrangler d1 execute edenmish --remote --file=./migrations/017_driver_task_proofs.sql
 wrangler d1 execute edenmish --remote --file=./migrations/018_business_wallet.sql
+wrangler d1 execute edenmish --remote --file=./migrations/019_delivery_notification_outbox.sql
+# Repair only when the migration 018 readiness query is incomplete:
+wrangler d1 execute edenmish --remote --file=./migrations/020_business_wallet_schema_repair.sql
 ```
 
 > Run only migrations that have not already been applied. Several `ALTER TABLE`
@@ -254,4 +261,5 @@ wrangler deploy
 - [ ] Confirm inline price approval works for a review order.
 - [ ] Confirm delivery proof can be saved (receiver name + note).
 - [ ] Confirm notification audit rows are created.
+- [ ] Confirm delivery completion creates unique email/WhatsApp outbox jobs and due failures retry.
 - [ ] Confirm per-order notification history appears in ops.

@@ -11,24 +11,15 @@
     "cancellation_submitted"
   ]);
   var ALLOWED_PARAMS = new Set(["service", "size", "review", "currency", "value", "source"]);
-  var GA4_EVENTS = {
-    booking_started: "booking_started",
-    booking_submitted: "generate_lead",
-    payment_started: "begin_checkout",
-    tracking_opened: "tracking_opened",
-    whatsapp_clicked: "contact",
-    cancellation_submitted: "cancellation_submitted"
-  };
-  var META_EVENTS = {
-    booking_submitted: "Lead",
-    payment_started: "InitiateCheckout",
-    whatsapp_clicked: "Contact"
-  };
 
-  var config = { ga4MeasurementId: "", metaPixelId: "" };
+  var config = { gtmContainerId: "" };
   var configLoaded = false;
-  var providersReady = false;
+  var containerReady = false;
   var consent = readConsent();
+
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
+  updateGoogleConsent("default", "denied");
 
   function readConsent() {
     try {
@@ -43,91 +34,54 @@
     try { window.localStorage.setItem(CONSENT_KEY, value); } catch (_) {}
   }
 
-  function hasProviders() {
-    return Boolean(config.ga4MeasurementId || config.metaPixelId);
+  function hasContainer() {
+    return Boolean(config.gtmContainerId);
   }
 
   function safeParams(input) {
-    var output = { page_path: window.location.pathname || "/" };
+    var output = { eden_page_path: window.location.pathname || "/" };
     Object.keys(input || {}).forEach(function (key) {
       if (!ALLOWED_PARAMS.has(key)) return;
       var value = input[key];
-      if (typeof value === "string") output[key] = value.slice(0, 40);
-      else if (typeof value === "number" && Number.isFinite(value)) output[key] = value;
-      else if (typeof value === "boolean") output[key] = value;
+      var field = "eden_" + key;
+      if (typeof value === "string") output[field] = value.slice(0, 40);
+      else if (typeof value === "number" && Number.isFinite(value)) output[field] = value;
+      else if (typeof value === "boolean") output[field] = value;
     });
     return output;
   }
 
-  function loadGoogle(measurementId) {
-    window.dataLayer = window.dataLayer || [];
-    window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
-    window.gtag("consent", "default", {
-      analytics_storage: "denied",
+  function updateGoogleConsent(command, value) {
+    var granted = value === "granted";
+    window.gtag("consent", command, {
+      analytics_storage: granted ? "granted" : "denied",
       ad_storage: "denied",
       ad_user_data: "denied",
       ad_personalization: "denied"
     });
-    window.gtag("consent", "update", {
-      analytics_storage: "granted",
-      ad_storage: "denied",
-      ad_user_data: "denied",
-      ad_personalization: "denied"
-    });
-    window.gtag("js", new Date());
-    window.gtag("config", measurementId, {
-      allow_google_signals: false,
-      allow_ad_personalization_signals: false,
-      send_page_view: true
-    });
-    var script = document.createElement("script");
-    script.async = true;
-    script.src = "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(measurementId);
-    document.head.appendChild(script);
-  }
-
-  function loadMeta(pixelId) {
-    if (window.fbq) return;
-    var fbq = window.fbq = function () {
-      fbq.callMethod ? fbq.callMethod.apply(fbq, arguments) : fbq.queue.push(arguments);
-    };
-    if (!window._fbq) window._fbq = fbq;
-    fbq.push = fbq;
-    fbq.loaded = true;
-    fbq.version = "2.0";
-    fbq.queue = [];
-    fbq("consent", "grant");
-    fbq("init", pixelId);
-    fbq("track", "PageView");
-    var script = document.createElement("script");
-    script.async = true;
-    script.src = "https://connect.facebook.net/en_US/fbevents.js";
-    document.head.appendChild(script);
   }
 
   function dispatch(name, params) {
     var clean = safeParams(params);
-    if (config.ga4MeasurementId && window.gtag) {
-      if (name === "payment_started") clean.transport_type = "beacon";
-      window.gtag("event", GA4_EVENTS[name] || name, clean);
-    }
-    if (config.metaPixelId && window.fbq) {
-      var standardName = META_EVENTS[name];
-      window.fbq(standardName ? "track" : "trackCustom", standardName || name, clean);
-    }
+    clean.event = "eden_" + name;
+    window.dataLayer.push(clean);
   }
 
   function track(name, params) {
-    if (!ALLOWED_EVENTS.has(name) || consent !== "granted" || !providersReady) return false;
+    if (!ALLOWED_EVENTS.has(name) || consent !== "granted" || !containerReady) return false;
     dispatch(name, params);
     return true;
   }
 
-  function initializeProviders() {
-    if (providersReady || consent !== "granted" || !hasProviders()) return;
-    if (config.ga4MeasurementId) loadGoogle(config.ga4MeasurementId);
-    if (config.metaPixelId) loadMeta(config.metaPixelId);
-    providersReady = true;
+  function initializeContainer() {
+    if (containerReady || consent !== "granted" || !hasContainer()) return;
+    updateGoogleConsent("update", "granted");
+    window.dataLayer.push({ "gtm.start": Date.now(), event: "gtm.js" });
+    var script = document.createElement("script");
+    script.async = true;
+    script.src = "https://www.googletagmanager.com/gtm.js?id=" + encodeURIComponent(config.gtmContainerId);
+    document.head.appendChild(script);
+    containerReady = true;
     if (/\/booking(?:\.html)?$/.test(window.location.pathname)) track("booking_started", { source: "booking_page" });
   }
 
@@ -136,15 +90,11 @@
     if (banner) banner.remove();
   }
 
-  function updateProviderConsent(value) {
-    var granted = value === "granted";
-    if (window.gtag) window.gtag("consent", "update", {
-      analytics_storage: granted ? "granted" : "denied",
-      ad_storage: "denied",
-      ad_user_data: "denied",
-      ad_personalization: "denied"
-    });
-    if (window.fbq) window.fbq("consent", granted ? "grant" : "revoke");
+  function updateContainerConsent(value) {
+    updateGoogleConsent("update", value);
+    if (containerReady) {
+      window.dataLayer.push({ event: "eden_consent_updated", eden_consent: value });
+    }
   }
 
   function setConsent(value) {
@@ -152,15 +102,15 @@
     writeConsent(consent);
     removeBanner();
     if (consent === "granted") {
-      if (providersReady) updateProviderConsent("granted");
-      else initializeProviders();
+      if (containerReady) updateContainerConsent("granted");
+      else initializeContainer();
     } else {
-      updateProviderConsent("denied");
+      updateContainerConsent("denied");
     }
   }
 
   function renderBanner() {
-    if (!hasProviders() || document.getElementById("eden-analytics-consent")) return;
+    if (!hasContainer() || document.getElementById("eden-analytics-consent")) return;
     var banner = document.createElement("section");
     banner.id = "eden-analytics-consent";
     banner.dir = "rtl";
@@ -183,7 +133,7 @@
   }
 
   function openPreferences() {
-    if (configLoaded && hasProviders()) renderBanner();
+    if (configLoaded && hasContainer()) renderBanner();
   }
 
   async function loadConfig() {
@@ -191,10 +141,9 @@
       var response = await fetch("/analytics-config", { credentials: "same-origin" });
       if (!response.ok) return;
       var data = await response.json();
-      config.ga4MeasurementId = /^G-[A-Z0-9]+$/.test(data.ga4MeasurementId || "") ? data.ga4MeasurementId : "";
-      config.metaPixelId = /^\d{5,20}$/.test(data.metaPixelId || "") ? data.metaPixelId : "";
+      config.gtmContainerId = /^GTM-[A-Z0-9]+$/.test(data.gtmContainerId || "") ? data.gtmContainerId : "";
     } catch (_) {
-      config = { ga4MeasurementId: "", metaPixelId: "" };
+      config = { gtmContainerId: "" };
     } finally {
       configLoaded = true;
     }
@@ -222,9 +171,9 @@
   });
 
   loadConfig().then(function () {
-    if (!hasProviders()) return;
+    if (!hasContainer()) return;
     document.querySelectorAll("[data-analytics-settings]").forEach(function (button) { button.hidden = false; });
-    if (consent === "granted") initializeProviders();
+    if (consent === "granted") initializeContainer();
     else if (consent === "unknown") renderBanner();
   });
 })();
