@@ -449,6 +449,49 @@ Expected result: `tables = 11` and `columns = 3`.
 
 ---
 
+### 021_business_entry_plans.sql
+
+**Purpose:** Promotes the ₪150 Trial package and ₪1,500 Business Wallet to
+first-class business-account plans. It rebuilds the three tables whose plan ID
+checks previously allowed only Silver, Gold, and Platinum, preserves existing
+accounts/top-ups/enrollments, and adds a unique guard for one active or paid Trial
+purchase per business account.
+
+**Command:**
+```bash
+# Staging (render the config first; run from worker/):
+npx wrangler d1 execute edenmish-staging --remote --yes \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/021_business_entry_plans.sql
+
+# Local verification:
+wrangler d1 execute edenmish --local \
+  --file=./migrations/021_business_entry_plans.sql
+
+# Production (after merge, before Worker deploy):
+wrangler d1 execute edenmish --remote \
+  --file=./migrations/021_business_entry_plans.sql
+```
+
+**Verification query:**
+```sql
+SELECT name, sql FROM sqlite_master
+WHERE type='table' AND name IN (
+  'business_accounts','wallet_topups','business_plan_enrollments'
+)
+ORDER BY name;
+
+SELECT name FROM pragma_index_list('wallet_topups')
+WHERE name='idx_wallet_topups_trial_once';
+
+PRAGMA foreign_key_check;
+```
+
+Expected result: all three table definitions include `trial` and `wallet`, the
+Trial guard index exists, and `foreign_key_check` returns no rows.
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -471,6 +514,7 @@ Expected result: `tables = 11` and `columns = 3`.
 - [ ] Run `018_business_wallet.sql` after merge and before deploying the Worker.
 - [ ] Run `019_delivery_notification_outbox.sql` after 018 and before enabling native driver completion.
 - [ ] Run `020_business_wallet_schema_repair.sql` only when migration 018 readiness is incomplete.
+- [ ] Run `021_business_entry_plans.sql` after 018/020 and before enabling Trial or Business Wallet checkout.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).

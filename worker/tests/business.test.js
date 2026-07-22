@@ -3,8 +3,12 @@ import assert from 'node:assert/strict';
 
 import {
   applyBusinessPlanPricing,
+  businessMagicUrl,
   businessSessionCookie,
   BUSINESS_PLANS,
+  cancelWalletTopup,
+  createWalletTopup,
+  creditWalletTopup,
   estimateBusinessDeliveries,
   normalizeBusinessEmail,
   publicBusinessPlans,
@@ -32,17 +36,36 @@ const publicQuote = (overrides = {}) => ({
 describe('business plan catalog and pricing', () => {
   test('publishes the approved wallet commitments without exposing agorot internals', () => {
     assert.deepEqual(publicBusinessPlans().map(({ id, amount, zones }) => ({ id, amount, zones })), [
+      { id: 'trial', amount: 150, zones: [1] },
+      { id: 'wallet', amount: 1500, zones: [1] },
       { id: 'silver', amount: 600, zones: [1] },
       { id: 'gold', amount: 1500, zones: [1, 2] },
       { id: 'platinum', amount: 3000, zones: [1, 2, 3] },
     ]);
     assert.equal(publicBusinessPlans().find(({ id }) => id === 'gold').rates['2:standard'], 65);
     assert.equal(BUSINESS_PLANS.platinum.amount_agorot, 300_000);
+    assert.equal(BUSINESS_PLANS.trial.amount_agorot, 15_000);
   });
 
   test('publishes a truthful value breakdown for each plan', () => {
     const plans = Object.fromEntries(publicBusinessPlans().map((plan) => [plan.id, plan]));
 
+    assert.deepEqual(plans.trial.value.example, {
+      zone: 1,
+      service: 'eco',
+      service_he: 'חסכוני',
+      public_rate: 35,
+      member_rate: 30,
+      saving_per_delivery: 5,
+      deliveries: 5,
+      estimated_savings: 25,
+      credit_remaining: 0,
+    });
+    assert.equal(plans.trial.value.credit_valid_days, 14);
+    assert.equal(plans.trial.value.repeatable, false);
+    assert.equal(plans.wallet.value.example.deliveries, 50);
+    assert.equal(plans.wallet.value.example.estimated_savings, 250);
+    assert.equal(plans.wallet.value.credit_valid_days, 30);
     assert.deepEqual(plans.silver.value.example, {
       zone: 1,
       service: 'standard',
@@ -63,6 +86,8 @@ describe('business plan catalog and pricing', () => {
   });
 
   test('estimates deliveries remaining from the authoritative available credit', () => {
+    assert.equal(estimateBusinessDeliveries(15_000, 'trial').count, 5);
+    assert.equal(estimateBusinessDeliveries(150_000, 'wallet').count, 50);
     assert.deepEqual(estimateBusinessDeliveries(60_000, 'silver'), {
       count: 13,
       rate: 45,
@@ -108,6 +133,61 @@ describe('business plan catalog and pricing', () => {
     assert.equal(silverZone2.available, false);
     assert.ok(silverZone2.reasons.includes('plan_service_unavailable'));
     assert.equal(platinumZone3Flash.available, false);
+    assert.equal(applyBusinessPlanPricing(publicQuote({ zone: 1, service: 'standard' }), 'trial').available, false);
+    assert.equal(applyBusinessPlanPricing(publicQuote({ zone: 1, service: 'eco', price: 35, breakdown: { base: 35, weekend_multiplier: 1 } }), 'wallet').price, 30);
+  });
+
+  test('uses the plan-specific credit expiry after a paid Shopify top-up', async () => {
+    const prepared = [];
+    const DB = {
+      prepare(sql) {
+        const statement = { sql, values: [], bind(...values) { this.values = values; prepared.push(this); return this; } };
+        return statement;
+      },
+      async batch() { return [{ meta: { changes: 1 } }]; },
+    };
+    const before = Date.now();
+    const result = await creditWalletTopup(DB, {
+      id: 'trial-topup', account_id: 7, plan_id: 'trial', amount_agorot: 15_000,
+      currency: 'ILS', status: 'checkout_ready', shopify_draft_order_id: '44',
+    }, { paid: true, total: 150, currency: 'ILS', draftOrderId: '44', shopifyOrderId: '99' });
+    const fourteenDays = 14 * 24 * 60 * 60 * 1000;
+    assert.ok(result.expires_at >= before + fourteenDays);
+    assert.ok(result.expires_at <= Date.now() + fourteenDays);
+    assert.ok(prepared.some(({ sql, values }) => sql.includes('wallet_credit_lots') && values[0] === result.expires_at));
+  });
+
+  test('enforces one Trial checkout per account at the domain boundary', async () => {
+    const prepared = [];
+    const DB = {
+      prepare(sql) {
+        const statement = {
+          sql,
+          values: [],
+          bind(...values) { this.values = values; prepared.push(this); return this; },
+          async run() { return { meta: { changes: 0 } }; },
+          async first() { return null; },
+        };
+        return statement;
+      },
+    };
+    const result = await createWalletTopup(DB, { account_id: 7, email: 'owner@example.com' }, 'trial');
+    assert.deepEqual(result, { error: 'trial_already_used' });
+    assert.ok(prepared.some(({ sql, values }) => sql.includes("SET status = 'cancelled'") && values[0] === 7 && values[1] === 'trial'));
+    assert.ok(prepared.some(({ sql }) => sql.includes('INSERT OR IGNORE INTO wallet_topups')));
+  });
+
+  test('cancels an unstarted top-up so failed checkout creation can be retried', async () => {
+    let statement;
+    const DB = {
+      prepare(sql) {
+        statement = { sql, values: [], bind(...values) { this.values = values; return this; }, async run() { return { meta: { changes: 1 } }; } };
+        return statement;
+      },
+    };
+    await cancelWalletTopup(DB, 'trial-topup');
+    assert.match(statement.sql, /status = 'cancelled'.*status = 'created'/);
+    assert.deepEqual(statement.values, ['trial-topup']);
   });
 });
 
@@ -124,6 +204,14 @@ describe('business passwordless authentication helpers', () => {
     assert.match(cookie, /Secure/);
     assert.match(cookie, /SameSite=Lax/);
     assert.match(cookie, /Max-Age=2592000/);
+  });
+
+  test('preserves the selected plan in emailed magic links', () => {
+    const url = new URL(businessMagicUrl('https://find.edenmish.com/business?plan=trial', 'challenge-1', 'token-1'));
+    assert.equal(url.pathname, '/business');
+    assert.equal(url.searchParams.get('plan'), 'trial');
+    assert.equal(url.searchParams.get('challenge'), 'challenge-1');
+    assert.equal(url.searchParams.get('token'), 'token-1');
   });
 });
 

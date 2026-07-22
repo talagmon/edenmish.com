@@ -191,6 +191,7 @@ wrangler d1 execute edenmish --remote --file=./migrations/018_business_wallet.sq
 wrangler d1 execute edenmish --remote --file=./migrations/019_delivery_notification_outbox.sql
 # Repair only when the migration 018 readiness query is incomplete:
 wrangler d1 execute edenmish --remote --file=./migrations/020_business_wallet_schema_repair.sql
+wrangler d1 execute edenmish --remote --file=./migrations/021_business_entry_plans.sql
 ```
 
 > Run only migrations that have not already been applied. Several `ALTER TABLE`
