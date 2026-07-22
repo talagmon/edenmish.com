@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import {
   applyBusinessPlanPricing,
+  businessCouponCustomerKey,
   businessMagicUrl,
   businessSessionCookie,
   BUSINESS_SESSION_TTL_MS,
@@ -116,6 +117,13 @@ function walletTestDB() {
 }
 
 describe('business plan catalog and pricing', () => {
+  test('keys one-time business coupons to the account rather than a member email', () => {
+    assert.equal(businessCouponCustomerKey({ account_id: 7, email: 'owner@example.com' }), 'business:7');
+    assert.equal(businessCouponCustomerKey({ account_id: 7, email: 'member@example.com' }), 'business:7');
+    assert.equal(businessCouponCustomerKey({ account_id: 8, email: 'owner@example.com' }), 'business:8');
+    assert.equal(businessCouponCustomerKey({ account_id: 0 }), null);
+  });
+
   test('publishes the approved wallet commitments without exposing agorot internals', () => {
     assert.deepEqual(publicBusinessPlans().map(({ id, amount, zones }) => ({ id, amount, zones })), [
       { id: 'trial', amount: 150, zones: [1] },

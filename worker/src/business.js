@@ -173,6 +173,17 @@ export function normalizeBusinessEmail(value) {
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) ? email : null;
 }
 
+// Business-plan coupon limits belong to the shared business account, not to an
+// individual member email. This prevents two members of one account from each
+// redeeming a coupon marked as once per customer.
+export function businessCouponCustomerKey(sessionOrAccountId) {
+  const raw = sessionOrAccountId && typeof sessionOrAccountId === 'object'
+    ? sessionOrAccountId.account_id
+    : sessionOrAccountId;
+  const accountId = Number(raw);
+  return Number.isSafeInteger(accountId) && accountId > 0 ? `business:${accountId}` : null;
+}
+
 function randomToken(bytes = 32) {
   const buf = new Uint8Array(bytes);
   crypto.getRandomValues(buf);
