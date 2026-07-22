@@ -149,6 +149,18 @@ describe('business account dashboard', () => {
     assert.doesNotMatch(html, /\b__name\s*\(/);
   });
 
+  test('makes the active identity explicit and offers a safe account switch', () => {
+    assert.match(html, /aria-label="החשבון המחובר"/);
+    assert.match(html, /id="session-email"/);
+    assert.match(html, /מחוברים כעת/);
+    assert.match(html, /הכניסה נשמרת במכשיר זה עד 3 ימים/);
+    assert.match(html, /id="switch-account"[^>]*data-business-logout/);
+    assert.match(html, /החלפת חשבון/);
+    assert.match(html, /\$\('session-email'\)\.textContent=s\.user\.email\|\|''/);
+    assert.match(html, /document\.querySelectorAll\('\[data-business-logout\]'\)\.forEach/);
+    assert.match(html, /api\('\/api\/business\/logout'/);
+  });
+
   test('opens Shopify separately and exposes pending, paid, and review states', () => {
     assert.match(html, /window\.open\('about:blank','_blank'\)/);
     assert.match(html, /status==='checkout_ready'/);

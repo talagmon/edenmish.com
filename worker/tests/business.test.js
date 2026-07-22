@@ -5,11 +5,13 @@ import {
   applyBusinessPlanPricing,
   businessMagicUrl,
   businessSessionCookie,
+  BUSINESS_SESSION_TTL_MS,
   BUSINESS_PLANS,
   cancelWalletTopup,
   createWalletTopup,
   creditWalletTopup,
   estimateBusinessDeliveries,
+  getBusinessSession,
   hydrateBusinessProfileFromPayment,
   normalizeBusinessEmail,
   publicBusinessPlans,
@@ -226,13 +228,42 @@ describe('business passwordless authentication helpers', () => {
     assert.equal(normalizeBusinessEmail('missing-at.example.com'), null);
   });
 
-  test('uses a secure, HttpOnly, same-site 30-day session cookie', () => {
+  test('uses a secure, HttpOnly, same-site three-day session cookie', () => {
     const cookie = businessSessionCookie('opaque-token');
     assert.match(cookie, /^business_session=opaque-token;/);
     assert.match(cookie, /HttpOnly/);
     assert.match(cookie, /Secure/);
     assert.match(cookie, /SameSite=Lax/);
-    assert.match(cookie, /Max-Age=2592000/);
+    assert.match(cookie, /Max-Age=259200/);
+    assert.equal(BUSINESS_SESSION_TTL_MS, 3 * 24 * 60 * 60 * 1000);
+  });
+
+  test('caps previously issued business sessions at the current three-day policy', async () => {
+    let sql = '';
+    let values = [];
+    const DB = {
+      prepare(statement) {
+        sql = statement;
+        return {
+          bind(...bound) {
+            values = bound;
+            return { first: async () => null };
+          },
+        };
+      },
+    };
+    const before = Date.now();
+    await getBusinessSession(
+      new Request('https://find.edenmish.com/api/business/me', {
+        headers: { Cookie: 'business_session=opaque-token' },
+      }),
+      { DB, SESSION_SECRET: 'test-session-secret-that-is-long-enough' },
+    );
+    const after = Date.now();
+    assert.match(sql, /s\.expires_at > \? AND s\.created_at >= \?/);
+    assert.equal(values.length, 3);
+    assert.ok(values[1] >= before && values[1] <= after);
+    assert.equal(values[1] - values[2], BUSINESS_SESSION_TTL_MS);
   });
 
   test('preserves the selected plan in emailed magic links', () => {
