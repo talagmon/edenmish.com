@@ -417,7 +417,7 @@ function renderTrack(d){
   }
 
   // Payment CTA for unpaid orders (customer can pay directly from the tracking page)
-  if (o.payment_url && o.payment_status !== "paid") {
+  if (o.payment_url && o.payment_status !== "paid" && !TERMINAL_TRACK_STATUSES.includes(o.status)) {
     const pay = document.createElement("a");
     pay.href = o.payment_url;
     pay.className = "mt-4 w-full bg-tertiary hover:brightness-110 text-on-tertiary font-bold py-4 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 shadow-lg shadow-tertiary/20";
