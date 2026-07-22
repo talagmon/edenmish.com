@@ -87,7 +87,8 @@ describe('parseShopifyOrderWebhook', () => {
       total_price: '50.00',
       currency: 'ILS',
       email: 'checkout@example.com',
-      customer: { first_name: 'Test', last_name: 'Customer' },
+      customer: { first_name: 'Test', last_name: 'Customer', phone: '0501111111' },
+      billing_address: { company: 'Test Delivery Ltd' },
       line_items: [{ properties: [{ name: '_tracking_token', value: 'line-token' }] }],
       metafields: [{ namespace: 'edenmish', key: 'tracking_token', value: 'meta-token' }],
       note: 'token: deadbeef',
@@ -101,6 +102,8 @@ describe('parseShopifyOrderWebhook', () => {
     assert.equal(result.currency, 'ILS');
     assert.equal(result.email, 'checkout@example.com');
     assert.equal(result.customerName, 'Test Customer');
+    assert.equal(result.customerPhone, '0501111111');
+    assert.equal(result.billingCompany, 'Test Delivery Ltd');
   });
 
   test('falls back to the EdenMish metafield and then the note token', () => {
@@ -129,6 +132,20 @@ describe('parseShopifyOrderWebhook', () => {
     assert.equal(result.email, 'dana@example.com');
     assert.equal(result.customerName, 'Dana Levi');
   });
+
+  test('uses billing details when Shopify does not attach a named customer', () => {
+    const result = parseShopifyOrderWebhook({
+      billing_address: {
+        first_name: 'Noa',
+        last_name: 'Cohen',
+        phone: '0522222222',
+        company: 'Noa Studio',
+      },
+    });
+    assert.equal(result.customerName, 'Noa Cohen');
+    assert.equal(result.customerPhone, '0522222222');
+    assert.equal(result.billingCompany, 'Noa Studio');
+  });
 });
 
 describe('corsFor', () => {
@@ -148,6 +165,7 @@ describe('corsFor', () => {
     });
     assert.equal(headers['Access-Control-Allow-Origin'], 'https://edenmish.com');
     assert.equal(headers['Access-Control-Allow-Credentials'], 'true');
+    assert.match(headers['Access-Control-Allow-Headers'], /Idempotency-Key/);
     assert.equal(headers.Vary, 'Origin');
   });
 

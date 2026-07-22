@@ -392,6 +392,15 @@ describe('Frontend: Booking form', () => {
     assertContains(html, 'price-table-title', 'active plan price-table title');
     assertContains(html, 'business-wallet-estimate', 'estimated deliveries remaining copy');
     assertContains(html, 'יתרת ₪ היא הקובעת', 'authoritative credit disclaimer');
+    assertContains(html, 'availableServices.has(input.value)', 'plan service availability');
+    assertContains(html, 'input.disabled=!available', 'unavailable plan service disabled');
+    assertContains(html, 'EdenBusinessBooking.planServiceState(activePlan)', 'tested plan-service decision');
+    assertContains(html, 'preferredInput.checked=true', 'plan service selected automatically');
+    assertContains(html, 'לא כלול במסלול', 'unavailable service explanation');
+    assertContains(html, 'requestAuthoritativeQuoteNow', 'immediate authoritative quote before wallet spend');
+    assertContains(html, 'לא נוכתה יתרה', 'failed business quote blocks wallet spend');
+    assertContains(html, 'plan_service_unavailable', 'plan restriction explanation');
+    assertContains(html, 'class="sr-only peer" name="service"', 'keyboard-focusable service radios');
   });
 
   test('Has terms acceptance separated from operational notifications', () => {

@@ -1,5 +1,68 @@
 const escapeScript = (value) => JSON.stringify(String(value || '')).replace(/</g, '\\u003c');
 
+export function selectRelevantBusinessTopup(topups, activeId = '', dismissedId = '', now = Date.now()) {
+  const rows = Array.isArray(topups) ? topups.filter(Boolean) : [];
+  const eventTime = (topup) => Number(topup?.status === 'paid' ? (topup.paid_at || topup.created_at || 0) : (topup?.created_at || 0));
+  const latest = (items) => items.reduce((selected, item) => (
+    !selected || eventTime(item) > eventTime(selected) ? item : selected
+  ), null);
+  const active = activeId ? rows.find((topup) => topup.id === activeId) : null;
+  if (active?.status === 'mismatch' && active.id !== dismissedId) return active;
+
+  const unresolvedMismatch = latest(rows.filter((topup) => topup.status === 'mismatch' && topup.id !== dismissedId));
+  if (unresolvedMismatch) return unresolvedMismatch;
+
+  const latestPaid = latest(rows.filter((topup) => topup.status === 'paid'));
+  const dismissed = dismissedId ? rows.find((topup) => topup.id === dismissedId) : null;
+  const cutoffAt = Math.max(eventTime(latestPaid), eventTime(dismissed));
+  const isRecent = (topup) => {
+    const timestamp = eventTime(topup);
+    return timestamp > 0 && now - timestamp < 86_400_000;
+  };
+  const isPending = (topup) => ['created', 'checkout_ready'].includes(topup?.status);
+
+  if (active && active.id !== dismissedId) {
+    if (isPending(active) && Number(active.created_at || 0) > cutoffAt && isRecent(active)) return active;
+    if (active.status === 'paid' && active.id === latestPaid?.id && isRecent(active)) return active;
+  }
+
+  const pending = latest(rows.filter((topup) => (
+    topup.id !== dismissedId
+    && topup.status === 'checkout_ready'
+    && Number(topup.created_at || 0) > cutoffAt
+    && isRecent(topup)
+  )));
+  if (pending) return pending;
+
+  if (latestPaid && latestPaid.id !== dismissedId && isRecent(latestPaid)) return latestPaid;
+  return null;
+}
+
+export function businessProfilePatch(values, dirtyFields) {
+  const dirty = new Set(dirtyFields || []);
+  const patch = {};
+  if (dirty.has('company')) patch.company_name = String(values?.company ?? '');
+  if (dirty.has('contact-name')) patch.name = String(values?.contactName ?? '');
+  if (dirty.has('phone')) patch.phone = String(values?.phone ?? '');
+  return patch;
+}
+
+export function createLatestBusinessSnapshotRefresher(load, apply, onError = () => {}) {
+  let latestRequest = 0;
+  return async function refresh(silent = false) {
+    const requestId = ++latestRequest;
+    try {
+      const value = await load();
+      if (requestId !== latestRequest) return false;
+      apply(value);
+      return true;
+    } catch (error) {
+      if (requestId === latestRequest) onError(error, silent);
+      return false;
+    }
+  };
+}
+
 export function businessAccountHtml(storefrontBase = 'https://edenmish.com') {
   const storefront = String(storefrontBase).replace(/\/+$/, '');
   return `<!doctype html>
@@ -87,6 +150,9 @@ export function businessAccountHtml(storefrontBase = 'https://edenmish.com') {
   </section>
 </main>
 <script>
+${selectRelevantBusinessTopup.toString()}
+${businessProfilePatch.toString()}
+${createLatestBusinessSnapshotRefresher.toString()}
 const STOREFRONT=${escapeScript(storefront)};
 const $=id=>document.getElementById(id);
 const esc=value=>String(value==null?'':value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -98,6 +164,7 @@ const orderStatuses={delivered:'נמסר',paid:'שולם',to_pickup:'בדרך ל
 const requestedPlan=new URLSearchParams(location.search).get('plan');
 const selectedPlanId=planNames[requestedPlan]?requestedPlan:'';
 let challenge=null,snapshot=null,firstRender=true,ordersExpanded=false,entriesExpanded=false,pollTimer=null;
+const profileDirty=new Set();
 
 async function api(path,options={}){const response=await fetch(path,{...options,credentials:'same-origin',headers:{'Content-Type':'application/json',...(options.headers||{})}});const data=await response.json().catch(()=>({}));if(!response.ok){const error=new Error(data.error||'request_failed');error.status=response.status;error.data=data;throw error}return data}
 function authMessage(text,error=false){const el=$('auth-message');el.textContent=text||'';el.classList.toggle('error',error)}
@@ -107,7 +174,7 @@ function planArt(id){return STOREFRONT+'/assets/business-'+(planNames[id]?id:'wa
 function initials(value){const words=String(value||'EM').trim().split(/\\s+/).filter(Boolean);return words.slice(0,2).map(w=>w[0]).join('').toUpperCase()||'EM'}
 function activeTopupId(){return sessionStorage.getItem('edenmish_active_topup')||''}
 function dismissTopup(id){if(id)sessionStorage.setItem('edenmish_dismissed_topup',id);sessionStorage.removeItem('edenmish_active_topup');$('topup-status').classList.add('hidden');stopPolling()}
-function relevantTopup(){if(!snapshot||!snapshot.topups)return null;const active=activeTopupId();const dismissed=sessionStorage.getItem('edenmish_dismissed_topup')||'';if(active){const match=snapshot.topups.find(t=>t.id===active);if(match)return match}const recent=snapshot.topups.find(t=>t.status==='checkout_ready'&&Date.now()-Number(t.created_at)<86400000&&t.id!==dismissed);return recent||null}
+function relevantTopup(){if(!snapshot||!snapshot.topups)return null;return selectRelevantBusinessTopup(snapshot.topups,activeTopupId(),sessionStorage.getItem('edenmish_dismissed_topup')||'',Date.now())}
 function stopPolling(){if(pollTimer){clearInterval(pollTimer);pollTimer=null}}
 function updatePolling(topup){stopPolling();if(topup&&(topup.status==='created'||topup.status==='checkout_ready'))pollTimer=setInterval(()=>{if(document.visibilityState==='visible')refreshSnapshot(true)},6000)}
 function renderTopupStatus(){const banner=$('topup-status');const topup=relevantTopup();if(!topup){banner.className='status-banner hidden';stopPolling();return}const plan=planNames[topup.plan_id]||topup.plan_id;let tone='pending',icon='schedule',title='התשלום ממתין להשלמה',copy='התשלום נפתח ב־Shopify בלשונית נפרדת. אם כבר שילמתם, אל תשלמו שוב — היתרה תתעדכן כאן אוטומטית.',actions='';if(topup.status==='paid'){tone='success';icon='check_circle';title='הטעינה הושלמה';copy='נוספו ₪'+money(topup.amount)+' ליתרה ומסלול '+plan+' פעיל כעת.'}else if(topup.status==='mismatch'){tone='problem';icon='error';title='התשלום התקבל ונדרש אימות';copy='אל תשלמו שוב. התשלום נמצא בבדיקה ואנחנו נטפל בהתאמת היתרה.'}else if(topup.checkout_url){actions='<a class="btn ghost" href="'+esc(topup.checkout_url)+'" target="_blank" rel="noopener">חזרה לתשלום</a>'}banner.className='status-banner '+tone;$('topup-status-icon').textContent=icon;$('topup-status-title').textContent=title;$('topup-status-copy').textContent=copy;$('topup-status-actions').innerHTML=actions+'<button class="icon-button ghost" type="button" aria-label="סגירת ההודעה" data-dismiss-topup="'+esc(topup.id)+'"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>';const close=banner.querySelector('[data-dismiss-topup]');if(close)close.onclick=()=>dismissTopup(topup.id);updatePolling(topup)}
@@ -115,8 +182,8 @@ function planCard(plan){const value=plan.value||{},example=value.example||{},cur
 function renderPlans(){const entry=snapshot.plans.filter(plan=>plan.id==='trial'||plan.id==='wallet'),tiers=snapshot.plans.filter(plan=>plan.id!=='trial'&&plan.id!=='wallet');$('entry-plan-cards').innerHTML=entry.map(planCard).join('');$('plan-cards').innerHTML=tiers.map(planCard).join('');document.querySelectorAll('.topup:not(:disabled)').forEach(button=>button.onclick=()=>topup(button))}
 function renderOrders(){const list=snapshot.orders||[],visible=ordersExpanded?list:list.slice(0,5);$('orders').innerHTML=visible.length?visible.map(order=>'<div class="row"><div class="row-main"><b>משלוח #'+esc(order.id)+'</b><div class="route muted">'+esc(order.pickup||'—')+' ← '+esc(order.dropoff||'—')+'</div></div><div class="row-side"><b><bdi>₪'+money(order.price)+'</bdi></b><div><span class="status-pill">'+esc(orderStatuses[order.status]||orderStatuses[order.payment_status]||order.status||order.payment_status||'בטיפול')+'</span></div></div></div>').join(''):'<div class="empty"><span class="material-symbols-outlined" aria-hidden="true">two_wheeler</span>עדיין אין משלוחים בחשבון.</div>';const toggle=$('orders-toggle');toggle.classList.toggle('hidden',list.length<=5);toggle.textContent=ordersExpanded?'הצגת חמשת האחרונים':'הצגת כל '+list.length+' המשלוחים'}
 function renderEntries(){const labels={topup:'טעינת יתרה',reserve:'שמירת יתרה למשלוח',capture:'חיוב משלוח',release:'שחרור יתרה',refund:'זיכוי',expiry:'פקיעת יתרה',adjustment:'התאמה'};const list=snapshot.entries||[],visible=entriesExpanded?list:list.slice(0,5);$('entries').innerHTML=visible.length?visible.map(entry=>{const delta=Number(entry.available_delta||0);return '<div class="row"><div class="row-main"><b>'+esc(labels[entry.entry_type]||entry.entry_type)+'</b><div class="muted">'+date(entry.created_at)+(entry.order_id?' · משלוח #'+esc(entry.order_id):'')+'</div></div><b class="ltr '+(delta>0?'positive':delta<0?'negative':'')+'">'+(delta>0?'+':'')+money(delta)+' ₪</b></div>'}).join(''):'<div class="empty"><span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span>פעילות היתרה תופיע כאן.</div>';const toggle=$('entries-toggle');toggle.classList.toggle('hidden',list.length<=5);toggle.textContent=entriesExpanded?'הצגת חמש הפעולות האחרונות':'הצגת כל '+list.length+' הפעולות'}
-function render(){const s=snapshot,estimate=s.wallet.delivery_estimate,plan=s.plans.find(item=>item.id===s.account.plan_id),hasPlan=Boolean(plan);$('balance').textContent=money(s.wallet.available);$('reserved').textContent=money(s.wallet.reserved)+' ₪ בהמתנה';$('estimated-deliveries').textContent=estimate?money(estimate.count):'—';$('estimate-basis').textContent=estimate?'משלוחים משוערים · '+estimate.service_he+' באזור '+money(estimate.zone):'לאחר בחירת מסלול תוצג הערכה';$('expiry').textContent=s.wallet.next_expiry?'₪'+money(s.wallet.next_expiry.amount)+' עד '+date(s.wallet.next_expiry.at):'אין יתרה שעומדת לפוג';const displayName=s.account.company_name||s.user.name||s.user.email;$('header-company').textContent=displayName;$('header-role').textContent=s.user.role==='owner'?'בעלים · חשבון מאומת':'חשבון מאומת';$('avatar').textContent=initials(displayName);$('active-plan-art').src=hasPlan?planArt(plan.id):STOREFRONT+'/assets/business-wallet.webp';$('active-plan-art').alt=hasPlan?(planAlt[plan.id]||'מסלול משלוחים עסקי'):'ארנק דיגיטלי מחבר רשת של שליחים על אופנועים';$('active-plan-eyebrow').textContent=hasPlan?'המסלול הפעיל':'החשבון העסקי שלך';$('active-plan-title').textContent=hasPlan?(planNames[plan.id]||plan.name_he):'עדיין אין מסלול פעיל';$('active-plan-copy').textContent=hasPlan?plan.value.best_for:'בחרו אחת מחמש התוכניות כדי להתחיל.';$('active-plan-badge').textContent=hasPlan?'פעיל · אזורים '+plan.zones.join('–'):'ממתין לבחירה';$('active-plan-badge').className='badge '+(hasPlan?'active':'');$('primary-action').href=hasPlan?STOREFRONT+'/booking.html?business=1':'#programs';$('primary-action-label').textContent=hasPlan?'משלוח חדש':'בחירת תוכנית';$('header-new-delivery').href=hasPlan?STOREFRONT+'/booking.html?business=1':'#programs';$('company').value=s.account.company_name||'';$('contact-name').value=s.user.name||'';$('phone').value=s.user.phone||'';$('login-email').value=s.user.email||'';$('business-summary').textContent=(s.account.company_name||'שם העסק לא הוגדר')+' · '+(s.user.name||'איש קשר לא הוגדר');renderPlans();renderOrders();renderEntries();renderTopupStatus();if(firstRender){$('programs').open=!hasPlan||Boolean(selectedPlanId);if(selectedPlanId)setTimeout(()=>document.querySelector('[data-plan-card="'+selectedPlanId+'"]')?.scrollIntoView({block:'center'}),60);firstRender=false}}
-async function refreshSnapshot(silent=false){try{snapshot=await api('/api/business/me');render();showDashboard()}catch(error){if(error.status===401)showAuth();else if(!silent){$('payment-message').textContent='לא הצלחנו לרענן את החשבון כרגע.';$('payment-message').classList.add('error')}}}
+function render(){const s=snapshot,estimate=s.wallet.delivery_estimate,plan=s.plans.find(item=>item.id===s.account.plan_id),hasPlan=Boolean(plan);$('balance').textContent=money(s.wallet.available);$('reserved').textContent=money(s.wallet.reserved)+' ₪ בהמתנה';$('estimated-deliveries').textContent=estimate?money(estimate.count):'—';$('estimate-basis').textContent=estimate?'משלוחים משוערים · '+estimate.service_he+' באזור '+money(estimate.zone):'לאחר בחירת מסלול תוצג הערכה';$('expiry').textContent=s.wallet.next_expiry?'₪'+money(s.wallet.next_expiry.amount)+' עד '+date(s.wallet.next_expiry.at):'אין יתרה שעומדת לפוג';const displayName=s.account.company_name||s.user.name||s.user.email;$('header-company').textContent=displayName;$('header-role').textContent=s.user.role==='owner'?'בעלים · חשבון מאומת':'חשבון מאומת';$('avatar').textContent=initials(displayName);$('active-plan-art').src=hasPlan?planArt(plan.id):STOREFRONT+'/assets/business-wallet.webp';$('active-plan-art').alt=hasPlan?(planAlt[plan.id]||'מסלול משלוחים עסקי'):'ארנק דיגיטלי מחבר רשת של שליחים על אופנועים';$('active-plan-eyebrow').textContent=hasPlan?'המסלול הפעיל':'החשבון העסקי שלך';$('active-plan-title').textContent=hasPlan?(planNames[plan.id]||plan.name_he):'עדיין אין מסלול פעיל';$('active-plan-copy').textContent=hasPlan?plan.value.best_for:'בחרו אחת מחמש התוכניות כדי להתחיל.';$('active-plan-badge').textContent=hasPlan?'פעיל · אזורים '+plan.zones.join('–'):'ממתין לבחירה';$('active-plan-badge').className='badge '+(hasPlan?'active':'');$('primary-action').href=hasPlan?STOREFRONT+'/booking.html?business=1':'#programs';$('primary-action-label').textContent=hasPlan?'משלוח חדש':'בחירת תוכנית';$('header-new-delivery').href=hasPlan?STOREFRONT+'/booking.html?business=1':'#programs';if(!profileDirty.has('company'))$('company').value=s.account.company_name||'';if(!profileDirty.has('contact-name'))$('contact-name').value=s.user.name||'';if(!profileDirty.has('phone'))$('phone').value=s.user.phone||'';$('login-email').value=s.user.email||'';$('business-summary').textContent=(s.account.company_name||'שם העסק לא הוגדר')+' · '+(s.user.name||'איש קשר לא הוגדר');renderPlans();renderOrders();renderEntries();renderTopupStatus();if(firstRender){$('programs').open=!hasPlan||Boolean(selectedPlanId);if(selectedPlanId)setTimeout(()=>document.querySelector('[data-plan-card="'+selectedPlanId+'"]')?.scrollIntoView({block:'center'}),60);firstRender=false}}
+const refreshSnapshot=createLatestBusinessSnapshotRefresher(()=>api('/api/business/me'),next=>{snapshot=next;render();showDashboard()},(error,silent)=>{if(error.status===401)showAuth();else if(!silent){$('payment-message').textContent='לא הצלחנו לרענן את החשבון כרגע.';$('payment-message').classList.add('error')}});
 async function topup(button){const plan=button.dataset.plan,original=button.textContent,checkoutWindow=window.open('about:blank','_blank');button.disabled=true;button.textContent='מכין תשלום…';$('payment-message').textContent='';try{const data=await api('/api/business/topups',{method:'POST',body:JSON.stringify({plan_id:plan})});if(!data.checkout_url)throw new Error('checkout_unavailable');sessionStorage.setItem('edenmish_active_topup',data.topup_id);sessionStorage.removeItem('edenmish_dismissed_topup');if(checkoutWindow){checkoutWindow.opener=null;checkoutWindow.location.replace(data.checkout_url)}else location.assign(data.checkout_url);await refreshSnapshot(true)}catch(error){if(checkoutWindow)checkoutWindow.close();$('payment-message').textContent=error.message==='trial_already_used'?'חבילת הניסיון כבר נבחרה בחשבון הזה. אפשר לבחור ארנק עסקי או מסלול אחר.':'לא הצלחנו לפתוח את התשלום. לא חויבתם — נסו שוב או פנו לעדן.';$('payment-message').classList.add('error');button.disabled=false;button.textContent=original}}
 $('orders-toggle').onclick=()=>{ordersExpanded=!ordersExpanded;renderOrders()};$('entries-toggle').onclick=()=>{entriesExpanded=!entriesExpanded;renderEntries()};
 $('email-form').onsubmit=async event=>{event.preventDefault();authMessage('שולחים…');const button=event.submitter;button.disabled=true;try{const data=await api('/api/business/auth/request',{method:'POST',body:JSON.stringify({email:$('email').value,plan_id:selectedPlanId||undefined})});challenge=data.challenge;$('email-step').classList.add('hidden');$('code-step').classList.remove('hidden');authMessage('שלחנו קישור וקוד לאימייל.');document.querySelector('.otp input').focus()}catch(error){authMessage(error.status===429?'נשלחו יותר מדי בקשות. נסו שוב מאוחר יותר.':'לא הצלחנו לשלוח. בדקו את האימייל ונסו שוב.',true)}finally{button.disabled=false}};
@@ -124,7 +191,8 @@ $('code-form').onsubmit=async event=>{event.preventDefault();const code=[...docu
 document.querySelectorAll('.otp input').forEach((input,index,all)=>{input.oninput=()=>{input.value=input.value.replace(/\\D/g,'').slice(-1);if(input.value&&all[index+1])all[index+1].focus()};input.onkeydown=event=>{if(event.key==='Backspace'&&!input.value&&all[index-1])all[index-1].focus()};input.onpaste=event=>{const digits=(event.clipboardData.getData('text')||'').replace(/\\D/g,'').slice(0,6);if(digits){event.preventDefault();digits.split('').forEach((digit,digitIndex)=>{if(all[digitIndex])all[digitIndex].value=digit});if(all[Math.min(digits.length,5)])all[Math.min(digits.length,5)].focus()}}});
 $('back-email').onclick=()=>{$('code-step').classList.add('hidden');$('email-step').classList.remove('hidden');authMessage('')};
 $('logout').onclick=async()=>{await api('/api/business/logout',{method:'POST',body:'{}'}).catch(()=>{});sessionStorage.removeItem('edenmish_active_topup');location.reload()};
-$('profile-form').onsubmit=async event=>{event.preventDefault();const button=event.submitter;button.disabled=true;$('profile-message').textContent='שומרים…';$('profile-message').classList.remove('error');try{await api('/api/business/profile',{method:'PUT',body:JSON.stringify({company_name:$('company').value,name:$('contact-name').value,phone:$('phone').value})});$('profile-message').textContent='הפרטים נשמרו.';await refreshSnapshot(true)}catch(error){$('profile-message').textContent='לא הצלחנו לשמור כרגע.';$('profile-message').classList.add('error')}finally{button.disabled=false}};
+document.querySelectorAll('#profile-form input:not([readonly])').forEach(input=>input.addEventListener('input',()=>{profileDirty.add(input.id)}));
+$('profile-form').onsubmit=async event=>{event.preventDefault();const button=event.submitter||event.currentTarget.querySelector('button[type="submit"]');const dirty=[...profileDirty],values={company:$('company').value,contactName:$('contact-name').value,phone:$('phone').value},patch=businessProfilePatch(values,dirty),submitted=new Map(dirty.map(id=>[id,$(id).value]));if(!Object.keys(patch).length){$('profile-message').textContent='לא בוצעו שינויים.';return}button.disabled=true;$('profile-message').textContent='שומרים…';$('profile-message').classList.remove('error');try{await api('/api/business/profile',{method:'PUT',body:JSON.stringify(patch)});dirty.forEach(id=>{if($(id).value===submitted.get(id))profileDirty.delete(id)});$('profile-message').textContent='הפרטים נשמרו.';await refreshSnapshot(true)}catch(error){$('profile-message').textContent='לא הצלחנו לשמור כרגע.';$('profile-message').classList.add('error')}finally{button.disabled=false}};
 window.addEventListener('focus',()=>{if(snapshot)refreshSnapshot(true)});document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&snapshot)refreshSnapshot(true)});
 (async()=>{const query=new URLSearchParams(location.search);if(query.get('challenge')&&query.get('token')){try{await api('/api/business/auth/verify',{method:'POST',body:JSON.stringify({challenge:query.get('challenge'),token:query.get('token')})})}catch(error){authMessage(error.message==='expired'?'הקישור פג. בקשו קישור חדש.':'הקישור אינו תקין.',true)}finally{history.replaceState({},'',location.pathname+(selectedPlanId?'?plan='+encodeURIComponent(selectedPlanId):''))}}await refreshSnapshot()})();
 </script>
