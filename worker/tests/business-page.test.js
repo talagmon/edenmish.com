@@ -172,6 +172,14 @@ describe('business account dashboard', () => {
     assert.match(html, /return selectRelevantBusinessTopup\(snapshot\.topups,activeTopupId\(\)/);
   });
 
+  test('offers a business-plan coupon field and sends it with the selected plan', () => {
+    assert.match(html, /id="business-coupon"/);
+    assert.match(html, /קוד קופון למסלול עסקי/);
+    assert.match(html, /coupon_code:couponCode\|\|undefined/);
+    assert.match(html, /error\.message==='invalid_coupon'/);
+    assert.match(html, /ההנחה תוצג ב־Shopify/);
+  });
+
   test('cleans one-time login tokens from the address even after verification errors', () => {
     assert.match(html, /finally\{history\.replaceState\(\{\},'',location\.pathname\+\(selectedPlanId/);
   });

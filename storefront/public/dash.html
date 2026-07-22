@@ -737,10 +737,12 @@ function renderCoupons(){
     return (c.redemption_count||0)+' / '+(c.usage_limit!=null?c.usage_limit:'ללא הגבלה');
   }
   function typeLabel(t){ return t==='percentage'?'אחוז %':'סכום קבוע ₪'; }
+  function scopeLabel(s){ return s==='business_plan'?'מסלול עסקי':'משלוח בודד'; }
   var rows = coupons.map(function(c){
     return '<tr class="border-b border-outline-variant/20">'+
       '<td class="p-2 font-mono text-label-sm text-primary" dir="ltr">'+esc(c.code)+'</td>'+
       '<td class="p-2 text-label-sm text-on-surface">'+esc(c.title||"—")+'</td>'+
+      '<td class="p-2 text-label-sm text-on-surface">'+scopeLabel(c.scope)+'</td>'+
       '<td class="p-2 text-label-sm text-on-surface">'+typeLabel(c.value_type)+'</td>'+
       '<td class="p-2 text-label-sm text-on-surface font-bold">'+(c.value_type==='percentage'?c.value+'%':'₪'+c.value)+'</td>'+
       '<td class="p-2">'+statusBadge(c)+'</td>'+
@@ -759,9 +761,9 @@ function renderCoupons(){
   var table = '<div class="glass-card rounded-2xl p-stack-sm overflow-x-auto">'+
     '<table class="w-full text-right min-w-[680px]">'+
     '<thead class="bg-surface-container-low/60 text-on-surface-variant text-label-sm font-label-bold">'+
-      '<tr><th class="p-2">קוד</th><th class="p-2">כותרת</th><th class="p-2">סוג</th><th class="p-2">ערך</th><th class="p-2">סטטוס</th><th class="p-2">מימוש</th><th class="p-2">התחלה</th><th class="p-2">סיום</th><th class="p-2">פעולות</th></tr>'+
+      '<tr><th class="p-2">קוד</th><th class="p-2">כותרת</th><th class="p-2">חל על</th><th class="p-2">סוג</th><th class="p-2">ערך</th><th class="p-2">סטטוס</th><th class="p-2">מימוש</th><th class="p-2">התחלה</th><th class="p-2">סיום</th><th class="p-2">פעולות</th></tr>'+
     '</thead>'+
-    '<tbody>'+(rows||'<tr><td colspan="9" class="p-6 text-center text-on-surface-variant">אין קופונים</td></tr>')+'</tbody>'+
+    '<tbody>'+(rows||'<tr><td colspan="10" class="p-6 text-center text-on-surface-variant">אין קופונים</td></tr>')+'</tbody>'+
     '</table></div>';
 
   var hdr = viewTabsHtml();
@@ -788,6 +790,8 @@ var editingCouponCode = null;
 function showCouponForm(code){
   editingCouponCode = code || null;
   var c = code ? coupons.find(function(x){return x.code===code;}) : null;
+  var planIds = c&&Array.isArray(c.business_plan_ids)?c.business_plan_ids:[];
+  var couponScope = c&&c.scope==='business_plan'?'business_plan':'delivery';
   var html =
     '<div class="coupon-form-overlay fixed inset-0 z-[100] bg-background/95 backdrop-blur-xl p-6 overflow-y-auto">'+
     '<div class="glass-card rounded-2xl p-stack-lg max-w-md mx-auto space-y-stack-md">'+
@@ -796,6 +800,13 @@ function showCouponForm(code){
     '<div class="space-y-3">'+
     '<div><label class="text-label-sm text-on-surface-variant block mb-1">קוד קופון</label><input id="c-code" type="text" placeholder="WELCOME10" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-left font-mono" dir="ltr" value="'+(c?esc(c.code):'')+'" '+(!c?'oninput="this.value=this.value.toUpperCase()"':'readonly="readonly"')+'/></div>'+
     '<div><label class="text-label-sm text-on-surface-variant block mb-1">כותרת</label><input id="c-title" type="text" placeholder="שם תצוגה" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-right" value="'+(c?esc(c.title||''):'')+'"/></div>'+
+    '<div><label class="text-label-sm text-on-surface-variant block mb-1">הקופון חל על</label><select id="c-scope" onchange="toggleBusinessPlanCouponFields()" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3">'+
+      '<option value="delivery" '+(couponScope==='delivery'?'selected':'')+'>משלוח בודד</option>'+
+      '<option value="business_plan" '+(couponScope==='business_plan'?'selected':'')+'>רכישת מסלול עסקי</option>'+
+    '</select></div>'+
+    '<div id="c-business-plans" class="glass-card rounded-xl p-3 '+(couponScope==='business_plan'?'':'hidden')+'"><div class="text-label-sm text-on-surface-variant mb-2">מסלולים תקפים · ללא בחירה = כל המסלולים</div><div class="grid grid-cols-2 gap-2">'+
+      [['trial','ניסיון'],['wallet','ארנק'],['silver','כסף'],['gold','זהב'],['platinum','פלטינום']].map(function(p){return '<label class="flex items-center gap-2"><input type="checkbox" name="c-plan" value="'+p[0]+'" '+(planIds.includes(p[0])?'checked':'')+' class="accent-secondary"/><span class="text-label-sm">'+p[1]+'</span></label>';}).join('')+
+    '</div></div>'+
     '<div class="flex gap-3">'+
       '<label class="flex-1 flex items-center gap-2 glass-card rounded-xl p-3 cursor-pointer '+(c&&c.value_type==='percentage'?'ring-1 ring-secondary':'')+'"><input type="radio" name="c-type" value="percentage" '+(c&&c.value_type==='percentage'?'checked':'')+' class="accent-secondary"/><span class="text-label-sm text-on-surface">אחוז %</span></label>'+
       '<label class="flex-1 flex items-center gap-2 glass-card rounded-xl p-3 cursor-pointer '+(c&&c.value_type==='fixed_amount'?'ring-1 ring-secondary':'')+'"><input type="radio" name="c-type" value="fixed_amount" '+(c&&c.value_type==='fixed_amount'?'checked':'')+' class="accent-secondary"/><span class="text-label-sm text-on-surface">סכום קבוע ₪</span></label>'+
@@ -820,6 +831,7 @@ function showCouponForm(code){
   var tmp = document.createElement("div"); tmp.innerHTML = html; document.body.appendChild(tmp.firstElementChild);
 }
 function cancelCouponForm(){ var m=document.querySelector('.coupon-form-overlay'); if(m)m.remove(); editingCouponCode=null; }
+function toggleBusinessPlanCouponFields(){var scope=document.getElementById('c-scope');var plans=document.getElementById('c-business-plans');if(scope&&plans)plans.classList.toggle('hidden',scope.value!=='business_plan');}
 function toDatetimeLocal(ts){ var d=new Date(ts); var pad=function(n){return n<10?'0'+n:n;}; return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes()); }
 function submitCoupon(code){
   var btn = document.getElementById("c-submit"); if(btn) btn.disabled = true;
@@ -829,7 +841,9 @@ function submitCoupon(code){
     value_type: document.querySelector('input[name="c-type"]:checked')?document.querySelector('input[name="c-type"]:checked').value:'percentage',
     value: Number(document.getElementById("c-value").value)||0,
     status: document.getElementById("c-status").value,
-    applies_once_per_customer: !!document.getElementById("c-once").checked
+    applies_once_per_customer: !!document.getElementById("c-once").checked,
+    scope: document.getElementById("c-scope").value,
+    business_plan_ids: Array.from(document.querySelectorAll('input[name="c-plan"]:checked')).map(function(input){return input.value;})
   };
   var st = document.getElementById("c-starts").value;
   var en = document.getElementById("c-ends").value;

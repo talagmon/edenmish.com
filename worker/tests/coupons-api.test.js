@@ -78,8 +78,8 @@ function apiDb({ coupon = null, raceRedemptions = false, orderRow = null } = {})
             columns.forEach((column, index) => { orderRow[column] = this.args[index]; });
           }
           if (/INSERT INTO coupons/.test(sql)) {
-            const [code, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, synced_at] = this.args;
-            state.coupons.set(code, { code, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, synced_at });
+            const [code, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, scope, business_plan_ids, synced_at] = this.args;
+            state.coupons.set(code, { code, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, scope, business_plan_ids, synced_at });
             return { meta: { changes: 1 } };
           }
           if (/UPDATE coupons SET/.test(sql)) {
@@ -392,9 +392,9 @@ describe('POST /api/orders with coupon', () => {
         assert.ok(['orders/updated', 'refunds/create'].includes(webhook.topic));
         return { ok: true, async json() { return { webhook: { id: webhook.topic, ...webhook } }; } };
       }
-      assert.ok(String(url).endsWith('/draft_orders.json'));
+      assert.ok(String(url).endsWith('/graphql.json'));
       assert.equal(opts.method, 'POST');
-      return { ok: true, async json() { return { draft_order: { id: 99, invoice_url: 'https://test.myshopify.com/invoice/abc' } }; } };
+      return { ok: true, async json() { return { data: { draftOrderCreate: { draftOrder: { id: 'gid://shopify/DraftOrder/99', legacyResourceId: '99', invoiceUrl: 'https://test.myshopify.com/invoice/abc' }, userErrors: [] } } }; } };
     };
     const env = { ...envFor(db), SHOPIFY_SHOP: 'test.myshopify.com', SHOPIFY_ADMIN_TOKEN: 'shpat_test' };
     const res = await worker.fetch(post('/api/orders', { ...ORDER_BODY }, nextIp()), env);
@@ -583,8 +583,9 @@ describe('createDraftOrder coupon pricing', () => {
   function captureDraftFetch() {
     const captured = {};
     globalThis.fetch = async (url, opts) => {
+      captured.url = String(url);
       captured.body = JSON.parse(opts.body);
-      return { ok: true, async json() { return { draft_order: { id: 99, invoice_url: 'https://test.myshopify.com/invoice' } }; } };
+      return { ok: true, async json() { return { data: { draftOrderCreate: { draftOrder: { id: 'gid://shopify/DraftOrder/99', legacyResourceId: '99', invoiceUrl: 'https://test.myshopify.com/invoice' }, userErrors: [] } } }; } };
     };
     return captured;
   }
@@ -599,41 +600,56 @@ describe('createDraftOrder coupon pricing', () => {
     const order = { ...baseOrder, price: 45, subtotal_price: 50, discount_code: 'SAVE10', discount_amount: 5, discount_title: 'Save 10' };
     const draft = await createDraftOrder(SHOPIFY_ENV, order, 45);
     assert.ok(draft);
-    const d = captured.body.draft_order;
-    assert.equal(d.line_items[0].price, '50.00');
-    assert.ok('applied_discount' in d);
-    assert.equal(d.applied_discount.title, 'SAVE10');
-    assert.equal(d.applied_discount.value_type, 'fixed_amount');
-    assert.equal(d.applied_discount.amount, '5.00');
+    assert.ok(captured.url.endsWith('/graphql.json'));
+    const d = captured.body.variables.input;
+    assert.equal(d.lineItems[0].priceOverride.amount, '50.00');
+    assert.equal(d.lineItems[0].variantId, 'gid://shopify/ProductVariant/52017093345597');
+    assert.ok('appliedDiscount' in d);
+    assert.equal(d.appliedDiscount.title, 'SAVE10');
+    assert.equal(d.appliedDiscount.valueType, 'FIXED_AMOUNT');
+    assert.equal(d.appliedDiscount.amountWithCurrency.amount, '5.00');
   });
 
   test('percentage coupon: line item at subtotal with applied_discount', async () => {
     const captured = captureDraftFetch();
     const order = { ...baseOrder, price: 76, subtotal_price: 85, discount_code: 'SAVE10', discount_amount: 9 };
     await createDraftOrder(SHOPIFY_ENV, order, 76);
-    const d = captured.body.draft_order;
-    assert.equal(d.line_items[0].price, '85.00');
-    assert.equal(d.applied_discount.amount, '9.00');
+    const d = captured.body.variables.input;
+    assert.equal(d.lineItems[0].priceOverride.amount, '85.00');
+    assert.equal(d.appliedDiscount.amountWithCurrency.amount, '9.00');
   });
 
   test('100% coupon: line item at subtotal, applied_discount covers the full amount', async () => {
     const captured = captureDraftFetch();
     const order = { ...baseOrder, price: 0, subtotal_price: 50, discount_code: 'FREE100', discount_amount: 50, discount_title: 'Free delivery' };
     await createDraftOrder(SHOPIFY_ENV, order, 0);
-    const d = captured.body.draft_order;
-    assert.equal(d.line_items[0].price, '50.00');
-    assert.equal(d.applied_discount.amount, '50.00');
+    const d = captured.body.variables.input;
+    assert.equal(d.lineItems[0].priceOverride.amount, '50.00');
+    assert.equal(d.appliedDiscount.amountWithCurrency.amount, '50.00');
   });
 
   test('non-coupon order: line item is the plain price, no applied_discount', async () => {
     const captured = captureDraftFetch();
     await createDraftOrder(SHOPIFY_ENV, { ...baseOrder, price: 50 }, 50);
-    const d = captured.body.draft_order;
-    assert.equal(d.line_items[0].price, '50.00');
-    assert.ok(!('applied_discount' in d), 'no applied_discount for non-coupon orders');
-    assert.equal(d.line_items[0].title, 'שליחות — רגיל (מסירה בתוך 4 שעות)');
-    assert.equal(d.line_items[0].properties.find(p => p.name === 'רמת שירות').value, 'רגיל (מסירה בתוך 4 שעות)');
+    const d = captured.body.variables.input;
+    assert.equal(d.lineItems[0].priceOverride.amount, '50.00');
+    assert.ok(!('appliedDiscount' in d), 'no appliedDiscount for non-coupon orders');
+    assert.equal(d.lineItems[0].variantId, 'gid://shopify/ProductVariant/52017093345597');
+    assert.equal(d.lineItems[0].customAttributes.find(p => p.key === 'רמת שירות').value, 'רגיל (מסירה בתוך 4 שעות)');
     assert.ok(!/Standard|Eco|Flash/.test(JSON.stringify(d)), 'customer-facing Draft Order copy must be fully Hebrew');
+  });
+
+  test('maps every delivery service to its image-bearing Shopify variant', async () => {
+    const variants = {
+      eco: 'gid://shopify/ProductVariant/52017093312829',
+      standard: 'gid://shopify/ProductVariant/52017093345597',
+      flash: 'gid://shopify/ProductVariant/52017093378365',
+    };
+    for (const [service, variantId] of Object.entries(variants)) {
+      const captured = captureDraftFetch();
+      await createDraftOrder(SHOPIFY_ENV, { ...baseOrder, service }, 50);
+      assert.equal(captured.body.variables.input.lineItems[0].variantId, variantId);
+    }
   });
 });
 

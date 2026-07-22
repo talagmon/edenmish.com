@@ -259,6 +259,24 @@ describe('business plan catalog and pricing', () => {
     assert.equal(wrongOrder.paymentValidated, false);
   });
 
+  test('accepts a ₪130 discounted payment and credits the full ₪150 plan value', async () => {
+    const prepared = [];
+    const DB = {
+      prepare(sql) {
+        const statement = { sql, values: [], bind(...values) { this.values = values; prepared.push(this); return this; } };
+        return statement;
+      },
+      async batch() { return [{ meta: { changes: 1 } }]; },
+    };
+    const result = await creditWalletTopup(DB, {
+      id: 'discounted-trial', account_id: 7, plan_id: 'trial', amount_agorot: 15_000,
+      payment_amount_agorot: 13_000, currency: 'ILS', status: 'checkout_ready', shopify_draft_order_id: '44',
+    }, { paid: true, total: 130, currency: 'ILS', draftOrderId: '44', shopifyOrderId: '100' });
+    assert.equal(result.credited, true);
+    const walletCredit = prepared.find(({ sql }) => /SET available_agorot = available_agorot \+ \?/.test(sql));
+    assert.equal(walletCredit.values[0], 15_000);
+  });
+
   test('hydrates billing profile only on the first validated wallet credit', () => {
     assert.equal(shouldHydrateBusinessProfile({ paymentValidated: true, credited: true }), true);
     assert.equal(shouldHydrateBusinessProfile({ paymentValidated: true, credited: true, unchanged: true }), false);
@@ -296,6 +314,30 @@ describe('business plan catalog and pricing', () => {
     await cancelWalletTopup(DB, 'trial-topup');
     assert.match(statement.sql, /status = 'cancelled'.*status = 'created'/);
     assert.deepEqual(statement.values, ['trial-topup']);
+  });
+
+  test('snapshots a ₪20 business coupon while preserving the ₪150 plan credit', async () => {
+    const prepared = [];
+    const DB = {
+      prepare(sql) {
+        const statement = {
+          sql, values: [], bind(...values) { this.values = values; prepared.push(this); return this; },
+          async run() { return { meta: { changes: 1 } }; },
+          async first() { return /INSERT OR IGNORE INTO wallet_topups/.test(sql) ? { id: 'created' } : null; },
+        };
+        return statement;
+      },
+    };
+    const coupon = { code: 'BIZ20', title: '₪20 business discount', subtotal: 150, discountAmount: 20, price: 130 };
+    const topup = await createWalletTopup(DB, { account_id: 7, email: 'owner@example.com' }, 'trial', coupon);
+    assert.equal(topup.amount, 130);
+    assert.equal(topup.subtotal, 150);
+    assert.equal(topup.credit_amount, 150);
+    assert.equal(topup.discount_code, 'BIZ20');
+    const insert = prepared.find(({ sql }) => /INSERT OR IGNORE INTO wallet_topups/.test(sql));
+    assert.equal(insert.values[3], 15_000, 'wallet credit remains the full plan value');
+    assert.equal(insert.values[4], 13_000, 'payment reconciliation uses the discounted total');
+    assert.equal(insert.values[6], 2_000);
   });
 });
 
@@ -500,7 +542,7 @@ describe('Shopify business wallet boundary', () => {
     let request;
     globalThis.fetch = async (url, options) => {
       request = { url, options };
-      return new Response(JSON.stringify({ draft_order: { id: 44, invoice_url: 'https://shop.example/invoice/44' } }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ data: { draftOrderCreate: { draftOrder: { id: 'gid://shopify/DraftOrder/44', legacyResourceId: '44', invoiceUrl: 'https://shop.example/invoice/44' }, userErrors: [] } } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     };
     try {
       const draft = await createWalletDraftOrder({
@@ -508,13 +550,63 @@ describe('Shopify business wallet boundary', () => {
         SHOPIFY_ADMIN_TOKEN: 'placeholder-for-test',
         SHOPIFY_API_VERSION: '2026-04',
       }, { id: 'topup-44', plan_id: 'gold', plan_name_he: 'זהב', email: 'owner@example.com' }, 1500);
-      assert.equal(draft.id, 44);
-      const body = JSON.parse(request.options.body).draft_order;
-      assert.equal(body.line_items[0].requires_shipping, false);
-      assert.equal(body.line_items[0].price, '1500.00');
-      assert.deepEqual(body.line_items[0].properties[0], { name: '_edenmish_wallet_topup', value: 'topup-44' });
-      assert.equal(body.tags, 'edenmish-wallet-topup');
-      assert.equal(body.customer.email, 'owner@example.com');
+      assert.equal(draft.id, '44');
+      assert.ok(String(request.url).endsWith('/graphql.json'));
+      const body = JSON.parse(request.options.body).variables.input;
+      assert.equal(body.lineItems[0].variantId, 'gid://shopify/ProductVariant/52017115070781');
+      assert.equal(body.lineItems[0].priceOverride.amount, '1500.00');
+      assert.deepEqual(body.lineItems[0].customAttributes[0], { key: '_edenmish_wallet_topup', value: 'topup-44' });
+      assert.deepEqual(body.tags, ['edenmish-wallet-topup']);
+      assert.equal(body.email, 'owner@example.com');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('maps every business plan to its image-bearing Shopify variant', async () => {
+    const originalFetch = globalThis.fetch;
+    let request;
+    globalThis.fetch = async (url, options) => {
+      request = { url, options };
+      return new Response(JSON.stringify({ data: { draftOrderCreate: { draftOrder: { id: 'gid://shopify/DraftOrder/45', legacyResourceId: '45', invoiceUrl: 'https://shop.example/invoice/45' }, userErrors: [] } } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    const variants = {
+      trial: 'gid://shopify/ProductVariant/52017114972477',
+      wallet: 'gid://shopify/ProductVariant/52017115005245',
+      silver: 'gid://shopify/ProductVariant/52017115038013',
+      gold: 'gid://shopify/ProductVariant/52017115070781',
+      platinum: 'gid://shopify/ProductVariant/52017115103549',
+    };
+    try {
+      for (const [planId, variantId] of Object.entries(variants)) {
+        await createWalletDraftOrder({
+          SHOPIFY_SHOP: 'example.myshopify.com',
+          SHOPIFY_ADMIN_TOKEN: 'placeholder-for-test',
+        }, { id: `topup-${planId}`, plan_id: planId, plan_name_he: planId }, 150);
+        const input = JSON.parse(request.options.body).variables.input;
+        assert.equal(input.lineItems[0].variantId, variantId);
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('shows ₪150 less ₪20 as an applied Shopify checkout discount', async () => {
+    const originalFetch = globalThis.fetch;
+    let input;
+    globalThis.fetch = async (url, options) => {
+      input = JSON.parse(options.body).variables.input;
+      return new Response(JSON.stringify({ data: { draftOrderCreate: { draftOrder: { id: 'gid://shopify/DraftOrder/46', legacyResourceId: '46', invoiceUrl: 'https://shop.example/invoice/46' }, userErrors: [] } } }), { status: 200 });
+    };
+    try {
+      await createWalletDraftOrder({ SHOPIFY_SHOP: 'example.myshopify.com', SHOPIFY_ADMIN_TOKEN: 'test' }, {
+        id: 'topup-discount', plan_id: 'trial', plan_name_he: 'ניסיון', subtotal: 150,
+        credit_amount: 150, discount_code: 'BIZ20', discount_amount: 20,
+      }, 130);
+      assert.equal(input.lineItems[0].priceOverride.amount, '150.00');
+      assert.equal(input.appliedDiscount.title, 'BIZ20');
+      assert.equal(input.appliedDiscount.amountWithCurrency.amount, '20.00');
+      assert.equal(input.lineItems[0].customAttributes.find(({ key }) => key === 'יתרה').value, '₪150');
     } finally {
       globalThis.fetch = originalFetch;
     }

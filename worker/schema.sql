@@ -170,6 +170,8 @@ CREATE TABLE IF NOT EXISTS coupons (
   ends_at INTEGER,                     -- epoch ms
   usage_limit INTEGER,                 -- NULL = unlimited (from Shopify definition)
   applies_once_per_customer INTEGER DEFAULT 0,
+  scope TEXT NOT NULL DEFAULT 'delivery' CHECK(scope IN ('delivery','business_plan')),
+  business_plan_ids TEXT,              -- JSON array; NULL/[] = every business plan
   synced_at INTEGER,                   -- epoch ms of last Shopify sync
   raw_shopify_json TEXT                -- full Shopify payload for debugging/resync
 );
@@ -398,6 +400,10 @@ CREATE TABLE IF NOT EXISTS wallet_topups (
   account_id INTEGER NOT NULL,
   plan_id TEXT NOT NULL CHECK(plan_id IN ('trial','wallet','silver','gold','platinum')),
   amount_agorot INTEGER NOT NULL CHECK(amount_agorot > 0),
+  payment_amount_agorot INTEGER CHECK(payment_amount_agorot >= 0),
+  discount_code TEXT,
+  discount_amount_agorot INTEGER NOT NULL DEFAULT 0 CHECK(discount_amount_agorot >= 0),
+  discount_title TEXT,
   currency TEXT NOT NULL DEFAULT 'ILS',
   status TEXT NOT NULL DEFAULT 'created' CHECK(status IN ('created','checkout_ready','paid','mismatch','cancelled')),
   shopify_draft_order_id TEXT,
@@ -410,6 +416,21 @@ CREATE INDEX IF NOT EXISTS idx_wallet_topups_account ON wallet_topups(account_id
 CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_topups_trial_once
   ON wallet_topups(account_id)
   WHERE plan_id = 'trial' AND status IN ('created','checkout_ready','paid');
+
+-- Business-plan coupon reservations use wallet top-ups rather than delivery orders.
+CREATE TABLE IF NOT EXISTS business_coupon_redemptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  topup_id TEXT NOT NULL UNIQUE,
+  code TEXT NOT NULL,
+  customer_key TEXT,
+  price_before INTEGER,
+  discount_amount INTEGER,
+  price_after INTEGER,
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY (topup_id) REFERENCES wallet_topups(id)
+);
+CREATE INDEX IF NOT EXISTS idx_business_coupon_redemptions_code ON business_coupon_redemptions(code);
+CREATE INDEX IF NOT EXISTS idx_business_coupon_redemptions_customer ON business_coupon_redemptions(customer_key);
 
 CREATE TABLE IF NOT EXISTS wallet_credit_lots (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
