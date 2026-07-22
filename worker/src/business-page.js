@@ -150,9 +150,53 @@ export function businessAccountHtml(storefrontBase = 'https://edenmish.com') {
   </section>
 </main>
 <script>
-${selectRelevantBusinessTopup.toString()}
-${businessProfilePatch.toString()}
-${createLatestBusinessSnapshotRefresher.toString()}
+// Keep browser helpers as literal script text. Serializing exported functions
+// is unsafe after Wrangler/esbuild adds private server-bundle decorators that
+// do not exist inside the generated page.
+function selectRelevantBusinessTopup(topups,activeId='',dismissedId='',now=Date.now()){
+  const rows=Array.isArray(topups)?topups.filter(Boolean):[];
+  const eventTime=topup=>Number(topup?.status==='paid'?(topup.paid_at||topup.created_at||0):(topup?.created_at||0));
+  const latest=items=>items.reduce((selected,item)=>(!selected||eventTime(item)>eventTime(selected)?item:selected),null);
+  const active=activeId?rows.find(topup=>topup.id===activeId):null;
+  if(active?.status==='mismatch'&&active.id!==dismissedId)return active;
+  const unresolvedMismatch=latest(rows.filter(topup=>topup.status==='mismatch'&&topup.id!==dismissedId));
+  if(unresolvedMismatch)return unresolvedMismatch;
+  const latestPaid=latest(rows.filter(topup=>topup.status==='paid'));
+  const dismissed=dismissedId?rows.find(topup=>topup.id===dismissedId):null;
+  const cutoffAt=Math.max(eventTime(latestPaid),eventTime(dismissed));
+  const isRecent=topup=>{const timestamp=eventTime(topup);return timestamp>0&&now-timestamp<86400000};
+  const isPending=topup=>['created','checkout_ready'].includes(topup?.status);
+  if(active&&active.id!==dismissedId){
+    if(isPending(active)&&Number(active.created_at||0)>cutoffAt&&isRecent(active))return active;
+    if(active.status==='paid'&&active.id===latestPaid?.id&&isRecent(active))return active;
+  }
+  const pending=latest(rows.filter(topup=>topup.id!==dismissedId&&topup.status==='checkout_ready'&&Number(topup.created_at||0)>cutoffAt&&isRecent(topup)));
+  if(pending)return pending;
+  if(latestPaid&&latestPaid.id!==dismissedId&&isRecent(latestPaid))return latestPaid;
+  return null;
+}
+function businessProfilePatch(values,dirtyFields){
+  const dirty=new Set(dirtyFields||[]),patch={};
+  if(dirty.has('company'))patch.company_name=String(values?.company??'');
+  if(dirty.has('contact-name'))patch.name=String(values?.contactName??'');
+  if(dirty.has('phone'))patch.phone=String(values?.phone??'');
+  return patch;
+}
+function createLatestBusinessSnapshotRefresher(load,apply,onError){
+  let latestRequest=0;
+  return async function(silent=false){
+    const requestId=++latestRequest;
+    try{
+      const value=await load();
+      if(requestId!==latestRequest)return false;
+      apply(value);
+      return true;
+    }catch(error){
+      if(requestId===latestRequest)onError(error,silent);
+      return false;
+    }
+  };
+}
 const STOREFRONT=${escapeScript(storefront)};
 const $=id=>document.getElementById(id);
 const esc=value=>String(value==null?'':value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

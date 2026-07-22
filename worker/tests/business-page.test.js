@@ -146,6 +146,7 @@ describe('business account dashboard', () => {
     assert.match(html, /profileDirty\.add\(input\.id\)/);
     assert.match(html, /businessProfilePatch\(values,dirty\)/);
     assert.match(html, /createLatestBusinessSnapshotRefresher/);
+    assert.doesNotMatch(html, /\b__name\s*\(/);
   });
 
   test('opens Shopify separately and exposes pending, paid, and review states', () => {
