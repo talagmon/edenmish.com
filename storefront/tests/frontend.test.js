@@ -126,11 +126,30 @@ function opsQueueHelpers() {
 }
 
 describe('Frontend: Pages exist', () => {
-  for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'blog/edenmish-information-security.html', 'business.html', 'business-account.html', 'success.html', 'error.html', 'terms.html', 'privacy.html', 'refund.html', 'accessibility.html', 'cancel.html']) {
+  for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'blog/edenmish-information-security.html', 'business.html', 'business-account.html', 'success.html', 'thank-you.html', 'error.html', 'terms.html', 'privacy.html', 'refund.html', 'accessibility.html', 'cancel.html']) {
     test(`${page} exists`, () => {
       assert.ok(existsSync(join(PUB, page)), `${page} not found in public/`);
     });
   }
+});
+
+describe('Frontend: Shopify post-payment exit', () => {
+  test('publishes a branded thank-you page with one safe destination', () => {
+    const html = readPage('thank-you.html');
+    assertContains(html, 'התשלום התקבל בהצלחה', 'payment confirmation');
+    assertContains(html, 'תודה שבחרתם ב-EdenMish', 'thank-you message');
+    assertContains(html, '/assets/edenmish-thank-you-bike.webp', 'thank-you artwork');
+    assertContains(html, 'href="https://edenmish.com/"', 'main-site CTA');
+    assert.ok(existsSync(join(PUB, 'assets', 'edenmish-thank-you-bike.webp')), 'thank-you artwork not found');
+    assert.ok(!html.includes('pay.edenmish.com'), 'thank-you page must not link back to the payment storefront');
+  });
+
+  test('redirects Shopify storefront visits to the main EdenMish site', () => {
+    const theme = readFileSync(join(process.cwd(), '..', 'theme', 'layout', 'theme.liquid'), 'utf8');
+    assertContains(theme, "request.host == 'pay.edenmish.com'", 'payment-host guard');
+    assertContains(theme, '<meta http-equiv="refresh" content="0;url=https://edenmish.com/thank-you.html">', 'no-script redirect');
+    assertContains(theme, "window.location.replace('https://edenmish.com/thank-you.html');", 'browser redirect');
+  });
 });
 
 describe('Frontend: Tracking terminal states', () => {

@@ -7,6 +7,18 @@
   dir="rtl"
 >
   <head>
+    {%- comment -%}
+      pay.edenmish.com is the trusted Shopify checkout shell, not a public
+      storefront. Checkout, invoice, Thank You and Order Status routes are
+      rendered outside this theme; any route that reaches this layout is a
+      storefront visit and should continue to the branded EdenMish thank-you
+      page. That page has a single next destination: the main website.
+    {%- endcomment -%}
+    {%- if request.host == 'pay.edenmish.com' -%}
+      <meta http-equiv="refresh" content="0;url=https://edenmish.com/thank-you.html">
+      <script>window.location.replace('https://edenmish.com/thank-you.html');</script>
+    {%- endif -%}
+
     {%- if settings.favicon != blank -%}
       <link
         rel="icon"
