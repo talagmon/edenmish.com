@@ -77,6 +77,7 @@
     position: relative;
     overflow: hidden;
     min-height: 245px;
+    margin: 0;
     border-radius: 1.6rem;
   }
 
@@ -187,10 +188,14 @@
 
   @media (min-width: 820px) {
     .shell { padding-top: 2rem; }
-    .thank-you { grid-template-columns: minmax(0, 1.12fr) minmax(390px, 0.88fr); align-items: stretch; }
+    .thank-you {
+      direction: ltr;
+      grid-template-columns: minmax(0, 1.12fr) minmax(390px, 0.88fr);
+      align-items: stretch;
+    }
     .art { min-height: 610px; }
     .art img { min-height: 610px; }
-    .message { min-height: 610px; }
+    .message { min-height: 610px; direction: rtl; }
     .home-cta { width: fit-content; min-width: 15rem; }
   }
 

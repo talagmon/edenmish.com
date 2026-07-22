@@ -140,6 +140,8 @@ describe('Frontend: Shopify post-payment exit', () => {
     assertContains(html, 'תודה שבחרתם ב-EdenMish', 'thank-you message');
     assertContains(html, '/assets/edenmish-thank-you-bike.webp', 'thank-you artwork');
     assertContains(html, 'href="https://edenmish.com/"', 'main-site CTA');
+    assertContains(html, 'direction: ltr;', 'desktop image-left composition');
+    assertContains(html, '.message { min-height: 610px; direction: rtl; }', 'RTL message direction');
     assert.ok(existsSync(join(PUB, 'assets', 'edenmish-thank-you-bike.webp')), 'thank-you artwork not found');
     assert.ok(!html.includes('pay.edenmish.com'), 'thank-you page must not link back to the payment storefront');
   });
