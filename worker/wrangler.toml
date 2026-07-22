@@ -11,7 +11,7 @@ routes = [
 ]
 
 [triggers]
-crons = ["17 2 * * *"]
+crons = ["*/5 * * * *", "17 2 * * *"]
 
 [vars]
 BRAND = "EdenMish"

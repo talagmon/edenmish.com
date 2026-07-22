@@ -2,6 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { handleDriverApi } from '../src/driver-api.js';
+import worker from '../src/index.js';
 
 const requestId = '11111111-1111-4111-8111-111111111111';
 const installationId = '22222222-2222-4222-8222-222222222222';
@@ -26,8 +27,10 @@ function request(path, init = {}) {
 
 function fakeDb({ first, all, run } = {}) {
   const calls = [];
+  const batches = [];
   return {
     calls,
+    batches,
     prepare(sql) {
       const call = { sql: sql.replace(/\s+/g, ' ').trim(), args: [] };
       calls.push(call);
@@ -40,6 +43,12 @@ function fakeDb({ first, all, run } = {}) {
         all: async () => all ? all(call) : { results: [] },
         run: async () => run ? run(call) : { meta: { changes: 1 } },
       };
+    },
+    async batch(statements) {
+      batches.push(statements);
+      const results = [];
+      for (const statement of statements) results.push(await statement.run());
+      return results;
     },
   };
 }
@@ -442,7 +451,7 @@ describe('driver API v1', () => {
     assert.equal(orderUpdate.args[0], 'to_dropoff');
   });
 
-  test('runs delivery notifications once after a driver completes a drop-off', async () => {
+  test('atomically creates one logical notification job per channel on delivery', async () => {
     const order = {
       id: 9001,
       token: 'deliverytoken9001',
@@ -455,7 +464,6 @@ describe('driver API v1', () => {
       price: 50,
     };
     let eventStored = false;
-    let notificationId = 0;
     const db = fakeDb({
       first: (call) => {
         const auth = authenticatedFirst(call);
@@ -477,14 +485,14 @@ describe('driver API v1', () => {
           return { stop_id: 'stop_d1', task_type: 'dropoff' };
         }
         if (call.sql === 'SELECT * FROM orders WHERE id = ?') return order;
-        if (call.sql.startsWith('INSERT INTO notifications')) {
-          notificationId += 1;
-          return { id: notificationId };
-        }
         return null;
       },
       run: (call) => {
-        if (call.sql.startsWith('UPDATE orders SET')) order.status = call.args[0];
+        if (call.sql.startsWith("UPDATE orders SET status = 'delivered'")) {
+          order.status = 'delivered';
+        } else if (call.sql.startsWith('UPDATE orders SET')) {
+          order.status = call.args[0];
+        }
         if (call.sql.includes('INSERT OR IGNORE INTO driver_execution_events')) {
           eventStored = true;
         }
@@ -502,29 +510,39 @@ describe('driver API v1', () => {
       route_revision_seen: 13,
       payload: {},
     };
-    const send = () => handleDriverApi(request('/api/driver/v1/execution-events:batch', {
+    const send = (executionContext) => worker.fetch(request('/api/driver/v1/execution-events:batch', {
       method: 'POST',
       headers: { authorization: 'Bearer valid-token' },
       body: JSON.stringify({ events: [event] }),
-    }), { DB: db });
+    }), { DB: db }, executionContext);
 
-    const firstResponse = await send();
+    const deferred = [];
+    const firstResponse = await send({ waitUntil: (promise) => deferred.push(promise) });
     assert.equal((await firstResponse.json()).results[0].status, 'accepted');
+    assert.equal(deferred.length, 1);
+    assert.ok(deferred[0] instanceof Promise);
+    await deferred[0];
     assert.equal(order.status, 'delivered');
-    const notificationAttempts = db.calls.filter((call) => call.sql.startsWith('INSERT INTO notifications'));
-    assert.equal(notificationAttempts.length, 2);
+    assert.equal(db.batches.length, 1);
+    assert.equal(db.batches[0].length, 6);
+    const notificationJobs = db.calls.filter((call) => (
+      call.sql.startsWith('INSERT OR IGNORE INTO delivery_notification_outbox')
+    ));
+    assert.equal(notificationJobs.length, 2);
     assert.deepEqual(
-      notificationAttempts.map((call) => [call.args[1], call.args[2]]),
+      notificationJobs.map((call) => call.args[2]),
       [
-        ['email', 'customer_delivery_summary'],
-        ['whatsapp', 'customer_delivery_summary'],
+        'email',
+        'whatsapp',
       ],
     );
 
     const replayResponse = await send();
     assert.equal((await replayResponse.json()).results[0].status, 'duplicate');
     assert.equal(
-      db.calls.filter((call) => call.sql.startsWith('INSERT INTO notifications')).length,
+      db.calls.filter((call) => (
+        call.sql.startsWith('INSERT OR IGNORE INTO delivery_notification_outbox')
+      )).length,
       2,
     );
   });

@@ -371,6 +371,44 @@ WHERE name IN ('business_account_id','wallet_reservation_id','payment_method');
 
 ---
 
+### 019_delivery_notification_outbox.sql
+
+**Purpose:** Makes driver delivery completion atomic with a durable transition marker
+and one unique customer-notification job per channel. Jobs use expiring leases, bounded
+exponential retries, and terminal `sent`/`dead` states. Provider delivery is
+**at-least-once**: a Worker crash after provider acceptance but before the `sent` update
+can cause another attempt.
+
+**Command:**
+```bash
+# Staging (render the config first; run from worker/):
+npx wrangler d1 execute edenmish-staging --remote --yes \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/019_delivery_notification_outbox.sql
+
+# Local verification:
+wrangler d1 execute edenmish --local \
+  --file=./migrations/019_delivery_notification_outbox.sql
+
+# Production (after merge, before Worker deploy):
+wrangler d1 execute edenmish --remote \
+  --file=./migrations/019_delivery_notification_outbox.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM sqlite_master WHERE type='table' AND name IN (
+  'delivery_completion_transitions','delivery_notification_outbox'
+) ORDER BY name;
+
+SELECT name FROM pragma_index_list('delivery_notification_outbox')
+WHERE name='idx_delivery_notification_outbox_due';
+
+SELECT state, COUNT(*) FROM delivery_notification_outbox GROUP BY state;
+```
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -391,6 +429,7 @@ WHERE name IN ('business_account_id','wallet_reservation_id','payment_method');
 - [ ] Run `016_driver_route_integrity.sql` after 015 and before enabling GPS-origin route optimization.
 - [ ] Run `017_driver_task_proofs.sql` after 016 and before enabling driver photo/signature capture.
 - [ ] Run `018_business_wallet.sql` after merge and before deploying the Worker.
+- [ ] Run `019_delivery_notification_outbox.sql` after 018 and before enabling native driver completion.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).
@@ -407,7 +446,7 @@ whether each table exists:
 ```sql
 SELECT name FROM sqlite_master
 WHERE type='table'
-AND name IN ('rate_limits', 'delivery_proofs', 'notifications', 'coupons', 'coupon_redemptions', 'business_accounts', 'business_wallets', 'wallet_entries')
+AND name IN ('rate_limits', 'delivery_proofs', 'notifications', 'coupons', 'coupon_redemptions', 'business_accounts', 'business_wallets', 'wallet_entries', 'delivery_completion_transitions', 'delivery_notification_outbox')
 ORDER BY name;
 ```
 

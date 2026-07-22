@@ -71,6 +71,12 @@ jobs:
           else
             echo "Business wallet migration 018 is already applied."
           fi
+      - name: Apply staging delivery notification outbox migration
+        working-directory: worker
+        run: >-
+          npx wrangler d1 execute edenmish-staging --remote --yes
+          --config wrangler.staging.generated.toml
+          --file=./migrations/019_delivery_notification_outbox.sql
       - name: Verify remote driver schema readiness
         working-directory: worker
         run: node scripts/validate-driver-schema.mjs --database edenmish-staging --config wrangler.staging.generated.toml

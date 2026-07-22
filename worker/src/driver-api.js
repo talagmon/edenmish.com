@@ -8,6 +8,10 @@ import {
 } from './db.js';
 import { syncDriverRoute } from './driver-dispatch.js';
 import { runDeliveryCompletionSideEffects } from './delivery-completion.js';
+import {
+  deliveryCompletionTransitionStatement,
+  deliveryNotificationOutboxStatements,
+} from './delivery-notification-outbox.js';
 
 const ACCESS_TTL_MS = 15 * 60 * 1000;
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -396,7 +400,16 @@ async function applyTaskEvent(env, eventType, task, order, orderId) {
   return { status: 'accepted', conflictType: null, transitioned: true };
 }
 
-async function processEvent(env, auth, meta, event) {
+function executionEventInsertStatement(env, auth, meta, event, orderId, status, conflictType, now) {
+  return env.DB.prepare(`INSERT OR IGNORE INTO driver_execution_events
+    (event_id, driver_id, shift_id, order_id, stop_id, event_type, occurred_at, route_revision_seen, payload_json, status, conflict_type, server_received_at, correlation_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(event.event_id, auth.driver_id, event.shift_id, orderId, event.stop_id || null,
+      event.event_type, event.occurred_at, event.route_revision_seen,
+      JSON.stringify(event.payload || {}), status, conflictType, now, meta.requestId);
+}
+
+async function processEvent(env, auth, meta, event, executionContext) {
   if (!event || !UUID.test(event.event_id || '')) return { event_id: event?.event_id || '', status: 'rejected_invalid', server_received_at: new Date().toISOString() };
   const existing = await env.DB.prepare(`SELECT event_id, status, conflict_type, server_received_at, correlation_id
     FROM driver_execution_events WHERE event_id = ? AND driver_id = ?`).bind(event.event_id, auth.driver_id).first();
@@ -423,6 +436,7 @@ async function processEvent(env, auth, meta, event) {
   let status = 'accepted';
   let conflictType = null;
   let transitioned = false;
+  let deliveryTransitionOrder = null;
   if (TASK_EVENT_TYPES.has(event.event_type)) {
     if (orderId == null || event.stop_id == null) {
       return { event_id: event.event_id, status: 'rejected_invalid', server_received_at: new Date().toISOString() };
@@ -430,17 +444,54 @@ async function processEvent(env, auth, meta, event) {
     const task = await assignedTask(env, event.shift_id, event.stop_id, orderId);
     if (!task) return { event_id: event.event_id, status: 'rejected_auth', server_received_at: new Date().toISOString() };
     const order = await getOrderById(env.DB, orderId);
-    const applied = await applyTaskEvent(env, event.event_type, task, order, orderId);
-    status = applied.status;
-    conflictType = applied.conflictType;
-    transitioned = applied.transitioned;
+    if (event.event_type === 'delivery_completed'
+      && task.task_type === 'dropoff'
+      && order?.status === 'to_dropoff') {
+      // This transition is committed below with its event and logical notification jobs.
+      deliveryTransitionOrder = order;
+    } else {
+      const applied = await applyTaskEvent(env, event.event_type, task, order, orderId);
+      status = applied.status;
+      conflictType = applied.conflictType;
+      transitioned = applied.transitioned;
+    }
   }
   const now = Date.now();
   const correlationId = meta.requestId;
-  const inserted = await env.DB.prepare(`INSERT OR IGNORE INTO driver_execution_events
-    (event_id, driver_id, shift_id, order_id, stop_id, event_type, occurred_at, route_revision_seen, payload_json, status, conflict_type, server_received_at, correlation_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .bind(event.event_id, auth.driver_id, event.shift_id, orderId, event.stop_id || null, event.event_type, event.occurred_at, event.route_revision_seen, JSON.stringify(event.payload || {}), status, conflictType, now, correlationId).run();
+  let inserted;
+  if (deliveryTransitionOrder) {
+    const eventInsert = executionEventInsertStatement(
+      env, auth, meta, event, orderId, status, conflictType, now,
+    );
+    const transition = deliveryCompletionTransitionStatement(
+      env.DB, orderId, event.event_id, auth.driver_id, correlationId, now,
+    );
+    const updateOrder = env.DB.prepare(`UPDATE orders
+      SET status = 'delivered', delivered_at = ?
+      WHERE id = ? AND status = 'to_dropoff'
+        AND EXISTS (SELECT 1 FROM delivery_completion_transitions
+          WHERE order_id = ? AND event_id = ?)`).bind(now, orderId, orderId, event.event_id);
+    const addHistory = env.DB.prepare(`INSERT INTO status_history (order_id, status, at, note)
+      SELECT ?, 'delivered', ?, NULL
+      WHERE EXISTS (SELECT 1 FROM delivery_completion_transitions
+        WHERE order_id = ? AND event_id = ?)
+        AND EXISTS (SELECT 1 FROM driver_execution_events
+          WHERE event_id = ? AND driver_id = ? AND correlation_id = ?)`)
+      .bind(
+        orderId, now, orderId, event.event_id,
+        event.event_id, auth.driver_id, correlationId,
+      );
+    const outbox = deliveryNotificationOutboxStatements(
+      env.DB, deliveryTransitionOrder, event.event_id, now, { sendWhatsApp: true },
+    );
+    const results = await env.DB.batch([eventInsert, transition, updateOrder, addHistory, ...outbox]);
+    inserted = results[0];
+    transitioned = !!results[1]?.meta?.changes;
+  } else {
+    inserted = await executionEventInsertStatement(
+      env, auth, meta, event, orderId, status, conflictType, now,
+    ).run();
+  }
   if (!inserted?.meta?.changes) {
     const replay = await env.DB.prepare(`SELECT event_id, status, conflict_type, server_received_at, correlation_id
       FROM driver_execution_events WHERE event_id = ? AND driver_id = ?`).bind(event.event_id, auth.driver_id).first();
@@ -469,19 +520,33 @@ async function processEvent(env, auth, meta, event) {
   }
   if (event.event_type === 'delivery_completed' && status === 'accepted' && transitioned) {
     const deliveredOrder = await getOrderById(env.DB, orderId);
-    if (deliveredOrder) {
-      await runDeliveryCompletionSideEffects(env, deliveredOrder, { sendWhatsApp: true });
+    if (deliveredOrder && executionContext?.waitUntil) {
+      const deferred = runDeliveryCompletionSideEffects(env, deliveredOrder, {
+        sendWhatsApp: true,
+        notificationsAlreadyEnqueued: true,
+        eventId: event.event_id,
+      }).catch((error) => {
+        // The canonical transition and logical jobs are already durable. Deferred
+        // draining is best-effort; the five-minute scheduled worker owns retries.
+        console.error('delivery_notification_outbox_immediate_drain_failed', {
+          eventId: event.event_id,
+          message: error?.message || String(error),
+        });
+      });
+      executionContext.waitUntil(deferred);
     }
   }
   return { event_id: event.event_id, status, server_received_at: new Date(now).toISOString(), conflict_type: conflictType, correlation_id: correlationId };
 }
 
-async function eventBatch(req, env, auth, meta) {
+async function eventBatch(req, env, auth, meta, executionContext) {
   let body;
   try { body = await readJson(req); } catch (error) { return response({ code: error.message, message: 'Invalid request.', request_id: meta.requestId }, error.status || 400, meta.requestId); }
   if (!body || !Array.isArray(body.events) || body.events.length < 1 || body.events.length > 50) return response({ code: 'invalid_events', message: 'Expected 1-50 events.', request_id: meta.requestId }, 400, meta.requestId);
   const results = [];
-  for (const event of body.events) results.push(await processEvent(env, auth, meta, event));
+  for (const event of body.events) {
+    results.push(await processEvent(env, auth, meta, event, executionContext));
+  }
   return response({ results }, 200, meta.requestId);
 }
 
@@ -575,7 +640,12 @@ async function locationBatch(req, env, auth, meta) {
   return response({ accepted_count: acceptedCount }, 202, meta.requestId);
 }
 
-export async function handleDriverApi(req, env, path = new URL(req.url).pathname) {
+export async function handleDriverApi(
+  req,
+  env,
+  path = new URL(req.url).pathname,
+  executionContext,
+) {
   if (!path.startsWith('/api/driver/v1/')) return null;
   const meta = metadata(req);
   if (meta.error) return response({ code: meta.error, message: 'Required request metadata is invalid.', request_id: meta.requestId }, 400, meta.requestId);
@@ -595,7 +665,9 @@ export async function handleDriverApi(req, env, path = new URL(req.url).pathname
     decodeURIComponent(proofMatch[1]),
     decodeURIComponent(proofMatch[2]),
   );
-  if (path === '/api/driver/v1/execution-events:batch' && req.method === 'POST') return eventBatch(req, env, auth, meta);
+  if (path === '/api/driver/v1/execution-events:batch' && req.method === 'POST') {
+    return eventBatch(req, env, auth, meta, executionContext);
+  }
   if (path === '/api/driver/v1/location:batch' && req.method === 'POST') return locationBatch(req, env, auth, meta);
   return response({ code: 'not_found', message: 'Driver API endpoint not found.', request_id: meta.requestId }, 404, meta.requestId);
 }
@@ -606,4 +678,5 @@ export const driverApiTest = {
   hmacHex,
   parseOrderId,
   validLocationSample,
+  processEvent,
 };
