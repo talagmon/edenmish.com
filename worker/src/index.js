@@ -12,7 +12,7 @@ import { getStatusMeta, getNextStatuses, isTerminalStatus } from './status.js';
 import { shopifyWebhookRegistrar } from './shopify-webhooks.js';
 import { handleDriverApi } from './driver-api.js';
 import { driverDispatchStatus, startDriverShift, endDriverShift } from './driver-dispatch.js';
-import { applyBusinessPlanPricing, businessSessionCookie, cancelWalletTopup, captureWalletReservation, cleanupBusinessSecurity, clearBusinessSessionCookie, createWalletTopup, creditWalletTopup, getBusinessSession, getBusinessSnapshot, getWalletTopup, linkWalletReservationToOrder, markWalletTopupCheckout, publicBusinessPlans, releaseWalletReservation, requestBusinessLogin, reserveWalletCredit, revokeBusinessSession, updateBusinessProfile, verifyBusinessLogin } from './business.js';
+import { applyBusinessPlanPricing, businessSessionCookie, cancelWalletTopup, captureWalletReservation, cleanupBusinessSecurity, clearBusinessSessionCookie, createWalletTopup, creditWalletTopup, getBusinessSession, getBusinessSnapshot, getWalletTopup, hydrateBusinessProfileFromPayment, linkWalletReservationToOrder, markWalletTopupCheckout, publicBusinessPlans, releaseWalletReservation, requestBusinessLogin, reserveWalletCredit, revokeBusinessSession, shouldHydrateBusinessProfile, updateBusinessProfile, verifyBusinessLogin } from './business.js';
 import { runDeliveryCompletionSideEffects } from './delivery-completion.js';
 import {
   persistOpsDeliveryCompletion,
@@ -1164,6 +1164,13 @@ export default {
           return json({ received: true, reconciled: false });
         }
         const credited = await creditWalletTopup(env.DB, topup, parsed);
+        if (shouldHydrateBusinessProfile(credited)) {
+          try {
+            await hydrateBusinessProfileFromPayment(env.DB, topup.account_id, parsed);
+          } catch (error) {
+            console.error('business_profile_hydration_failed', { topup: topup.id, account: topup.account_id });
+          }
+        }
         if (credited.credited && !credited.unchanged) {
           const owner = await env.DB.prepare(
             `SELECT u.email FROM business_members m JOIN business_users u ON u.id = m.user_id

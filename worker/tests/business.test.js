@@ -10,8 +10,11 @@ import {
   createWalletTopup,
   creditWalletTopup,
   estimateBusinessDeliveries,
+  hydrateBusinessProfileFromPayment,
   normalizeBusinessEmail,
   publicBusinessPlans,
+  shouldHydrateBusinessProfile,
+  updateBusinessProfile,
 } from '../src/business.js';
 import { createWalletDraftOrder, parseShopifyOrderWebhook } from '../src/integrations.js';
 
@@ -157,6 +160,32 @@ describe('business plan catalog and pricing', () => {
     assert.ok(prepared.some(({ sql, values }) => sql.includes('wallet_credit_lots') && values[0] === result.expires_at));
   });
 
+  test('validates a replayed paid webhook before allowing profile hydration', async () => {
+    const topup = {
+      id: 'paid-topup', account_id: 7, plan_id: 'trial', amount_agorot: 15_000,
+      currency: 'ILS', status: 'paid', shopify_draft_order_id: '44', shopify_order_id: '99',
+    };
+    const valid = await creditWalletTopup(null, topup, {
+      paid: true, total: 150, currency: 'ILS', draftOrderId: '44', shopifyOrderId: '99',
+    });
+    const pending = await creditWalletTopup(null, topup, {
+      paid: false, total: 150, currency: 'ILS', draftOrderId: '44', shopifyOrderId: '99',
+    });
+    const wrongOrder = await creditWalletTopup(null, topup, {
+      paid: true, total: 150, currency: 'ILS', draftOrderId: '44', shopifyOrderId: '100',
+    });
+    assert.equal(valid.paymentValidated, true);
+    assert.equal(shouldHydrateBusinessProfile(valid), false, 'a paid webhook replay must not restore cleared profile fields');
+    assert.equal(pending.paymentValidated, false);
+    assert.equal(wrongOrder.paymentValidated, false);
+  });
+
+  test('hydrates billing profile only on the first validated wallet credit', () => {
+    assert.equal(shouldHydrateBusinessProfile({ paymentValidated: true, credited: true }), true);
+    assert.equal(shouldHydrateBusinessProfile({ paymentValidated: true, credited: true, unchanged: true }), false);
+    assert.equal(shouldHydrateBusinessProfile({ paymentValidated: false, credited: false }), false);
+  });
+
   test('enforces one Trial checkout per account at the domain boundary', async () => {
     const prepared = [];
     const DB = {
@@ -229,6 +258,43 @@ describe('Shopify business wallet boundary', () => {
     assert.equal(line.token, null);
     assert.equal(meta.walletTopupToken, 'topup_meta');
     assert.equal(note.walletTopupToken, 'topup-note_1');
+  });
+
+  test('fills empty business details from a verified payment without replacing saved values', async () => {
+    const prepared = [];
+    const DB = {
+      prepare(sql) {
+        const statement = { sql, values: [], bind(...values) { this.values = values; prepared.push(this); return this; } };
+        return statement;
+      },
+      async batch() { return [{ meta: { changes: 1 } }, { meta: { changes: 1 } }]; },
+    };
+    const result = await hydrateBusinessProfileFromPayment(DB, 7, {
+      billingCompany: 'Eden Mish Ltd',
+      customerName: 'Eden Arieli',
+      customerPhone: '0501234567',
+      email: 'owner@example.com',
+    });
+    assert.equal(result.updated, true);
+    assert.match(prepared[0].sql, /COALESCE\(NULLIF\(TRIM\(company_name\)/);
+    assert.match(prepared[1].sql, /email = \?.*business_members/s);
+    assert.deepEqual(prepared[0].values, ['Eden Mish Ltd', prepared[0].values[1], 7]);
+    assert.deepEqual(prepared[1].values, ['Eden Arieli', '0501234567', prepared[1].values[2], 'owner@example.com', 7]);
+  });
+
+  test('updates only profile fields present in a customer patch', async () => {
+    const prepared = [];
+    const DB = {
+      prepare(sql) {
+        const statement = { sql, values: [], bind(...values) { this.values = values; prepared.push(this); return this; } };
+        return statement;
+      },
+      async batch(statements) { return statements.map(() => ({ meta: { changes: 1 } })); },
+    };
+    const result = await updateBusinessProfile(DB, { account_id: 7, user_id: 9 }, { company_name: 'New Name' });
+    assert.equal(prepared.length, 1);
+    assert.match(prepared[0].sql, /UPDATE business_accounts/);
+    assert.deepEqual(result, { company_name: 'New Name', name: undefined, phone: undefined });
   });
 
   test('creates a non-shipping Draft Order with wallet-only correlation metadata', async () => {

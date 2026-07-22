@@ -157,6 +157,13 @@ export async function verifyShopifyWebhook(env, rawBody, hmacHeader) {
 // We recover the EdenMish token from the note or metafields we set on the draft order.
 export function parseShopifyOrderWebhook(body) {
   const o = body || {};
+  const customer = o.customer || {};
+  const billing = o.billing_address || {};
+  const shipping = o.shipping_address || {};
+  const joinedName = (source) => [source.first_name, source.last_name]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .join(' ');
   let token = null;
   let walletTopupToken = null;
   // The funnel embeds _tracking_token in line item properties
@@ -200,8 +207,10 @@ export function parseShopifyOrderWebhook(body) {
     financial_status: o.financial_status || null,
     total: o.total_price || null,
     currency: o.currency || o.presentment_currency || null,
-    email: o.email || (o.customer && o.customer.email) || null,
-    customerName: (o.customer && (o.customer.first_name + ' ' + o.customer.last_name).trim()) || o.email || null,
+    email: o.email || customer.email || null,
+    customerName: joinedName(customer) || joinedName(billing) || joinedName(shipping) || null,
+    customerPhone: o.phone || customer.phone || billing.phone || shipping.phone || null,
+    billingCompany: billing.company || shipping.company || null,
     raw: o,
   };
 }

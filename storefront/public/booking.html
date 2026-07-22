@@ -304,8 +304,8 @@ gmp-place-autocomplete.eden-places{display:block;width:100%;color-scheme:dark}
 <h2 class="font-headline-md text-on-surface">רמת שירות</h2>
 </div>
 <div class="grid grid-cols-1 md:grid-cols-3 gap-stack-md">
-<label class="cursor-pointer group">
-<input class="hidden peer" name="service" type="radio" value="eco"/>
+<label class="cursor-pointer group rounded-xl focus-within:ring-2 focus-within:ring-primary/50">
+<input class="sr-only peer" name="service" type="radio" value="eco"/>
 <div class="flex flex-col items-center justify-center p-stack-md bg-surface-container-low border-2 border-outline-variant rounded-xl group-hover:border-primary peer-checked:border-secondary peer-checked:bg-secondary-container/20 transition-all text-center h-full">
 <span class="material-symbols-outlined text-4xl mb-2 text-on-surface-variant peer-checked:text-secondary">schedule</span>
 <h4 class="font-label-bold text-on-surface">חסכוני</h4>
@@ -315,8 +315,8 @@ gmp-place-autocomplete.eden-places{display:block;width:100%;color-scheme:dark}
 <p data-service-rate="eco" class="text-primary font-label-bold mt-2">החל מ₪35</p>
 </div>
 </label>
-<label class="cursor-pointer group">
-<input checked class="hidden peer" name="service" type="radio" value="standard"/>
+<label class="cursor-pointer group rounded-xl focus-within:ring-2 focus-within:ring-primary/50">
+<input checked class="sr-only peer" name="service" type="radio" value="standard"/>
 <div class="flex flex-col items-center justify-center p-stack-md bg-surface-container-low border-2 border-outline-variant rounded-xl group-hover:border-primary peer-checked:border-secondary peer-checked:bg-secondary-container/20 transition-all text-center h-full">
 <span class="material-symbols-outlined text-4xl mb-2 text-on-surface-variant peer-checked:text-secondary">two_wheeler</span>
 <h4 class="font-label-bold text-on-surface">רגיל</h4>
@@ -324,8 +324,8 @@ gmp-place-autocomplete.eden-places{display:block;width:100%;color-scheme:dark}
 <p data-service-rate="standard" class="text-primary font-label-bold mt-2">החל מ₪50</p>
 </div>
 </label>
-<label class="cursor-pointer group">
-<input class="hidden peer" name="service" type="radio" value="flash"/>
+<label class="cursor-pointer group rounded-xl focus-within:ring-2 focus-within:ring-primary/50">
+<input class="sr-only peer" name="service" type="radio" value="flash"/>
 <div class="flex flex-col items-center justify-center p-stack-md bg-surface-container-low border-2 border-outline-variant rounded-xl group-hover:border-primary peer-checked:border-secondary peer-checked:bg-secondary-container/20 transition-all text-center h-full">
 <span class="material-symbols-outlined text-4xl mb-2 text-on-surface-variant peer-checked:text-secondary">bolt</span>
 <h4 class="font-label-bold text-on-surface">מהיר</h4>
@@ -413,6 +413,7 @@ gmp-place-autocomplete.eden-places{display:block;width:100%;color-scheme:dark}
 </div>
 </footer>
 <script src="/assets/api-origin.js"></script>
+<script src="/assets/business-booking.js"></script>
 <script>
 // Existing Worker backend (sibling repo). Public order endpoint only.
 const API = window.EDEN_API.find;
@@ -441,7 +442,17 @@ async function initBusinessMode(){
       const title=document.getElementById("price-table-title");if(title)title.textContent="מחירי מסלול "+planName;
       document.querySelectorAll("[data-rate-key]").forEach((cell)=>{const rate=activePlan.rates&&activePlan.rates[cell.dataset.rateKey];cell.textContent=Number.isFinite(rate)?"₪"+rate:"—";});
       FALLBACK_BASE={eco:activePlan.rates["1:eco"]||35,standard:activePlan.rates["1:standard"]||50,flash:activePlan.rates["1:flash"]||85};
-      document.querySelectorAll("[data-service-rate]").forEach((label)=>{label.textContent="החל מ₪"+FALLBACK_BASE[label.dataset.serviceRate];});
+      const serviceState=window.EdenBusinessBooking.planServiceState(activePlan);
+      const availableServices=new Set(serviceState.available);
+      document.querySelectorAll('input[name="service"]').forEach((input)=>{
+        const available=availableServices.has(input.value);
+        input.disabled=!available;
+        const card=input.closest("label");
+        if(card){card.classList.toggle("opacity-40",!available);card.classList.toggle("cursor-not-allowed",!available);card.classList.toggle("cursor-pointer",available);card.setAttribute("aria-disabled",String(!available));}
+      });
+      document.querySelectorAll("[data-service-rate]").forEach((label)=>{const rate=activePlan.rates&&activePlan.rates["1:"+label.dataset.serviceRate];label.textContent=Number.isFinite(rate)?"החל מ₪"+rate:"לא כלול במסלול";});
+      const preferredInput=document.querySelector('input[name="service"][value="'+serviceState.preferred+'"]:not(:disabled)');
+      if(preferredInput){preferredInput.checked=true;sched.service=preferredInput.value;renderSchedule();}
     }
     const email=document.getElementById("f-email");if(email){email.value=businessAccount.user.email||"";email.readOnly=true;emailState.value=email.value;emailState.resolved=true;}
     const name=document.getElementById("f-name");if(name&&!name.value)name.value=businessAccount.user.name||businessAccount.account.company_name||"";
@@ -471,7 +482,9 @@ function setPriceNote(message, visible){
   const p = priceNote.querySelector("p"); if (p && message) p.textContent = message;
 }
 function quoteUnavailableMessage(reason){
-  return reason === "flash_unavailable_z3" ? "שירות מהיר אינו זמין באזור 3. בחרו שירות רגיל או חסכוני." : "אחת הכתובות מחוץ לאזור השירות שלנו.";
+  if(reason === "flash_unavailable_z3")return "שירות מהיר אינו זמין באזור 3. בחרו שירות רגיל או חסכוני.";
+  if(reason === "plan_service_unavailable")return "השירות או האזור אינם כלולים במסלול העסקי הנוכחי. בחרו אפשרות שכלולה במסלול או שדרגו אותו.";
+  return "אחת הכתובות מחוץ לאזור השירות שלנו.";
 }
 function renderFallbackEstimate(fields, unavailable){
   const base = FALLBACK_BASE[fields.service] || FALLBACK_BASE.standard;
@@ -512,19 +525,28 @@ function renderAuthoritativeQuote(quote){
   setPriceNote("", false);
   if(couponState.data && couponState.data.valid) setEstimateText("price-val", couponState.data.price);
 }
+async function performAuthoritativeQuote(fields,fingerprint,sequence){
+  try{
+    const res=await fetch(API+(BUSINESS_MODE?"/api/business/quote":"/api/quote"),{method:"POST",credentials:BUSINESS_MODE?"include":"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(fields)});
+    const data=await res.json();
+    if(sequence!==quoteState.sequence||fingerprint!==quoteFingerprint(getCouponPricingFields()))return null;
+    if(!res.ok)throw new Error(data.error||"quote_failed");
+    quoteState.data=data;renderAuthoritativeQuote(data);return data;
+  }catch(e){if(sequence===quoteState.sequence){quoteState.data=null;renderFallbackEstimate(fields,true)}return null}
+}
+function prepareAuthoritativeQuote(fields){
+  if(quoteState.timer){clearTimeout(quoteState.timer);quoteState.timer=null}
+  const fingerprint=quoteFingerprint(fields),sequence=++quoteState.sequence;
+  quoteState.fingerprint=fingerprint;quoteState.data=null;
+  return {fingerprint,sequence};
+}
 function requestAuthoritativeQuote(fields){
-  if(quoteState.timer) clearTimeout(quoteState.timer);
-  const fingerprint=quoteFingerprint(fields); const sequence=++quoteState.sequence;
-  quoteState.fingerprint=fingerprint; quoteState.data=null;
-  quoteState.timer=setTimeout(async()=>{
-    try{
-      const res=await fetch(API+(BUSINESS_MODE?"/api/business/quote":"/api/quote"),{method:"POST",credentials:BUSINESS_MODE?"include":"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(fields)});
-      const data=await res.json();
-      if(sequence!==quoteState.sequence||fingerprint!==quoteFingerprint(getCouponPricingFields()))return;
-      if(!res.ok)throw new Error(data.error||"quote_failed");
-      quoteState.data=data; renderAuthoritativeQuote(data);
-    }catch(e){if(sequence===quoteState.sequence)renderFallbackEstimate(fields,true);}
-  },300);
+  const request=prepareAuthoritativeQuote(fields);
+  quoteState.timer=setTimeout(()=>{quoteState.timer=null;performAuthoritativeQuote(fields,request.fingerprint,request.sequence)},300);
+}
+function requestAuthoritativeQuoteNow(fields){
+  const request=prepareAuthoritativeQuote(fields);
+  return performAuthoritativeQuote(fields,request.fingerprint,request.sequence);
 }
 function computeEstimate(){
   const fields=getCouponPricingFields();
@@ -1152,10 +1174,24 @@ form.addEventListener("submit", async (e) => {
   } else if (!sched.window) {
     return showError("נא לבחור מועד לאיסוף (תאריך וחלון זמן).");
   }
-  const activeQuoteFields=getCouponPricingFields();
-  const activeQuote=quoteState.fingerprint===quoteFingerprint(activeQuoteFields)?quoteState.data:null;
-  if(activeQuote&&!activeQuote.available)return showError(quoteUnavailableMessage((activeQuote.reasons||[])[0]));
   if (!document.getElementById("agree-terms").checked) return showError("נא לאשר את התקנון והמדיניות.");
+  const activeQuoteFields=getCouponPricingFields();
+  let activeQuote=quoteState.fingerprint===quoteFingerprint(activeQuoteFields)?quoteState.data:null;
+  if(BUSINESS_MODE&&!activeQuote){
+    const checkingLabel=submitBtn.textContent;
+    submitBtn.disabled=true;submitBtn.textContent="בודק מחיר במסלול…";
+    const quoteDecision=await window.EdenBusinessBooking.prepareAuthoritativeQuote({businessMode:BUSINESS_MODE,quote:activeQuote,quoteFingerprint:quoteState.fingerprint,expectedFingerprint:quoteFingerprint(activeQuoteFields),fetchQuote:()=>requestAuthoritativeQuoteNow(activeQuoteFields)});
+    activeQuote=quoteDecision.quote;
+    submitBtn.disabled=false;submitBtn.textContent=checkingLabel;
+    if(!activeQuote)return showError("לא הצלחנו לאמת כרגע את מחיר המסלול העסקי. לא נוכתה יתרה — נסו שוב בעוד רגע.");
+    if(!activeQuote.available)return showError(quoteUnavailableMessage((activeQuote.reasons||[])[0]));
+    if(!quoteDecision.canSubmit){
+      setPriceNote("המחיר עודכן ל־₪"+Number(activeQuote.price||0).toLocaleString("he-IL")+" — לחצו שוב לאישור וחיוב.",true);
+      const priceNote=document.getElementById("price-note");if(priceNote)priceNote.scrollIntoView({behavior:"smooth",block:"center"});
+      return;
+    }
+  }
+  if(activeQuote&&!activeQuote.available)return showError(quoteUnavailableMessage((activeQuote.reasons||[])[0]));
 
   const hour = service === "flash" ? new Date().getHours() : (sched.window ? parseInt(sched.window.split(":")[0], 10) : -1);
   const svcLabel = service === "eco" ? "חסכוני" : service === "flash" ? "מהיר" : "רגיל";
