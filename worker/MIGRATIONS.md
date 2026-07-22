@@ -409,6 +409,46 @@ SELECT state, COUNT(*) FROM delivery_notification_outbox GROUP BY state;
 
 ---
 
+### 020_business_wallet_schema_repair.sql
+
+**Purpose:** Repairs a partially applied migration 018 without rerunning its
+non-idempotent `ALTER TABLE orders` statements. It recreates every missing wallet
+table and index with `IF NOT EXISTS` and is safe to run repeatedly after the three
+business-wallet columns exist on `orders`.
+
+**Command:**
+```bash
+# Staging (render the config first; run from worker/):
+npx wrangler d1 execute edenmish-staging --remote --yes \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/020_business_wallet_schema_repair.sql
+
+# Local verification:
+wrangler d1 execute edenmish --local \
+  --file=./migrations/020_business_wallet_schema_repair.sql
+
+# Production: run only if migration 018 readiness is incomplete, before Worker deploy.
+wrangler d1 execute edenmish --remote \
+  --file=./migrations/020_business_wallet_schema_repair.sql
+```
+
+**Verification query:**
+```sql
+SELECT COUNT(*) AS tables FROM sqlite_master
+WHERE type='table' AND name IN (
+  'business_users','business_accounts','business_members','business_auth_challenges',
+  'business_sessions','business_wallets','wallet_topups','wallet_credit_lots',
+  'wallet_reservations','wallet_entries','business_plan_enrollments'
+);
+
+SELECT COUNT(*) AS columns FROM pragma_table_info('orders')
+WHERE name IN ('business_account_id','wallet_reservation_id','payment_method');
+```
+
+Expected result: `tables = 11` and `columns = 3`.
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -430,6 +470,7 @@ SELECT state, COUNT(*) FROM delivery_notification_outbox GROUP BY state;
 - [ ] Run `017_driver_task_proofs.sql` after 016 and before enabling driver photo/signature capture.
 - [ ] Run `018_business_wallet.sql` after merge and before deploying the Worker.
 - [ ] Run `019_delivery_notification_outbox.sql` after 018 and before enabling native driver completion.
+- [ ] Run `020_business_wallet_schema_repair.sql` only when migration 018 readiness is incomplete.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).
