@@ -439,6 +439,26 @@ describe('customer tracking payment gate', () => {
     assert.equal(d.order.id, 32);
     assert.equal(d.otp_pending, false);
   });
+
+  test('keeps a cancelled wallet order visible after its reservation is released', async () => {
+    const token = 'cancelledwallettrack1';
+    const db = apiDb({ orderRow: {
+      id: 33,
+      token,
+      status: 'cancelled',
+      payment_status: 'wallet_released',
+      payment_method: 'wallet',
+      delivered_at: null,
+    } });
+    const res = await worker.fetch(new Request(`https://find.edenmish.com/api/orders/${token}`), envFor(db));
+
+    assert.equal(res.status, 200);
+    const d = await res.json();
+    assert.equal(d.order.id, 33);
+    assert.equal(d.order.status, 'cancelled');
+    assert.equal(d.order.payment_status, 'wallet_released');
+    assert.equal(d.otp_pending, false);
+  });
 });
 
 // ---- ops coupon CRUD: GET/POST/PUT/DELETE /api/ops/coupons ----

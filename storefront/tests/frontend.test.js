@@ -133,6 +133,18 @@ describe('Frontend: Pages exist', () => {
   }
 });
 
+describe('Frontend: Tracking terminal states', () => {
+  test('does not offer payment again for a cancelled order', () => {
+    const html = readPage('track.html');
+    assertContains(
+      html,
+      'o.payment_url && o.payment_status !== "paid" && !TERMINAL_TRACK_STATUSES.includes(o.status)',
+      'terminal-status payment guard',
+    );
+    assertContains(html, 'cancelled:"ההזמנה בוטלה"', 'cancelled tracking message');
+  });
+});
+
 describe('Frontend: SEO foundations', () => {
   test('Publishes crawler directives and a focused sitemap', () => {
     const robots = readPage('robots.txt');
