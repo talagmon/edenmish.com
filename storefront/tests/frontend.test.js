@@ -161,6 +161,14 @@ describe('Frontend: SEO foundations', () => {
     }
     assertContains(html, 'ללא דמי מנוי', 'business value pitch');
     assertContains(html, 'href="/business-account.html"', 'business account CTA');
+    for (const plan of ['trial', 'wallet', 'silver', 'gold', 'platinum']) {
+      assertContains(html, `href="/business-account.html?plan=${plan}"`, `${plan} account CTA`);
+    }
+    assert.ok(!html.includes('אני מעוניין/ת בחבילת הניסיון'), 'Trial must not use the assisted WhatsApp purchase flow');
+    assert.ok(!html.includes('אני מעוניין/ת בארנק העסקי'), 'Business Wallet must not use the assisted WhatsApp purchase flow');
+    const accountEntry = readPage('business-account.html');
+    assertContains(accountEntry, 'allowedPlans', 'business account plan allowlist');
+    assertContains(accountEntry, 'target.searchParams.set("plan",requestedPlan)', 'selected plan forwarding');
   });
 
   test('Homepage exposes valid LocalBusiness structured data', () => {

@@ -16,9 +16,12 @@
   </main>
   <script src="/assets/api-origin.js"></script>
   <script>
-    const target=window.EDEN_API.find+"/business";
-    document.getElementById("continue").href=target;
-    window.location.replace(target);
+    const allowedPlans=new Set(["trial","wallet","silver","gold","platinum"]);
+    const requestedPlan=new URLSearchParams(window.location.search).get("plan");
+    const target=new URL(window.EDEN_API.find+"/business");
+    if(allowedPlans.has(requestedPlan))target.searchParams.set("plan",requestedPlan);
+    document.getElementById("continue").href=target.toString();
+    window.location.replace(target.toString());
   </script>
 </body>
 </html>

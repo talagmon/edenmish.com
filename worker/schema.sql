@@ -348,7 +348,7 @@ CREATE TABLE IF NOT EXISTS business_users (
 CREATE TABLE IF NOT EXISTS business_accounts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   company_name TEXT,
-  plan_id TEXT CHECK(plan_id IN ('silver','gold','platinum')),
+  plan_id TEXT CHECK(plan_id IN ('trial','wallet','silver','gold','platinum')),
   rate_plan_version TEXT,
   status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','suspended','closed')),
   created_at INTEGER NOT NULL,
@@ -396,7 +396,7 @@ CREATE TABLE IF NOT EXISTS business_wallets (
 CREATE TABLE IF NOT EXISTS wallet_topups (
   id TEXT PRIMARY KEY,
   account_id INTEGER NOT NULL,
-  plan_id TEXT NOT NULL CHECK(plan_id IN ('silver','gold','platinum')),
+  plan_id TEXT NOT NULL CHECK(plan_id IN ('trial','wallet','silver','gold','platinum')),
   amount_agorot INTEGER NOT NULL CHECK(amount_agorot > 0),
   currency TEXT NOT NULL DEFAULT 'ILS',
   status TEXT NOT NULL DEFAULT 'created' CHECK(status IN ('created','checkout_ready','paid','mismatch','cancelled')),
@@ -407,6 +407,9 @@ CREATE TABLE IF NOT EXISTS wallet_topups (
   paid_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_wallet_topups_account ON wallet_topups(account_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_topups_trial_once
+  ON wallet_topups(account_id)
+  WHERE plan_id = 'trial' AND status IN ('created','checkout_ready','paid');
 
 CREATE TABLE IF NOT EXISTS wallet_credit_lots (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -451,7 +454,7 @@ CREATE INDEX IF NOT EXISTS idx_wallet_entries_account ON wallet_entries(account_
 CREATE TABLE IF NOT EXISTS business_plan_enrollments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   account_id INTEGER NOT NULL,
-  plan_id TEXT NOT NULL CHECK(plan_id IN ('silver','gold','platinum')),
+  plan_id TEXT NOT NULL CHECK(plan_id IN ('trial','wallet','silver','gold','platinum')),
   rate_plan_version TEXT NOT NULL,
   topup_id TEXT NOT NULL UNIQUE,
   starts_at INTEGER NOT NULL,

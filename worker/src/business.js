@@ -12,21 +12,35 @@ const DAY = 24 * 60 * 60 * 1000;
 const AUTH_TTL_MS = 10 * 60 * 1000;
 const SESSION_TTL_MS = 30 * DAY;
 export const BUSINESS_SESSION_COOKIE = 'business_session';
-export const RATE_PLAN_VERSION = '2026-07-v1';
+export const RATE_PLAN_VERSION = '2026-07-v2';
 
 export const BUSINESS_PLANS = Object.freeze({
-  silver: Object.freeze({ id: 'silver', name_he: 'כסף', amount_agorot: 60_000, zones: [1], priority: 'normal' }),
-  gold: Object.freeze({ id: 'gold', name_he: 'זהב', amount_agorot: 150_000, zones: [1, 2], priority: 'priority' }),
-  platinum: Object.freeze({ id: 'platinum', name_he: 'פלטינום', amount_agorot: 300_000, zones: [1, 2, 3], priority: 'first' }),
+  trial: Object.freeze({ id: 'trial', name_he: 'חבילת ניסיון', amount_agorot: 15_000, zones: [1], priority: 'normal', credit_valid_days: 14, one_per_account: true }),
+  wallet: Object.freeze({ id: 'wallet', name_he: 'ארנק עסקי', amount_agorot: 150_000, zones: [1], priority: 'normal', credit_valid_days: 30 }),
+  silver: Object.freeze({ id: 'silver', name_he: 'כסף', amount_agorot: 60_000, zones: [1], priority: 'normal', credit_valid_days: 60 }),
+  gold: Object.freeze({ id: 'gold', name_he: 'זהב', amount_agorot: 150_000, zones: [1, 2], priority: 'priority', credit_valid_days: 60 }),
+  platinum: Object.freeze({ id: 'platinum', name_he: 'פלטינום', amount_agorot: 300_000, zones: [1, 2, 3], priority: 'first', credit_valid_days: 60 }),
 });
 
 const MEMBER_BASE_RATES = Object.freeze({
+  trial: Object.freeze({ '1:eco': 30 }),
+  wallet: Object.freeze({ '1:eco': 30 }),
   silver: Object.freeze({ '1:eco': 30, '1:standard': 45 }),
   gold: Object.freeze({ '1:eco': 30, '1:standard': 45, '1:flash': 85, '2:eco': 50, '2:standard': 65, '2:flash': 110 }),
   platinum: Object.freeze({ '1:eco': 30, '1:standard': 45, '1:flash': 80, '2:eco': 48, '2:standard': 63, '2:flash': 105, '3:eco': 68, '3:standard': 104 }),
 });
 
 const BUSINESS_PLAN_VALUE = Object.freeze({
+  trial: Object.freeze({
+    best_for: 'לעסק שרוצה לבדוק את השירות בלי התחייבות',
+    example_rate_key: '1:eco',
+    benefits: Object.freeze(['5 משלוחים חסכוניים באזור 1', 'קרדיט תקף ל־14 יום', 'חבילת ניסיון אחת לכל עסק']),
+  }),
+  wallet: Object.freeze({
+    best_for: 'לעסק עם משלוחים חסכוניים קבועים באזור 1',
+    example_rate_key: '1:eco',
+    benefits: Object.freeze(['עד 50 משלוחים חסכוניים באזור 1', 'קרדיט תקף ל־30 יום', 'חשבון, יתרה והיסטוריית חיובים בזמן אמת']),
+  }),
   silver: Object.freeze({
     best_for: 'לעסקים עם משלוחים קבועים במרכז תל אביב וגוש דן',
     example_rate_key: '1:standard',
@@ -71,7 +85,8 @@ function planValue(plan) {
     best_for: value.best_for,
     recommended: Boolean(value.recommended),
     benefits: [...value.benefits],
-    credit_valid_days: 60,
+    credit_valid_days: plan.credit_valid_days,
+    repeatable: !plan.one_per_account,
     max_discount_percent: maxDiscountPercent,
     example: {
       zone: Number(zone),
@@ -177,6 +192,13 @@ function loginEmailHtml(code, magicUrl) {
   return `<div dir="rtl" style="font-family:Arial,sans-serif;line-height:1.7;max-width:480px;margin:auto;padding:28px;background:#fff;color:#0F172A;border:1px solid #e5dbee;border-radius:18px"><h1 style="color:#5B2A86;font-size:25px;margin:0 0 8px">כניסה לחשבון העסקי</h1><p style="color:#475569">לחצו על הכפתור לכניסה מיידית. הקישור והקוד תקפים ל-10 דקות ופועלים פעם אחת בלבד.</p><p style="text-align:center;margin:24px 0"><a href="${esc(magicUrl)}" style="display:inline-block;background:#5B2A86;color:#fff;padding:13px 28px;border-radius:10px;text-decoration:none;font-weight:700">כניסה מאובטחת לחשבון</a></p><div style="text-align:center;padding:18px;background:#f7f3fa;border-radius:12px"><div style="font-size:13px;color:#64748b">או הזינו את הקוד</div><div style="font-size:34px;font-weight:800;letter-spacing:7px;color:#5B2A86;direction:ltr">${esc(code)}</div></div><p style="font-size:13px;color:#64748b;margin-top:18px">אם לא ביקשתם להיכנס, אפשר להתעלם מההודעה.</p></div>`;
 }
 
+export function businessMagicUrl(accountUrl, challengeId, magicToken) {
+  const magicUrl = new URL(String(accountUrl));
+  magicUrl.searchParams.set('challenge', String(challengeId));
+  magicUrl.searchParams.set('token', String(magicToken));
+  return magicUrl.toString();
+}
+
 export async function requestBusinessLogin(env, req, emailValue, accountUrl) {
   const email = normalizeBusinessEmail(emailValue);
   if (!email) return { ok: false, error: 'invalid_email', status: 400 };
@@ -205,7 +227,7 @@ export async function requestBusinessLogin(env, req, emailValue, accountUrl) {
     now
   ).run();
 
-  const magicUrl = `${String(accountUrl).replace(/\?.*$/, '')}?challenge=${encodeURIComponent(id)}&token=${encodeURIComponent(magicToken)}`;
+  const magicUrl = businessMagicUrl(accountUrl, id, magicToken);
   await notifyEmail(env, env.DB, {
     orderId: null,
     template: 'business_login',
@@ -359,10 +381,17 @@ export async function createWalletTopup(DB, session, planId) {
   if (!plan) return null;
   const id = randomToken(22);
   const now = Date.now();
-  await DB.prepare(
-    `INSERT INTO wallet_topups (id, account_id, plan_id, amount_agorot, currency, status, created_at)
-     VALUES (?, ?, ?, ?, 'ILS', 'created', ?)`
-  ).bind(id, session.account_id, plan.id, plan.amount_agorot, now).run();
+  if (plan.one_per_account) {
+    await DB.prepare(`UPDATE wallet_topups SET status = 'cancelled'
+      WHERE account_id = ? AND plan_id = ? AND status IN ('created','checkout_ready') AND created_at < ?`)
+      .bind(session.account_id, plan.id, now - DAY).run();
+  }
+  const inserted = await DB.prepare(
+    `INSERT OR IGNORE INTO wallet_topups (id, account_id, plan_id, amount_agorot, currency, status, created_at)
+     VALUES (?, ?, ?, ?, 'ILS', 'created', ?)
+     RETURNING id`
+  ).bind(id, session.account_id, plan.id, plan.amount_agorot, now).first();
+  if (!inserted) return { error: plan.one_per_account ? 'trial_already_used' : 'topup_unavailable' };
   return { id, account_id: session.account_id, email: session.email, company_name: session.company_name, plan, amount: plan.amount_agorot / 100 };
 }
 
@@ -371,6 +400,11 @@ export async function markWalletTopupCheckout(DB, topupId, charge) {
     `UPDATE wallet_topups SET status = 'checkout_ready', checkout_url = ?, shopify_draft_order_id = ?
      WHERE id = ? AND status = 'created'`
   ).bind(charge.checkoutUrl, String(charge.draftOrderId || charge.processorRef || ''), topupId).run();
+}
+
+export async function cancelWalletTopup(DB, topupId) {
+  await DB.prepare(`UPDATE wallet_topups SET status = 'cancelled' WHERE id = ? AND status = 'created'`)
+    .bind(topupId).run();
 }
 
 export async function getWalletTopup(DB, id) {
@@ -391,7 +425,7 @@ export async function creditWalletTopup(DB, topup, payment) {
   }
 
   const now = Date.now();
-  const expiresAt = now + 60 * DAY;
+  const expiresAt = now + (BUSINESS_PLANS[topup.plan_id]?.credit_valid_days || 60) * DAY;
   const idempotencyKey = `topup:${topup.id}:paid`;
   const statements = [
     DB.prepare(`UPDATE business_wallets

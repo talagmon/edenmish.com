@@ -431,7 +431,7 @@ async function initBusinessMode(){
     const banner=document.getElementById("business-wallet-banner");if(banner)banner.classList.remove("hidden");
     const accountLink=document.getElementById("business-account-link");if(accountLink)accountLink.href=API+"/business";
     const coupon=document.getElementById("coupon-section");if(coupon)coupon.hidden=true;
-    const planNames={silver:"כסף",gold:"זהב",platinum:"פלטינום"};
+    const planNames={trial:"חבילת ניסיון",wallet:"ארנק עסקי",silver:"כסף",gold:"זהב",platinum:"פלטינום"};
     const planName=planNames[businessAccount.account.plan_id]||"ללא מסלול";
     const copy=document.getElementById("business-wallet-copy");if(copy)copy.textContent="מסלול "+planName+" · יתרה זמינה ₪"+Number(businessAccount.wallet.available||0).toLocaleString("he-IL");
     const deliveryEstimate=businessAccount.wallet.delivery_estimate;

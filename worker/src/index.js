@@ -12,7 +12,7 @@ import { getStatusMeta, getNextStatuses, isTerminalStatus } from './status.js';
 import { shopifyWebhookRegistrar } from './shopify-webhooks.js';
 import { handleDriverApi } from './driver-api.js';
 import { driverDispatchStatus, startDriverShift, endDriverShift } from './driver-dispatch.js';
-import { applyBusinessPlanPricing, businessSessionCookie, captureWalletReservation, cleanupBusinessSecurity, clearBusinessSessionCookie, createWalletTopup, creditWalletTopup, getBusinessSession, getBusinessSnapshot, getWalletTopup, linkWalletReservationToOrder, markWalletTopupCheckout, publicBusinessPlans, releaseWalletReservation, requestBusinessLogin, reserveWalletCredit, revokeBusinessSession, updateBusinessProfile, verifyBusinessLogin } from './business.js';
+import { applyBusinessPlanPricing, businessSessionCookie, cancelWalletTopup, captureWalletReservation, cleanupBusinessSecurity, clearBusinessSessionCookie, createWalletTopup, creditWalletTopup, getBusinessSession, getBusinessSnapshot, getWalletTopup, linkWalletReservationToOrder, markWalletTopupCheckout, publicBusinessPlans, releaseWalletReservation, requestBusinessLogin, reserveWalletCredit, revokeBusinessSession, updateBusinessProfile, verifyBusinessLogin } from './business.js';
 import { runDeliveryCompletionSideEffects } from './delivery-completion.js';
 import {
   persistOpsDeliveryCompletion,
@@ -291,7 +291,10 @@ export default {
     if (path === '/api/business/auth/request' && req.method === 'POST') {
       let b; try { b = await readJson(req); } catch (e) { return json({ error: e.message }, e.status || 400); }
       try {
-        const result = await requestBusinessLogin(env, req, b.email, `${url.origin}/business`);
+        const requestedPlan = String(b.plan_id || '');
+        const accountUrl = new URL(`${url.origin}/business`);
+        if (publicBusinessPlans().some((plan) => plan.id === requestedPlan)) accountUrl.searchParams.set('plan', requestedPlan);
+        const result = await requestBusinessLogin(env, req, b.email, accountUrl.toString());
         return json(result.ok ? { ok: true, challenge: result.challenge, ...(result.test_code ? { test_code: result.test_code, test_token: result.test_token } : {}) } : { error: result.error }, result.status || 200);
       } catch (error) {
         console.error('business_login_request_failed', error && error.message || String(error));
@@ -347,6 +350,7 @@ export default {
       let b; try { b = await readJson(req); } catch (e) { return json({ error: e.message }, e.status || 400); }
       const topup = await createWalletTopup(env.DB, session, b.plan_id);
       if (!topup) return json({ error: 'invalid_plan' }, 400);
+      if (topup.error) return json({ error: topup.error }, topup.error === 'trial_already_used' ? 409 : 503);
       try {
         const charge = await createWalletCharge(env, {
           id: topup.id,
@@ -355,10 +359,11 @@ export default {
           email: topup.email,
           company_name: topup.company_name,
         }, topup.amount);
-        if (!charge || !charge.checkoutUrl) return json({ error: 'checkout_unavailable' }, 503);
+        if (!charge || !charge.checkoutUrl) throw new Error('checkout_unavailable');
         await markWalletTopupCheckout(env.DB, topup.id, charge);
         return json({ ok: true, topup_id: topup.id, checkout_url: charge.checkoutUrl });
       } catch (error) {
+        await cancelWalletTopup(env.DB, topup.id).catch(() => {});
         console.error('business_topup_checkout_failed', error && error.message || String(error));
         return json({ error: 'checkout_unavailable' }, 503);
       }
