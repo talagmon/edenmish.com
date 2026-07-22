@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
-<title>EdenMish | תודה שבחרתם בנו</title>
-<meta name="description" content="התשלום ל-EdenMish התקבל בהצלחה. אנחנו ממשיכים לטפל בהזמנה ונשלח את פרטי ההמשך במייל."/>
+<title>EdenMish | התשלום לא הושלם</title>
+<meta name="description" content="התשלום ל-EdenMish לא הושלם. אפשר לחזור בבטחה לעמוד התשלום ולנסות שוב."/>
 <meta name="robots" content="noindex, nofollow"/>
 <meta name="theme-color" content="#0b1020"/>
-<link rel="canonical" href="https://edenmish.com/thank-you.html"/>
+<link rel="canonical" href="https://edenmish.com/payment-failed.html"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
@@ -20,7 +20,6 @@
     --surface-soft: rgba(24, 30, 54, 0.78);
     --outline: rgba(223, 183, 255, 0.18);
     --primary: #dfb7ff;
-    --primary-strong: #5b2a86;
     --mint: #91d3c8;
     --text: #f6f2fb;
     --muted: #b8b3c7;
@@ -58,7 +57,7 @@
     text-decoration: none;
   }
 
-  .thank-you {
+  .payment-result {
     min-width: 0;
     margin-block: auto;
     padding-block: 2rem;
@@ -87,7 +86,7 @@
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(180deg, transparent 48%, rgba(11, 16, 32, 0.42));
+    background: linear-gradient(180deg, transparent 52%, rgba(11, 16, 32, 0.42));
     pointer-events: none;
   }
 
@@ -114,10 +113,10 @@
     display: inline-flex;
     align-items: center;
     gap: 0.55rem;
-    border: 1px solid rgba(145, 211, 200, 0.3);
+    border: 1px solid rgba(223, 183, 255, 0.32);
     border-radius: 999px;
-    background: rgba(145, 211, 200, 0.1);
-    color: var(--mint);
+    background: rgba(91, 42, 134, 0.2);
+    color: var(--primary);
     font-size: 0.9rem;
     font-weight: 700;
   }
@@ -127,8 +126,8 @@
     width: 0.55rem;
     height: 0.55rem;
     border-radius: 50%;
-    background: var(--mint);
-    box-shadow: 0 0 18px rgba(145, 211, 200, 0.75);
+    background: var(--primary);
+    box-shadow: 0 0 18px rgba(223, 183, 255, 0.65);
   }
 
   h1 {
@@ -147,7 +146,7 @@
     line-height: 1.7;
   }
 
-  .next {
+  .note {
     margin: 1.5rem 0 0;
     padding: 1rem 1.1rem;
     border-radius: 1rem;
@@ -157,48 +156,44 @@
     line-height: 1.55;
   }
 
-  .home-cta {
-    width: 100%;
+  .actions { margin-top: 1.5rem; display: grid; gap: 0.75rem; }
+
+  .cta {
     min-height: 3.6rem;
-    margin-top: 1.5rem;
     padding: 0.85rem 1.25rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.7rem;
+    border: 1px solid transparent;
     border-radius: 1rem;
-    background: var(--mint);
-    color: #10201f;
     font-size: 1.02rem;
     font-weight: 800;
     text-decoration: none;
-    box-shadow: 0 14px 32px rgba(145, 211, 200, 0.18);
-    transition: transform 180ms ease, filter 180ms ease;
+    transition: transform 180ms ease, filter 180ms ease, background 180ms ease;
   }
 
-  .home-cta:hover { filter: brightness(1.07); }
-  .home-cta:active { transform: scale(0.985); }
-  .home-cta:focus-visible { outline: 3px solid var(--primary); outline-offset: 4px; }
-  .home-cta span { direction: ltr; font-size: 1.35rem; }
+  .cta.primary { background: var(--mint); color: #10201f; box-shadow: 0 14px 32px rgba(145, 211, 200, 0.18); }
+  .cta.secondary { border-color: var(--outline); background: rgba(255, 255, 255, 0.035); color: var(--primary); }
+  .cta:hover { filter: brightness(1.07); }
+  .cta:active { transform: scale(0.985); }
+  .cta:focus-visible { outline: 3px solid var(--primary); outline-offset: 4px; }
+  .cta span { direction: ltr; font-size: 1.35rem; }
+  [hidden] { display: none !important; }
 
-  footer {
-    padding-top: 1rem;
-    color: #898497;
-    font-size: 0.8rem;
-    text-align: center;
-  }
+  footer { padding-top: 1rem; color: #898497; font-size: 0.8rem; text-align: center; }
 
   @media (min-width: 820px) {
     .shell { padding-top: 2rem; }
-    .thank-you {
+    .payment-result {
       direction: ltr;
       grid-template-columns: minmax(0, 1.12fr) minmax(390px, 0.88fr);
       align-items: stretch;
     }
-    .art { min-height: 610px; }
-    .art img { min-height: 610px; }
-    .message { min-height: 610px; direction: rtl; }
-    .home-cta { width: fit-content; min-width: 15rem; }
+    .art, .art img, .message { min-height: 610px; }
+    .message { direction: rtl; }
+    .actions { grid-template-columns: repeat(2, max-content); }
+    .cta { min-width: 12rem; }
   }
 
   @media (prefers-reduced-motion: no-preference) {
@@ -215,24 +210,66 @@
 <div class="shell">
   <a class="brand" href="https://edenmish.com/" aria-label="EdenMish — דף הבית">EdenMish</a>
 
-  <main class="thank-you">
+  <main class="payment-result">
     <figure class="art">
-      <img src="./assets/edenmish-thank-you-bike.webp" width="1672" height="941" alt="אופנוע משלוחים של EdenMish נוסע לאורך מסלול מואר בעיר"/>
+      <img src="./assets/edenmish-payment-retry-bike.webp" width="1672" height="941" alt="אופנוע משלוחים ממתין ליד מסלול מואר שמוכן להמשך"/>
     </figure>
 
-    <section class="message" aria-labelledby="thank-you-title">
-      <p class="status">התשלום התקבל בהצלחה</p>
-      <h1 id="thank-you-title">תודה שבחרתם ב-EdenMish</h1>
-      <p class="lead">אנחנו מעדכנים עכשיו את ההזמנה או החשבון שלכם. אישור ופרטי ההמשך יישלחו לכתובת האימייל שמסרתם.</p>
-      <p class="next"><strong>מה עכשיו?</strong> אפשר לסגור את העמוד בבטחה או לחזור לאתר הראשי. אנחנו ממשיכים לטפל בכל השאר.</p>
-      <a class="home-cta" href="https://edenmish.com/">
-        <span aria-hidden="true">←</span>
-        חזרה ל-edenmish.com
-      </a>
+    <section class="message" aria-labelledby="payment-failed-title">
+      <p class="status">לא בוצע חיוב מאושר</p>
+      <h1 id="payment-failed-title">התשלום לא הושלם</h1>
+      <p class="lead">ההזמנה או הטעינה עדיין לא אושרו. אפשר לחזור לעמוד התשלום ולנסות שוב — רק תשלום ש-Shopify מאשרת מעדכן את החשבון.</p>
+      <p class="note"><strong>כדאי לבדוק:</strong> פרטי הכרטיס, מסגרת האשראי והאישור באפליקציית הבנק. אם מופיע חיוב אבל העמוד עדיין מציג שגיאה, אל תשלמו שוב ופנו אלינו לבדיקה.</p>
+      <div class="actions">
+        <a class="cta primary" id="retry-cta" href="https://edenmish.com/">
+          ניסיון נוסף לתשלום
+          <span aria-hidden="true">←</span>
+        </a>
+        <a class="cta secondary" href="https://edenmish.com/">
+          חזרה ל-EdenMish
+        </a>
+      </div>
     </section>
   </main>
 
   <footer>© 2026 EdenMish · משלוחים בגוש דן</footer>
 </div>
+<script>
+  (() => {
+    const allowedHosts = new Set([
+      'pay.edenmish.com',
+      'edenmish.myshopify.com',
+      'r013gt-fc.myshopify.com',
+    ]);
+
+    function safePaymentUrl(value) {
+      if (!value) return null;
+      try {
+        const url = new URL(value, window.location.href);
+        const path = url.pathname.replace(/\/+$/, '') || '/';
+        if (url.protocol !== 'https:' || (url.port && url.port !== '443') || !allowedHosts.has(url.hostname)) return null;
+        if (path === '/' || path === '/payment-failed' || path === '/payment-error' || path === '/pages/payment-failed') return null;
+        return url.href;
+      } catch {
+        return null;
+      }
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const retryUrl = safePaymentUrl(params.get('retry_url')) || safePaymentUrl(document.referrer);
+    const retry = document.getElementById('retry-cta');
+    if (retryUrl) {
+      retry.href = retryUrl;
+      return;
+    }
+
+    retry.addEventListener('click', event => {
+      if (window.history.length <= 1) return;
+      event.preventDefault();
+      window.history.back();
+      window.setTimeout(() => window.location.assign('https://edenmish.com/'), 1200);
+    });
+  })();
+</script>
 </body>
 </html>
