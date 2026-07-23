@@ -55,6 +55,7 @@ jobs:
             echo "  wrangler d1 execute edenmish --remote --file=./migrations/019_delivery_notification_outbox.sql"
             echo "  wrangler d1 execute edenmish --remote --file=./migrations/021_business_entry_plans.sql"
             echo "  wrangler d1 execute edenmish --remote --file=./migrations/022_business_plan_coupons.sql"
+            echo "  wrangler d1 execute edenmish --remote --file=./migrations/023_driver_login_invitations.sql"
             echo ""
             echo "See worker/MIGRATIONS.md for verification queries."
             exit 1
