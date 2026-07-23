@@ -383,7 +383,8 @@ describe('Frontend: SEO foundations', () => {
     for (const deliveryState of ['התקבלה', 'אושר', 'לאיסוף', 'למסירה', 'נמסר']) {
       assertContains(html, deliveryState, `${deliveryState} live-delivery state`);
     }
-    assertContains(html, 'src="/assets/edenmish-thank-you-bike.webp"', 'motorcycle courier hero artwork');
+    assertContains(html, 'src="/assets/edenmish-home-hero-neon.webp"', 'motorcycle courier hero artwork with neon route trail');
+    assert.ok(existsSync(join(PUB, 'assets', 'edenmish-home-hero-neon.webp')), 'neon motorcycle hero artwork not found');
     assertContains(html, 'src="/assets/edenmish-v0.mp4"', 'service-area logistics video');
     assertContains(styles, '.home-page {', 'homepage-only skin scope');
     assertContains(styles, '@media (max-width: 767px)', 'mobile presentation breakpoint');
