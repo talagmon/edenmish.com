@@ -9,7 +9,7 @@
 //
 // For every public/*.html it:
 //   1. Adds/updates <meta name="app-version" content="X.Y.Z+#bn (sha)"> in <head>.
-//   2. Versions the shared stylesheet URL so Safari cannot reuse stale CSS.
+//   2. Versions shared presentation assets so browsers cannot mix releases.
 //   3. Injects a small footer stamp right after the credits line.
 //
 // Wired into package.json: `npm run build` runs tailwind then this script.
@@ -82,12 +82,16 @@ for (const file of htmlFiles) {
     html = html.replace(/<\/title>/, `</title>\n${newMeta}`);
   }
 
-  // 2. Cache-bust the generated Tailwind bundle on every build. Cloudflare can
-  // still cache the immutable URL, while Safari always requests the release's
-  // exact stylesheet instead of keeping a stale response under a shared path.
+  // 2. Cache-bust the generated Tailwind bundle and responsive navigation on
+  // every build. They must move together: mixing current navigation JS with a
+  // stale stylesheet can expose desktop links and the hamburger simultaneously.
   html = html.replace(
     /href="\/assets\/styles\.css(?:\?v=[^"]*)?"/g,
     `href="/assets/styles.css?v=${ASSET_VERSION}"`,
+  );
+  html = html.replace(
+    /src="\/assets\/mobile-nav\.js(?:\?v=[^"]*)?"/g,
+    `src="/assets/mobile-nav.js?v=${ASSET_VERSION}"`,
   );
 
   // 3. Footer stamp.
