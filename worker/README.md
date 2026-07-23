@@ -198,6 +198,8 @@ wrangler d1 execute edenmish --remote --file=./migrations/021_business_entry_pla
 wrangler d1 execute edenmish --remote --file=./migrations/022_business_plan_coupons.sql
 wrangler d1 execute edenmish --remote --file=./migrations/023_driver_login_invitations.sql
 wrangler d1 execute edenmish --remote --file=./migrations/024_phone_delivery_link_consent.sql
+# Run the duplicate-reference preflight in MIGRATIONS.md before migration 025:
+wrangler d1 execute edenmish --remote --file=./migrations/025_wallet_reservation_ownership.sql
 ```
 
 > Run only migrations that have not already been applied. Several `ALTER TABLE`

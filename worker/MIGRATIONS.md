@@ -32,6 +32,38 @@ would fail with "duplicate column" on a DB where `schema.sql` has already run.
 
 ## Existing production DB — migration order
 
+### 025_wallet_reservation_ownership.sql
+
+**Purpose:** Enforces the payment invariant that one non-null wallet reservation
+can fund exactly one delivery order. This closes a concurrent same-idempotency-key
+race in the business order API.
+
+**Preflight (must return zero rows):**
+```sql
+SELECT wallet_reservation_id, COUNT(*) AS order_count
+FROM orders
+WHERE wallet_reservation_id IS NOT NULL
+GROUP BY wallet_reservation_id
+HAVING COUNT(*) > 1;
+```
+
+If this query returns any rows, stop and review the affected orders and wallet
+ledger entries manually. The migration deliberately refuses to guess which
+payment record is authoritative.
+
+**Command:**
+```bash
+wrangler d1 execute edenmish --remote --file=./migrations/025_wallet_reservation_ownership.sql
+```
+
+**Verification query:**
+```sql
+SELECT name, sql FROM sqlite_master
+WHERE type = 'index' AND name = 'idx_orders_wallet_reservation_unique';
+```
+
+---
+
 ### 024_phone_delivery_link_consent.sql
 
 **Purpose:** Stores the customer's optional, explicit consent to receive the
