@@ -205,6 +205,7 @@ input:focus{outline:none;border-color:#dfb7ff;box-shadow:0 0 10px rgba(223,183,2
 .ocard-actions{margin-top:10px;border-top:1px dashed rgba(255,255,255,.12);padding-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .inline-price{display:flex;gap:6px;align-items:stretch;width:100%}
 .inline-price input{flex:1;margin:0;padding:12px;border:1px solid rgba(255,255,255,.18);border-radius:10px;font-size:1.1rem;text-align:center;min-width:80px;background:rgba(13,8,20,.6);color:#dae2fd}
+.inline-price select.fee-preset{margin:0;padding:12px 8px;border:1px solid rgba(255,255,255,.18);border-radius:10px;font-size:.95rem;background:rgba(13,8,20,.6);color:#dae2fd;min-width:104px}
 .deliver-form{display:flex;flex-direction:column;gap:6px;width:100%}
 .deliver-form input{margin:0;padding:12px;border:1px solid rgba(255,255,255,.18);border-radius:10px;font-size:1rem;text-align:right;background:rgba(13,8,20,.6);color:#dae2fd}
 .nlist{margin-top:8px;border-top:1px dashed rgba(255,255,255,.12);padding-top:8px}
@@ -300,11 +301,23 @@ function card(o){
   h+=actions(o);if(notifOrderId===id)h+=notifPanel();h+='</div>';
   return h;
 }
+// Handling-fee presets, in shekels. Ops adds one to the price with a single pick instead
+// of doing the arithmetic by hand — used for an extra stop after a failed delivery
+// (return or redelivery) and for any other manual surcharge.
+var FEE_PRESETS=[20,25,30,35,40,45,50,55,60];
+function feePresetHtml(id){
+  var h='<select class="fee-preset" data-fee-for="'+id+'" aria-label="הוספת דמי טיפול למחיר">'
+    +'<option value="">+ דמי טיפול ₪</option>';
+  for(var i=0;i<FEE_PRESETS.length;i++){
+    h+='<option value="'+FEE_PRESETS[i]+'">+'+FEE_PRESETS[i]+' ₪</option>';
+  }
+  return h+'</select>';
+}
 function actions(o){
   var s=o.status,id=o.id,h='<div class="ocard-actions">';
   if(LIVE.indexOf(s)>=0)h+=gpsControlHtml(id);
   if(s==='review'||s==='priced'||s==='received'){
-    h+='<div class="inline-price"><input type="number" inputmode="numeric" min="1" id="price-'+id+'" value="'+(o.price||'')+'" placeholder="מחיר ₪"><button class="btn sm go" data-act="approve" data-id="'+id+'">אישור מחיר ושליחת קישור תשלום</button></div>';
+    h+='<div class="inline-price"><input type="number" inputmode="numeric" min="1" id="price-'+id+'" value="'+(o.price||'')+'" placeholder="מחיר ₪">'+feePresetHtml(id)+'<button class="btn sm go" data-act="approve" data-id="'+id+'">אישור מחיר ושליחת קישור תשלום</button></div>';
     if(o.review_flag)h+='<div class="stale" style="width:100%">חריג: '+esc(o.review_reason||'')+'</div>';
   }else if(s==='payment_sent'){
     if(o.payment_url)h+='<button class="btn sm" data-act="copy" data-pay="'+esc(o.payment_url)+'">העתק קישור תשלום</button><a class="btn sm alt" href="'+esc(o.payment_url)+'" target="_blank" rel="noopener">פתח קישור</a>';
@@ -396,6 +409,12 @@ function updateGpsControl(id){var el=document.getElementById('gps-control-'+id);
 function toggleGps(id){if((watchId!==null||gpsState==='requesting')&&gpsOrderId===id)stopWatch();else startWatch(id);}
 function startWatch(id){if(!navigator.geolocation){gpsOrderId=id;gpsState='error';updateGpsControl(id);alert('שירותי מיקום אינם זמינים במכשיר הזה.');return;}if(watchId!==null)stopWatch();gpsOrderId=id;gpsState='requesting';updateGpsControl(id);try{watchId=navigator.geolocation.watchPosition(function(p){gpsState='active';updateGpsControl(id);var c=p.coords;api('/api/ops/orders/'+id+'/gps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lat:c.latitude,lng:c.longitude})}).catch(function(){});},function(err){if(watchId!==null)navigator.geolocation.clearWatch(watchId);watchId=null;gpsState=err&&err.code===1?'denied':'error';updateGpsControl(id);alert(gpsState==='denied'?'הרשאת המיקום נדחתה. ניתן לנסות שוב מהכפתור.':'לא הצלחנו לקבל מיקום. בדקו את שירותי המיקום ונסו שוב.');},{enableHighAccuracy:true,maximumAge:5000,timeout:15000});}catch(e){watchId=null;gpsState='error';updateGpsControl(id);alert('לא הצלחנו להפעיל שיתוף מיקום.');}}
 function stopWatch(){var id=gpsOrderId;if(watchId!==null)navigator.geolocation.clearWatch(watchId);watchId=null;gpsOrderId=null;gpsState='idle';if(id!=null)updateGpsControl(id);}
+document.getElementById('app').addEventListener('change',function(e){
+  var sel=e.target.closest('.fee-preset');if(!sel||!sel.value)return;
+  var inp=document.getElementById('price-'+sel.getAttribute('data-fee-for'));
+  if(inp)inp.value=String((Number(inp.value)||0)+Number(sel.value));
+  sel.value='';
+});
 document.getElementById('app').addEventListener('click',function(e){
   var b=e.target.closest('[data-act]');if(!b)return;
   var act=b.getAttribute('data-act'),id=Number(b.getAttribute('data-id'));e.preventDefault();
