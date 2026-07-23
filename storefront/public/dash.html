@@ -15,8 +15,18 @@
 <meta name="theme-color" content="#8B5CF6"/>
 <style>
 .dashboard-auth-shell{position:relative;isolation:isolate;overflow:hidden;background:#090d24 url("/assets/edenmish-home-hero-neon.webp") center/cover no-repeat}
-.dashboard-auth-shell::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,rgba(9,13,36,.34),rgba(9,13,36,.64) 54%,rgba(9,13,36,.9)),linear-gradient(180deg,rgba(9,13,36,.22),rgba(9,13,36,.48))}
-.dashboard-auth-card{background:linear-gradient(145deg,rgba(35,45,82,.84),rgba(17,23,53,.72));border:1px solid rgba(209,218,255,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 30px 90px rgba(0,0,0,.45);backdrop-filter:blur(28px) saturate(150%);-webkit-backdrop-filter:blur(28px) saturate(150%)}
+.dashboard-auth-shell::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,rgba(9,13,36,.18),rgba(9,13,36,.42) 54%,rgba(9,13,36,.7)),linear-gradient(180deg,rgba(9,13,36,.08),rgba(9,13,36,.34))}
+.dashboard-auth-card{position:relative;isolation:isolate;overflow:hidden;width:100%;max-width:410px;padding:42px 38px 38px!important;border:1px solid rgba(225,231,255,.26);border-radius:68px!important;background:rgba(17,23,53,.82);box-shadow:inset 0 1px 0 rgba(255,255,255,.3),inset 0 -1px 0 rgba(145,211,200,.07),0 0 0 8px rgba(3,5,18,.58),0 0 0 9px rgba(209,218,255,.1),0 38px 110px rgba(0,0,0,.48),0 0 76px rgba(91,42,134,.14)}
+.dashboard-auth-card::before{content:"";position:absolute;z-index:-1;inset:0;background:linear-gradient(150deg,rgba(255,255,255,.18) 0%,rgba(223,183,255,.07) 24%,rgba(35,45,82,.32) 50%,rgba(9,13,36,.22) 100%);pointer-events:none}
+.dashboard-auth-card::after{content:"";position:absolute;z-index:-1;top:0;right:14%;left:14%;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.76),rgba(223,183,255,.45),transparent);box-shadow:0 1px 18px rgba(255,255,255,.18);pointer-events:none}
+.dashboard-auth-icon{width:70px;height:70px;border-radius:24px;background:linear-gradient(145deg,rgba(255,255,255,.74),rgba(223,183,255,.72));border:1px solid rgba(255,255,255,.54);box-shadow:inset 0 1px 0 rgba(255,255,255,.72),0 14px 38px rgba(91,42,134,.28);color:#4c1199}
+.dashboard-auth-title{color:#f0d9ff;text-shadow:0 1px 18px rgba(139,92,246,.22)}
+.dashboard-auth-input{height:58px;border:1px solid rgba(223,183,255,.42)!important;border-radius:24px!important;background:rgba(4,8,30,.38)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 12px 32px rgba(0,0,0,.12);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);transition:border-color .2s ease,background .2s ease,box-shadow .2s ease}
+.dashboard-auth-input:focus{border-color:rgba(223,183,255,.88)!important;background:rgba(9,13,36,.5)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 0 4px rgba(139,92,246,.14),0 16px 38px rgba(0,0,0,.14)!important}
+.dashboard-auth-button{position:relative;overflow:hidden;min-height:58px;border:1px solid rgba(244,230,255,.32);border-radius:24px!important;background:linear-gradient(135deg,rgba(128,102,232,.94),rgba(91,42,134,.94));box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 18px 38px rgba(63,28,111,.3),0 0 26px rgba(128,102,232,.12);transition:transform .18s ease,filter .18s ease,box-shadow .18s ease}
+.dashboard-auth-button:hover{filter:brightness(1.08);box-shadow:inset 0 1px 0 rgba(255,255,255,.34),0 22px 44px rgba(63,28,111,.36)}
+.dashboard-auth-button:active{transform:scale(.985)}
+@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){.dashboard-auth-card{background:linear-gradient(150deg,rgba(32,41,78,.48),rgba(17,23,53,.25));backdrop-filter:blur(26px) saturate(145%) brightness(.82);-webkit-backdrop-filter:blur(26px) saturate(145%) brightness(.82)}}
 .ops-queue-grid{display:grid;grid-template-columns:minmax(0,1fr);align-items:start;gap:14px}
 .ios-order-wrap{position:relative;overflow:hidden;align-self:start;border-radius:20px}
 .ios-order-card{position:relative;z-index:1;overflow:hidden;padding:16px;border:1px solid rgba(209,218,255,.15);border-radius:20px;background:linear-gradient(145deg,#1e264b,#111735);box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 20px 60px rgba(0,0,0,.24);backdrop-filter:blur(24px) saturate(145%);-webkit-backdrop-filter:blur(24px) saturate(145%);transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
@@ -57,7 +67,7 @@
 .ios-order-step.is-current .ios-order-step-dot{color:#fff;border-color:#8b5cf6;background:#5b2a86;box-shadow:0 0 0 4px rgba(139,92,246,.14),0 0 18px rgba(139,92,246,.42)}
 .ios-order-terminal{display:flex;align-items:center;gap:7px;margin-top:14px;padding:11px 2px 0;color:#b8b8c8;font-size:.78rem;font-weight:700;border-top:1px solid rgba(209,218,255,.1)}
 @media(min-width:900px){.ops-queue-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:640px){.dashboard-auth-shell{background-position:19% center}.dashboard-auth-shell::before{background:linear-gradient(180deg,rgba(9,13,36,.48),rgba(9,13,36,.84))}.ios-order-card{padding:14px;border-radius:18px}.ios-order-identity{grid-template-columns:40px minmax(0,1fr) auto;gap:10px}.ios-order-icon{width:40px;height:40px}.ios-order-name{font-size:1.02rem}.ios-order-step-label{font-size:.53rem}}
+@media(max-width:640px){.dashboard-auth-shell{background-position:19% center}.dashboard-auth-shell::before{background:linear-gradient(180deg,rgba(9,13,36,.26),rgba(9,13,36,.62))}.dashboard-auth-card{max-width:360px;padding:34px 26px 30px!important;border-radius:52px!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),inset 0 -1px 0 rgba(145,211,200,.07),0 0 0 6px rgba(3,5,18,.58),0 0 0 7px rgba(209,218,255,.1),0 32px 90px rgba(0,0,0,.46),0 0 60px rgba(91,42,134,.13)}.dashboard-auth-icon{width:66px;height:66px;border-radius:22px}.ios-order-card{padding:14px;border-radius:18px}.ios-order-identity{grid-template-columns:40px minmax(0,1fr) auto;gap:10px}.ios-order-icon{width:40px;height:40px}.ios-order-name{font-size:1.02rem}.ios-order-step-label{font-size:.53rem}}
 </style>
 </head>
 <body class="bg-surface-dim">
@@ -86,7 +96,7 @@ function connectionErrorView(){
     '<span class="material-symbols-outlined text-error text-5xl mb-stack-sm">cloud_off</span>'+
     '<h1 class="font-headline-md text-headline-md text-primary mb-stack-sm">לא ניתן להתחבר למרכז הבקרה</h1>'+
     '<p class="text-body-md text-on-surface-variant mb-stack-lg">סביבת השרת אינה זמינה כרגע. לא בוצע שום שינוי בהזמנות.</p>'+
-    '<button class="w-full bg-primary text-on-primary font-headline-md py-3 rounded-xl" onclick="refresh()">נסו שוב</button>'+
+    '<button class="dashboard-auth-button w-full text-on-primary font-headline-md py-3" onclick="refresh()">נסו שוב</button>'+
     '</div></div>';
 }
 async function api(path,opts){
@@ -102,12 +112,12 @@ async function api(path,opts){
 function loginView(){
   $("app").innerHTML = '<div class="dashboard-auth-shell min-h-screen flex items-center justify-center p-gutter-mobile">'+
     '<div class="dashboard-auth-card glass-card rounded-3xl p-stack-lg max-w-sm w-full text-center">'+
-    '<div class="w-16 h-16 rounded-full bg-tertiary flex items-center justify-center mx-auto mb-stack-md">'+
-    '<span class="material-symbols-outlined text-on-tertiary text-4xl">two_wheeler</span></div>'+
-    '<h1 class="font-label-bold text-label-bold text-primary mb-1">מעקב הזמנות | עדן מיש</h1>'+
+    '<div class="dashboard-auth-icon flex items-center justify-center mx-auto mb-stack-md">'+
+    '<span class="material-symbols-outlined text-4xl">two_wheeler</span></div>'+
+    '<h1 class="dashboard-auth-title font-label-bold text-label-bold mb-1">מעקב הזמנות | עדן מיש</h1>'+
     '<p class="text-body-md text-on-surface-variant mb-stack-lg">מרכז הבקרה</p>'+
-    '<input id="pin" type="password" placeholder="הזן PIN" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-center text-xl mb-stack-md" style="letter-spacing:6px" onkeydown="if(event.key===\'Enter\')doLogin()"/>'+
-    '<button class="w-full bg-primary hover:bg-primary-fixed-dim text-on-primary font-headline-md py-4 rounded-xl shadow-lg shadow-primary/20 active:scale-95 transition-all" onclick="doLogin()">התחבר</button>'+
+    '<input id="pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="הזן PIN" class="dashboard-auth-input w-full text-on-surface p-3 text-center text-xl mb-stack-md" style="letter-spacing:6px" onkeydown="if(event.key===\'Enter\')doLogin()"/>'+
+    '<button class="dashboard-auth-button w-full text-on-primary font-headline-md py-4" onclick="doLogin()">התחבר</button>'+
     '</div></div>';
 }
 
