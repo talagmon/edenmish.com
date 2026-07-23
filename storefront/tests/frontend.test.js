@@ -335,7 +335,7 @@ describe('Frontend: SEO foundations', () => {
     ]);
   });
 
-  test('Homepage visibly lists every supported service city', () => {
+  test('Homepage exposes every supported city in a fixed-height orbital map and directory', () => {
     const html = readPage('index.html');
     const styles = readFileSync(join(process.cwd(), 'src', 'styles.css'), 'utf8');
     const cities = [
@@ -345,19 +345,20 @@ describe('Frontend: SEO foundations', () => {
       'הוד השרון', 'רמלה', 'לוד'
     ];
     assertContains(html, 'aria-label="כל אזורי השירות של EdenMish"');
-    assertContains(html, 'class="service-areas-layout', 'desktop service-area grid');
-    assertContains(html, 'class="service-areas-map-slot', 'desktop map anchor slot');
-    assertContains(html, 'class="service-areas-map', 'desktop-centered service map');
-    assertContains(html, 'class="service-areas-intro', 'service-area intro row');
-    assertContains(html, 'class="service-areas-cities', 'service city-card row');
-    assertContains(styles, '.service-areas-layout .service-areas-cities {\n      display: contents;', 'city cards join the desktop parent grid');
-    assertContains(styles, '.service-areas-cities > :nth-child(n + 4):nth-child(-n + 6) {\n      grid-row: 3;', 'Bnei Brak group uses the second city row');
-    assertContains(styles, '.service-areas-cities > :nth-child(n + 16):nth-child(-n + 18) {\n      grid-row: 7;', 'Kfar Saba group uses the sixth city row');
-    assertContains(styles, '.service-areas-map-slot {', 'map anchor slot styles');
-    assertContains(styles, 'align-self: stretch;', 'map anchor spans the target city rows');
-    assertContains(styles, 'grid-row: 3 / 8;', 'map spans Bnei Brak through Kfar Saba rows');
-    assertContains(styles, 'transform: translateY(-50%);', 'map center uses the target city-row span as its anchor');
-    for (const city of cities) assertContains(html, `>${city}</span>`, `${city} service-area card`);
+    assertContains(html, 'class="service-areas-shell', 'orbital service-area shell');
+    assertContains(html, 'class="service-areas-stage"', 'fixed map and directory stage');
+    assertContains(html, 'class="service-orbit-points"', 'interactive city orbit');
+    assertContains(html, 'class="service-city-directory"', 'contained city directory');
+    assertContains(html, 'id="service-city-search-input"', 'city search control');
+    assertContains(html, 'src="/assets/service-areas.js"', 'service-area interaction script');
+    assertContains(styles, '.service-areas-stage {\n    height: 510px;', 'fixed desktop service-area stage');
+    assertContains(styles, '.service-areas-stage {\n      height: 440px;', 'fixed mobile service-area stage');
+    assertContains(styles, '.service-city-directory {', 'city directory styles');
+    assertContains(styles, 'overflow-y: auto;', 'city directory scroll containment');
+    for (const city of cities) {
+      assertContains(html, `data-city="${city}"`, `${city} interactive orbit point`);
+      assertContains(html, `data-city-row="${city}"`, `${city} directory row`);
+    }
   });
 
   test('Homepage ships the responsive glass presentation without changing customer destinations', () => {
@@ -385,11 +386,116 @@ describe('Frontend: SEO foundations', () => {
     }
     assertContains(html, 'src="/assets/edenmish-home-hero-neon.webp"', 'motorcycle courier hero artwork with neon route trail');
     assert.ok(existsSync(join(PUB, 'assets', 'edenmish-home-hero-neon.webp')), 'neon motorcycle hero artwork not found');
-    assertContains(html, 'src="/assets/edenmish-v0.mp4"', 'service-area logistics video');
+    assertContains(html, 'src="/assets/edenmish-city-orbit.webp"', 'service-area orbital map artwork');
+    assert.ok(existsSync(join(PUB, 'assets', 'edenmish-city-orbit.webp')), 'service-area orbital artwork not found');
+    assert.ok(existsSync(join(PUB, 'assets', 'service-areas.js')), 'service-area interaction script not found');
     assertContains(styles, '.home-page {', 'homepage-only skin scope');
     assertContains(styles, '@media (max-width: 767px)', 'mobile presentation breakpoint');
     assertContains(styles, '.home-process-step:not(:last-child)::after', 'connected journey presentation');
-    assertContains(styles, 'backdrop-filter: blur(28px) saturate(155%);', 'layered glass navigation');
+    assert.deepEqual(
+      [...html.matchAll(/class="home-benefit-number" aria-hidden="true">([123])<\/span>/g)].map((match) => match[1]),
+      ['1', '2', '3'],
+      'homepage benefits should use ordered numeric markers',
+    );
+    assert.equal(
+      [...html.matchAll(/class="home-slogan-signature(?: home-slogan-signature--center)?"/g)].length,
+      2,
+      'homepage should use slogan signatures at two conversion moments',
+    );
+    for (const slogan of [
+      'המשלוח בידיים בטוחות',
+      'תזמינו בדקה. תשכחו מהדאגה.',
+      'רואים הכול. סומכים על הכול.',
+      'מהזמנה עד מסירה',
+      'אתם בשליטה',
+      'הזמנה ראשונה בהנחה. שירות שיגרום לכם לחזור.',
+    ]) {
+      assertContains(html, slogan, `${slogan} homepage slogan`);
+    }
+    assertContains(html, 'class="home-slogan-band"', 'process-to-service slogan transition');
+    assertContains(html, 'class="home-live-slogan"', 'live-tracking slogan');
+    assertContains(html, 'class="home-benefits-slogan"', 'benefits slogan');
+    assertContains(styles, '.home-slogan-signature {', 'slogan signature styling');
+    assertContains(styles, '.home-slogan-band {', 'process slogan styling');
+    assertContains(styles, '.home-benefit-number {', 'numeric benefit marker styling');
+    assertContains(styles, '@media (min-width: 768px) and (max-width: 1023px)', 'tablet navigation breakpoint');
+    assertContains(styles, '.home-nav > nav {\n      gap: 18px;', 'tablet navigation spacing');
+    assertContains(styles, 'backdrop-filter: blur(24px) saturate(150%);', 'layered glass navigation');
+  });
+
+  test('Customer journeys carry the slogan system and the About page ships the selected contact concept', () => {
+    const about = readPage('about.html');
+    const booking = readPage('booking.html');
+    const tracking = readPage('track.html');
+    const business = readPage('business.html');
+    const styles = readFileSync(join(process.cwd(), 'src', 'styles.css'), 'utf8');
+
+    for (const [html, slogan, page] of [
+      [about, 'שולחים בראש שקט', 'about'],
+      [about, 'תנו לנו הזדמנות אחת. תראו את ההבדל.', 'about CTA'],
+      [booking, 'הזמנת משלוח? זה כבר בדרך.', 'booking'],
+      [tracking, 'רואים הכול. סומכים על הכול.', 'tracking'],
+      [business, 'משלוח חכם. הגעה בטוחה.', 'business'],
+    ]) {
+      assertContains(html, slogan, `${page} slogan`);
+    }
+
+    for (const hook of [
+      'class="about-founder-hero ',
+      'class="about-story-video ',
+      'class="about-contact-console ',
+      'class="about-contact-panel"',
+      'class="about-area-panel"',
+      'class="about-faq ',
+      'class="about-cta"',
+      'class="about-team"',
+      'class="eden-about-sunflower"',
+      'src="/assets/eden-arieli-portrait.webp"',
+      'src="/assets/edenmish-city-orbit.webp"',
+      'src="/assets/edenmish-v0.mp4"',
+    ]) {
+      assertContains(about, hook, `${hook} About-page presentation hook`);
+    }
+    assert.ok(existsSync(join(PUB, 'assets', 'edenmish-city-orbit.webp')), 'About-page orbital map artwork not found');
+    assert.ok(existsSync(join(PUB, 'assets', 'edenmish-v0.mp4')), 'About-page brand film not found');
+    assert.ok(existsSync(join(PUB, 'assets', 'eden-arieli-portrait.webp')), 'About-page founder portrait not found');
+    for (const city of [
+      'תל אביב-יפו', 'רמת גן', 'גבעתיים', 'בני ברק', 'הרצליה', 'רמת השרון',
+      'חולון', 'בת ים', 'קריית אונו', 'גבעת שמואל', 'אזור', 'גני תקווה',
+      'סביון', 'אור יהודה', 'ראשון לציון', 'כפר סבא', 'רעננה', 'פתח תקווה',
+      'הוד השרון', 'רמלה', 'לוד'
+    ]) {
+      assertContains(about, city, `${city} About-page service area`);
+    }
+    assertContains(styles, '.brand-slogan {', 'shared slogan styling');
+    assertContains(styles, '.about-contact-console {', 'selected contact-console styling');
+    assertContains(styles, '.about-founder-portrait {', 'selected 4:5 founder portrait styling');
+    assertContains(styles, '.about-faq-list {', 'editorial FAQ styling');
+    assertContains(styles, '.about-team-shell {', 'team and story styling');
+    assertContains(styles, '@media (max-width: 1023px)', 'responsive About-page contact breakpoint');
+  });
+
+  test('Public journey CTAs share the semi-transparent glass treatment', () => {
+    const styles = readFileSync(join(process.cwd(), 'src', 'styles.css'), 'utf8');
+    const success = readPage('success.html');
+    const blog = readPage('blog/edenmish-information-security.html');
+    const notFound = readPage('404.html');
+    const paymentFailed = readPage('payment-failed.html');
+    const thankYou = readPage('thank-you.html');
+
+    assertContains(styles, '.public-glass-cta {', 'shared public CTA styling');
+    assertContains(styles, 'backdrop-filter: blur(18px) saturate(150%);', 'shared CTA backdrop blur');
+    assertContains(success, 'class="public-glass-cta hidden', 'success tracking CTA');
+    assertContains(success, 'public-glass-cta public-glass-cta--secondary', 'success secondary CTA');
+    assertContains(blog, 'class="public-glass-cta inline-flex', 'blog conversion CTA');
+    for (const [html, page] of [
+      [notFound, '404'],
+      [paymentFailed, 'payment failure'],
+      [thankYou, 'thank-you'],
+    ]) {
+      assertContains(html, 'blur(18px) saturate(150%)', `${page} glass CTA blur`);
+      assertContains(html, 'rgba(128', `${page} translucent CTA fill`);
+    }
   });
 
   test('Publishes the EdenMish platform story with professional attribution and honest launch copy', () => {
@@ -1116,6 +1222,27 @@ describe('Frontend: Mobile nav', () => {
     assert.ok(!js.includes('touches.length > 1'), 'must not block pinch zoom');
     assertContains(js, 'burger', 'hamburger builder');
     assertContains(js, 'עוסק פטור', 'legal footer line');
+  });
+
+  test('Shared header uses one canonical order and keeps cancellation in the footer', () => {
+    const js = readFileSync(join(PUB, 'assets', 'mobile-nav.js'), 'utf8');
+    const headerBuilder = js.slice(0, js.indexOf('// Footer:'));
+    const labels = ['בית', 'שירותים', 'מעקב משלוחים', 'לעסקים', 'אודות'];
+    let previous = -1;
+    for (const label of labels) {
+      const position = headerBuilder.indexOf(`label: '${label}'`);
+      assert.ok(position > previous, `${label} follows the canonical navigation order`);
+      previous = position;
+    }
+    assert.ok(!headerBuilder.includes('ביטול עסקה'), 'cancellation is omitted from the header and hamburger menu');
+    assertContains(headerBuilder, "setAttribute('aria-current', 'page')", 'single current-page state');
+    assertContains(headerBuilder, "body > nav.fixed", 'About top navigation is discovered directly');
+  });
+
+  test('About mobile hero owns the compact booking CTA without a truck icon', () => {
+    const html = readPage('about.html');
+    assertContains(html, 'class="about-founder-portrait__cta" href="/booking.html"', 'portrait booking CTA');
+    assert.ok(!/about-founder-portrait__cta[^]*?local_shipping[^]*?<\/a>/.test(html), 'portrait CTA has no truck icon');
   });
 
   test('Pages include mobile-nav.js', () => {
