@@ -542,7 +542,7 @@ describe('driver API v1', () => {
     assert.equal(orderUpdate.args[0], 'to_dropoff');
   });
 
-  test('atomically creates one logical notification job per channel on delivery', async () => {
+  test('atomically creates one SendGrid email job on delivery', async () => {
     const order = {
       id: 9001,
       token: 'deliverytoken9001',
@@ -550,6 +550,7 @@ describe('driver API v1', () => {
       payment_mode: 'immediate',
       email: 'customer@example.com',
       phone: '+972541234567',
+      phone_delivery_link_opt_in: 0,
       pickup: 'Pickup address',
       dropoff: 'Drop-off address',
       price: 50,
@@ -615,17 +616,14 @@ describe('driver API v1', () => {
     await deferred[0];
     assert.equal(order.status, 'delivered');
     assert.equal(db.batches.length, 1);
-    assert.equal(db.batches[0].length, 6);
+    assert.equal(db.batches[0].length, 5);
     const notificationJobs = db.calls.filter((call) => (
       call.sql.startsWith('INSERT OR IGNORE INTO delivery_notification_outbox')
     ));
-    assert.equal(notificationJobs.length, 2);
+    assert.equal(notificationJobs.length, 1);
     assert.deepEqual(
       notificationJobs.map((call) => call.args[2]),
-      [
-        'email',
-        'whatsapp',
-      ],
+      ['email'],
     );
 
     const replayResponse = await send();
@@ -634,7 +632,7 @@ describe('driver API v1', () => {
       db.calls.filter((call) => (
         call.sql.startsWith('INSERT OR IGNORE INTO delivery_notification_outbox')
       )).length,
-      2,
+      1,
     );
   });
 

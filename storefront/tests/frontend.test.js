@@ -588,6 +588,11 @@ describe('Frontend: Booking form', () => {
     assertContains(html, 'תקנון', 'terms link');
     assertContains(html, 'מדיניות פרטיות', 'privacy link');
     assertContains(html, 'אין חובה חוקית למסור', 'privacy collection notice');
+    assertContains(html, 'כולל אישור והוכחת מסירה', 'transactional POD email disclosure');
+    assertContains(html, 'באמצעות SendGrid', 'transactional email processor disclosure');
+    assertContains(html, 'יישלח רק לאחר הסכמה נפרדת', 'separate phone-channel consent');
+    assertContains(html, 'id="phone-pod-opt-in"', 'optional WhatsApp POD-link consent');
+    assertContains(html, 'phone_delivery_link_opt_in:', 'persisted phone-link consent payload');
     assertContains(html, 'לא יישלח דיוור שיווקי מכוח אישור זה', 'no bundled marketing consent');
     assert.ok(!html.includes('הנני מסכים/ה לקבל עדכונים'), 'transaction acceptance must not be bundled with communications consent');
     assertContains(html, 'EdenMish אינה שומרת פרטי כרטיס אשראי', 'accurate hosted-payment disclosure');

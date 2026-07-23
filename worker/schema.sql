@@ -30,7 +30,9 @@ CREATE TABLE IF NOT EXISTS orders (
   email TEXT, email_verified INTEGER DEFAULT 0, otp_hash TEXT, otp_expires INTEGER,
   business_account_id INTEGER,
   wallet_reservation_id TEXT,
-  payment_method TEXT
+  payment_method TEXT,
+  phone_delivery_link_opt_in INTEGER NOT NULL DEFAULT 0,
+  phone_delivery_link_opt_in_at INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS status_history (
