@@ -391,6 +391,33 @@ async function applyTaskEvent(env, eventType, task, order, orderId, payload = {}
     return { status: 'accepted_conflict', conflictType: 'task_type_mismatch', transitioned: false };
   }
 
+  // A retained package: the order is closed as 'failed' but the driver is still carrying it,
+  // and dispatch has given them a return or redelivery leg. Those events cannot go through the
+  // normal ladder below, which only reaches 'delivered' from 'to_dropoff' — a retained order
+  // sits at 'failed', so every event on the leg would come back as accepted_conflict, and an
+  // accepted_conflict makes the driver app block all actions until a full route reload. The
+  // leg would be undeliverable and would jam the app.
+  if (order.status === 'failed' && RETAINED_FAILURE_DISPOSITIONS.has(order.retained_by_driver)) {
+    if (eventType === 'navigation_started' || eventType === 'arrived') {
+      // Progress on the leg needs no canonical status change.
+      return { status: 'accepted', conflictType: null, transitioned: false };
+    }
+    if (eventType === 'delivery_completed') {
+      // The package is back with us, so custody ends. The status stays 'failed' on purpose:
+      // the recipient never received it, and calling this 'delivered' would misreport the
+      // order to Ops and on the customer timeline. Clearing the column also drops the order
+      // from the next route, retiring the leg.
+      await env.DB.prepare('UPDATE orders SET retained_by_driver = NULL WHERE id = ?')
+        .bind(orderId).run();
+      return { status: 'accepted', conflictType: null, transitioned: true };
+    }
+    if (eventType === 'delivery_failed') {
+      // The return itself could not be completed. Keep custody exactly as it is and let Ops
+      // decide; silently clearing it would lose track of a package still in a vehicle.
+      return { status: 'accepted', conflictType: null, transitioned: false };
+    }
+  }
+
   const targetStatus = eventType === 'navigation_started'
     ? task.task_type === 'pickup' ? 'to_pickup' : 'to_dropoff'
     : eventType === 'pickup_completed' ? 'picked_up'
