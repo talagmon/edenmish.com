@@ -2,6 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  deliveryNotificationOutboxPolicy,
   enqueueDeliveryNotificationJobs,
   processDeliveryNotificationOutbox,
 } from '../src/delivery-notification-outbox.js';
@@ -156,7 +157,7 @@ const order = {
 };
 
 describe('delivery notification outbox', () => {
-  test('event replay creates one logical job per channel', async () => {
+  test('event replay creates one email job and never infers phone consent', async () => {
     const DB = new OutboxDb();
     const options = { eventId: 'event-1', now: 1_000, sendWhatsApp: true };
 
@@ -165,8 +166,60 @@ describe('delivery notification outbox', () => {
       enqueueDeliveryNotificationJobs(DB, order, options),
     ]);
 
+    assert.deepEqual(DB.jobs.map((job) => job.channel), ['email']);
+    assert.equal(new Set(DB.jobs.map((job) => `${job.order_id}:${job.channel}`)).size, 1);
+    assert.deepEqual(deliveryNotificationOutboxPolicy.channels, ['email', 'whatsapp_opt_in']);
+    assert.equal(deliveryNotificationOutboxPolicy.phoneDeliveryRequiresPersistedOptIn, true);
+  });
+
+  test('explicit persisted phone consent adds one WhatsApp proof-link job', async () => {
+    const DB = new OutboxDb();
+    await enqueueDeliveryNotificationJobs(
+      DB,
+      { ...order, phone_delivery_link_opt_in: 1 },
+      { eventId: 'event-consented', now: 1_000 },
+    );
+
     assert.deepEqual(DB.jobs.map((job) => job.channel), ['email', 'whatsapp']);
-    assert.equal(new Set(DB.jobs.map((job) => `${job.order_id}:${job.channel}`)).size, 2);
+  });
+
+  test('consented WhatsApp delivery contains the customer proof link', async () => {
+    const DB = new OutboxDb();
+    const consented = {
+      ...order,
+      token: 'proof-token-9001',
+      email: null,
+      phone_delivery_link_opt_in: 1,
+    };
+    DB.orders.set(order.id, consented);
+    await enqueueDeliveryNotificationJobs(
+      DB,
+      consented,
+      { eventId: 'event-phone-link', now: 1_000 },
+    );
+    const originalFetch = globalThis.fetch;
+    let outbound;
+    globalThis.fetch = async (_url, options) => {
+      outbound = JSON.parse(options.body);
+      return { ok: true };
+    };
+
+    try {
+      const summary = await processDeliveryNotificationOutbox({
+        DB,
+        STOREFRONT_BASE: 'https://edenmish.com',
+        WHATSAPP_TOKEN: 'test-token',
+        WHATSAPP_PHONE_ID: 'test-phone-id',
+      }, { now: 1_000 });
+
+      assert.deepEqual(summary, { claimed: 1, sent: 1, retried: 0, dead: 0 });
+      assert.match(
+        outbound.text.body,
+        /https:\/\/edenmish\.com\/delivered\.html\?t=proof-token-9001/,
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   test('failed work backs off and later succeeds with the same logical job', async () => {
@@ -190,6 +243,33 @@ describe('delivery notification outbox', () => {
     assert.deepEqual(recovered, { claimed: 1, sent: 1, retried: 0, dead: 0 });
     assert.equal(DB.jobs[0].attempt_count, 2);
     assert.equal(DB.jobs[0].state, 'sent');
+  });
+
+  test('legacy phone jobs are permanently disabled without persisted opt-in', async () => {
+    const DB = new OutboxDb();
+    DB.jobs.push({
+      id: DB.nextId++,
+      order_id: order.id,
+      transition: 'delivered',
+      event_id: 'legacy-event',
+      channel: 'whatsapp',
+      template: deliveryNotificationOutboxPolicy.template,
+      state: 'pending',
+      attempt_count: 0,
+      next_attempt_at: 1_000,
+      lease_token: null,
+      lease_expires_at: null,
+      last_error: null,
+      created_at: 1_000,
+      updated_at: 1_000,
+      sent_at: null,
+    });
+
+    const summary = await processDeliveryNotificationOutbox({ DB }, { now: 1_000 });
+
+    assert.deepEqual(summary, { claimed: 1, sent: 0, retried: 0, dead: 1 });
+    assert.equal(DB.jobs[0].state, 'dead');
+    assert.equal(DB.jobs[0].last_error, 'phone_channel_requires_opt_in');
   });
 
   test('concurrent processors lease one job to one sender', async () => {

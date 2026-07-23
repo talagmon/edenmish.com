@@ -14,5 +14,8 @@
   },
   "devDependencies": {
     "wrangler": "^4.110.0"
+  },
+  "dependencies": {
+    "qrcode-generator": "^1.4.4"
   }
 }

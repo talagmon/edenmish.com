@@ -23,7 +23,9 @@ request data. The cancellation table stores only the last four ID digits.
 - Google Maps/Places: addresses, maps and route-related processing.
 - Shopify and PayPlus: hosted checkout and payment processing.
 - SendGrid: transactional email.
-- Meta/WhatsApp: operational messages when that channel is used.
+- Meta/WhatsApp: optional delivery-proof links only after a separate, persisted
+  phone-channel opt-in and timestamp. Delivery proof is email-first and must not
+  use a phone channel without the stored opt-in.
 - Authorized courier/operations personnel: only information needed to deliver.
 
 Some processors may process data outside Israel. Keep current processor agreements,

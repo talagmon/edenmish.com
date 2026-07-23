@@ -21,7 +21,7 @@
 
   var burger = document.createElement('button');
   burger.type = 'button';
-  burger.className = 'md:hidden p-2 text-on-surface hover:text-primary transition-colors';
+  burger.className = 'md:hidden shrink-0 p-2 text-on-surface hover:text-primary transition-colors';
   burger.setAttribute('aria-label', 'תפריט');
   burger.innerHTML = '<span class="material-symbols-outlined">menu</span>';
   var last = bar.children[bar.children.length - 1];

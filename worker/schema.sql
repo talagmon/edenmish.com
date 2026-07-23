@@ -32,10 +32,12 @@ CREATE TABLE IF NOT EXISTS orders (
   wallet_reservation_id TEXT,
   payment_method TEXT,
   -- Set when a failed delivery leaves the package with the driver, to the reported
-  -- disposition ('return_to_origin' | 'hold_for_redelivery'). See migration 023.
+  -- disposition ('return_to_origin' | 'hold_for_redelivery'). See migration 025.
   retained_by_driver TEXT,
   retained_at INTEGER,             -- epoch ms the package was retained; drives 24h auto-return
-  pending_redelivery_json TEXT     -- staged corrected address + fee for a redelivery. Migration 024
+  pending_redelivery_json TEXT,    -- staged corrected address + fee for a redelivery. Migration 026
+  phone_delivery_link_opt_in INTEGER NOT NULL DEFAULT 0,
+  phone_delivery_link_opt_in_at INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS status_history (
@@ -221,6 +223,26 @@ CREATE TABLE IF NOT EXISTS driver_sessions (
   FOREIGN KEY (driver_id) REFERENCES drivers(id)
 );
 CREATE INDEX IF NOT EXISTS idx_driver_sessions_access ON driver_sessions(access_token_hash, access_expires_at);
+
+CREATE TABLE IF NOT EXISTS driver_login_invitations (
+  id TEXT PRIMARY KEY,
+  driver_id TEXT NOT NULL,
+  code_hash TEXT NOT NULL UNIQUE,
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  consumed_at INTEGER,
+  consumed_session_id TEXT,
+  consumed_installation_id TEXT,
+  revoked_at INTEGER,
+  FOREIGN KEY (driver_id) REFERENCES drivers(id),
+  FOREIGN KEY (consumed_session_id) REFERENCES driver_sessions(id)
+);
+CREATE INDEX IF NOT EXISTS idx_driver_login_invitations_driver
+  ON driver_login_invitations(driver_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_driver_login_invitations_active
+  ON driver_login_invitations(code_hash, expires_at)
+  WHERE consumed_at IS NULL AND revoked_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS driver_shifts (
   id TEXT PRIMARY KEY,

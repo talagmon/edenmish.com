@@ -23,3 +23,13 @@ test('ops board surfaces a held package with a fee suggestion and the 24h auto-r
   assert.match(html, /תוך 24 שעות/);
   assert.match(html, /אין צורך בפעולה/);
 });
+
+test('ops exposes per-driver manual and QR pairing without embedding review credentials', () => {
+  const html = opsHtml({});
+
+  assert.match(html, /חיבור אפליקציית נהג/);
+  assert.match(html, /\/api\/ops\/driver\/invitations/);
+  assert.match(html, /קוד ה־QR/);
+  assert.match(html, /לאחר שימוש ראשון הקוד מתבטל אוטומטית/);
+  assert.doesNotMatch(html, /DRIVER_REVIEW_CODE|DRIVER_ONE_TIME_CODE/);
+});

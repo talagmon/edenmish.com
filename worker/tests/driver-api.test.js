@@ -105,7 +105,7 @@ describe('driver API v1', () => {
     });
   });
 
-  test('exchanges a single-use code and persists only token/code digests', async () => {
+  test('exchanges the review credential and persists only token/code digests', async () => {
     const db = fakeDb({
       first: (call) => call.sql.includes('FROM rate_limits') ? null : null,
     });
@@ -137,18 +137,57 @@ describe('driver API v1', () => {
     assert.ok(!insert.args.includes(body.refresh_token));
   });
 
-  test('rejects a bootstrap code that has already been consumed', async () => {
+  test('accepts an additional driver code without replacing the primary review code', async () => {
+    const db = fakeDb({
+      first: (call) => call.sql.includes('FROM rate_limits') ? null : null,
+    });
+    const res = await handleDriverApi(request('/api/driver/v1/session', {
+      method: 'POST',
+      body: JSON.stringify({ one_time_code: '76120493' }),
+    }), {
+      DB: db,
+      SESSION_SECRET: 'test-session-secret-with-enough-entropy',
+      DRIVER_ONE_TIME_CODE: '845921',
+      DRIVER_ADDITIONAL_ONE_TIME_CODES: '76120493, 629184',
+    });
+
+    assert.equal(res.status, 201);
+    const insert = db.calls.find((call) => call.sql.includes('INSERT OR IGNORE INTO driver_sessions'));
+    assert.ok(insert);
+    assert.ok(!insert.args.includes('76120493'));
+  });
+
+  test('rejects codes outside the primary and additional configured set', async () => {
+    const db = fakeDb({
+      first: (call) => call.sql.includes('FROM rate_limits') ? null : null,
+    });
+    const res = await handleDriverApi(request('/api/driver/v1/session', {
+      method: 'POST',
+      body: JSON.stringify({ one_time_code: '11111111' }),
+    }), {
+      DB: db,
+      SESSION_SECRET: 'test-session-secret-with-enough-entropy',
+      DRIVER_ONE_TIME_CODE: '845921',
+      DRIVER_ADDITIONAL_ONE_TIME_CODES: '76120493',
+    });
+
+    assert.equal(res.status, 401);
+    assert.equal((await res.json()).code, 'invalid_credentials');
+  });
+
+  test('rejects a legacy additional code that has already been consumed', async () => {
     const db = fakeDb({
       first: () => null,
       run: (call) => ({ meta: { changes: call.sql.includes('INSERT OR IGNORE INTO driver_sessions') ? 0 : 1 } }),
     });
     const res = await handleDriverApi(request('/api/driver/v1/session', {
       method: 'POST',
-      body: JSON.stringify({ one_time_code: '845921' }),
+      body: JSON.stringify({ one_time_code: '76120493' }),
     }), {
       DB: db,
       SESSION_SECRET: 'test-session-secret-with-enough-entropy',
       DRIVER_ONE_TIME_CODE: '845921',
+      DRIVER_ADDITIONAL_ONE_TIME_CODES: '76120493',
     });
 
     assert.equal(res.status, 401);
@@ -270,6 +309,58 @@ describe('driver API v1', () => {
     assert.equal(body.stops[1].required_predecessor_stop_id, 'stop_p0');
     assert.equal(body.stops[1].service_duration_seconds, 420);
     assert.deepEqual(body.change_summary.added_stop_ids, ['stop_d0']);
+  });
+
+  test('maps the legacy queue_changed route reason to the public mobile contract', async () => {
+    const db = fakeDb({
+      first: (call) => {
+        const auth = authenticatedFirst(call);
+        if (auth) return auth;
+        if (call.sql === 'SELECT id FROM driver_shifts WHERE id = ? AND driver_id = ?') {
+          return { id: 'sh_123' };
+        }
+        if (call.sql.includes('FROM driver_routes')) {
+          return {
+            id: 8,
+            revision: 14,
+            generated_at: Date.parse('2026-07-18T15:40:00Z'),
+            reason: 'queue_changed',
+            current_stop_id: 'stop_d1',
+            current_stop_locked: 0,
+            delay_minutes: 0,
+            current_position: 1,
+            total_stops: 1,
+            onboard_order_ids_json: '[9001]',
+          };
+        }
+        return null;
+      },
+      all: (call) => {
+        if (call.sql.includes('FROM driver_route_stops')) {
+          return { results: [{
+            stop_id: 'stop_d1', order_id: 9001, position: 1, task_type: 'dropoff',
+            required_predecessor_stop_id: null, state: 'pending',
+            name: 'נועה לוי', phone: '+972541234567',
+            pickup: 'הרצל 42, תל אביב', pickup_detail: null,
+            pickup_lat: 32.0632, pickup_lng: 34.7708,
+            dropoff: 'אבן גבירול 81, תל אביב', dropoff_detail: null,
+            dropoff_lat: 32.0801, dropoff_lng: 34.7813,
+            promised_from: '2026-07-18T15:00:00Z',
+            promised_to: '2026-07-18T16:00:00Z',
+            eta: '2026-07-18T15:45:00Z', service_duration_seconds: 300,
+            urgency: 'normal', inserted: 0,
+          }] };
+        }
+        return { results: [] };
+      },
+    });
+
+    const res = await handleDriverApi(request('/api/driver/v1/shifts/sh_123/route', {
+      headers: { authorization: 'Bearer valid-token' },
+    }), { DB: db });
+
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).reason, 'dispatch_reordered');
   });
 
   test('stores authenticated pickup proof against the assigned route task', async () => {
@@ -451,7 +542,7 @@ describe('driver API v1', () => {
     assert.equal(orderUpdate.args[0], 'to_dropoff');
   });
 
-  test('atomically creates one logical notification job per channel on delivery', async () => {
+  test('atomically creates one SendGrid email job on delivery', async () => {
     const order = {
       id: 9001,
       token: 'deliverytoken9001',
@@ -459,6 +550,7 @@ describe('driver API v1', () => {
       payment_mode: 'immediate',
       email: 'customer@example.com',
       phone: '+972541234567',
+      phone_delivery_link_opt_in: 0,
       pickup: 'Pickup address',
       dropoff: 'Drop-off address',
       price: 50,
@@ -524,17 +616,14 @@ describe('driver API v1', () => {
     await deferred[0];
     assert.equal(order.status, 'delivered');
     assert.equal(db.batches.length, 1);
-    assert.equal(db.batches[0].length, 6);
+    assert.equal(db.batches[0].length, 5);
     const notificationJobs = db.calls.filter((call) => (
       call.sql.startsWith('INSERT OR IGNORE INTO delivery_notification_outbox')
     ));
-    assert.equal(notificationJobs.length, 2);
+    assert.equal(notificationJobs.length, 1);
     assert.deepEqual(
       notificationJobs.map((call) => call.args[2]),
-      [
-        'email',
-        'whatsapp',
-      ],
+      ['email'],
     );
 
     const replayResponse = await send();
@@ -543,7 +632,7 @@ describe('driver API v1', () => {
       db.calls.filter((call) => (
         call.sql.startsWith('INSERT OR IGNORE INTO delivery_notification_outbox')
       )).length,
-      2,
+      1,
     );
   });
 
