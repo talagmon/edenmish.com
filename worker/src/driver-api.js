@@ -11,6 +11,8 @@ import { runDeliveryCompletionSideEffects } from './delivery-completion.js';
 import {
   deliveryCompletionTransitionStatement,
   deliveryNotificationOutboxStatements,
+  processDeliveryNotificationOutbox,
+  retainedFailureNotificationOutboxStatements,
 } from './delivery-notification-outbox.js';
 import {
   findUsableDriverInvitation,
@@ -566,6 +568,7 @@ async function processEvent(env, auth, meta, event, executionContext) {
   let conflictType = null;
   let transitioned = false;
   let deliveryTransitionOrder = null;
+  let retainedFailureTransition = null;
   if (TASK_EVENT_TYPES.has(event.event_type)) {
     if (orderId == null || event.stop_id == null) {
       return { event_id: event.event_id, status: 'rejected_invalid', server_received_at: new Date().toISOString() };
@@ -578,6 +581,17 @@ async function processEvent(env, auth, meta, event, executionContext) {
       && order?.status === 'to_dropoff') {
       // This transition is committed below with its event and logical notification jobs.
       deliveryTransitionOrder = order;
+    } else if (event.event_type === 'delivery_failed'
+      && task.task_type === 'dropoff'
+      && order?.status === 'to_dropoff'
+      && RETAINED_FAILURE_DISPOSITIONS.has(event.payload.disposition)) {
+      // A retained failure must commit the accepted driver event, canonical failure,
+      // custody state, history, and customer email job together. Otherwise a Worker
+      // crash between setOrderStatus() and enqueue would leave a customer uninformed.
+      retainedFailureTransition = {
+        order,
+        disposition: event.payload.disposition,
+      };
     } else {
       const applied = await applyTaskEvent(
         env, event.event_type, task, order, orderId, event.payload,
@@ -616,6 +630,44 @@ async function processEvent(env, auth, meta, event, executionContext) {
       env.DB, deliveryTransitionOrder, event.event_id, now,
     );
     const results = await env.DB.batch([eventInsert, transition, updateOrder, addHistory, ...outbox]);
+    inserted = results[0];
+    transitioned = !!results[1]?.meta?.changes;
+  } else if (retainedFailureTransition) {
+    const { order, disposition } = retainedFailureTransition;
+    const eventInsert = executionEventInsertStatement(
+      env, auth, meta, event, orderId, status, conflictType, now,
+    );
+    const updateOrder = env.DB.prepare(`UPDATE orders
+      SET status = ?, retained_by_driver = ?, retained_at = ?
+      WHERE id = ? AND status = 'to_dropoff'
+        AND EXISTS (
+          SELECT 1 FROM driver_execution_events
+          WHERE event_id = ? AND driver_id = ? AND correlation_id = ?
+        )`).bind(
+      'failed', disposition, now, orderId,
+      event.event_id, auth.driver_id, correlationId,
+    );
+    const addHistory = env.DB.prepare(`INSERT INTO status_history (order_id, status, at, note)
+      SELECT ?, 'failed', ?, NULL
+      WHERE EXISTS (
+        SELECT 1 FROM driver_execution_events
+        WHERE event_id = ? AND driver_id = ? AND correlation_id = ?
+      )
+        AND EXISTS (
+          SELECT 1 FROM orders
+          WHERE id = ? AND status = 'failed' AND retained_by_driver = ?
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM status_history WHERE order_id = ? AND status = 'failed'
+        )`).bind(
+      orderId, now,
+      event.event_id, auth.driver_id, correlationId,
+      orderId, disposition, orderId,
+    );
+    const outbox = retainedFailureNotificationOutboxStatements(
+      env.DB, order, event.event_id, disposition, now,
+    );
+    const results = await env.DB.batch([eventInsert, updateOrder, addHistory, ...outbox]);
     inserted = results[0];
     transitioned = !!results[1]?.meta?.changes;
   } else {
@@ -665,6 +717,21 @@ async function processEvent(env, auth, meta, event, executionContext) {
       });
       executionContext.waitUntil(deferred);
     }
+  }
+  if (event.event_type === 'delivery_failed'
+    && status === 'accepted'
+    && transitioned
+    && retainedFailureTransition
+    && executionContext?.waitUntil) {
+    const deferred = processDeliveryNotificationOutbox(env).catch((error) => {
+      // The failure transition and logical email job are already durable. Scheduled
+      // draining owns retries if this best-effort immediate attempt fails.
+      console.error('retained_failure_notification_outbox_immediate_drain_failed', {
+        eventId: event.event_id,
+        message: error?.message || String(error),
+      });
+    });
+    executionContext.waitUntil(deferred);
   }
   return { event_id: event.event_id, status, server_received_at: new Date(now).toISOString(), conflict_type: conflictType, correlation_id: correlationId };
 }

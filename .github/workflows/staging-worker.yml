@@ -174,6 +174,23 @@ jobs:
           else
             echo "Pending-redelivery migration 026 is already applied."
           fi
+      - name: Apply staging retained-failure notification migration when needed
+        working-directory: worker
+        run: |
+          readiness_json="$(npx wrangler d1 execute edenmish-staging --remote --yes --json \
+            --config wrangler.staging.generated.toml \
+            --command "SELECT CASE WHEN sql LIKE '%delivery_failed_retained%' THEN 1 ELSE 0 END AS ready FROM sqlite_master WHERE type='table' AND name='delivery_notification_outbox'")"
+          ready="$(printf '%s' "$readiness_json" | jq -r '.[0].results[0].ready // 0')"
+          if [ "$ready" = "0" ]; then
+            npx wrangler d1 execute edenmish-staging --remote --yes \
+              --config wrangler.staging.generated.toml \
+              --file=./migrations/027_retained_failure_notifications.sql
+          elif [ "$ready" != "1" ]; then
+            echo "::error::Retained-failure notification migration returned an invalid readiness value ($ready)."
+            exit 1
+          else
+            echo "Retained-failure notification migration 027 is already applied."
+          fi
       - name: Verify remote driver schema readiness
         working-directory: worker
         run: node scripts/validate-driver-schema.mjs --database edenmish-staging --config wrangler.staging.generated.toml

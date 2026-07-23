@@ -658,6 +658,50 @@ Expected result: the `pending_redelivery_json` order column.
 
 ---
 
+### 027_retained_failure_notifications.sql
+
+**Purpose:** Expands the durable delivery outbox with the
+`delivery_failed_retained` transition used for customer failure emails. SQLite
+cannot alter the transition `CHECK` in place, so this migration rebuilds the
+outbox table while preserving all delivered-notification jobs, retry counts,
+leases, errors, and sent timestamps.
+
+**Command:**
+```bash
+# Staging (render the config first; run from worker/):
+npx wrangler d1 execute edenmish-staging --remote --yes \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/027_retained_failure_notifications.sql
+
+# Local verification:
+wrangler d1 execute edenmish --local \
+  --file=./migrations/027_retained_failure_notifications.sql
+
+# Production (after merge, before Worker deploy):
+wrangler d1 execute edenmish --remote \
+  --file=./migrations/027_retained_failure_notifications.sql
+```
+
+**Verification query:**
+```sql
+SELECT sql FROM sqlite_master
+WHERE type='table' AND name='delivery_notification_outbox';
+
+SELECT transition, state, COUNT(*)
+FROM delivery_notification_outbox
+GROUP BY transition, state
+ORDER BY transition, state;
+
+SELECT name FROM pragma_index_list('delivery_notification_outbox')
+WHERE name='idx_delivery_notification_outbox_due';
+```
+
+Expected result: the table definition permits both `delivered` and
+`delivery_failed_retained`, all pre-migration jobs remain present in their original
+states, and the due-job index exists.
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -686,6 +730,7 @@ Expected result: the `pending_redelivery_json` order column.
 - [ ] Run `024_phone_delivery_link_consent.sql` before enabling phone delivery-link consent.
 - [ ] Run `025_delivery_failure_retained_package.sql` before accepting retained-package dispositions.
 - [ ] Run `026_redelivery_pending_address.sql` after 025 and before enabling corrected-address redelivery.
+- [ ] Run `027_retained_failure_notifications.sql` after 019 and before enabling retained-package customer emails.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).
