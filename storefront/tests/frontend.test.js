@@ -360,6 +360,34 @@ describe('Frontend: SEO foundations', () => {
     for (const city of cities) assertContains(html, `>${city}</span>`, `${city} service-area card`);
   });
 
+  test('Homepage ships the responsive glass presentation without changing customer destinations', () => {
+    const html = readPage('index.html');
+    const styles = readFileSync(join(process.cwd(), 'src', 'styles.css'), 'utf8');
+    for (const hook of [
+      'class="home-page ',
+      'class="home-header ',
+      'class="home-hero ',
+      'class="home-live-card ',
+      'class="home-process ',
+      'home-service-areas',
+      'home-benefits',
+      'home-story',
+      'home-final-cta',
+    ]) {
+      assertContains(html, hook, `${hook} presentation hook`);
+    }
+    for (const destination of ['href="/booking.html"', 'href="/track.html"', 'href="/about.html"', 'href="/cancel.html"']) {
+      assertContains(html, destination, `${destination} customer destination`);
+    }
+    for (const deliveryState of ['התקבלה', 'אושר', 'לאיסוף', 'למסירה', 'נמסר']) {
+      assertContains(html, deliveryState, `${deliveryState} live-delivery state`);
+    }
+    assertContains(styles, '.home-page {', 'homepage-only skin scope');
+    assertContains(styles, '@media (max-width: 767px)', 'mobile presentation breakpoint');
+    assertContains(styles, '.home-process-step:not(:last-child)::after', 'connected journey presentation');
+    assertContains(styles, 'backdrop-filter: blur(28px) saturate(155%);', 'layered glass navigation');
+  });
+
   test('Publishes the EdenMish platform story with professional attribution and honest launch copy', () => {
     const homepage = readPage('index.html');
     const about = readPage('about.html');
