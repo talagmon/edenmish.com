@@ -45,7 +45,9 @@ class SQLiteD1 {
         phone_delivery_link_opt_in INTEGER NOT NULL DEFAULT 0,
         payment_method TEXT,
         delivered_at INTEGER,
-        payment_status TEXT
+        payment_status TEXT,
+        retained_by_driver TEXT,
+        retained_at INTEGER
       );
       CREATE TABLE status_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,6 +94,7 @@ class SQLiteD1 {
       );
     `);
     this.db.exec(readFileSync(new URL('../migrations/019_delivery_notification_outbox.sql', import.meta.url), 'utf8'));
+    this.db.exec(readFileSync(new URL('../migrations/027_retained_failure_notifications.sql', import.meta.url), 'utf8'));
   }
 
   prepare(sql) {
@@ -157,6 +160,18 @@ function driverCompletionEvent(eventId) {
     stop_id: 'stop_d1',
     route_revision_seen: 13,
     payload: {},
+  };
+}
+
+function retainedFailureEvent(eventId, disposition = 'hold_for_redelivery') {
+  return {
+    ...driverCompletionEvent(eventId),
+    event_type: 'delivery_failed',
+    payload: {
+      reason: 'incorrect_address',
+      disposition,
+      note: 'לא ניתן היה למסור',
+    },
   };
 }
 
@@ -282,5 +297,54 @@ describe('delivery completion transaction', () => {
     assert.equal(DB.scalar('SELECT COUNT(*) AS count FROM status_history').count, 1);
     assert.equal(DB.scalar('SELECT COUNT(*) AS count FROM delivery_completion_transitions').count, 1);
     assert.equal(DB.scalar('SELECT COUNT(*) AS count FROM delivery_notification_outbox').count, 1);
+  });
+
+  test('retained failure rolls back event, custody, history, and email job together', async () => {
+    const DB = new SQLiteD1({ failAtBatchIndex: 3 });
+    seedDriverRoute(DB);
+
+    await assert.rejects(
+      driverApiTest.processEvent(
+        { DB },
+        driverAuth,
+        driverMeta,
+        retainedFailureEvent('55555555-5555-4555-8555-555555555555'),
+      ),
+      /injected_batch_failure/,
+    );
+
+    assert.equal(DB.scalar('SELECT status FROM orders WHERE id = 9001').status, 'to_dropoff');
+    assert.equal(DB.scalar('SELECT retained_by_driver FROM orders WHERE id = 9001').retained_by_driver, null);
+    assert.equal(DB.scalar('SELECT COUNT(*) AS count FROM driver_execution_events').count, 0);
+    assert.equal(DB.scalar('SELECT COUNT(*) AS count FROM status_history').count, 0);
+    assert.equal(DB.scalar('SELECT COUNT(*) AS count FROM delivery_notification_outbox').count, 0);
+  });
+
+  test('retained failure atomically records custody and one disposition-specific email job', async () => {
+    const DB = new SQLiteD1();
+    seedDriverRoute(DB);
+
+    const result = await driverApiTest.processEvent(
+      { DB },
+      driverAuth,
+      driverMeta,
+      retainedFailureEvent('66666666-6666-4666-8666-666666666666'),
+    );
+
+    assert.equal(result.status, 'accepted');
+    assert.deepEqual(
+      { ...DB.scalar(`SELECT status, retained_by_driver FROM orders WHERE id = 9001`) },
+      { status: 'failed', retained_by_driver: 'hold_for_redelivery' },
+    );
+    assert.equal(DB.scalar('SELECT COUNT(*) AS count FROM status_history').count, 1);
+    assert.deepEqual(
+      { ...DB.scalar(`SELECT transition, channel, template
+        FROM delivery_notification_outbox WHERE order_id = 9001`) },
+      {
+        transition: 'delivery_failed_retained',
+        channel: 'email',
+        template: 'customer_delivery_failed_redelivery_hold',
+      },
+    );
   });
 });

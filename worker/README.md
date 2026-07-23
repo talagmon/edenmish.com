@@ -94,9 +94,10 @@ Database name: `edenmish`. Binding: `DB`.
 ### Schema and migrations
 
 `schema.sql` is the **fresh-DB source of truth** — it defines every current table.
-The numbered migrations (`003`–`024`) add tables/columns that were introduced after the
+The numbered migrations (`003`–`028`) add tables/columns that were introduced after the
 initial schema. Tables are idempotent (`CREATE TABLE IF NOT EXISTS`); `ALTER TABLE …
-ADD COLUMN` migrations (`006`–`010`, `015`, and `016`) must run only on DBs that predate their columns.
+ADD COLUMN` migrations (`006`–`010`, `015`, `016`, and `024`–`026`) must run only on
+DBs that predate their columns.
 
 - **Fresh DB:** run `npm run db:init` (schema.sql only).
 - **Existing production DB:** run numbered migrations in order — see **`MIGRATIONS.md`**
@@ -198,6 +199,12 @@ wrangler d1 execute edenmish --remote --file=./migrations/021_business_entry_pla
 wrangler d1 execute edenmish --remote --file=./migrations/022_business_plan_coupons.sql
 wrangler d1 execute edenmish --remote --file=./migrations/023_driver_login_invitations.sql
 wrangler d1 execute edenmish --remote --file=./migrations/024_phone_delivery_link_consent.sql
+wrangler d1 execute edenmish --remote --file=./migrations/025_delivery_failure_retained_package.sql
+wrangler d1 execute edenmish --remote --file=./migrations/026_redelivery_pending_address.sql
+wrangler d1 execute edenmish --remote --file=./migrations/027_retained_failure_notifications.sql
+wrangler d1 execute edenmish --remote --file=./migrations/028_redelivery_charges.sql
+# Run the duplicate-reference preflight in MIGRATIONS.md before migration 029:
+wrangler d1 execute edenmish --remote --file=./migrations/029_wallet_reservation_ownership.sql
 ```
 
 > Run only migrations that have not already been applied. Several `ALTER TABLE`

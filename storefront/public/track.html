@@ -23,6 +23,7 @@
   .accent-glow { filter: blur(80px); animation: apulse 4s ease-in-out infinite; }
   @keyframes apulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
   .otp-input:focus { outline: none; border-color: #8B5CF6; box-shadow: 0 0 15px rgba(139, 92, 246, 0.3); transform: translateY(-2px); }
+  gmp-place-autocomplete.redelivery-places { display:block; width:100%; color-scheme:dark; }
   @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
   .animate-shake { animation: shake .4s ease-in-out; }
 </style>
@@ -204,7 +205,7 @@ const show = (v) => ["entry","otp","track"].forEach(x => $(`view-${x}`).classLis
 let token = "";
 let trackingAnalyticsSent = false;
 
-function setToken(t){ const nextToken = String(t||"").trim().toLowerCase(); if(nextToken !== token) stopTrackPoll(); if(nextToken !== token) trackingAnalyticsSent=false; token = nextToken; const u = new URL(location.href); if(token){ u.searchParams.set("t", token); } else { u.searchParams.delete("t"); } history.replaceState(null,"",u); }
+function setToken(t){ const nextToken = String(t||"").trim().toLowerCase(); if(nextToken !== token){ stopTrackPoll(); trackingAnalyticsSent=false; lastStatus=null; lastRedeliveryState=null; } token = nextToken; const u = new URL(location.href); if(token){ u.searchParams.set("t", token); } else { u.searchParams.delete("t"); } history.replaceState(null,"",u); }
 
 function entryError(msg){ const e = $("entry-msg"); if(!msg){ e.classList.add("hidden"); e.textContent=""; return; } e.textContent = msg; e.classList.remove("hidden"); }
 
@@ -213,17 +214,19 @@ function showToast(msg){ const t=$("toast"); if(!t) return; t.textContent=msg; t
 // ---- Tracking refresh policy ----
 const LIVE_TRACK_STATUSES = ["to_pickup", "to_dropoff"];
 const TERMINAL_TRACK_STATUSES = ["delivered", "failed", "cancelled"];
+const ACTIVE_REDELIVERY_STATES = ["address_required", "payment_required", "paid_pending_release", "released"];
 const LIVE_POLL_MS = 5000;
 const IDLE_POLL_MS = 30000;
 function isLiveTrackStatus(status){ return LIVE_TRACK_STATUSES.includes(status); }
 function isTerminalTrackStatus(status){ return TERMINAL_TRACK_STATUSES.includes(status); }
+function shouldPollTrack(status){ return !isTerminalTrackStatus(status) || (status==="failed" && ACTIVE_REDELIVERY_STATES.includes(lastRedeliveryState)); }
 function pollDelayForStatus(status){ return isLiveTrackStatus(status) ? LIVE_POLL_MS : IDLE_POLL_MS; }
 
 async function loadOrder(){
   if(!token){ show("entry"); return; }
   showToast("מתחבר למערכת המעקב של עדן…");
   try {
-    const r = await fetch(API + "/api/orders/" + encodeURIComponent(token));
+    const r = await fetch(API + "/api/orders/" + encodeURIComponent(token), { credentials:"include" });
     if(r.status === 404){ show("entry"); entryError("לא נמצא משלוח עם מספר המעקב הזה."); return; }
     if(r.status === 402){ show("entry"); entryError("המעקב יהיה זמין לאחר אישור התשלום."); return; }
     if(!r.ok){ show("entry"); entryError("לא ניתן לטעון את המשלוח כעת. נסו שוב."); return; }
@@ -259,7 +262,7 @@ function routeRefreshDue(status,now,previousStatus,previousAt){
 }
 
 // ---- Live Google Map (loaded via /maps-key) ----
-let gMap=null, gMarker=null, gDestMarker=null, gTrailLine=null, gRoutePolylines=[], gRouteLibraryPromise=null, gRouteSequence=0, gFallbackLine=null, gPickupMarker=null, gPoll=null, lastStatus=null, mapsRequested=false, lastRouteAt=0, lastRouteStatus=null;
+let gMap=null, gMarker=null, gDestMarker=null, gTrailLine=null, gRoutePolylines=[], gRouteLibraryPromise=null, gRouteSequence=0, gFallbackLine=null, gPickupMarker=null, gPoll=null, lastStatus=null, lastRedeliveryState=null, mapsRequested=false, lastRouteAt=0, lastRouteStatus=null;
 function loadMapsForTrack(){
   if(mapsRequested || (window.google && google.maps)) return;
   mapsRequested=true;
@@ -365,12 +368,12 @@ function renderMap(live, gps, order, trail){
 function stopTrackPoll(){ if(gPoll){ clearTimeout(gPoll); gPoll=null; } }
 function scheduleTrackPoll(status){
   stopTrackPoll();
-  if(!token || document.hidden || isTerminalTrackStatus(status)) return;
+  if(!token || document.hidden || !shouldPollTrack(status)) return;
   gPoll=setTimeout(pollTrack, pollDelayForStatus(status));
 }
 async function pollTrack(){
   gPoll=null;
-  if(!token || document.hidden || isTerminalTrackStatus(lastStatus)) return;
+  if(!token || document.hidden || !shouldPollTrack(lastStatus)) return;
   try{
     const r=await fetch(API+"/api/orders/"+encodeURIComponent(token));
     if(r.status===404){ stopTrackPoll(); show("entry"); entryError("לא נמצא משלוח עם מספר המעקב הזה."); return; }
@@ -379,12 +382,126 @@ async function pollTrack(){
     if(d.otp_pending){ stopTrackPoll(); show("otp"); focusOtp(); return; }
     window.__lastTrack=d;
     const o=d.order||{};
-    if(o.status!==lastStatus){ renderTrack(d); return; }
+    const redeliveryState=d.redelivery&&d.redelivery.state||null;
+    if(o.status!==lastStatus||redeliveryState!==lastRedeliveryState){ renderTrack(d); return; }
     renderMap(isLiveTrackStatus(o.status), d.gps||null, o, d.gpsTrail||null);
     scheduleTrackPoll(o.status);
   }catch(e){ showToast("בעיית תקשורת. ננסה שוב אוטומטית."); scheduleTrackPoll(lastStatus); }
 }
 document.addEventListener("visibilitychange", function(){ if(document.hidden) stopTrackPoll(); else if(token) scheduleTrackPoll(lastStatus); });
+
+let redeliveryPlace=null,redeliveryPaymentBusy=false;
+function redeliveryMessage(text,tone){
+  return '<div class="mt-3 rounded-lg border px-3 py-2 text-label-sm '+(tone==="ok"?"border-secondary/30 bg-secondary/10 text-secondary":"border-primary/30 bg-primary/10 text-on-surface-variant")+'">'+esc(text)+'</div>';
+}
+function redeliveryActionHtml(redelivery){
+  if(!redelivery)return "";
+  const fee=redelivery.fee!=null?"₪"+redelivery.fee:"";
+  const address=redelivery.address&&redelivery.address.dropoff?redelivery.address.dropoff:"";
+  if(redelivery.state==="address_required"){
+    if(redelivery.verification_required){
+      return '<div class="mt-5 rounded-xl border border-primary/30 bg-primary/10 p-4"><div class="flex items-center gap-2 mb-2"><span class="material-symbols-outlined text-primary">mark_email_read</span><h3 class="font-headline-md text-primary">אימות לפני שינוי הכתובת</h3></div><p class="text-label-sm text-on-surface-variant">שינוי יעד הוא פעולה רגישה. נשלח קוד חד-פעמי לכתובת הדוא״ל של ההזמנה לפני פתיחת הטופס.</p><button id="redelivery-verify" class="mt-4 w-full bg-primary text-on-primary font-bold py-3 rounded-lg">שליחת קוד אימות</button><p id="redelivery-verify-msg" class="mt-2 min-h-[1em] text-label-sm text-status-alert"></p></div>';
+    }
+    return '<div class="mt-5 rounded-xl border border-primary/30 bg-primary/10 p-4"><div class="flex items-center gap-2 mb-2"><span class="material-symbols-outlined text-primary">edit_location_alt</span><h3 class="font-headline-md text-primary">עדכון כתובת למסירה חוזרת</h3></div><p class="text-label-sm text-on-surface-variant mb-4">בחרו כתובת מתוקנת מתוך הצעות המפה. המחיר יחושב לפי אזור היעד, ורק לאחר התשלום הכתובת תשוחרר לשליח.</p><form id="redelivery-form" class="space-y-3"><div id="redelivery-places"></div><input id="redelivery-detail" class="w-full bg-surface-container-high border border-outline-variant rounded-lg px-3 py-3 text-on-surface" placeholder="דירה, קומה או הוראות כניסה (אופציונלי)" maxlength="500"><button class="w-full bg-primary text-on-primary font-bold py-3 rounded-lg disabled:opacity-60" type="submit">בדיקת כתובת והצגת מחיר</button><p id="redelivery-msg" class="min-h-[1em] text-label-sm text-status-alert"></p></form></div>';
+  }
+  if(redelivery.state==="payment_required"){
+    const payControl=redelivery.payment_url
+      ? '<a href="'+esc(redelivery.payment_url)+'" class="mt-4 w-full bg-tertiary text-on-tertiary font-bold py-3 rounded-lg flex items-center justify-center gap-2"><span class="material-symbols-outlined">credit_card</span> לתשלום מאובטח'+(fee?" — "+fee:"")+'</a>'
+      : '<button id="redelivery-pay" class="mt-4 w-full bg-tertiary text-on-tertiary font-bold py-3 rounded-lg flex items-center justify-center gap-2"><span class="material-symbols-outlined">credit_card</span> יצירת קישור תשלום'+(fee?" — "+fee:"")+'</button>';
+    return '<div class="mt-5 rounded-xl border border-tertiary/30 bg-tertiary/10 p-4"><div class="flex items-center gap-2"><span class="material-symbols-outlined text-tertiary">payments</span><h3 class="font-headline-md text-tertiary">הכתובת נקלטה</h3></div><p class="mt-2 text-label-sm text-on-surface-variant">'+esc(address)+(redelivery.address&&redelivery.address.dropoff_detail?" · "+esc(redelivery.address.dropoff_detail):"")+'</p><div class="mt-3 flex justify-between border-t border-glass-border pt-3"><span class="text-on-surface-variant">ניסיון מסירה נוסף</span><b class="text-secondary text-headline-md">'+esc(fee)+'</b></div>'+payControl+'<p id="redelivery-pay-msg" class="mt-2 min-h-[1em] text-label-sm text-status-alert"></p></div>';
+  }
+  if(redelivery.state==="paid_pending_release"){
+    return redeliveryMessage("התשלום התקבל. הכתובת המתוקנת ממתינה לשחרור תפעולי למסלול השליח.","ok");
+  }
+  if(redelivery.state==="released"){
+    return redeliveryMessage("המסירה החוזרת שוחררה. היעד המתוקן נוסף למסלול השליח.","ok");
+  }
+  if(redelivery.state==="returning"||redelivery.state==="expired"){
+    return redeliveryMessage("חלון התיאום הסתיים והחבילה חוזרת לנקודת האיסוף.");
+  }
+  return redeliveryMessage("התשלום או הכתובת דורשים בדיקה. צוות EdenMish יצור איתכם קשר.");
+}
+function redeliveryCity(components){
+  const types=["locality","postal_town","administrative_area_level_2"];
+  return (components||[]).map(function(component){
+    return (component.types||[]).some(function(type){return types.includes(type);})
+      ? (component.longText||component.long_name||"") : "";
+  }).find(Boolean)||"";
+}
+async function initRedeliveryPlaces(){
+  const mount=$("redelivery-places");if(!mount)return;
+  try{
+    if(!window.google||!google.maps||!google.maps.importLibrary){
+      const keyResponse=await fetch("/maps-key");const keyData=await keyResponse.json();
+      if(!keyData||!keyData.key)throw new Error("maps_key_unavailable");
+      await new Promise(function(resolve,reject){
+        window.__redeliveryPlacesReady=resolve;
+        const script=document.createElement("script");
+        script.src="https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(keyData.key)+"&loading=async&libraries=places&language=iw&region=il&v=weekly&callback=__redeliveryPlacesReady";
+        script.async=true;script.onerror=reject;document.head.appendChild(script);
+      });
+    }
+    const places=await google.maps.importLibrary("places");
+    const widget=new places.PlaceAutocompleteElement();
+    widget.className="redelivery-places";
+    widget.placeholder="רחוב, מספר בית ועיר";
+    widget.includedRegionCodes=["il"];
+    widget.locationRestriction={north:32.20,south:31.90,east:34.95,west:34.70};
+    widget.setAttribute("aria-label","כתובת מתוקנת למסירה");
+    widget.addEventListener("input",function(){redeliveryPlace=null;});
+    widget.addEventListener("gmp-select",async function(event){
+      try{
+        const place=event.placePrediction.toPlace();
+        await place.fetchFields({fields:["formattedAddress","location","addressComponents"]});
+        const location=place.location;
+        const lat=location&&(typeof location.lat==="function"?location.lat():location.lat);
+        const lng=location&&(typeof location.lng==="function"?location.lng():location.lng);
+        const city=redeliveryCity(place.addressComponents);
+        if(!Number.isFinite(lat)||!Number.isFinite(lng)||!city)throw new Error("incomplete_place");
+        redeliveryPlace={dropoff:place.formattedAddress||"",dropoff_city:city,dropoff_lat:lat,dropoff_lng:lng};
+        const message=$("redelivery-msg");if(message)message.textContent="";
+      }catch(error){redeliveryPlace=null;const message=$("redelivery-msg");if(message)message.textContent="לא הצלחנו לקרוא את הכתובת. בחרו הצעה אחרת.";}
+    });
+    mount.replaceChildren(widget);
+  }catch(error){
+    mount.innerHTML='<div class="rounded-lg border border-status-alert/30 bg-status-alert/10 p-3 text-label-sm text-status-alert">שירות בחירת הכתובת אינו זמין כרגע. נסו שוב מאוחר יותר או צרו קשר בוואטסאפ.</div>';
+  }
+}
+async function submitRedeliveryAddress(event){
+  event.preventDefault();
+  const form=$("redelivery-form"),message=$("redelivery-msg"),button=form&&form.querySelector("button");
+  if(!redeliveryPlace){if(message)message.textContent="בחרו כתובת מתוך הצעות המפה.";return;}
+  if(button)button.disabled=true;if(message)message.textContent="מחשב מחיר…";
+  try{
+    const payload={...redeliveryPlace,dropoff_detail:($("redelivery-detail")||{}).value||null};
+    const response=await fetch(API+"/api/orders/"+encodeURIComponent(token)+"/redelivery-address",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    const data=await response.json().catch(function(){return {};});
+    if(!response.ok)throw new Error(data.error||"address_failed");
+    showToast("הכתובת נקלטה. המחיר חושב.");
+    await loadOrder();
+  }catch(error){if(message)message.textContent=error.message==="out_of_zone"?"הכתובת מחוץ לאזור השירות.":"לא הצלחנו לשמור את הכתובת. נסו שוב.";}
+  finally{if(button)button.disabled=false;}
+}
+async function beginRedeliveryPayment(){
+  if(redeliveryPaymentBusy)return;redeliveryPaymentBusy=true;
+  const button=$("redelivery-pay"),message=$("redelivery-pay-msg");
+  if(button)button.disabled=true;if(message)message.textContent="יוצר קישור מאובטח…";
+  try{
+    const response=await fetch(API+"/api/orders/"+encodeURIComponent(token)+"/redelivery-payment",{method:"POST"});
+    const data=await response.json().catch(function(){return {};});
+    if(!response.ok||!data.payment_url)throw new Error(data.error||"payment_failed");
+    location.href=data.payment_url;
+  }catch(error){if(message)message.textContent="לא הצלחנו ליצור קישור תשלום. נסו שוב.";if(button)button.disabled=false;redeliveryPaymentBusy=false;}
+}
+async function beginRedeliveryVerification(){
+  const button=$("redelivery-verify"),message=$("redelivery-verify-msg");
+  if(button)button.disabled=true;if(message)message.textContent="שולח קוד…";
+  try{
+    const response=await fetch(API+"/api/orders/"+encodeURIComponent(token)+"/resend-otp",{method:"POST"});
+    if(!response.ok)throw new Error("send_failed");
+    show("otp");focusOtp();otpMsg("קוד אימות נשלח לדוא״ל.",false);
+  }catch(error){if(message)message.textContent="לא הצלחנו לשלוח קוד. נסו שוב.";if(button)button.disabled=false;}
+}
 
 function renderTrack(d){
   const o = d.order || {};
@@ -419,6 +536,15 @@ function renderTrack(d){
       stepper.appendChild(row);
     });
   }
+  const redeliveryHtml=redeliveryActionHtml(d.redelivery);
+  if(redeliveryHtml){
+    const action=document.createElement("div");
+    action.innerHTML=redeliveryHtml;
+    while(action.firstChild)stepper.appendChild(action.firstChild);
+    const form=$("redelivery-form");if(form){form.addEventListener("submit",submitRedeliveryAddress);initRedeliveryPlaces();}
+    const payButton=$("redelivery-pay");if(payButton)payButton.addEventListener("click",beginRedeliveryPayment);
+    const verifyButton=$("redelivery-verify");if(verifyButton)verifyButton.addEventListener("click",beginRedeliveryVerification);
+  }
 
   // Payment CTA for unpaid orders (customer can pay directly from the tracking page)
   if (o.payment_url && o.payment_status !== "paid" && !TERMINAL_TRACK_STATUSES.includes(o.status)) {
@@ -433,6 +559,7 @@ function renderTrack(d){
   const live = isLiveTrackStatus(cur);
   $("live-badge").classList.toggle("hidden", !live);
   lastStatus = cur;
+  lastRedeliveryState = d.redelivery&&d.redelivery.state||null;
   window.__lastTrack = d;
   renderMap(live, gps, o, (d.gpsTrail||[]));
   scheduleTrackPoll(cur);
@@ -553,7 +680,7 @@ async function verifyOtpNow(){
   const btn = $("otp-submit"); const orig = btn.textContent; btn.disabled = true; btn.textContent = "מאמת…";
   otpVerifying = true;
   try {
-    const r = await fetch(API + "/api/orders/" + encodeURIComponent(token) + "/verify-otp", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ code }) });
+    const r = await fetch(API + "/api/orders/" + encodeURIComponent(token) + "/verify-otp", { method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ code }) });
     const d = await r.json().catch(()=>({}));
     if(d.verified){ otpMsg("מאומת! טוען מעקב…", false); loadOrder(); }
     else if(d.error === "locked"){ otpMsg("יותר מדי ניסיונות. נסו שוב מאוחר יותר."); }
@@ -565,7 +692,7 @@ async function verifyOtpNow(){
 $("otp-submit").addEventListener("click", verifyOtpNow);
 $("otp-resend").addEventListener("click", async () => {
   const btn = $("otp-resend"); const orig = btn.textContent; btn.textContent = "שולח…";
-  try { await fetch(API + "/api/orders/" + encodeURIComponent(token) + "/resend-otp", { method:"POST" }); otpMsg("קוד חדש נשלח.", false); }
+  try { await fetch(API + "/api/orders/" + encodeURIComponent(token) + "/resend-otp", { method:"POST", credentials:"include" }); otpMsg("קוד חדש נשלח.", false); }
   catch(e){ otpMsg("לא הצלחנו לשלוח. נסו שוב."); }
   finally { btn.textContent = orig; }
 });

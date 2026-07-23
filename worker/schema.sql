@@ -31,6 +31,11 @@ CREATE TABLE IF NOT EXISTS orders (
   business_account_id INTEGER,
   wallet_reservation_id TEXT,
   payment_method TEXT,
+  -- Set when a failed delivery leaves the package with the driver, to the reported
+  -- disposition ('return_to_origin' | 'hold_for_redelivery'). See migration 025.
+  retained_by_driver TEXT,
+  retained_at INTEGER,             -- epoch ms the package was retained; drives 24h auto-return
+  pending_redelivery_json TEXT,    -- staged corrected address + fee for a redelivery. Migration 026
   phone_delivery_link_opt_in INTEGER NOT NULL DEFAULT 0,
   phone_delivery_link_opt_in_at INTEGER
 );
@@ -66,6 +71,32 @@ CREATE TABLE IF NOT EXISTS payments (
   paid_at INTEGER,
   FOREIGN KEY (order_id) REFERENCES orders(id)
 );
+
+-- A second, purpose-specific Shopify Draft Order for a corrected-address
+-- redelivery. The original order payment remains immutable; this row owns the
+-- retry fee and its reconciliation lifecycle.
+CREATE TABLE IF NOT EXISTS redelivery_charges (
+  id TEXT PRIMARY KEY,
+  order_id INTEGER NOT NULL UNIQUE,
+  amount_agorot INTEGER NOT NULL CHECK(amount_agorot > 0),
+  currency TEXT NOT NULL DEFAULT 'ILS',
+  address_snapshot_json TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN (
+    'pending', 'creating', 'link_sent', 'paid', 'released', 'expired', 'mismatch', 'late_paid'
+  )),
+  payment_url TEXT,
+  processor_ref TEXT,
+  shopify_draft_order_id TEXT,
+  shopify_order_id TEXT UNIQUE,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  paid_at INTEGER,
+  released_at INTEGER,
+  FOREIGN KEY (order_id) REFERENCES orders(id)
+);
+CREATE INDEX IF NOT EXISTS idx_redelivery_charges_status
+  ON redelivery_charges(status, expires_at, order_id);
 
 CREATE TABLE IF NOT EXISTS pricing_rules (
   name TEXT PRIMARY KEY,
@@ -124,7 +155,7 @@ CREATE TABLE IF NOT EXISTS delivery_completion_transitions (
 CREATE TABLE IF NOT EXISTS delivery_notification_outbox (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   order_id INTEGER NOT NULL,
-  transition TEXT NOT NULL CHECK(transition = 'delivered'),
+  transition TEXT NOT NULL CHECK(transition IN ('delivered','delivery_failed_retained')),
   event_id TEXT NOT NULL,
   channel TEXT NOT NULL CHECK(channel IN ('email', 'whatsapp')),
   template TEXT NOT NULL,
@@ -505,6 +536,9 @@ CREATE TABLE IF NOT EXISTS business_plan_enrollments (
 );
 
 CREATE INDEX IF NOT EXISTS idx_orders_business_account ON orders(business_account_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_wallet_reservation_unique
+  ON orders(wallet_reservation_id)
+  WHERE wallet_reservation_id IS NOT NULL;
 
 INSERT OR IGNORE INTO pricing_rules (name, value) VALUES
   ('base_envelope','59'),

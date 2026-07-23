@@ -51,6 +51,12 @@ processor boundaries so future work stays clean.
 - Webhook reconciles as above.
 - Implemented today via the ops **"approve price"** action + `createDraftOrder`.
 
+Corrected-address redelivery uses the same immediate-capture boundary but a separate
+`redelivery_charges` row and Draft Order purpose. The retry fee never overwrites the
+original order price or payment status. A signed paid webhook marks the extra charge
+paid; Ops then performs the operational release that makes the new destination
+routable.
+
 ### 3. `PREAUTH_MAX_HOLD` — estimate now, capture actual later *(future — DO NOT IMPLEMENT YET)*
 
 - Price is **estimated** but the final amount may change (e.g. after delivery).

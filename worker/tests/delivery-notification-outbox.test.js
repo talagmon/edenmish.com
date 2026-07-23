@@ -5,6 +5,8 @@ import {
   deliveryNotificationOutboxPolicy,
   enqueueDeliveryNotificationJobs,
   processDeliveryNotificationOutbox,
+  retainedFailureNotificationOutboxStatements,
+  retainedPackageFailureHtml,
 } from '../src/delivery-notification-outbox.js';
 
 class OutboxDb {
@@ -70,16 +72,26 @@ class OutboxDb {
           return { meta: { changes } };
         }
         if (normalized.startsWith('INSERT OR IGNORE INTO delivery_notification_outbox')) {
-          const [orderId, eventId, channel, template, nextAttemptAt, createdAt, updatedAt] = this.args;
+          const retainedFailure = normalized.includes("'delivery_failed_retained'");
+          const [
+            orderId, eventId, channelOrTemplate, templateOrNextAttempt,
+            nextAttemptOrCreated, createdOrUpdated, updatedAt,
+          ] = this.args;
+          const transition = retainedFailure ? 'delivery_failed_retained' : 'delivered';
+          const channel = retainedFailure ? 'email' : channelOrTemplate;
+          const template = retainedFailure ? channelOrTemplate : templateOrNextAttempt;
+          const nextAttemptAt = retainedFailure ? templateOrNextAttempt : nextAttemptOrCreated;
+          const createdAt = retainedFailure ? nextAttemptOrCreated : createdOrUpdated;
+          const finalUpdatedAt = retainedFailure ? createdOrUpdated : updatedAt;
           const duplicate = db.jobs.some((job) => (
-            job.order_id === orderId && job.transition === 'delivered'
+            job.order_id === orderId && job.transition === transition
             && job.channel === channel && job.template === template
           ));
           if (duplicate) return { meta: { changes: 0 } };
           db.jobs.push({
             id: db.nextId++,
             order_id: orderId,
-            transition: 'delivered',
+            transition,
             event_id: eventId,
             channel,
             template,
@@ -90,7 +102,7 @@ class OutboxDb {
             lease_expires_at: null,
             last_error: null,
             created_at: createdAt,
-            updated_at: updatedAt,
+            updated_at: finalUpdatedAt,
             sent_at: null,
           });
           return { meta: { changes: 1 } };
@@ -181,6 +193,83 @@ describe('delivery notification outbox', () => {
     );
 
     assert.deepEqual(DB.jobs.map((job) => job.channel), ['email', 'whatsapp']);
+  });
+
+  test('retained failures enqueue one email job without reusing proof-link phone consent', async () => {
+    const DB = new OutboxDb();
+    const retained = {
+      ...order,
+      phone_delivery_link_opt_in: 1,
+    };
+    await DB.batch(retainedFailureNotificationOutboxStatements(
+      DB,
+      retained,
+      'failure-event-1',
+      'hold_for_redelivery',
+      1_000,
+    ));
+
+    assert.deepEqual(DB.jobs.map(({ transition, channel, template }) => ({
+      transition, channel, template,
+    })), [{
+      transition: 'delivery_failed_retained',
+      channel: 'email',
+      template: 'customer_delivery_failed_redelivery_hold',
+    }]);
+    assert.deepEqual(deliveryNotificationOutboxPolicy.retainedFailureChannels, ['email']);
+  });
+
+  test('retained-failure email gives a truthful 24-hour next step and tracking link', async () => {
+    const DB = new OutboxDb();
+    const retained = {
+      ...order,
+      token: 'retained-token-9001',
+      phone_delivery_link_opt_in: 1,
+    };
+    DB.orders.set(order.id, retained);
+    await DB.batch(retainedFailureNotificationOutboxStatements(
+      DB,
+      retained,
+      'failure-event-1',
+      'hold_for_redelivery',
+      1_000,
+    ));
+    const originalFetch = globalThis.fetch;
+    let outbound;
+    globalThis.fetch = async (_url, options) => {
+      outbound = JSON.parse(options.body);
+      return { ok: true };
+    };
+
+    try {
+      const summary = await processDeliveryNotificationOutbox({
+        DB,
+        STOREFRONT_BASE: 'https://edenmish.com',
+        SENDGRID_API_KEY: 'test-key',
+      }, { now: 1_000 });
+
+      assert.deepEqual(summary, { claimed: 1, sent: 1, retried: 0, dead: 0 });
+      assert.match(outbound.subject, /תיאום למסירה מחדש/);
+      assert.match(outbound.content[0].value, /בתוך 24 שעות/);
+      assert.match(
+        outbound.content[0].value,
+        /https:\/\/edenmish\.com\/track\.html\?t=retained-token-9001/,
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('returning failure copy requires no customer action and escapes order data', () => {
+    const html = retainedPackageFailureHtml(
+      { STOREFRONT_BASE: 'https://edenmish.com' },
+      { id: '<9001>', token: 'return-token' },
+      deliveryNotificationOutboxPolicy.templates.retainedReturning,
+    );
+
+    assert.match(html, /אין צורך בפעולה כרגע/);
+    assert.match(html, /#&lt;9001&gt;/);
+    assert.doesNotMatch(html, /#<9001>/);
   });
 
   test('consented WhatsApp delivery contains the customer proof link', async () => {

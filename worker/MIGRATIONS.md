@@ -590,6 +590,191 @@ and must not contain a raw `code` column.
 
 ---
 
+### 025_delivery_failure_retained_package.sql
+
+**Purpose:** Records when a failed delivery leaves the physical package with the
+driver, together with the timestamp used by the 24-hour auto-return rule. The
+partial index keeps retained-package dispatch lookups bounded without changing the
+shared order-status vocabulary.
+
+**Command:**
+```bash
+# Staging (render the config first; run from worker/):
+npx wrangler d1 execute edenmish-staging --remote --yes \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/025_delivery_failure_retained_package.sql
+
+# Local verification:
+wrangler d1 execute edenmish --local \
+  --file=./migrations/025_delivery_failure_retained_package.sql
+
+# Production (after merge, before Worker deploy):
+wrangler d1 execute edenmish --remote \
+  --file=./migrations/025_delivery_failure_retained_package.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM pragma_table_info('orders')
+WHERE name IN ('retained_by_driver','retained_at')
+ORDER BY name;
+SELECT name FROM sqlite_master
+WHERE type='index' AND name='idx_orders_retained_by_driver';
+```
+
+Expected result: both order columns and the retained-package partial index.
+
+---
+
+### 026_redelivery_pending_address.sql
+
+**Purpose:** Stages the package owner's corrected redelivery destination and
+quoted fee without overwriting the failed address. Ops promotes the staged data
+only after payment is confirmed.
+
+**Command:**
+```bash
+# Staging (render the config first; run from worker/):
+npx wrangler d1 execute edenmish-staging --remote --yes \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/026_redelivery_pending_address.sql
+
+# Local verification:
+wrangler d1 execute edenmish --local \
+  --file=./migrations/026_redelivery_pending_address.sql
+
+# Production (after merge, before Worker deploy):
+wrangler d1 execute edenmish --remote \
+  --file=./migrations/026_redelivery_pending_address.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM pragma_table_info('orders')
+WHERE name='pending_redelivery_json';
+```
+
+Expected result: the `pending_redelivery_json` order column.
+
+---
+
+### 027_retained_failure_notifications.sql
+
+**Purpose:** Expands the durable delivery outbox with the
+`delivery_failed_retained` transition used for customer failure emails. SQLite
+cannot alter the transition `CHECK` in place, so this migration rebuilds the
+outbox table while preserving all delivered-notification jobs, retry counts,
+leases, errors, and sent timestamps.
+
+**Command:**
+```bash
+# Staging (render the config first; run from worker/):
+npx wrangler d1 execute edenmish-staging --remote --yes \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/027_retained_failure_notifications.sql
+
+# Local verification:
+wrangler d1 execute edenmish --local \
+  --file=./migrations/027_retained_failure_notifications.sql
+
+# Production (after merge, before Worker deploy):
+wrangler d1 execute edenmish --remote \
+  --file=./migrations/027_retained_failure_notifications.sql
+```
+
+**Verification query:**
+```sql
+SELECT sql FROM sqlite_master
+WHERE type='table' AND name='delivery_notification_outbox';
+
+SELECT transition, state, COUNT(*)
+FROM delivery_notification_outbox
+GROUP BY transition, state
+ORDER BY transition, state;
+
+SELECT name FROM pragma_index_list('delivery_notification_outbox')
+WHERE name='idx_delivery_notification_outbox_due';
+```
+
+Expected result: the table definition permits both `delivered` and
+`delivery_failed_retained`, all pre-migration jobs remain present in their original
+states, and the due-job index exists.
+
+---
+
+### 028_redelivery_charges.sql
+
+**Purpose:** Adds the purpose-specific redelivery charge ledger. A corrected-address
+retry fee gets its own immutable amount, Shopify Draft Order reference, expiry, and
+webhook reconciliation state instead of overwriting the original delivery payment.
+
+**Command:**
+```bash
+# Staging (render the config first; run from worker/):
+npx wrangler d1 execute edenmish-staging --remote --yes \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/028_redelivery_charges.sql
+
+# Local verification:
+wrangler d1 execute edenmish --local \
+  --file=./migrations/028_redelivery_charges.sql
+
+# Production (after merge, before Worker deploy):
+wrangler d1 execute edenmish --remote \
+  --file=./migrations/028_redelivery_charges.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM sqlite_master
+WHERE type='table' AND name='redelivery_charges';
+
+SELECT name FROM pragma_index_list('redelivery_charges')
+WHERE name='idx_redelivery_charges_status';
+
+SELECT status, COUNT(*)
+FROM redelivery_charges
+GROUP BY status
+ORDER BY status;
+```
+
+Expected result: the table and status/expiry index exist. Before the feature is used,
+the grouped status query may return no rows.
+
+---
+
+### 029_wallet_reservation_ownership.sql
+
+**Purpose:** Enforces the payment invariant that one non-null wallet reservation
+can fund exactly one delivery order. This closes a concurrent same-idempotency-key
+race in the business order API.
+
+**Preflight (must return zero rows):**
+```sql
+SELECT wallet_reservation_id, COUNT(*) AS order_count
+FROM orders
+WHERE wallet_reservation_id IS NOT NULL
+GROUP BY wallet_reservation_id
+HAVING COUNT(*) > 1;
+```
+
+If this query returns any rows, stop and review the affected orders and wallet
+ledger entries manually. The migration deliberately refuses to guess which
+payment record is authoritative.
+
+**Command:**
+```bash
+wrangler d1 execute edenmish --remote --file=./migrations/029_wallet_reservation_ownership.sql
+```
+
+**Verification query:**
+```sql
+SELECT name, sql FROM sqlite_master
+WHERE type = 'index' AND name = 'idx_orders_wallet_reservation_unique';
+```
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -615,6 +800,12 @@ and must not contain a raw `code` column.
 - [ ] Run `021_business_entry_plans.sql` after 018/020 and before enabling Trial or Business Wallet checkout.
 - [ ] Run `022_business_plan_coupons.sql` after 021 and before enabling business-plan coupons.
 - [ ] Run `023_driver_login_invitations.sql` after 014 and before enabling Ops driver pairing.
+- [ ] Run `024_phone_delivery_link_consent.sql` before enabling phone delivery-link consent.
+- [ ] Run `025_delivery_failure_retained_package.sql` before accepting retained-package dispositions.
+- [ ] Run `026_redelivery_pending_address.sql` after 025 and before enabling corrected-address redelivery.
+- [ ] Run `027_retained_failure_notifications.sql` after 019 and before enabling retained-package customer emails.
+- [ ] Run `028_redelivery_charges.sql` after 026 and before enabling corrected-address redelivery payments.
+- [ ] Run `029_wallet_reservation_ownership.sql` after the duplicate-reference preflight and before deploying the Worker.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).

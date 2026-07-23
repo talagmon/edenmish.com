@@ -106,6 +106,32 @@ describe('parseShopifyOrderWebhook', () => {
     assert.equal(result.billingCompany, 'Test Delivery Ltd');
   });
 
+  test('parses a redelivery charge independently from the original tracking token', () => {
+    const line = parseShopifyOrderWebhook({
+      line_items: [{
+        properties: [
+          { name: '_tracking_token', value: 'tracking-token' },
+          { name: '_edenmish_redelivery_charge', value: 'rdl_line' },
+        ],
+      }],
+    });
+    const meta = parseShopifyOrderWebhook({
+      metafields: [{
+        namespace: 'edenmish',
+        key: 'redelivery_charge_id',
+        value: 'rdl_meta',
+      }],
+    });
+    const note = parseShopifyOrderWebhook({
+      note: 'EdenMish redelivery charge: rdl_note-1',
+    });
+
+    assert.equal(line.token, 'tracking-token');
+    assert.equal(line.redeliveryChargeId, 'rdl_line');
+    assert.equal(meta.redeliveryChargeId, 'rdl_meta');
+    assert.equal(note.redeliveryChargeId, 'rdl_note-1');
+  });
+
   test('falls back to the EdenMish metafield and then the note token', () => {
     const meta = parseShopifyOrderWebhook({
       metafields: [{ namespace: 'edenmish', key: 'tracking_token', value: 'meta-token' }],
