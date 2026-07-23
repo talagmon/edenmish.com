@@ -92,6 +92,22 @@ async function constantTimeTextEqual(a, b) {
   return diff === 0;
 }
 
+function configuredDriverLoginCodes(env) {
+  return [
+    env.DRIVER_ONE_TIME_CODE,
+    ...(env.DRIVER_ADDITIONAL_ONE_TIME_CODES || '').split(','),
+  ].map((code) => code?.trim())
+    .filter((code) => typeof code === 'string' && /^\d{6,12}$/.test(code));
+}
+
+async function matchesConfiguredDriverLoginCode(input, configuredCodes) {
+  let matched = false;
+  for (const configuredCode of configuredCodes) {
+    matched = (await constantTimeTextEqual(input, configuredCode)) || matched;
+  }
+  return matched;
+}
+
 async function authenticate(req, env, meta) {
   const authorization = req.headers.get('authorization') || '';
   const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
@@ -105,14 +121,15 @@ async function authenticate(req, env, meta) {
 }
 
 async function createSession(req, env, meta) {
-  if (!env.DRIVER_ONE_TIME_CODE || !env.SESSION_SECRET) return response({ code: 'driver_auth_unconfigured', message: 'Driver authentication is unavailable.', request_id: meta.requestId }, 503, meta.requestId);
+  const configuredCodes = configuredDriverLoginCodes(env);
+  if (!configuredCodes.length || !env.SESSION_SECRET) return response({ code: 'driver_auth_unconfigured', message: 'Driver authentication is unavailable.', request_id: meta.requestId }, 503, meta.requestId);
   const rateKey = 'drvlogin:' + await anonKey(env, clientIp(req));
   const rate = await incrRateLimit(env.DB, rateKey, 10 * 60 * 1000);
   if (rate.count > 5) return response({ code: 'rate_limited', message: 'Too many attempts.', request_id: meta.requestId }, 429, meta.requestId, { 'Retry-After': '600' });
   let body;
   try { body = await readJson(req); } catch (error) { return response({ code: error.message, message: 'Invalid request.', request_id: meta.requestId }, error.status || 400, meta.requestId); }
   if (!body || typeof body.one_time_code !== 'string' || !/^\d{6,12}$/.test(body.one_time_code)
-    || !(await constantTimeTextEqual(body.one_time_code, env.DRIVER_ONE_TIME_CODE))) {
+    || !(await matchesConfiguredDriverLoginCode(body.one_time_code, configuredCodes))) {
     return response({ code: 'invalid_credentials', message: 'Invalid credentials.', request_id: meta.requestId }, 401, meta.requestId);
   }
   const now = Date.now();

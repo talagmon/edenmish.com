@@ -137,6 +137,44 @@ describe('driver API v1', () => {
     assert.ok(!insert.args.includes(body.refresh_token));
   });
 
+  test('accepts an additional driver code without replacing the primary review code', async () => {
+    const db = fakeDb({
+      first: (call) => call.sql.includes('FROM rate_limits') ? null : null,
+    });
+    const res = await handleDriverApi(request('/api/driver/v1/session', {
+      method: 'POST',
+      body: JSON.stringify({ one_time_code: '76120493' }),
+    }), {
+      DB: db,
+      SESSION_SECRET: 'test-session-secret-with-enough-entropy',
+      DRIVER_ONE_TIME_CODE: '845921',
+      DRIVER_ADDITIONAL_ONE_TIME_CODES: '76120493, 629184',
+    });
+
+    assert.equal(res.status, 201);
+    const insert = db.calls.find((call) => call.sql.includes('INSERT OR IGNORE INTO driver_sessions'));
+    assert.ok(insert);
+    assert.ok(!insert.args.includes('76120493'));
+  });
+
+  test('rejects codes outside the primary and additional configured set', async () => {
+    const db = fakeDb({
+      first: (call) => call.sql.includes('FROM rate_limits') ? null : null,
+    });
+    const res = await handleDriverApi(request('/api/driver/v1/session', {
+      method: 'POST',
+      body: JSON.stringify({ one_time_code: '11111111' }),
+    }), {
+      DB: db,
+      SESSION_SECRET: 'test-session-secret-with-enough-entropy',
+      DRIVER_ONE_TIME_CODE: '845921',
+      DRIVER_ADDITIONAL_ONE_TIME_CODES: '76120493',
+    });
+
+    assert.equal(res.status, 401);
+    assert.equal((await res.json()).code, 'invalid_credentials');
+  });
+
   test('rejects a bootstrap code that has already been consumed', async () => {
     const db = fakeDb({
       first: () => null,
