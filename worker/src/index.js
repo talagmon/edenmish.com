@@ -34,7 +34,18 @@ import {
   listRedeliveryCharges,
 } from './db.js';
 import { priceOrder, retryFee, zoneOf, ZONE_CITIES, DEFAULT_PRICING_RULES } from './pricing.js';
-import { makeSession, checkSession, getCookie, genOtp, hashOtp, timingSafeEqual } from './integrations.js';
+import {
+  makeSession,
+  checkSession,
+  getCookie,
+  genOtp,
+  hashOtp,
+  timingSafeEqual,
+  makeTrackingUnlock,
+  checkTrackingUnlock,
+  trackingUnlockCookie,
+  TRACKING_UNLOCK_COOKIE,
+} from './integrations.js';
 import { createCharge, createWalletCharge, verifyShopifyWebhook, parseShopifyOrderWebhook, parseShopifyRefundWebhook } from './payment.js';
 import { trackingHtml, opsHtml } from './pages.js';
 import { businessAccountHtml } from './business-page.js';
@@ -77,6 +88,12 @@ const trackingIsAvailable = (order) => order && (
   order.payment_status === 'wallet_paid' ||
   ['paid', 'to_pickup', 'picked_up', 'to_dropoff', 'delivered', 'cancelled'].includes(order.status)
 );
+const trackingPrivacyIsLocked = (order, now = Date.now()) => {
+  const deliveredAt = order?.delivered_at ? Number(order.delivered_at) : null;
+  return order?.status === 'delivered'
+    && deliveredAt
+    && now - deliveredAt > 24 * 60 * 60 * 1000;
+};
 const canTransition = (from, to) => {
   if (!getStatusMeta(to)) return false;
   if (from === to) return true;
@@ -925,13 +942,17 @@ export default {
       // moved the order into the paid delivery lifecycle.
       if (!trackingIsAvailable(o)) return json({ error: 'payment_required' }, 402, cors);
       // Magic-link tracking: the unguessable 22-char token authorizes read-only
-      // viewing — no OTP needed to see live status. OTP is re-enabled ONLY by the
-      // 24-hour post-delivery privacy lock (so an old/leaked link can't harvest PII),
-      // and remains available for sensitive "write" actions (address/phone changes,
-      // B2B history) via /verify-otp.
-      const deliveredAt = o.delivered_at ? Number(o.delivered_at) : null;
-      const privacyLocked = o.status === 'delivered' && deliveredAt && (Date.now() - deliveredAt > 24 * 60 * 60 * 1000);
-      if (privacyLocked && !o.email_verified) {
+      // viewing while the delivery is active. After the 24-hour post-delivery
+      // privacy window, durable email ownership is not enough: a fresh OTP must
+      // mint a short-lived, order-scoped unlock cookie.
+      const privacyLocked = trackingPrivacyIsLocked(o);
+      const privacyUnlocked = privacyLocked && await checkTrackingUnlock(
+        env,
+        getCookie(req, TRACKING_UNLOCK_COOKIE),
+        o.id,
+        o.token,
+      );
+      if (privacyLocked && !privacyUnlocked) {
         return json({ order: publicOrderSummary(o), history: [], gps: null, otp_pending: true }, 200, cors);
       }
       const proofP = o.status === 'delivered' ? getDeliveryProof(env.DB, o.id) : Promise.resolve(null);
@@ -976,7 +997,15 @@ export default {
       if (expect === o.otp_hash) {
         await verifyOtp(env.DB, o.id);
         await resetRateLimit(env.DB, RL);
-        return json({ verified: true }, 200, cors);
+        if (!trackingPrivacyIsLocked(o)) {
+          return json({ verified: true }, 200, cors);
+        }
+        const unlock = await makeTrackingUnlock(env, o.id, o.token);
+        return json(
+          { verified: true },
+          200,
+          { ...cors, 'Set-Cookie': trackingUnlockCookie(unlock) },
+        );
       }
       // Part C — max 5 failed attempts within 10 min, then lock for 15 min.
       const after = await incrRateLimit(env.DB, RL, 10 * 60 * 1000);
@@ -1005,7 +1034,7 @@ export default {
       // Don't reveal existence: a missing token / no-email / unpaid order returns
       // the same shape as a successful send (and sends nothing). OTP is only for
       // paid customers — tracking is a post-payment tool.
-      if (!o || !o.email || o.payment_status !== 'paid') return json({ ok: true }, 200, cors);
+      if (!o || !o.email || !trackingIsAvailable(o)) return json({ ok: true }, 200, cors);
       const after = await incrRateLimit(env.DB, RL, 15 * 60 * 1000);
       if (after.count > 3) {
         await setRateLock(env.DB, RL, now + 15 * 60 * 1000);

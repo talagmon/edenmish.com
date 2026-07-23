@@ -841,6 +841,8 @@ describe('Frontend: Tracking page', () => {
   test('Has magic-link (no forced OTP for active orders)', () => {
     assertContains(html, 'otp_pending', 'OTP check');
     assertContains(html, 'r.status === 402', 'unpaid tracking guard');
+    assertContains(html, '{ credentials:"include" }', 'credentialed tracking unlock read');
+    assertContains(html, 'method:"POST", credentials:"include"', 'credentialed OTP unlock');
   });
 
   test('Has PoD display (delivered photo)', () => {

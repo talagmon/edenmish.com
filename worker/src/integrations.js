@@ -409,3 +409,57 @@ export function getCookie(req, name) {
   const m = c.match(new RegExp('(?:^|; )' + name + '=([^;]+)'));
   return m ? m[1] : null;
 }
+
+// A tracking magic link is intentionally enough for live, read-only tracking, but
+// delivered orders relock after 24 hours. A fresh OTP grants a short, order-scoped
+// view without turning the durable email_verified flag into a permanent bypass.
+export const TRACKING_UNLOCK_COOKIE = '__Secure-eden_tracking_unlock';
+export const TRACKING_UNLOCK_TTL_MS = 15 * 60 * 1000;
+
+function base64UrlEncode(value) {
+  return btoa(value).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function base64UrlDecode(value) {
+  const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+  return atob(normalized + '='.repeat((4 - normalized.length % 4) % 4));
+}
+
+export async function makeTrackingUnlock(env, orderId, token, now = Date.now()) {
+  if (!env.SESSION_SECRET) throw new Error('SESSION_SECRET is required');
+  const payload = base64UrlEncode(JSON.stringify({
+    purpose: 'tracking_unlock',
+    order_id: String(orderId),
+    token: String(token),
+    iat: now,
+    exp: now + TRACKING_UNLOCK_TTL_MS,
+  }));
+  const signature = await hmac(env.SESSION_SECRET, `tracking-unlock:${payload}`);
+  return `${payload}.${signature}`;
+}
+
+export async function checkTrackingUnlock(env, value, orderId, token, now = Date.now()) {
+  if (!value || !env.SESSION_SECRET) return false;
+  const parts = String(value).split('.');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return false;
+  const [payload, signature] = parts;
+  const expected = await hmac(env.SESSION_SECRET, `tracking-unlock:${payload}`);
+  if (!timingSafeEqual(expected, signature)) return false;
+  try {
+    const claims = JSON.parse(base64UrlDecode(payload));
+    return claims.purpose === 'tracking_unlock'
+      && claims.order_id === String(orderId)
+      && claims.token === String(token)
+      && Number.isFinite(claims.iat)
+      && Number.isFinite(claims.exp)
+      && claims.iat <= now
+      && claims.exp > now
+      && claims.exp - claims.iat === TRACKING_UNLOCK_TTL_MS;
+  } catch {
+    return false;
+  }
+}
+
+export function trackingUnlockCookie(value) {
+  return `${TRACKING_UNLOCK_COOKIE}=${value}; Path=/api/orders; HttpOnly; Secure; SameSite=Strict; Max-Age=${Math.floor(TRACKING_UNLOCK_TTL_MS / 1000)}`;
+}

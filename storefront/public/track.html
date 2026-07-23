@@ -226,7 +226,7 @@ async function loadOrder(){
   if(!token){ show("entry"); return; }
   showToast("מתחבר למערכת המעקב של עדן…");
   try {
-    const r = await fetch(API + "/api/orders/" + encodeURIComponent(token));
+    const r = await fetch(API + "/api/orders/" + encodeURIComponent(token), { credentials:"include" });
     if(r.status === 404){ show("entry"); entryError("לא נמצא משלוח עם מספר המעקב הזה."); return; }
     if(r.status === 402){ show("entry"); entryError("המעקב יהיה זמין לאחר אישור התשלום."); return; }
     if(!r.ok){ show("entry"); entryError("לא ניתן לטעון את המשלוח כעת. נסו שוב."); return; }
@@ -680,7 +680,7 @@ async function verifyOtpNow(){
   const btn = $("otp-submit"); const orig = btn.textContent; btn.disabled = true; btn.textContent = "מאמת…";
   otpVerifying = true;
   try {
-    const r = await fetch(API + "/api/orders/" + encodeURIComponent(token) + "/verify-otp", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ code }) });
+    const r = await fetch(API + "/api/orders/" + encodeURIComponent(token) + "/verify-otp", { method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ code }) });
     const d = await r.json().catch(()=>({}));
     if(d.verified){ otpMsg("מאומת! טוען מעקב…", false); loadOrder(); }
     else if(d.error === "locked"){ otpMsg("יותר מדי ניסיונות. נסו שוב מאוחר יותר."); }
@@ -692,7 +692,7 @@ async function verifyOtpNow(){
 $("otp-submit").addEventListener("click", verifyOtpNow);
 $("otp-resend").addEventListener("click", async () => {
   const btn = $("otp-resend"); const orig = btn.textContent; btn.textContent = "שולח…";
-  try { await fetch(API + "/api/orders/" + encodeURIComponent(token) + "/resend-otp", { method:"POST" }); otpMsg("קוד חדש נשלח.", false); }
+  try { await fetch(API + "/api/orders/" + encodeURIComponent(token) + "/resend-otp", { method:"POST", credentials:"include" }); otpMsg("קוד חדש נשלח.", false); }
   catch(e){ otpMsg("לא הצלחנו לשלוח. נסו שוב."); }
   finally { btn.textContent = orig; }
 });
