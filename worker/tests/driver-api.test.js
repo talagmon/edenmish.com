@@ -310,6 +310,58 @@ describe('driver API v1', () => {
     assert.deepEqual(body.change_summary.added_stop_ids, ['stop_d0']);
   });
 
+  test('maps the legacy queue_changed route reason to the public mobile contract', async () => {
+    const db = fakeDb({
+      first: (call) => {
+        const auth = authenticatedFirst(call);
+        if (auth) return auth;
+        if (call.sql === 'SELECT id FROM driver_shifts WHERE id = ? AND driver_id = ?') {
+          return { id: 'sh_123' };
+        }
+        if (call.sql.includes('FROM driver_routes')) {
+          return {
+            id: 8,
+            revision: 14,
+            generated_at: Date.parse('2026-07-18T15:40:00Z'),
+            reason: 'queue_changed',
+            current_stop_id: 'stop_d1',
+            current_stop_locked: 0,
+            delay_minutes: 0,
+            current_position: 1,
+            total_stops: 1,
+            onboard_order_ids_json: '[9001]',
+          };
+        }
+        return null;
+      },
+      all: (call) => {
+        if (call.sql.includes('FROM driver_route_stops')) {
+          return { results: [{
+            stop_id: 'stop_d1', order_id: 9001, position: 1, task_type: 'dropoff',
+            required_predecessor_stop_id: null, state: 'pending',
+            name: 'נועה לוי', phone: '+972541234567',
+            pickup: 'הרצל 42, תל אביב', pickup_detail: null,
+            pickup_lat: 32.0632, pickup_lng: 34.7708,
+            dropoff: 'אבן גבירול 81, תל אביב', dropoff_detail: null,
+            dropoff_lat: 32.0801, dropoff_lng: 34.7813,
+            promised_from: '2026-07-18T15:00:00Z',
+            promised_to: '2026-07-18T16:00:00Z',
+            eta: '2026-07-18T15:45:00Z', service_duration_seconds: 300,
+            urgency: 'normal', inserted: 0,
+          }] };
+        }
+        return { results: [] };
+      },
+    });
+
+    const res = await handleDriverApi(request('/api/driver/v1/shifts/sh_123/route', {
+      headers: { authorization: 'Bearer valid-token' },
+    }), { DB: db });
+
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).reason, 'dispatch_reordered');
+  });
+
   test('stores authenticated pickup proof against the assigned route task', async () => {
     const db = fakeDb({
       first: (call) => {
