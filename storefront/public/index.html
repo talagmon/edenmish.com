@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <title>EdenMish | משלוחים חכמים בגוש דן</title>
-<meta name="app-version" content="v0.28.0(293096)">
+<meta name="app-version" content="v0.30.1(293658)">
 <meta name="description" content="EdenMish - משלוחים חכמים בגוש דן. טכנולוגיה מתקדמת, שירות אישי ומעקב חי. הזמינו שליח עכשיו."/>
 <link rel="canonical" href="https://edenmish.com/"/>
 <meta property="og:type" content="website"/>
@@ -25,8 +25,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="/assets/styles.css?v=0.28.0-293096-a8d8b91"/>
+<link rel="stylesheet" href="/assets/styles.css?v=0.30.1-293658-43a4044"/>
 <script src="/assets/analytics.js" defer></script>
+<script src="/assets/service-areas.js" defer></script>
 <link rel="icon" href="/assets/favicon.ico"/>
 <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"/>
 <meta name="theme-color" content="#8B5CF6"/>
@@ -119,8 +120,8 @@ html.eden-a11y-motion *,html.eden-a11y-motion *::before,html.eden-a11y-motion *:
 <a class="home-nav-link home-nav-link--active font-body-md text-body-md font-bold transition-colors duration-200" href="/">בית</a>
 <a class="home-nav-link font-body-md text-body-md transition-colors duration-200" href="/booking.html">שירותים</a>
 <a class="home-nav-link font-body-md text-body-md transition-colors duration-200" href="/track.html">מעקב משלוחים</a>
+<a class="home-nav-link font-body-md text-body-md transition-colors duration-200" href="/business">לעסקים</a>
 <a class="home-nav-link font-body-md text-body-md transition-colors duration-200" href="/about.html">אודות</a>
-<a class="home-nav-link home-nav-link--danger font-body-md text-body-md font-bold transition-colors duration-200" href="/cancel.html">ביטול עסקה</a>
 </nav>
 <a href="/booking.html" class="home-nav-cta px-5 md:px-6 py-2 rounded-xl font-label-bold active:scale-95 transition-transform">
 שלחו עכשיו
@@ -159,6 +160,9 @@ html.eden-a11y-motion *,html.eden-a11y-motion *::before,html.eden-a11y-motion *:
 עקבו אחרי משלוח
 </a>
 </div>
+<p class="home-slogan-signature">
+תזמינו בדקה. תשכחו מהדאגה.
+</p>
 <article class="home-live-card text-right" aria-label="דוגמה לסטטוס משלוח חי">
 <div class="home-live-card__top flex items-center justify-between gap-4">
 <div>
@@ -189,6 +193,7 @@ html.eden-a11y-motion *,html.eden-a11y-motion *::before,html.eden-a11y-motion *:
 <div class="home-progress-line"></div>
 <div class="home-progress-step"><span></span><small>נמסר</small></div>
 </div>
+<p class="home-live-slogan">רואים הכול. סומכים על הכול.</p>
 <a href="/track.html" class="home-live-track flex items-center justify-center gap-2"><span class="material-symbols-outlined" aria-hidden="true">near_me</span>עקבו אחרי משלוח</a>
 </article>
 </div>
@@ -241,51 +246,96 @@ html.eden-a11y-motion *,html.eden-a11y-motion *::before,html.eden-a11y-motion *:
 </article>
 </div>
 </div>
+<p class="home-slogan-band">מהזמנה עד מסירה <span aria-hidden="true">—</span> אתם בשליטה</p>
 </section>
 <!-- Service Areas Section -->
-<section class="home-section home-service-areas py-stack-lg relative">
-<div class="service-areas-layout px-gutter-desktop max-w-container-max mx-auto grid grid-cols-1 lg:grid-cols-2 gap-stack-lg items-start">
-<div class="service-areas-map-slot order-2 lg:order-1">
-<div class="service-areas-map h-[400px] rounded-3xl overflow-hidden glass-card shadow-2xl relative">
-<div class="absolute inset-0 bg-primary/5 mix-blend-overlay"></div>
-<video class="w-full h-full object-cover" autoplay muted loop playsinline preload="metadata" aria-label="רשת המשלוחים החכמה של EdenMish בגוש דן">
-<source src="/assets/edenmish-v0.mp4" type="video/mp4"/>
-</video>
-<div class="absolute top-4 left-4 glass-card px-4 py-2 rounded-full flex items-center gap-2">
-<span class="w-2 h-2 rounded-full bg-success-mint animate-pulse"></span>
-<span class="text-label-sm text-on-surface font-label-bold">שירות פעיל כעת</span>
-</div>
-</div>
-</div>
-<div class="service-areas-content order-1 lg:order-2 text-right">
-<div class="service-areas-intro">
-<h2 class="font-headline-lg text-headline-lg text-on-surface mb-stack-md">אזורי שירות</h2>
-<p class="font-body-lg text-body-lg text-on-surface-variant mb-stack-lg">
-אנחנו מתמקדים במטרופולין גוש דן כדי להבטיח את זמני המשלוח המהירים ביותר בשוק. שירות אקספרס ופתרונות לוגיסטיים בתוך העיר.
+<section class="home-section home-service-areas py-stack-lg px-gutter-mobile md:px-gutter-desktop" aria-labelledby="service-areas-title">
+<div class="service-areas-shell glass-card max-w-container-max mx-auto">
+<header class="service-areas-intro text-center">
+<span class="service-areas-status">
+<span class="service-areas-status__dot" aria-hidden="true"></span>
+שירות פעיל כעת
+</span>
+<h2 id="service-areas-title" class="font-display-lg text-headline-lg md:text-display-lg text-on-surface">אזורי שירות</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant">
+21 ערים במטרופולין גוש דן, מחוברות לרשת משלוחים אחת מהירה ומדויקת.
 </p>
+</header>
+<div class="service-areas-switch" role="tablist" aria-label="תצוגת אזורי השירות">
+<button id="service-areas-map-tab" class="service-areas-switch__button is-active" type="button" role="tab" aria-selected="true" aria-controls="service-areas-map-panel" data-service-view="map">
+<span class="material-symbols-outlined" aria-hidden="true">hub</span>
+מפה
+</button>
+<button id="service-areas-list-tab" class="service-areas-switch__button" type="button" role="tab" aria-selected="false" aria-controls="service-areas-list-panel" data-service-view="list">
+<span class="material-symbols-outlined" aria-hidden="true">format_list_bulleted</span>
+כל 21 הערים
+</button>
 </div>
-<div class="service-areas-cities grid grid-cols-2 md:grid-cols-3 gap-2" aria-label="כל אזורי השירות של EdenMish">
-<div class="glass-card p-4 rounded-xl flex items-center gap-2 border-r-4 border-primary"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface font-bold">תל אביב-יפו</span></div>
-<div class="glass-card p-4 rounded-xl flex items-center gap-2 border-r-4 border-secondary"><span class="w-2 h-2 rounded-full bg-secondary"></span><span class="text-on-surface font-bold">רמת גן</span></div>
-<div class="glass-card p-4 rounded-xl flex items-center gap-2 border-r-4 border-tertiary"><span class="w-2 h-2 rounded-full bg-tertiary"></span><span class="text-on-surface font-bold">גבעתיים</span></div>
-<div class="glass-card p-4 rounded-xl flex items-center gap-2 border-r-4 border-primary"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface font-bold">בני ברק</span></div>
-<div class="glass-card p-4 rounded-xl flex items-center gap-2 border-r-4 border-secondary"><span class="w-2 h-2 rounded-full bg-secondary"></span><span class="text-on-surface font-bold">הרצליה</span></div>
-<div class="glass-card p-4 rounded-xl flex items-center gap-2 border-r-4 border-tertiary"><span class="w-2 h-2 rounded-full bg-tertiary"></span><span class="text-on-surface font-bold">רמת השרון</span></div>
-<div class="glass-card p-4 rounded-xl flex items-center gap-2 border-r-4 border-primary"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface font-bold">חולון</span></div>
-<div class="glass-card p-4 rounded-xl flex items-center gap-2 border-r-4 border-secondary"><span class="w-2 h-2 rounded-full bg-secondary"></span><span class="text-on-surface font-bold">בת ים</span></div>
-<div class="glass-card p-4 rounded-xl flex items-center gap-2 border-r-4 border-tertiary"><span class="w-2 h-2 rounded-full bg-tertiary"></span><span class="text-on-surface font-bold">קריית אונו</span></div>
-<div class="glass-card p-4 rounded-xl flex items-center gap-2 border-r-4 border-primary"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface font-bold">גבעת שמואל</span></div>
-<div class="glass-card p-4 rounded-xl flex items-center gap-2 border-r-4 border-secondary"><span class="w-2 h-2 rounded-full bg-secondary"></span><span class="text-on-surface font-bold">אזור</span></div>
-<div class="glass-card p-4 rounded-xl flex items-center gap-2 border-r-4 border-tertiary"><span class="w-2 h-2 rounded-full bg-tertiary"></span><span class="text-on-surface font-bold">גני תקווה</span></div>
-<div class="glass-card p-4 rounded-xl flex items-center gap-2 border-r-4 border-primary"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface font-bold">סביון</span></div>
-<div class="glass-card p-4 rounded-xl flex items-center gap-2 border-r-4 border-secondary"><span class="w-2 h-2 rounded-full bg-secondary"></span><span class="text-on-surface font-bold">אור יהודה</span></div>
-<div class="glass-card p-4 rounded-xl flex items-center gap-2 border-r-4 border-tertiary"><span class="w-2 h-2 rounded-full bg-tertiary"></span><span class="text-on-surface font-bold">ראשון לציון</span></div>
-<div class="glass-card p-4 rounded-xl flex items-center gap-2 border-r-4 border-primary"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface font-bold">כפר סבא</span></div>
-<div class="glass-card p-4 rounded-xl flex items-center gap-2 border-r-4 border-secondary"><span class="w-2 h-2 rounded-full bg-secondary"></span><span class="text-on-surface font-bold">רעננה</span></div>
-<div class="glass-card p-4 rounded-xl flex items-center gap-2 border-r-4 border-tertiary"><span class="w-2 h-2 rounded-full bg-tertiary"></span><span class="text-on-surface font-bold">פתח תקווה</span></div>
-<div class="glass-card p-4 rounded-xl flex items-center gap-2 border-r-4 border-primary"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface font-bold">הוד השרון</span></div>
-<div class="glass-card p-4 rounded-xl flex items-center gap-2 border-r-4 border-secondary"><span class="w-2 h-2 rounded-full bg-secondary"></span><span class="text-on-surface font-bold">רמלה</span></div>
-<div class="glass-card p-4 rounded-xl flex items-center gap-2 border-r-4 border-tertiary"><span class="w-2 h-2 rounded-full bg-tertiary"></span><span class="text-on-surface font-bold">לוד</span></div>
+<div class="service-areas-stage">
+<div id="service-areas-map-panel" class="service-areas-panel service-areas-panel--map" role="tabpanel" aria-labelledby="service-areas-map-tab">
+<img class="service-orbit-art" src="/assets/edenmish-city-orbit.webp" alt="" width="1536" height="1024" loading="lazy" decoding="async"/>
+<div class="service-orbit-selection" aria-live="polite">
+<span class="service-orbit-selection__eyebrow">אזור שירות פעיל</span>
+<strong id="service-orbit-selected-city">תל אביב-יפו</strong>
+</div>
+<div class="service-orbit-points" role="group" aria-label="בחרו עיר על מפת אזורי השירות">
+<button class="service-orbit-point is-featured is-selected" type="button" data-city="תל אביב-יפו" aria-pressed="true" style="--city-x:19%;--city-y:50%;--city-depth:1.12"><span>תל אביב-יפו</span></button>
+<button class="service-orbit-point is-featured" type="button" data-city="רמת גן" aria-pressed="false" style="--city-x:72%;--city-y:43%;--city-depth:1.08"><span>רמת גן</span></button>
+<button class="service-orbit-point is-featured" type="button" data-city="גבעתיים" aria-pressed="false" style="--city-x:79%;--city-y:58%;--city-depth:1.02"><span>גבעתיים</span></button>
+<button class="service-orbit-point" type="button" data-city="בני ברק" aria-pressed="false" style="--city-x:70%;--city-y:65%;--city-depth:.94"><span>בני ברק</span></button>
+<button class="service-orbit-point is-featured" type="button" data-city="הרצליה" aria-pressed="false" style="--city-x:29%;--city-y:24%;--city-depth:.98"><span>הרצליה</span></button>
+<button class="service-orbit-point" type="button" data-city="רמת השרון" aria-pressed="false" style="--city-x:42%;--city-y:28%;--city-depth:.84"><span>רמת השרון</span></button>
+<button class="service-orbit-point is-featured" type="button" data-city="חולון" aria-pressed="false" style="--city-x:35%;--city-y:71%;--city-depth:1.04"><span>חולון</span></button>
+<button class="service-orbit-point" type="button" data-city="בת ים" aria-pressed="false" style="--city-x:23%;--city-y:66%;--city-depth:.88"><span>בת ים</span></button>
+<button class="service-orbit-point" type="button" data-city="קריית אונו" aria-pressed="false" style="--city-x:64%;--city-y:53%;--city-depth:.82"><span>קריית אונו</span></button>
+<button class="service-orbit-point" type="button" data-city="גבעת שמואל" aria-pressed="false" style="--city-x:68%;--city-y:48%;--city-depth:.78"><span>גבעת שמואל</span></button>
+<button class="service-orbit-point" type="button" data-city="אזור" aria-pressed="false" style="--city-x:44%;--city-y:68%;--city-depth:.76"><span>אזור</span></button>
+<button class="service-orbit-point" type="button" data-city="גני תקווה" aria-pressed="false" style="--city-x:62%;--city-y:61%;--city-depth:.86"><span>גני תקווה</span></button>
+<button class="service-orbit-point" type="button" data-city="סביון" aria-pressed="false" style="--city-x:74%;--city-y:55%;--city-depth:.72"><span>סביון</span></button>
+<button class="service-orbit-point" type="button" data-city="אור יהודה" aria-pressed="false" style="--city-x:56%;--city-y:65%;--city-depth:.8"><span>אור יהודה</span></button>
+<button class="service-orbit-point" type="button" data-city="ראשון לציון" aria-pressed="false" style="--city-x:41%;--city-y:80%;--city-depth:.9"><span>ראשון לציון</span></button>
+<button class="service-orbit-point" type="button" data-city="כפר סבא" aria-pressed="false" style="--city-x:68%;--city-y:23%;--city-depth:.88"><span>כפר סבא</span></button>
+<button class="service-orbit-point" type="button" data-city="רעננה" aria-pressed="false" style="--city-x:57%;--city-y:27%;--city-depth:.78"><span>רעננה</span></button>
+<button class="service-orbit-point" type="button" data-city="פתח תקווה" aria-pressed="false" style="--city-x:82%;--city-y:40%;--city-depth:.92"><span>פתח תקווה</span></button>
+<button class="service-orbit-point" type="button" data-city="הוד השרון" aria-pressed="false" style="--city-x:62%;--city-y:35%;--city-depth:.74"><span>הוד השרון</span></button>
+<button class="service-orbit-point" type="button" data-city="רמלה" aria-pressed="false" style="--city-x:52%;--city-y:79%;--city-depth:.72"><span>רמלה</span></button>
+<button class="service-orbit-point" type="button" data-city="לוד" aria-pressed="false" style="--city-x:62%;--city-y:75%;--city-depth:.82"><span>לוד</span></button>
+</div>
+<button class="service-areas-open-list" type="button" data-service-view="list">
+<span class="material-symbols-outlined" aria-hidden="true">search</span>
+מצאו את העיר שלכם
+</button>
+</div>
+<div id="service-areas-list-panel" class="service-areas-panel service-areas-panel--list" role="tabpanel" aria-labelledby="service-areas-list-tab" hidden>
+<div class="service-city-search">
+<span class="material-symbols-outlined" aria-hidden="true">search</span>
+<label class="sr-only" for="service-city-search-input">חיפוש עיר</label>
+<input id="service-city-search-input" type="search" inputmode="search" autocomplete="off" placeholder="חיפוש עיר"/>
+</div>
+<div class="service-city-directory" aria-label="כל אזורי השירות של EdenMish">
+<button type="button" data-city-row="תל אביב-יפו"><span>תל אביב-יפו</span><span class="material-symbols-outlined" aria-hidden="true">location_on</span></button>
+<button type="button" data-city-row="רמת גן"><span>רמת גן</span><span class="material-symbols-outlined" aria-hidden="true">location_on</span></button>
+<button type="button" data-city-row="גבעתיים"><span>גבעתיים</span><span class="material-symbols-outlined" aria-hidden="true">location_on</span></button>
+<button type="button" data-city-row="בני ברק"><span>בני ברק</span><span class="material-symbols-outlined" aria-hidden="true">location_on</span></button>
+<button type="button" data-city-row="הרצליה"><span>הרצליה</span><span class="material-symbols-outlined" aria-hidden="true">location_on</span></button>
+<button type="button" data-city-row="רמת השרון"><span>רמת השרון</span><span class="material-symbols-outlined" aria-hidden="true">location_on</span></button>
+<button type="button" data-city-row="חולון"><span>חולון</span><span class="material-symbols-outlined" aria-hidden="true">location_on</span></button>
+<button type="button" data-city-row="בת ים"><span>בת ים</span><span class="material-symbols-outlined" aria-hidden="true">location_on</span></button>
+<button type="button" data-city-row="קריית אונו"><span>קריית אונו</span><span class="material-symbols-outlined" aria-hidden="true">location_on</span></button>
+<button type="button" data-city-row="גבעת שמואל"><span>גבעת שמואל</span><span class="material-symbols-outlined" aria-hidden="true">location_on</span></button>
+<button type="button" data-city-row="אזור"><span>אזור</span><span class="material-symbols-outlined" aria-hidden="true">location_on</span></button>
+<button type="button" data-city-row="גני תקווה"><span>גני תקווה</span><span class="material-symbols-outlined" aria-hidden="true">location_on</span></button>
+<button type="button" data-city-row="סביון"><span>סביון</span><span class="material-symbols-outlined" aria-hidden="true">location_on</span></button>
+<button type="button" data-city-row="אור יהודה"><span>אור יהודה</span><span class="material-symbols-outlined" aria-hidden="true">location_on</span></button>
+<button type="button" data-city-row="ראשון לציון"><span>ראשון לציון</span><span class="material-symbols-outlined" aria-hidden="true">location_on</span></button>
+<button type="button" data-city-row="כפר סבא"><span>כפר סבא</span><span class="material-symbols-outlined" aria-hidden="true">location_on</span></button>
+<button type="button" data-city-row="רעננה"><span>רעננה</span><span class="material-symbols-outlined" aria-hidden="true">location_on</span></button>
+<button type="button" data-city-row="פתח תקווה"><span>פתח תקווה</span><span class="material-symbols-outlined" aria-hidden="true">location_on</span></button>
+<button type="button" data-city-row="הוד השרון"><span>הוד השרון</span><span class="material-symbols-outlined" aria-hidden="true">location_on</span></button>
+<button type="button" data-city-row="רמלה"><span>רמלה</span><span class="material-symbols-outlined" aria-hidden="true">location_on</span></button>
+<button type="button" data-city-row="לוד"><span>לוד</span><span class="material-symbols-outlined" aria-hidden="true">location_on</span></button>
+</div>
+<p class="service-city-empty" hidden>לא מצאנו עיר בשם הזה. אפשר לנסות כתיב אחר.</p>
 </div>
 </div>
 </div>
@@ -294,25 +344,26 @@ html.eden-a11y-motion *,html.eden-a11y-motion *::before,html.eden-a11y-motion *:
 <section class="home-section home-benefits py-stack-lg px-gutter-mobile md:px-gutter-desktop max-w-container-max mx-auto">
 <div class="text-center mb-stack-lg">
 <h2 class="font-display-lg text-headline-lg md:text-display-lg text-on-surface">למה לבחור ב-EdenMish?</h2>
+<p class="home-benefits-slogan">המשלוח בידיים בטוחות</p>
 </div>
 <div class="grid grid-cols-1 md:grid-cols-3 gap-stack-lg">
 <div class="text-center p-stack-lg space-y-stack-sm group">
 <div class="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-on-primary transition-all duration-300">
-<span class="material-symbols-outlined text-4xl" style="font-variation-settings: 'opsz' 48;">bolt</span>
+<span class="home-benefit-number" aria-hidden="true">1</span>
 </div>
 <h3 class="font-headline-md text-headline-md text-on-surface">מהירות וזריזות</h3>
 <p class="font-body-md text-body-md text-on-surface-variant">זמן ממוצע למשלוח פנים-עירוני של 45 דקות בלבד.</p>
 </div>
 <div class="text-center p-stack-lg space-y-stack-sm group">
 <div class="mx-auto w-16 h-16 rounded-full bg-secondary/10 flex items-center justify-center text-secondary group-hover:bg-secondary group-hover:text-on-secondary transition-all duration-300">
-<span class="material-symbols-outlined text-4xl" style="font-variation-settings: 'opsz' 48;">person_pin</span>
+<span class="home-benefit-number" aria-hidden="true">2</span>
 </div>
 <h3 class="font-headline-md text-headline-md text-on-surface">שירות אישי</h3>
 <p class="font-body-md text-body-md text-on-surface-variant">שירות לקוחות אנושי וזמין, ללא בוטים מתישים.</p>
 </div>
 <div class="text-center p-stack-lg space-y-stack-sm group">
 <div class="mx-auto w-16 h-16 rounded-full bg-tertiary/10 flex items-center justify-center text-tertiary group-hover:bg-tertiary group-hover:text-on-tertiary transition-all duration-300">
-<span class="material-symbols-outlined text-4xl" style="font-variation-settings: 'opsz' 48;">radar</span>
+<span class="home-benefit-number" aria-hidden="true">3</span>
 </div>
 <h3 class="font-headline-md text-headline-md text-on-surface">מעקב מדויק</h3>
 <p class="font-body-md text-body-md text-on-surface-variant">דיוק של מטרים בודדים על המפה בזמן אמת.</p>
@@ -322,8 +373,8 @@ html.eden-a11y-motion *,html.eden-a11y-motion *::before,html.eden-a11y-motion *:
 <!-- Behind the Scenes -->
 <section id="behind-the-scenes" class="home-section home-story py-stack-lg px-gutter-mobile md:px-gutter-desktop max-w-container-max mx-auto" aria-labelledby="behind-the-scenes-title">
 <div class="glass-card rounded-3xl overflow-hidden grid grid-cols-1 md:grid-cols-2">
-<div class="relative overflow-hidden bg-surface-container-low">
-<img class="w-full h-full object-cover" src="/assets/edenmish-security-review.webp" alt="EdenMish Security Review: פרטיות, גישה ותשלומים" loading="lazy"/>
+<div class="relative overflow-hidden" style="background:#020821">
+<img class="w-full h-full object-contain" src="/assets/edenmish-security-review.webp" alt="EdenMish Security Review: פרטיות, גישה ותשלומים" loading="lazy"/>
 <div class="absolute inset-0 bg-gradient-to-t from-surface-dim via-transparent to-transparent"></div>
 </div>
 <div class="p-stack-lg flex flex-col items-start justify-center text-right">
@@ -355,6 +406,9 @@ EdenMish היא מערכת תפעולית שמחברת בין הזמנה, תמח
 <section class="home-section home-final-cta py-stack-lg px-gutter-mobile md:px-gutter-desktop">
 <div class="home-final-cta-shell max-w-container-max mx-auto glass-card p-stack-lg overflow-hidden relative">
 <div class="relative z-10 text-center space-y-stack-md py-8">
+<p class="home-slogan-signature home-slogan-signature--center">
+הזמנה ראשונה בהנחה. שירות שיגרום לכם לחזור.
+</p>
 <h2 class="font-display-lg text-headline-lg md:text-display-lg text-on-surface">מוכנים לשלוח?</h2>
 <p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl mx-auto">
 הצטרפו ללקוחות הראשונים של EdenMish ותיהנו מהטבת השקה מיוחדת על המשלוח הראשון.
@@ -412,7 +466,7 @@ EdenMish היא מערכת תפעולית שמחברת בין הזמנה, תמח
 <div class="flex items-center justify-center gap-2 mt-3 opacity-60">
   <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener"><img src="/assets/se-footer.png" class="w-7 h-7 rounded-full" alt="Six Elements Altiora"></a>
   <span class="text-label-sm">פותח על ידי <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Six Elements Altiora</a> · <a href="https://talagmon.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Tal Agmon</a></span>
-<span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.28.0(293096)</span>
+<span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.30.1(293658)</span>
 </div>
 </footer>
 <script>
