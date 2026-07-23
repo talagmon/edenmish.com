@@ -44,6 +44,7 @@ const held = {
   token: 'trk_abc',
   status: 'failed',
   retained_by_driver: 'hold_for_redelivery',
+  email_verified: 1, // OTP cleared: an address change is a sensitive write
   pickup_city: 'תל אביב',
   when_date: null,
   when_hour: null,
@@ -73,6 +74,15 @@ describe('POST /api/orders/:token/redelivery-address', () => {
     assert.equal(staged.dropoff_city, 'גבעתיים');
     assert.equal(staged.fee, 25);
     assert.ok(staged.submitted_at > 0);
+  });
+
+  test('requires OTP verification before an address change is accepted', async () => {
+    const unverified = { ...held, email_verified: 0 };
+    const db = redeliveryDb(unverified);
+    const res = await worker.fetch(request('trk_abc', newAddress), { DB: db });
+    assert.equal(res.status, 403);
+    assert.equal((await res.json()).error, 'otp_required');
+    assert.equal(db.state.updated, null, 'an unverified caller must not stage an address');
   });
 
   test('rejects an order that is not awaiting redelivery', async () => {
@@ -111,29 +121,42 @@ describe('POST /api/orders/:token/redelivery-address', () => {
 });
 
 // ---- Ops release of a paid redelivery ----
-function releaseDb(order) {
-  const state = { released: null };
-  return {
+function releaseDb(order, chargeStatus = 'paid') {
+  const state = {
+    released: null,
+    charge: chargeStatus ? { id: 'rdl_test', order_id: order?.id, status: chargeStatus } : null,
+  };
+  const DB = {
     state,
     prepare(sql) {
       const s = sql.replace(/\s+/g, ' ').trim();
-      return {
-        bind(...args) {
-          return {
-            async first() {
-              if (s.startsWith('SELECT * FROM orders WHERE id')) return order;
-              return null;
-            },
-            async run() {
-              if (s.startsWith('UPDATE orders SET dropoff')) state.released = { sql: s, args };
-              return { meta: { changes: 1 } };
-            },
-            async all() { return { results: [] }; },
-          };
+      const statement = {
+        args: [],
+        bind(...args) { this.args = args; return this; },
+        async first() {
+          if (s.startsWith('SELECT * FROM orders WHERE id')) return order;
+          if (s.startsWith('SELECT * FROM redelivery_charges WHERE order_id')) return state.charge;
+          return null;
         },
+        async run() {
+          if (s.startsWith('UPDATE orders SET dropoff')) {
+            state.released = { sql: s, args: this.args };
+            order.retained_by_driver = 'redelivery';
+          }
+          if (s.startsWith('UPDATE redelivery_charges SET status')) state.charge.status = 'released';
+          return { meta: { changes: 1 } };
+        },
+        async all() { return { results: [] }; },
       };
+      return statement;
+    },
+    async batch(statements) {
+      const results = [];
+      for (const statement of statements) results.push(await statement.run());
+      return results;
     },
   };
+  return DB;
 }
 
 async function opsRequest(id) {
@@ -173,6 +196,14 @@ describe('POST /api/ops/orders/:id/release-redelivery', () => {
     const res = await worker.fetch(await opsRequest(9001), opsEnv(db));
     assert.equal(res.status, 409);
     assert.equal((await res.json()).error, 'not_awaiting_redelivery');
+    assert.equal(db.state.released, null);
+  });
+
+  test('refuses to release a corrected address before Shopify payment is verified', async () => {
+    const db = releaseDb({ ...staged }, 'link_sent');
+    const res = await worker.fetch(await opsRequest(9001), opsEnv(db));
+    assert.equal(res.status, 409);
+    assert.equal((await res.json()).error, 'redelivery_payment_required');
     assert.equal(db.state.released, null);
   });
 

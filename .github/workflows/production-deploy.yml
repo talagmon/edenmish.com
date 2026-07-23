@@ -60,6 +60,7 @@ jobs:
             echo "  wrangler d1 execute edenmish --remote --file=./migrations/025_delivery_failure_retained_package.sql"
             echo "  wrangler d1 execute edenmish --remote --file=./migrations/026_redelivery_pending_address.sql"
             echo "  wrangler d1 execute edenmish --remote --file=./migrations/027_retained_failure_notifications.sql"
+            echo "  wrangler d1 execute edenmish --remote --file=./migrations/028_redelivery_charges.sql"
             echo ""
             echo "See worker/MIGRATIONS.md for verification queries."
             exit 1

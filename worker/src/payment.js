@@ -7,7 +7,14 @@
 // The rest of the app calls createCharge() / settleOrder() and never knows
 // which processor is behind them. Swapping to Mesh = rewrite this file only.
 
-import { createDraftOrder, createWalletDraftOrder, verifyShopifyWebhook, parseShopifyOrderWebhook, parseShopifyRefundWebhook } from './integrations.js';
+import {
+  createDraftOrder,
+  createRedeliveryDraftOrder,
+  createWalletDraftOrder,
+  verifyShopifyWebhook,
+  parseShopifyOrderWebhook,
+  parseShopifyRefundWebhook,
+} from './integrations.js';
 
 // createCharge(env, order, priceNis) → { checkoutUrl, mode, processorRef } | null
 // - 'immediate' mode: returns a Shopify checkout URL; payment is captured at checkout.
@@ -18,7 +25,7 @@ import { createDraftOrder, createWalletDraftOrder, verifyShopifyWebhook, parseSh
 //   tracking page, emails, and ops dashboard. `priceNis` is always the FINAL
 //   (post-discount) amount the customer pays; the Shopify Draft Order line item
 //   is set directly to this price.
-export async function createCharge(env, order, priceNis) {
+export async function createCharge(env, order, priceNis, options = {}) {
   const mode = env.PAYMENT_MODE === 'preauth' ? 'preauth' : 'immediate';
 
   if (mode === 'preauth' && env.MESH_API_KEY) {
@@ -28,7 +35,9 @@ export async function createCharge(env, order, priceNis) {
   }
 
   // Immediate capture via Shopify Draft Order + PayPlus app.
-  const draft = await createDraftOrder(env, order, priceNis);
+  const draft = options.purpose === 'redelivery'
+    ? await createRedeliveryDraftOrder(env, order, priceNis, options.reference)
+    : await createDraftOrder(env, order, priceNis);
   if (!draft) return null;
   // Force Hebrew checkout. Shopify respects ?locale=he on the invoice URL (Hebrew
   // must be a published language in Shopify admin → Settings → Languages).

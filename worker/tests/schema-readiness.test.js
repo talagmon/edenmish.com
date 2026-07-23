@@ -10,10 +10,11 @@ const ready = (overrides = {}) => ({
   migration_019_items: 3,
   migration_023_items: 3,
   migration_027_items: 1,
+  migration_028_items: 2,
   ...overrides,
 });
 
-test('accepts a remote schema with driver migrations 014 through 027', () => {
+test('accepts a remote schema with driver migrations 014 through 028', () => {
   assert.deepEqual(validateDriverSchemaSnapshot(ready()), []);
 });
 
@@ -26,6 +27,7 @@ test('reports every incomplete driver migration without mutating D1', () => {
     migration_019_items: 1,
     migration_023_items: 1,
     migration_027_items: 0,
+    migration_028_items: 0,
   })), [
     'migration_014_items: expected 10, received 8.',
     'migration_015_columns: expected 4, received 1.',
@@ -34,6 +36,7 @@ test('reports every incomplete driver migration without mutating D1', () => {
     'migration_019_items: expected 3, received 1.',
     'migration_023_items: expected 3, received 1.',
     'migration_027_items: expected 1, received 0.',
+    'migration_028_items: expected 2, received 0.',
   ]);
 });
 
