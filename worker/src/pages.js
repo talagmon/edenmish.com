@@ -285,6 +285,18 @@ function render(fails){
   var fp=(fails&&fails.length)?'<div class="qbucket"><div class="qhead"><span class="qhead-label" style="color:#C0392B">בעיות בשליחת הודעות</span><span class="qhead-count">'+fails.length+'</span></div><div class="qcards">'+fails.map(function(f){return '<div class="ocard" style="border-color:rgba(192,57,43,.3)"><div class="ocard-top"><span class="badge" style="background:#C0392B">'+esc(f.channel||'email')+'</span><b>'+(f.order_id?'#'+f.order_id:'—')+'</b><span class="muted" style="margin-inline-start:auto;font-size:.72rem">'+fmt(f.created_at)+'</span></div><div class="muted">'+esc(f.template||'')+(f.recipient?' · '+esc(maskRecip(f.recipient)):'')+'</div><div class="stale" style="margin-top:4px">'+esc(f.error||'שגיאה לא ידועה')+'</div></div>';}).join('')+'</div></div>':'';
   document.getElementById('app').innerHTML=toolbar+sections+fp;
 }
+// A failed delivery whose package is still with the driver. Surfaces it in the board so a held
+// package cannot go dark, and says what Ops must do: a return is already on its way back and
+// needs nothing; a hold is waiting on a corrected destination and the owner's fee payment.
+function retainedBanner(o){
+  var hold=o.retained_by_driver==='hold_for_redelivery';
+  var fee=Number(o.retry_fee_suggested)||0;
+  var msg=hold
+    ?'החבילה אצל השליח וממתינה ליעד חדש. שלחו למזמין קישור לעדכון כתובת ותשלום'+(fee?' (מוצע: '+fee+' ₪'+(o.retry_fee_zone?' · אזור '+o.retry_fee_zone:'')+')':'')+'. ללא מענה תוחזר אוטומטית לנקודת האיסוף תוך 24 שעות.'
+    :'החבילה אצל השליח ומוחזרת לנקודת האיסוף. אין צורך בפעולה.';
+  var color=hold?'#dfb7ff':'#91d3c8';
+  return '<div style="margin-top:6px;padding:6px 10px;background:rgba(147,211,200,.08);border:1px solid '+color+'55;border-radius:8px;font-size:.78rem;color:'+color+'"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">'+(hold?'inventory_2':'assignment_return')+'</span> '+esc(msg)+'</div>';
+}
 function card(o){
   var s=o.status,id=o.id,isLive=LIVE.indexOf(s)>=0,isActive=o.id===activeId;
   var h='<div class="glass-card ocard'+(isActive?' ocard-active':'')+(isLive?' ocard-live':'')+'" style="border-radius:16px;margin:0">';
@@ -296,6 +308,7 @@ function card(o){
   if(o.when_text)h+='<span class="chip">'+esc(o.when_text)+'</span>';
   if(o.payment_status&&o.payment_status!=='none')h+='<span class="chip chip-pay">'+esc(o.payment_status)+'</span>';
   h+='</div>';
+  if(o.retained_by_driver)h+=retainedBanner(o);
   if(o.notes)h+='<div style="margin-top:6px;padding:6px 10px;background:rgba(251,191,36,.1);border-radius:8px;font-size:.78rem;color:#FBBF24"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">sticky_note_2</span> '+esc(o.notes)+'</div>';
   h+='<div class="ocard-meta">'+fmt(o.created_at)+'</div>';
   h+=actions(o);if(notifOrderId===id)h+=notifPanel();h+='</div>';

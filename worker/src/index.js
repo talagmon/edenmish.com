@@ -1,4 +1,4 @@
-import { createOrder, getOrderByToken, getOrderById, getOrderByShopifyOrderId, listOrders, setOrderStatus, setOrderRating, getStatusHistory, addGps, latestGps, getGpsTrail, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof, listRecentNotificationFailures, listNotificationsForOrder, createCancellationRequest, listCancellationRequests, runRetentionCleanup } from './db.js';
+import { createOrder, getOrderByToken, getOrderById, getOrderByShopifyOrderId, listOrders, setOrderStatus, setOrderRating, getStatusHistory, addGps, latestGps, getGpsTrail, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof, listRecentNotificationFailures, listNotificationsForOrder, createCancellationRequest, listCancellationRequests, runRetentionCleanup, runHeldPackageAutoReturn } from './db.js';
 import { priceOrder, retryFee, ZONE_CITIES, DEFAULT_PRICING_RULES } from './pricing.js';
 import { makeSession, checkSession, getCookie, genOtp, hashOtp, timingSafeEqual } from './integrations.js';
 import { createCharge, createWalletCharge, verifyShopifyWebhook, parseShopifyOrderWebhook, parseShopifyRefundWebhook } from './payment.js';
@@ -1303,7 +1303,9 @@ export default {
     return new Response('Not found', { status: 404 });
   },
   async scheduled(event, env, ctx) {
-    const tasks = [processDeliveryNotificationOutbox(env)];
+    // Runs on every scheduled tick, not only the daily one, so a hold reverts to a return
+    // close to its 24h boundary rather than up to a day late.
+    const tasks = [processDeliveryNotificationOutbox(env), runHeldPackageAutoReturn(env.DB)];
     if (event.cron === '17 2 * * *') {
       tasks.push(runRetentionCleanup(env.DB), cleanupBusinessSecurity(env.DB));
     }

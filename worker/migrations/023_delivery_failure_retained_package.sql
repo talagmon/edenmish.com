@@ -16,6 +16,11 @@
 -- native cutover completes.
 ALTER TABLE orders ADD COLUMN retained_by_driver TEXT;
 
+-- When the package was retained (epoch ms). Drives the auto-return rule: a
+-- hold_for_redelivery with no corrected destination reverts to return_to_origin after 24h so
+-- an unpaid hold cannot ride around in a vehicle indefinitely.
+ALTER TABLE orders ADD COLUMN retained_at INTEGER;
+
 -- Dispatch reads this on every route sync, filtered to failed orders.
 CREATE INDEX IF NOT EXISTS idx_orders_retained_by_driver
   ON orders (retained_by_driver)

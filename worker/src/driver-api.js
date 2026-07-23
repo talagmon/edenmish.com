@@ -407,7 +407,7 @@ async function applyTaskEvent(env, eventType, task, order, orderId, payload = {}
       // the recipient never received it, and calling this 'delivered' would misreport the
       // order to Ops and on the customer timeline. Clearing the column also drops the order
       // from the next route, retiring the leg.
-      await env.DB.prepare('UPDATE orders SET retained_by_driver = NULL WHERE id = ?')
+      await env.DB.prepare('UPDATE orders SET retained_by_driver = NULL, retained_at = NULL WHERE id = ?')
         .bind(orderId).run();
       return { status: 'accepted', conflictType: null, transitioned: true };
     }
@@ -442,10 +442,11 @@ async function applyTaskEvent(env, eventType, task, order, orderId, payload = {}
   if (targetStatus === 'failed') {
     // Record whether the driver still has the package. Dispatch keeps a retained order
     // eligible and onboard so a return or redelivery leg can be routed; an alternate
-    // handoff clears it so the order settles as a normal failure.
-    fields.retained_by_driver = RETAINED_FAILURE_DISPOSITIONS.has(payload.disposition)
-      ? payload.disposition
-      : null;
+    // handoff clears it so the order settles as a normal failure. retained_at anchors the
+    // 24h auto-return.
+    const retained = RETAINED_FAILURE_DISPOSITIONS.has(payload.disposition);
+    fields.retained_by_driver = retained ? payload.disposition : null;
+    fields.retained_at = retained ? Date.now() : null;
   }
   await setOrderStatus(env.DB, orderId, targetStatus, fields);
   return { status: 'accepted', conflictType: null, transitioned: true };

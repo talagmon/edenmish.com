@@ -261,6 +261,21 @@ export async function listCancellationRequests(DB, limit = 100) {
 
 // Data-minimization schedule. Core order/payment records remain available for
 // accounting and legal claims; short-lived operational and security data does not.
+// A package held for redelivery reverts to a return once it has waited too long without a
+// corrected destination, so it is never carried around indefinitely waiting on an address or
+// a fee that never comes. Returns are dispatched without a payment gate, so this always
+// resolves the package rather than leaving it stuck. return_to_origin is left untouched — it
+// is already resolving.
+export async function runHeldPackageAutoReturn(DB, now = Date.now(), maxHoldMs = 24 * 60 * 60 * 1000) {
+  return DB.prepare(
+    `UPDATE orders SET retained_by_driver = 'return_to_origin', retained_at = ?
+     WHERE status = 'failed'
+       AND retained_by_driver = 'hold_for_redelivery'
+       AND retained_at IS NOT NULL
+       AND retained_at < ?`
+  ).bind(now, now - maxHoldMs).run();
+}
+
 export async function runRetentionCleanup(DB, now = Date.now()) {
   const day = 24 * 60 * 60 * 1000;
   const results = {};

@@ -752,10 +752,13 @@ describe('driver API v1', () => {
       return update.args;
     };
 
-    // The two retained dispositions record custody so dispatch keeps the order live.
-    assert.ok((await send('return_to_origin')).includes('return_to_origin'));
+    // The two retained dispositions record custody so dispatch keeps the order live, and
+    // timestamp it so the 24h auto-return can fire.
+    const returned = await send('return_to_origin');
+    assert.ok(returned.includes('return_to_origin'));
+    assert.ok(returned.some((value) => typeof value === 'number' && value > 0));
     assert.ok((await send('hold_for_redelivery')).includes('hold_for_redelivery'));
-    // An alternate handoff released the package, so custody is explicitly cleared.
+    // An alternate handoff released the package, so custody and its timestamp are cleared.
     assert.ok((await send('left_with_alternate')).includes(null));
   });
 
