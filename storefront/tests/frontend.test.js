@@ -367,6 +367,7 @@ describe('Frontend: SEO foundations', () => {
       'class="home-page ',
       'class="home-header ',
       'class="home-hero ',
+      'class="home-hero-backdrop ',
       'class="home-live-card ',
       'class="home-process ',
       'home-service-areas',
@@ -383,6 +384,7 @@ describe('Frontend: SEO foundations', () => {
       assertContains(html, deliveryState, `${deliveryState} live-delivery state`);
     }
     assertContains(html, 'src="/assets/edenmish-thank-you-bike.webp"', 'motorcycle courier hero artwork');
+    assertContains(html, 'src="/assets/edenmish-v0.mp4"', 'service-area logistics video');
     assertContains(styles, '.home-page {', 'homepage-only skin scope');
     assertContains(styles, '@media (max-width: 767px)', 'mobile presentation breakpoint');
     assertContains(styles, '.home-process-step:not(:last-child)::after', 'connected journey presentation');

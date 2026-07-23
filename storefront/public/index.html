@@ -133,6 +133,10 @@ html.eden-a11y-motion *,html.eden-a11y-motion *::before,html.eden-a11y-motion *:
 <div class="home-ambient home-ambient--two" aria-hidden="true"></div>
 <!-- Hero Section -->
 <section class="home-hero relative flex items-center px-gutter-mobile md:px-gutter-desktop max-w-container-max mx-auto">
+<div class="home-hero-backdrop absolute inset-0" aria-hidden="true">
+<img class="home-hero-backdrop__media w-full h-full object-cover" src="/assets/edenmish-thank-you-bike.webp" alt="" width="1792" height="1024" fetchpriority="high" decoding="async"/>
+</div>
+<div class="home-hero-backdrop__shade absolute inset-0" aria-hidden="true"></div>
 <div class="home-hero-grid grid grid-cols-1 lg:grid-cols-2 gap-stack-lg items-center w-full">
 <div class="home-hero-copy text-center lg:text-right space-y-stack-md z-10">
 <span class="home-eyebrow inline-flex items-center gap-2 px-4 py-2 rounded-full font-label-bold text-label-sm">
@@ -155,12 +159,7 @@ html.eden-a11y-motion *,html.eden-a11y-motion *::before,html.eden-a11y-motion *:
 עקבו אחרי משלוח
 </a>
 </div>
-</div>
-<div class="home-hero-visual relative flex justify-center items-center">
-<div class="home-visual-shell relative z-10 w-full overflow-hidden">
-<img class="home-visual-media w-full h-full object-cover" src="/assets/edenmish-thank-you-bike.webp" alt="שליח EdenMish על אופנוע בדרך מוארת בגוש דן" width="1792" height="1024" fetchpriority="high" decoding="async"/>
-<div class="home-visual-vignette absolute inset-0" aria-hidden="true"></div>
-<article class="home-live-card absolute text-right" aria-label="דוגמה לסטטוס משלוח חי">
+<article class="home-live-card text-right" aria-label="דוגמה לסטטוס משלוח חי">
 <div class="home-live-card__top flex items-center justify-between gap-4">
 <div>
 <div class="home-live-kicker flex items-center gap-2 font-label-bold text-label-sm"><span class="home-live-dot" aria-hidden="true"></span>משלוח חי</div>
@@ -193,6 +192,7 @@ html.eden-a11y-motion *,html.eden-a11y-motion *::before,html.eden-a11y-motion *:
 <a href="/track.html" class="home-live-track flex items-center justify-center gap-2"><span class="material-symbols-outlined" aria-hidden="true">near_me</span>עקבו אחרי משלוח</a>
 </article>
 </div>
+<div class="home-hero-visual relative" aria-hidden="true"></div>
 </div>
 </section>
 <!-- How It Works Section -->
@@ -248,7 +248,9 @@ html.eden-a11y-motion *,html.eden-a11y-motion *::before,html.eden-a11y-motion *:
 <div class="service-areas-map-slot order-2 lg:order-1">
 <div class="service-areas-map h-[400px] rounded-3xl overflow-hidden glass-card shadow-2xl relative">
 <div class="absolute inset-0 bg-primary/5 mix-blend-overlay"></div>
-<img class="w-full h-full object-cover" alt="מפה מסוגננת של תל אביב וגוש דן עם עורקים ירוקים וסמני לוגיסטיקה סגולים" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAk-tQEZYB3qdWgmwMVy_bvDgndr93ZU9TlU8WtqsbIJiZEunGdZ37d8dv9s5lz690p5e43PFGaGl2sSGZMy_2F7hUq-vwHDXIX8bf7b-11yNshuh2tNjXxk56G7O2V7qHQJpWJNwGtRsRD0j7QbFNLssXDQ4Yq9TtigSJsoW0bRHn2M4ylqHwDBMaO9TKdVRZUJqqDRpBxezftcodf1tPzfBEJOOoFvL0HxbQWAvOlsNbGIZdG73fk"/>
+<video class="w-full h-full object-cover" autoplay muted loop playsinline preload="metadata" aria-label="רשת המשלוחים החכמה של EdenMish בגוש דן">
+<source src="/assets/edenmish-v0.mp4" type="video/mp4"/>
+</video>
 <div class="absolute top-4 left-4 glass-card px-4 py-2 rounded-full flex items-center gap-2">
 <span class="w-2 h-2 rounded-full bg-success-mint animate-pulse"></span>
 <span class="text-label-sm text-on-surface font-label-bold">שירות פעיל כעת</span>

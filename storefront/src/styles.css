@@ -270,12 +270,37 @@
   }
 
   .home-hero {
+    overflow: hidden;
     min-height: 700px;
     padding-top: 52px;
     padding-bottom: 52px;
+    border: 1px solid rgba(209, 218, 255, 0.13);
+    border-radius: 32px;
+    background: #090d24;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 30px 90px rgba(0, 0, 0, 0.28);
+  }
+
+  .home-hero-backdrop {
+    z-index: 0;
+  }
+
+  .home-hero-backdrop__media {
+    object-position: 42% 58%;
+    transform: scale(1.02);
+  }
+
+  .home-hero-backdrop__shade {
+    z-index: 1;
+    background:
+      linear-gradient(90deg, rgba(9, 13, 36, 0.28) 0%, rgba(9, 13, 36, 0.46) 48%, rgba(9, 13, 36, 0.92) 100%),
+      linear-gradient(180deg, rgba(9, 13, 36, 0.18) 0%, rgba(9, 13, 36, 0.08) 55%, rgba(9, 13, 36, 0.72) 100%);
   }
 
   .home-hero-grid {
+    position: relative;
+    z-index: 2;
     grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
   }
 
@@ -362,32 +387,12 @@
     direction: rtl;
   }
 
-  .home-visual-shell {
-    height: 560px;
-    border: 1px solid rgba(209, 218, 255, 0.14);
-    border-radius: 30px;
-    background: #0b1029;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      0 30px 80px rgba(0, 0, 0, 0.32),
-      0 0 80px rgba(91, 42, 134, 0.12);
-  }
-
-  .home-visual-media {
-    transform: scale(1.025);
-  }
-
-  .home-visual-vignette {
-    background:
-      linear-gradient(90deg, transparent 35%, rgba(9, 13, 36, 0.18) 80%, rgba(9, 13, 36, 0.42) 100%),
-      linear-gradient(0deg, rgba(9, 13, 36, 0.72) 0%, transparent 52%);
-    pointer-events: none;
-  }
-
   .home-live-card {
-    left: 24px;
-    bottom: 24px;
-    width: min(82%, 540px);
+    position: relative;
+    width: 100%;
+    max-width: 640px;
+    margin-right: 0;
+    margin-left: auto;
     padding: 18px;
     border: 1px solid rgba(209, 218, 255, 0.2);
     border-radius: 22px;
@@ -766,6 +771,18 @@
       min-height: auto;
       padding-top: 34px;
       padding-bottom: 38px;
+      border-radius: 26px;
+    }
+
+    .home-hero-backdrop__media {
+      object-position: 42% 54%;
+      transform: scale(1.01);
+    }
+
+    .home-hero-backdrop__shade {
+      background:
+        linear-gradient(180deg, rgba(9, 13, 36, 0.82) 0%, rgba(9, 13, 36, 0.58) 42%, rgba(9, 13, 36, 0.48) 66%, rgba(9, 13, 36, 0.82) 100%),
+        linear-gradient(90deg, rgba(9, 13, 36, 0.3), rgba(9, 13, 36, 0.08), rgba(9, 13, 36, 0.3));
     }
 
     .home-eyebrow {
@@ -799,25 +816,12 @@
       margin-top: 8px;
     }
 
-    .home-visual-shell {
-      height: 485px;
-      border-radius: 24px;
-    }
-
-    .home-visual-media {
-      height: 252px;
-      transform: scale(1.02);
-    }
-
-    .home-visual-vignette {
-      background: linear-gradient(0deg, #101735 44%, rgba(9, 13, 36, 0.06) 83%);
-    }
-
     .home-live-card {
-      right: 12px;
-      bottom: 12px;
-      left: 12px;
-      width: auto;
+      right: auto;
+      bottom: auto;
+      left: auto;
+      width: 100%;
+      max-width: none;
       padding: 14px;
       border-radius: 18px;
     }
