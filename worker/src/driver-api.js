@@ -215,6 +215,14 @@ function onboardOrderIds(value) {
   }
 }
 
+function publicRouteReason(reason) {
+  // `queue_changed` was the original internal persistence value. It was never
+  // part of the mobile v1 contract, whose equivalent reason is
+  // `dispatch_reordered`. Keep existing route revisions readable by released
+  // clients while new revisions are persisted with the public value.
+  return reason === 'queue_changed' ? 'dispatch_reordered' : reason;
+}
+
 function routeTask(stop, executionState = null) {
   const taskType = stop.task_type === 'pickup' ? 'pickup' : 'dropoff';
   const isPickup = taskType === 'pickup';
@@ -272,7 +280,7 @@ async function routeSnapshot(env, auth, meta, shiftId) {
   const stops = (rows.results || []).map((stop) => routeTask(stop, executionStateByStop.get(stop.stop_id)));
   const activeStop = stops.find((stop) => !['completed', 'failed', 'cancelled', 'skipped_by_dispatch'].includes(stop.state));
   return response({
-    shift_id: shiftId, revision: route.revision, generated_at: new Date(route.generated_at).toISOString(), reason: route.reason,
+    shift_id: shiftId, revision: route.revision, generated_at: new Date(route.generated_at).toISOString(), reason: publicRouteReason(route.reason),
     current_stop_id: activeStop?.stop_id || route.current_stop_id,
     current_stop_locked: !!activeStop && ['navigating', 'arrived'].includes(activeStop.state),
     delay_minutes: route.delay_minutes,
