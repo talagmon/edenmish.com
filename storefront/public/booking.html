@@ -371,7 +371,11 @@ gmp-place-autocomplete.eden-places{display:block;width:100%;color-scheme:dark}
 קראתי ואני מאשר/ת את <a href="/terms.html" class="text-primary underline">תקנון השירות</a>, <a href="/privacy.html" class="text-primary underline">מדיניות הפרטיות</a> ו<a href="/refund.html" class="text-primary underline">מדיניות הביטול</a>.
 </span>
 </label>
-<p class="mt-3 text-label-sm text-on-surface-variant">עדכונים תפעוליים הנחוצים לביצוע ההזמנה עשויים להישלח בדוא״ל, ב‑WhatsApp או ב‑SMS. לא יישלח דיוור שיווקי מכוח אישור זה.</p>
+<p class="mt-3 text-label-sm text-on-surface-variant">עדכונים תפעוליים, כולל אישור והוכחת מסירה, יישלחו לכתובת הדוא״ל שמסרתם באמצעות SendGrid. קישור לטלפון, ל‑WhatsApp או ב‑SMS יישלח רק לאחר הסכמה נפרדת. לא יישלח דיוור שיווקי מכוח אישור זה.</p>
+<label class="mt-3 flex items-start gap-3 cursor-pointer">
+<input type="checkbox" id="phone-pod-opt-in" class="mt-1 w-5 h-5 accent-[#8B5CF6] cursor-pointer"/>
+<span class="text-label-sm text-on-surface-variant leading-relaxed">אני מסכים/ה לקבל גם קישור להוכחת המסירה ב‑WhatsApp למספר הטלפון שמסרתי. הבחירה אופציונלית ואינה כוללת דיוור שיווקי.</span>
+</label>
 </section>
 <!-- Error + Submit -->
 <div id="form-error" class="hidden bg-error-container/30 border border-error/40 text-error rounded-lg p-stack-sm text-label-bold text-center"></div>
@@ -1198,6 +1202,7 @@ form.addEventListener("submit", async (e) => {
   const sizeLabel = size === "medium" ? "בינוני" : "קטן";
   const payload = {
     name, phone, email,
+    phone_delivery_link_opt_in: document.getElementById("phone-pod-opt-in").checked,
     service, size,
     package: svcLabel + " · " + sizeLabel,   // legacy column (ops display)
     urgent: service === "flash" ? 1 : 0,     // legacy column

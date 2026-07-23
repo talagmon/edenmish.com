@@ -94,7 +94,7 @@ Database name: `edenmish`. Binding: `DB`.
 ### Schema and migrations
 
 `schema.sql` is the **fresh-DB source of truth** — it defines every current table.
-The numbered migrations (`003`–`022`) add tables/columns that were introduced after the
+The numbered migrations (`003`–`024`) add tables/columns that were introduced after the
 initial schema. Tables are idempotent (`CREATE TABLE IF NOT EXISTS`); `ALTER TABLE …
 ADD COLUMN` migrations (`006`–`010`, `015`, and `016`) must run only on DBs that predate their columns.
 
@@ -197,6 +197,7 @@ wrangler d1 execute edenmish --remote --file=./migrations/020_business_wallet_sc
 wrangler d1 execute edenmish --remote --file=./migrations/021_business_entry_plans.sql
 wrangler d1 execute edenmish --remote --file=./migrations/022_business_plan_coupons.sql
 wrangler d1 execute edenmish --remote --file=./migrations/023_driver_login_invitations.sql
+wrangler d1 execute edenmish --remote --file=./migrations/024_phone_delivery_link_consent.sql
 ```
 
 > Run only migrations that have not already been applied. Several `ALTER TABLE`
@@ -270,5 +271,6 @@ wrangler deploy
 - [ ] Confirm inline price approval works for a review order.
 - [ ] Confirm delivery proof can be saved (receiver name + note).
 - [ ] Confirm notification audit rows are created.
-- [ ] Confirm delivery completion creates unique email/WhatsApp outbox jobs and due failures retry.
+- [ ] Confirm delivery completion always creates one email outbox job, creates a
+      WhatsApp proof-link job only for a stored opt-in, and retries due failures.
 - [ ] Confirm per-order notification history appears in ops.

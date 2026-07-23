@@ -32,6 +32,26 @@ would fail with "duplicate column" on a DB where `schema.sql` has already run.
 
 ## Existing production DB — migration order
 
+### 024_phone_delivery_link_consent.sql
+
+**Purpose:** Stores the customer's optional, explicit consent to receive the
+proof-of-delivery link through WhatsApp in addition to the primary SendGrid email.
+The consent timestamp is stored with the order and checked again when the outbox job
+is delivered.
+
+**Command:**
+```bash
+wrangler d1 execute edenmish --remote --file=./migrations/024_phone_delivery_link_consent.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM pragma_table_info('orders')
+WHERE name IN ('phone_delivery_link_opt_in','phone_delivery_link_opt_in_at');
+```
+
+---
+
 ### 003_rate_limits.sql
 
 **Introduced by:** PR 5 — Harden tracking security and public endpoint abuse protection
