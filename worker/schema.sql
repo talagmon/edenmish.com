@@ -31,6 +31,11 @@ CREATE TABLE IF NOT EXISTS orders (
   business_account_id INTEGER,
   wallet_reservation_id TEXT,
   payment_method TEXT,
+  -- Set when a failed delivery leaves the package with the driver, to the reported
+  -- disposition ('return_to_origin' | 'hold_for_redelivery'). See migration 025.
+  retained_by_driver TEXT,
+  retained_at INTEGER,             -- epoch ms the package was retained; drives 24h auto-return
+  pending_redelivery_json TEXT,    -- staged corrected address + fee for a redelivery. Migration 026
   phone_delivery_link_opt_in INTEGER NOT NULL DEFAULT 0,
   phone_delivery_link_opt_in_at INTEGER
 );

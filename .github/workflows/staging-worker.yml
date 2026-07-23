@@ -140,6 +140,40 @@ jobs:
           else
             echo "Phone delivery-link consent migration 024 is already applied."
           fi
+      - name: Apply staging retained-package migration when needed
+        working-directory: worker
+        run: |
+          readiness_json="$(npx wrangler d1 execute edenmish-staging --remote --yes --json \
+            --config wrangler.staging.generated.toml \
+            --command "SELECT (SELECT COUNT(*) FROM pragma_table_info('orders') WHERE name IN ('retained_by_driver','retained_at')) + (SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_orders_retained_by_driver') AS ready")"
+          ready="$(printf '%s' "$readiness_json" | jq -r '.[0].results[0].ready')"
+          if [ "$ready" = "0" ]; then
+            npx wrangler d1 execute edenmish-staging --remote --yes \
+              --config wrangler.staging.generated.toml \
+              --file=./migrations/025_delivery_failure_retained_package.sql
+          elif [ "$ready" != "3" ]; then
+            echo "::error::Retained-package migration is only partially applied ($ready/3 schema items)."
+            exit 1
+          else
+            echo "Retained-package migration 025 is already applied."
+          fi
+      - name: Apply staging pending-redelivery migration when needed
+        working-directory: worker
+        run: |
+          readiness_json="$(npx wrangler d1 execute edenmish-staging --remote --yes --json \
+            --config wrangler.staging.generated.toml \
+            --command "SELECT COUNT(*) AS ready FROM pragma_table_info('orders') WHERE name='pending_redelivery_json'")"
+          ready="$(printf '%s' "$readiness_json" | jq -r '.[0].results[0].ready')"
+          if [ "$ready" = "0" ]; then
+            npx wrangler d1 execute edenmish-staging --remote --yes \
+              --config wrangler.staging.generated.toml \
+              --file=./migrations/026_redelivery_pending_address.sql
+          elif [ "$ready" != "1" ]; then
+            echo "::error::Pending-redelivery migration returned an invalid readiness count ($ready)."
+            exit 1
+          else
+            echo "Pending-redelivery migration 026 is already applied."
+          fi
       - name: Verify remote driver schema readiness
         working-directory: worker
         run: node scripts/validate-driver-schema.mjs --database edenmish-staging --config wrangler.staging.generated.toml

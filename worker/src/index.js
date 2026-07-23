@@ -1,5 +1,5 @@
-import { createOrder, getOrderByToken, getOrderById, getOrderByShopifyOrderId, listOrders, setOrderStatus, setOrderRating, getStatusHistory, addGps, latestGps, getGpsTrail, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof, listRecentNotificationFailures, listNotificationsForOrder, createCancellationRequest, listCancellationRequests, runRetentionCleanup } from './db.js';
-import { priceOrder, ZONE_CITIES, DEFAULT_PRICING_RULES } from './pricing.js';
+import { createOrder, getOrderByToken, getOrderById, getOrderByShopifyOrderId, listOrders, setOrderStatus, setOrderRating, getStatusHistory, addGps, latestGps, getGpsTrail, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof, listRecentNotificationFailures, listNotificationsForOrder, createCancellationRequest, listCancellationRequests, runRetentionCleanup, runHeldPackageAutoReturn } from './db.js';
+import { priceOrder, retryFee, zoneOf, ZONE_CITIES, DEFAULT_PRICING_RULES } from './pricing.js';
 import { makeSession, checkSession, getCookie, genOtp, hashOtp, timingSafeEqual } from './integrations.js';
 import { createCharge, createWalletCharge, verifyShopifyWebhook, parseShopifyOrderWebhook, parseShopifyRefundWebhook } from './payment.js';
 import { trackingHtml, opsHtml } from './pages.js';
@@ -910,6 +910,57 @@ export default {
       return json({ ok: true, rating }, 200, cors);
     }
 
+    // ---- redelivery: owner supplies a corrected address for a held package ----
+    // Token-gated, exactly like the rating write above: whoever holds the tracking token owns
+    // the order. Only valid while the package is held for redelivery; it stages the address and
+    // returns the fee, and deliberately does NOT dispatch — payment does that (a separate step),
+    // so an unpaid address can never route a free redelivery.
+    if (path.startsWith('/api/orders/') && path.endsWith('/redelivery-address') && req.method === 'POST') {
+      const token = path.split('/')[3];
+      const o = await getOrderByToken(env.DB, token);
+      if (!o) return json({ ok: false, error: 'not_found' }, 404, cors);
+      if (!(o.status === 'failed' && o.retained_by_driver === 'hold_for_redelivery')) {
+        return json({ ok: false, error: 'not_awaiting_redelivery' }, 409, cors);
+      }
+      let b; try { b = await req.json(); } catch { b = {}; }
+      const dropoff = String(b.dropoff || '').trim().slice(0, 500);
+      const dropoffDetail = b.dropoff_detail != null ? String(b.dropoff_detail).trim().slice(0, 500) : null;
+      const dropoffCity = String(b.dropoff_city || '').trim().slice(0, 100);
+      const lat = b.dropoff_lat;
+      const lng = b.dropoff_lng;
+      if (!dropoff || !dropoffCity) return json({ ok: false, error: 'missing_address' }, 400, cors);
+      // A redelivery must be routable, so coordinates are required here (unlike booking, which
+      // allows a human review pass). A pin the driver cannot navigate to is useless.
+      if (!validCoordinate(lat, -90, 90) || !validCoordinate(lng, -180, 180)) {
+        return json({ ok: false, error: 'invalid_coordinates' }, 400, cors);
+      }
+      // The corrected destination itself must be inside a served zone. retryFee prices by the
+      // max of the two ends, so it would happily quote a Zone 1 fee for an unserved destination
+      // just because the pickup is in Zone 1 — serviceability has to gate on the destination.
+      if (zoneOf(dropoffCity) == null) return json({ ok: false, error: 'out_of_zone' }, 400, cors);
+      const suggestion = retryFee({
+        pickup_city: o.pickup_city,
+        dropoff_city: dropoffCity,
+        when_date: o.when_date,
+        when_hour: o.when_hour,
+      });
+      if (suggestion.fee == null) return json({ ok: false, error: 'out_of_zone' }, 400, cors);
+      const pending = {
+        dropoff,
+        dropoff_detail: dropoffDetail,
+        dropoff_lat: lat,
+        dropoff_lng: lng,
+        dropoff_city: dropoffCity,
+        zone: suggestion.zone,
+        fee: suggestion.fee,
+        submitted_at: Date.now(),
+      };
+      await env.DB.prepare('UPDATE orders SET pending_redelivery_json = ? WHERE id = ?')
+        .bind(JSON.stringify(pending), o.id).run();
+      console.log('redelivery_address_staged', { order: o.id, zone: suggestion.zone, fee: suggestion.fee });
+      return json({ ok: true, fee: suggestion.fee, zone: suggestion.zone, currency: 'ILS' }, 200, cors);
+    }
+
     // ---- customer tracking page (find.) ----
     if (onFind && path.startsWith('/t/')) {
       const token = path.split('/')[2];
@@ -1018,8 +1069,34 @@ export default {
     if (onOps && path === '/api/ops/orders' && req.method === 'GET') {
       if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
       const r = await listOrders(env.DB);
+      // Suggest an extra-stop fee for packages a driver is still carrying after a failed
+      // delivery, so the operator does not have to work out the zone rate by hand. It is a
+      // suggestion only: whether to charge at all is a fault judgement Ops makes.
+      const orders = (r.results || []).map((order) => {
+        if (!order || !order.retained_by_driver) return order;
+        // If the owner has already supplied a corrected redelivery address, surface it and its
+        // computed fee. Otherwise suggest the return-to-origin fee as a default.
+        let pending = null;
+        if (order.pending_redelivery_json) {
+          try { pending = JSON.parse(order.pending_redelivery_json); } catch { pending = null; }
+        }
+        const suggestion = pending || retryFee({
+          pickup_city: order.pickup_city,
+          // Without a corrected address the leg ends where it was collected (a return).
+          dropoff_city: order.pickup_city,
+          when_date: order.when_date,
+          when_hour: order.when_hour,
+        });
+        const { pending_redelivery_json, ...rest } = order;
+        return {
+          ...rest,
+          retry_fee_suggested: suggestion.fee,
+          retry_fee_zone: suggestion.zone,
+          pending_redelivery: pending && { city: pending.dropoff_city, dropoff: pending.dropoff, fee: pending.fee },
+        };
+      });
       return json({
-        orders: r.results,
+        orders,
         integrations: { shopify_webhooks: shopifyWebhookRegistrar.status() },
       });
     }
@@ -1164,6 +1241,43 @@ export default {
       }
       const proof = await getDeliveryProof(env.DB, id);
       return json({ ok: true, order: o, proof });
+    }
+
+    // Release a paid redelivery: Ops confirms the extra-stop fee is collected, and this promotes
+    // the staged corrected address onto the live dropoff columns and flips the hold to a
+    // 'redelivery' state that dispatch routes. The fee itself is collected by Ops (a payment link
+    // or manual mark) — auto-reconciling a second charge via the Shopify webhook is deferred to
+    // the pre-auth (Mesh) phase, so a human confirms the money here.
+    if (onOps && path.includes('/api/ops/orders/') && path.endsWith('/release-redelivery') && req.method === 'POST') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      const id = Number(path.split('/')[4]);
+      const o = await getOrderById(env.DB, id);
+      if (!o) return json({ error: 'not found' }, 404);
+      if (o.status === 'failed' && o.retained_by_driver === 'redelivery') {
+        return json({ ok: true, already: true }); // idempotent re-release
+      }
+      if (!(o.status === 'failed' && o.retained_by_driver === 'hold_for_redelivery')) {
+        return json({ error: 'not_awaiting_redelivery' }, 409);
+      }
+      let pending = null;
+      try { pending = o.pending_redelivery_json ? JSON.parse(o.pending_redelivery_json) : null; } catch { pending = null; }
+      if (!pending || pending.dropoff_lat == null || pending.dropoff_lng == null) {
+        return json({ error: 'no_pending_address' }, 409);
+      }
+      // Overwrite the live destination with the corrected one and mark the order a redelivery.
+      // Status stays 'failed' (canonically the first attempt did fail); dispatch routes a fresh
+      // drop-off (stop_x…) to the new address on the driver's next route poll.
+      await env.DB.prepare(
+        `UPDATE orders SET dropoff = ?, dropoff_detail = ?, dropoff_lat = ?, dropoff_lng = ?,
+           dropoff_city = ?, retained_by_driver = 'redelivery', retained_at = ?,
+           pending_redelivery_json = NULL
+         WHERE id = ?`
+      ).bind(
+        pending.dropoff, pending.dropoff_detail ?? null, pending.dropoff_lat, pending.dropoff_lng,
+        pending.dropoff_city, Date.now(), id,
+      ).run();
+      console.log('redelivery_released', { order: id, city: pending.dropoff_city, fee: pending.fee });
+      return json({ ok: true, order: await getOrderById(env.DB, id) });
     }
 
     if (onOps && path.includes('/api/ops/orders/') && path.endsWith('/driver-proofs') && req.method === 'GET') {
@@ -1349,7 +1463,9 @@ export default {
     return new Response('Not found', { status: 404 });
   },
   async scheduled(event, env, ctx) {
-    const tasks = [processDeliveryNotificationOutbox(env)];
+    // Runs on every scheduled tick, not only the daily one, so a hold reverts to a return
+    // close to its 24h boundary rather than up to a day late.
+    const tasks = [processDeliveryNotificationOutbox(env), runHeldPackageAutoReturn(env.DB)];
     if (event.cron === '17 2 * * *') {
       tasks.push(runRetentionCleanup(env.DB), cleanupBusinessSecurity(env.DB));
     }

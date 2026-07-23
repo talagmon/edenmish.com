@@ -1,0 +1,13 @@
+-- Corrected destination for a redelivery, staged until the owner pays the extra-stop fee.
+--
+-- When a delivery fails and the driver holds the package (retained_by_driver =
+-- 'hold_for_redelivery'), the package owner supplies a corrected address and pays a fee before
+-- the redelivery is dispatched. The new address is staged here rather than overwritten onto the
+-- live dropoff_* columns, for two reasons:
+--   1. The original drop-off address is preserved for audit of why the delivery failed.
+--   2. Nothing routable changes until payment is confirmed, so an unpaid address can never leak
+--      a free redelivery into a driver's route.
+--
+-- Holds a JSON object: { dropoff, dropoff_detail, dropoff_lat, dropoff_lng, dropoff_city,
+--                        zone, fee, submitted_at }. Cleared once promoted to the live columns.
+ALTER TABLE orders ADD COLUMN pending_redelivery_json TEXT;

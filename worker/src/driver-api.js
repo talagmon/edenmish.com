@@ -42,6 +42,18 @@ const TASK_STATE_FOR_EVENT = {
   delivery_completed: 'completed',
   delivery_failed: 'failed',
 };
+// What the driver did with the package on a failed delivery. return_to_origin and
+// hold_for_redelivery mean the driver still carries it and dispatch owes a return or
+// redelivery leg; left_with_alternate means it was handed off.
+//
+// The field is optional on purpose: the stable Flutter client predates it and reports
+// failures without it, and rejecting those would break failure reporting for the
+// production app (rejected_invalid is non-retryable). Absent keeps the legacy
+// behaviour. A value we do not recognise is a contract defect and is refused, so the
+// dispatch layer can trust any value that is stored.
+const DELIVERY_FAILURE_DISPOSITIONS = new Set([
+  'return_to_origin', 'hold_for_redelivery', 'left_with_alternate',
+]);
 
 const response = (body, status = 200, requestId = null, extra = {}) => new Response(JSON.stringify(body), {
   status,
@@ -424,7 +436,14 @@ async function taskProof(req, env, auth, meta, shiftId, stopId) {
   }, 201, meta.requestId);
 }
 
-async function applyTaskEvent(env, eventType, task, order, orderId) {
+// Dispositions a driver can report on a failed delivery that leave the package with them.
+const RETAINED_FAILURE_DISPOSITIONS = new Set(['return_to_origin', 'hold_for_redelivery']);
+// Every retained state where the driver is still carrying the package — the two above plus
+// 'redelivery', which Ops promotes once the owner has paid the extra-stop fee. Completion of a
+// redelivery marks the order delivered; completion of a return leaves it failed (see below).
+const RETAINED_CARRIED = new Set(['return_to_origin', 'hold_for_redelivery', 'redelivery']);
+
+async function applyTaskEvent(env, eventType, task, order, orderId, payload = {}) {
   if (!order || order.status === 'cancelled') {
     return { status: 'accepted_conflict', conflictType: order ? 'order_cancelled' : 'order_missing', transitioned: false };
   }
@@ -433,6 +452,42 @@ async function applyTaskEvent(env, eventType, task, order, orderId) {
   }
   if (['delivery_completed', 'delivery_failed'].includes(eventType) && task.task_type !== 'dropoff') {
     return { status: 'accepted_conflict', conflictType: 'task_type_mismatch', transitioned: false };
+  }
+
+  // A retained package: the order is closed as 'failed' but the driver is still carrying it,
+  // and dispatch has given them a return or redelivery leg. Those events cannot go through the
+  // normal ladder below, which only reaches 'delivered' from 'to_dropoff' — a retained order
+  // sits at 'failed', so every event on the leg would come back as accepted_conflict, and an
+  // accepted_conflict makes the driver app block all actions until a full route reload. The
+  // leg would be undeliverable and would jam the app.
+  if (order.status === 'failed' && RETAINED_CARRIED.has(order.retained_by_driver)) {
+    const isRedelivery = order.retained_by_driver === 'redelivery';
+    if (eventType === 'navigation_started' || eventType === 'arrived') {
+      // Progress on the leg needs no canonical status change.
+      return { status: 'accepted', conflictType: null, transitioned: false };
+    }
+    if (eventType === 'delivery_completed') {
+      if (isRedelivery) {
+        // A paid redelivery that reached the recipient IS a delivery. Promote the order to
+        // 'delivered' and end custody, so the customer timeline and Ops reflect success and
+        // the normal delivery notification fires.
+        await setOrderStatus(env.DB, orderId, 'delivered', {
+          delivered_at: Date.now(), retained_by_driver: null, retained_at: null,
+        });
+        return { status: 'accepted', conflictType: null, transitioned: true };
+      }
+      // A return handed back to us. Status stays 'failed' on purpose: the recipient never
+      // received it, and calling this 'delivered' would misreport the order. Clearing the
+      // column ends custody and retires the leg on the next route sync.
+      await env.DB.prepare('UPDATE orders SET retained_by_driver = NULL, retained_at = NULL WHERE id = ?')
+        .bind(orderId).run();
+      return { status: 'accepted', conflictType: null, transitioned: true };
+    }
+    if (eventType === 'delivery_failed') {
+      // The leg could not be completed. Keep custody exactly as it is and let Ops decide;
+      // silently clearing it would lose track of a package still in a vehicle.
+      return { status: 'accepted', conflictType: null, transitioned: false };
+    }
   }
 
   const targetStatus = eventType === 'navigation_started'
@@ -456,6 +511,15 @@ async function applyTaskEvent(env, eventType, task, order, orderId) {
   const fields = targetStatus === 'picked_up' ? { picked_up_at: Date.now() }
     : targetStatus === 'delivered' ? { delivered_at: Date.now() }
     : {};
+  if (targetStatus === 'failed') {
+    // Record whether the driver still has the package. Dispatch keeps a retained order
+    // eligible and onboard so a return or redelivery leg can be routed; an alternate
+    // handoff clears it so the order settles as a normal failure. retained_at anchors the
+    // 24h auto-return.
+    const retained = RETAINED_FAILURE_DISPOSITIONS.has(payload.disposition);
+    fields.retained_by_driver = retained ? payload.disposition : null;
+    fields.retained_at = retained ? Date.now() : null;
+  }
   await setOrderStatus(env.DB, orderId, targetStatus, fields);
   return { status: 'accepted', conflictType: null, transitioned: true };
 }
@@ -485,6 +549,11 @@ async function processEvent(env, auth, meta, event, executionContext) {
     || Object.keys(event.payload).length > 10) {
     return { event_id: event.event_id, status: 'rejected_invalid', server_received_at: new Date().toISOString() };
   }
+  if (event.event_type === 'delivery_failed'
+    && event.payload.disposition != null
+    && !DELIVERY_FAILURE_DISPOSITIONS.has(event.payload.disposition)) {
+    return { event_id: event.event_id, status: 'rejected_invalid', server_received_at: new Date().toISOString() };
+  }
   const shift = await env.DB.prepare('SELECT id FROM driver_shifts WHERE id = ? AND driver_id = ?').bind(event.shift_id, auth.driver_id).first();
   if (!shift) return { event_id: event.event_id, status: 'rejected_auth', server_received_at: new Date().toISOString() };
   const orderId = event.order_id == null ? null : parseOrderId(event.order_id);
@@ -510,7 +579,9 @@ async function processEvent(env, auth, meta, event, executionContext) {
       // This transition is committed below with its event and logical notification jobs.
       deliveryTransitionOrder = order;
     } else {
-      const applied = await applyTaskEvent(env, event.event_type, task, order, orderId);
+      const applied = await applyTaskEvent(
+        env, event.event_type, task, order, orderId, event.payload,
+      );
       status = applied.status;
       conflictType = applied.conflictType;
       transitioned = applied.transitioned;

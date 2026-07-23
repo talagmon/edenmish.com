@@ -590,6 +590,74 @@ and must not contain a raw `code` column.
 
 ---
 
+### 025_delivery_failure_retained_package.sql
+
+**Purpose:** Records when a failed delivery leaves the physical package with the
+driver, together with the timestamp used by the 24-hour auto-return rule. The
+partial index keeps retained-package dispatch lookups bounded without changing the
+shared order-status vocabulary.
+
+**Command:**
+```bash
+# Staging (render the config first; run from worker/):
+npx wrangler d1 execute edenmish-staging --remote --yes \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/025_delivery_failure_retained_package.sql
+
+# Local verification:
+wrangler d1 execute edenmish --local \
+  --file=./migrations/025_delivery_failure_retained_package.sql
+
+# Production (after merge, before Worker deploy):
+wrangler d1 execute edenmish --remote \
+  --file=./migrations/025_delivery_failure_retained_package.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM pragma_table_info('orders')
+WHERE name IN ('retained_by_driver','retained_at')
+ORDER BY name;
+SELECT name FROM sqlite_master
+WHERE type='index' AND name='idx_orders_retained_by_driver';
+```
+
+Expected result: both order columns and the retained-package partial index.
+
+---
+
+### 026_redelivery_pending_address.sql
+
+**Purpose:** Stages the package owner's corrected redelivery destination and
+quoted fee without overwriting the failed address. Ops promotes the staged data
+only after payment is confirmed.
+
+**Command:**
+```bash
+# Staging (render the config first; run from worker/):
+npx wrangler d1 execute edenmish-staging --remote --yes \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/026_redelivery_pending_address.sql
+
+# Local verification:
+wrangler d1 execute edenmish --local \
+  --file=./migrations/026_redelivery_pending_address.sql
+
+# Production (after merge, before Worker deploy):
+wrangler d1 execute edenmish --remote \
+  --file=./migrations/026_redelivery_pending_address.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM pragma_table_info('orders')
+WHERE name='pending_redelivery_json';
+```
+
+Expected result: the `pending_redelivery_json` order column.
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -615,6 +683,9 @@ and must not contain a raw `code` column.
 - [ ] Run `021_business_entry_plans.sql` after 018/020 and before enabling Trial or Business Wallet checkout.
 - [ ] Run `022_business_plan_coupons.sql` after 021 and before enabling business-plan coupons.
 - [ ] Run `023_driver_login_invitations.sql` after 014 and before enabling Ops driver pairing.
+- [ ] Run `024_phone_delivery_link_consent.sql` before enabling phone delivery-link consent.
+- [ ] Run `025_delivery_failure_retained_package.sql` before accepting retained-package dispositions.
+- [ ] Run `026_redelivery_pending_address.sql` after 025 and before enabling corrected-address redelivery.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).
