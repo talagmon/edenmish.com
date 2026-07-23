@@ -921,6 +921,16 @@ describe('Frontend: Security and accessibility hardening', () => {
     assertContains(html, 'catch(e){return connectionErrorView();}');
   });
 
+  test('ops authentication uses the translucent iOS-style glass treatment', () => {
+    const html = readPage('dash.html');
+    assertContains(html, '.dashboard-auth-card::before', 'layered translucent glass');
+    assertContains(html, 'backdrop-filter:blur(26px)', 'glass blur');
+    assertContains(html, 'dashboard-auth-icon', 'iOS-style app tile');
+    assertContains(html, 'dashboard-auth-input', 'embedded PIN control');
+    assertContains(html, 'dashboard-auth-button', 'embedded primary action');
+    assertContains(html, 'inputmode="numeric"', 'mobile numeric keypad');
+  });
+
   test('ops dashboard exposes secure per-driver invitation and QR controls', () => {
     const html = readPage('dash.html');
     assertContains(html, 'onclick="showDriverAccess()"', 'driver connection action');
@@ -1017,6 +1027,18 @@ describe('Frontend: Ops daily summary and queue ordering', () => {
     assertContains(html, 'מסירות היום');
     assertContains(html, 'הכנסה היום');
     assertContains(html, 'ממתינות מעל שעה');
+  });
+
+  test('renders Ops queue orders with the native iOS card hierarchy and six-stage progress', () => {
+    const html = readPage('dash.html');
+    assertContains(html, 'class="ops-queue-grid"', 'responsive queue grid');
+    assertContains(html, 'class="ios-order-card ', 'native card shell');
+    assertContains(html, 'class="ios-order-number">הזמנה #', 'prominent order number');
+    assertContains(html, 'function queueTimingInfo(o)', 'time remaining or service-window summary');
+    assertContains(html, 'function queueProgressHtml(o)', 'queue progress renderer');
+    for (const label of ['נתקבלה', 'אושר', 'לאיסוף', 'נאסף', 'למסירה', 'נמסר']) {
+      assertContains(html, `label:"${label}"`, `progress milestone ${label}`);
+    }
   });
 });
 
