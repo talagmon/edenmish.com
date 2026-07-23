@@ -1,7 +1,11 @@
 import { getOrderById } from './db.js';
 import { notifyEmail, notifyWhatsApp } from './notify.js';
 
-const TEMPLATE = 'customer_delivery_summary';
+const DELIVERED_TEMPLATE = 'customer_delivery_summary';
+const RETAINED_FAILURE_TEMPLATES = Object.freeze({
+  return_to_origin: 'customer_delivery_failed_returning',
+  hold_for_redelivery: 'customer_delivery_failed_redelivery_hold',
+});
 const DEFAULT_LIMIT = 20;
 const DEFAULT_MAX_ATTEMPTS = 6;
 const DEFAULT_LEASE_MS = 60_000;
@@ -34,8 +38,31 @@ export function deliveryNotificationOutboxStatements(DB, order, eventId, now) {
       SELECT 1 FROM delivery_completion_transitions
       WHERE order_id = ? AND event_id = ?
     )`).bind(
-    order.id, eventId, channel, TEMPLATE, now, now, now, order.id, eventId,
+    order.id, eventId, channel, DELIVERED_TEMPLATE, now, now, now, order.id, eventId,
   ));
+}
+
+export function retainedFailureNotificationOutboxStatements(
+  DB, order, eventId, disposition, now,
+) {
+  const template = RETAINED_FAILURE_TEMPLATES[disposition];
+  if (!order?.email || !template) return [];
+  return [DB.prepare(`INSERT OR IGNORE INTO delivery_notification_outbox
+    (order_id, transition, event_id, channel, template, state, attempt_count,
+     next_attempt_at, created_at, updated_at)
+    SELECT ?, 'delivery_failed_retained', ?, 'email', ?, 'pending', 0, ?, ?, ?
+    WHERE EXISTS (
+      SELECT 1 FROM driver_execution_events
+      WHERE event_id = ? AND order_id = ?
+        AND event_type = 'delivery_failed' AND status = 'accepted'
+    )
+      AND EXISTS (
+        SELECT 1 FROM orders
+        WHERE id = ? AND status = 'failed' AND retained_by_driver = ?
+      )`).bind(
+    order.id, eventId, template, now, now, now,
+    eventId, order.id, order.id, disposition,
+  )];
 }
 
 export async function persistOpsDeliveryCompletion(DB, order, {
@@ -82,21 +109,66 @@ export async function enqueueDeliveryNotificationJobs(DB, order, {
     (order_id, transition, event_id, channel, template, state, attempt_count,
      next_attempt_at, created_at, updated_at)
     VALUES (?, 'delivered', ?, ?, ?, 'pending', 0, ?, ?, ?)`)
-    .bind(order.id, eventId, channel, TEMPLATE, now, now, now)));
+    .bind(order.id, eventId, channel, DELIVERED_TEMPLATE, now, now, now)));
 }
+
+const escHtml = (value) => String(value == null ? '' : value).replace(
+  /[&<>"']/g,
+  (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[character]),
+);
+
+const storefrontBase = (env) => (
+  env.STOREFRONT_BASE || env.BOOKING_URL || 'https://edenmish.com'
+).replace(/\/+$/, '');
+
+export const retainedPackageFailureHtml = (env, order, template) => {
+  const returning = template === RETAINED_FAILURE_TEMPLATES.return_to_origin;
+  const trackingUrl = `${storefrontBase(env)}/track.html?t=${encodeURIComponent(order.token || '')}`;
+  const title = returning
+    ? 'לא הצלחנו למסור — החבילה חוזרת לנקודת האיסוף'
+    : 'לא הצלחנו למסור — נדרש תיאום למסירה מחדש';
+  const nextStep = returning
+    ? 'החבילה נשארה אצל השליח והיא בדרך חזרה לנקודת האיסוף. אין צורך בפעולה כרגע; ניצור איתכם קשר אם יידרש תיאום נוסף.'
+    : 'החבילה נשארה אצל השליח. ניצור איתכם קשר לעדכון הכתובת ולתיאום התשלום עבור ניסיון המסירה הנוסף. אם לא יושלם תיאום בתוך 24 שעות, החבילה תחזור לנקודת האיסוף.';
+  return `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px;margin:0 auto;background:#ffffff;color:#1f2937;color-scheme:light;forced-color-adjust:none;padding:32px 24px;border:1px solid #e5e7eb;border-radius:16px"><h1 style="color:#5B2A86;font-size:24px;margin:0 0 10px">${title}</h1><p style="color:#4b5563;margin:0 0 18px;font-size:15px">${nextStep}</p><div style="background:#f7f3fa;border:1px solid #e3d7eb;border-radius:12px;padding:16px;margin-bottom:18px"><span style="color:#4b5563;font-size:12px">מספר הזמנה </span><b style="color:#1f2937">#${escHtml(order.id)}</b></div><div style="text-align:center"><a href="${trackingUrl}" style="display:inline-block;background:#5B2A86;color:#ffffff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700">לצפייה בעדכון המשלוח ←</a></div><p style="color:#4b5563;font-size:13px;margin-top:18px">לשאלות: eden@edenmish.com · 053-405-8498<br>כתובת העסק למשלוח הודעות: קריניצי 111, רמת גן, ישראל</p></div>`;
+};
 
 async function defaultDeliver(env, job, order) {
   if (job.channel === 'email') {
+    if (Object.values(RETAINED_FAILURE_TEMPLATES).includes(job.template)) {
+      const returning = job.template === RETAINED_FAILURE_TEMPLATES.return_to_origin;
+      return notifyEmail(env, env.DB, {
+        orderId: order.id,
+        template: job.template,
+        recipient: order.email,
+        subject: returning
+          ? 'לא הצלחנו למסור — החבילה חוזרת לנקודת האיסוף'
+          : 'לא הצלחנו למסור — נדרש תיאום למסירה מחדש',
+        html: retainedPackageFailureHtml(env, order, job.template),
+      });
+    }
+    if (job.template !== DELIVERED_TEMPLATE) {
+      return { ok: false, error: 'unsupported_template', permanent: true };
+    }
     const { deliverySummaryHtml } = await import('./delivery-completion.js');
     return notifyEmail(env, env.DB, {
       orderId: order.id,
-      template: TEMPLATE,
+      template: DELIVERED_TEMPLATE,
       recipient: order.email,
       subject: 'המשלוח מ-EdenMish נמסר ✓',
       html: deliverySummaryHtml(env, order),
     });
   }
   if (job.channel === 'whatsapp') {
+    if (job.template !== DELIVERED_TEMPLATE) {
+      return { ok: false, error: 'phone_channel_not_permitted_for_template', permanent: true };
+    }
     if (!order.phone_delivery_link_opt_in || !order.phone) {
       return { ok: false, error: 'phone_channel_requires_opt_in', permanent: true };
     }
@@ -106,7 +178,7 @@ async function defaultDeliver(env, job, order) {
     const proofUrl = `${base}/delivered.html?t=${encodeURIComponent(order.token || '')}`;
     return notifyWhatsApp(env, env.DB, {
       orderId: order.id,
-      template: TEMPLATE,
+      template: DELIVERED_TEMPLATE,
       recipient: order.phone,
       body: `המשלוח שלך הגיע ✓\nלצפייה בהוכחת המסירה: ${proofUrl}\nתודה שבחרת ב-EdenMish!`,
     });
@@ -196,8 +268,15 @@ export async function processDeliveryNotificationOutbox(env, {
 }
 
 export const deliveryNotificationOutboxPolicy = Object.freeze({
-  template: TEMPLATE,
+  template: DELIVERED_TEMPLATE,
+  templates: Object.freeze({
+    delivered: DELIVERED_TEMPLATE,
+    retainedReturning: RETAINED_FAILURE_TEMPLATES.return_to_origin,
+    retainedRedeliveryHold: RETAINED_FAILURE_TEMPLATES.hold_for_redelivery,
+  }),
+  transitions: Object.freeze(['delivered', 'delivery_failed_retained']),
   channels: Object.freeze(['email', 'whatsapp_opt_in']),
+  retainedFailureChannels: Object.freeze(['email']),
   phoneDeliveryRequiresPersistedOptIn: true,
   defaultLimit: DEFAULT_LIMIT,
   defaultMaxAttempts: DEFAULT_MAX_ATTEMPTS,

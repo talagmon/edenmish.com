@@ -1,4 +1,4 @@
--- Migration 025: Enforce one delivery order per non-null wallet reservation.
+-- Migration 029: Enforce one delivery order per non-null wallet reservation.
 --
 -- This index intentionally fails closed if historical duplicate references exist.
 -- Run the documented preflight query in MIGRATIONS.md first; conflicting payment

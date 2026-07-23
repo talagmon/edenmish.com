@@ -712,8 +712,217 @@ describe('driver API v1', () => {
 
     assert.equal((await res.json()).results[0].status, 'accepted');
     assert.equal(order.status, 'failed');
-    assert.ok(db.calls.some((call) => call.sql.includes("FROM orders WHERE status IN ('paid','to_pickup','picked_up','to_dropoff')")));
+    // Dispatch re-queried the dispatchable orders: the happy-path statuses plus any failed
+    // order whose package is still with the driver.
+    assert.ok(db.calls.some((call) => call.sql.includes(
+      "FROM orders WHERE (status IN ('paid','to_pickup','picked_up','to_dropoff')",
+    )));
+    assert.ok(db.calls.some((call) => call.sql.includes(
+      "OR (status = 'failed' AND retained_by_driver IN ('return_to_origin','hold_for_redelivery','redelivery'))",
+    )));
     assert.ok(db.calls.some((call) => call.sql.startsWith('UPDATE driver_assignments SET active = 0')));
+  });
+
+  test('validates the package disposition on a failed delivery without breaking legacy clients', async () => {
+    const failureDb = () => {
+      const order = { id: 9001, status: 'to_dropoff' };
+      const db = fakeDb({
+        first: (call) => {
+          const auth = authenticatedFirst(call);
+          if (auth) return auth;
+          if (call.sql.startsWith('SELECT event_id')) return null;
+          if (call.sql.includes('FROM driver_shifts WHERE id')) return { id: 'sh_123' };
+          if (call.sql.includes('FROM driver_assignments')) return { order_id: 9001 };
+          if (call.sql.includes('FROM driver_route_stops s JOIN driver_routes')) {
+            return { stop_id: 'stop_d1', task_type: 'dropoff' };
+          }
+          if (call.sql === 'SELECT * FROM orders WHERE id = ?') return order;
+          return null;
+        },
+        run: (call) => {
+          if (call.sql.startsWith('UPDATE orders SET')) order.status = call.args[0];
+          return { meta: { changes: 1 } };
+        },
+      });
+      return { db, order };
+    };
+    const send = async (payload) => {
+      const { db, order } = failureDb();
+      const res = await handleDriverApi(request('/api/driver/v1/execution-events:batch', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({ events: [{
+          event_id: eventId,
+          event_type: 'delivery_failed',
+          occurred_at: '2026-07-18T15:00:00Z',
+          recorded_at_monotonic_ms: 42,
+          shift_id: 'sh_123',
+          order_id: 'ord_9001',
+          stop_id: 'stop_d1',
+          route_revision_seen: 13,
+          payload,
+        }] }),
+      }), { DB: db });
+      return { result: (await res.json()).results[0], order, db };
+    };
+
+    // Each known disposition is accepted and still closes the order as failed.
+    for (const disposition of ['return_to_origin', 'hold_for_redelivery', 'left_with_alternate']) {
+      const { result, order } = await send({
+        reason: 'incorrect_address',
+        disposition,
+        note: 'לא ניתן היה למסור',
+      });
+      assert.equal(result.status, 'accepted', disposition);
+      assert.equal(order.status, 'failed', disposition);
+    }
+
+    // An unrecognised disposition is a contract defect: refuse it and never touch the
+    // order, so the dispatch layer can trust any stored value.
+    const unknown = await send({
+      reason: 'incorrect_address',
+      disposition: 'teleport_home',
+      note: 'לא ניתן היה למסור',
+    });
+    assert.equal(unknown.result.status, 'rejected_invalid');
+    assert.equal(unknown.order.status, 'to_dropoff');
+    assert.ok(!unknown.db.calls.some((call) => call.sql.startsWith('UPDATE orders SET')));
+
+    // The stable Flutter client reports failures with no disposition at all; that must
+    // keep working exactly as before.
+    const legacy = await send({});
+    assert.equal(legacy.result.status, 'accepted');
+    assert.equal(legacy.order.status, 'failed');
+  });
+
+  test('records whether a failed delivery left the package with the driver', async () => {
+    const send = async (disposition) => {
+      const order = { id: 9001, status: 'to_dropoff' };
+      const updates = [];
+      const db = fakeDb({
+        first: (call) => {
+          const auth = authenticatedFirst(call);
+          if (auth) return auth;
+          if (call.sql.startsWith('SELECT event_id')) return null;
+          if (call.sql.includes('FROM driver_shifts WHERE id')) return { id: 'sh_123' };
+          if (call.sql.includes('FROM driver_assignments')) return { order_id: 9001 };
+          if (call.sql.includes('FROM driver_route_stops s JOIN driver_routes')) {
+            return { stop_id: 'stop_d1', task_type: 'dropoff' };
+          }
+          if (call.sql === 'SELECT * FROM orders WHERE id = ?') return order;
+          return null;
+        },
+        run: (call) => {
+          if (call.sql.startsWith('UPDATE orders SET')) {
+            updates.push({ sql: call.sql, args: call.args });
+            order.status = call.args[0];
+          }
+          return { meta: { changes: 1 } };
+        },
+      });
+      const res = await handleDriverApi(request('/api/driver/v1/execution-events:batch', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({ events: [{
+          event_id: eventId,
+          event_type: 'delivery_failed',
+          occurred_at: '2026-07-18T15:00:00Z',
+          recorded_at_monotonic_ms: 42,
+          shift_id: 'sh_123',
+          order_id: 'ord_9001',
+          stop_id: 'stop_d1',
+          route_revision_seen: 13,
+          payload: { reason: 'incorrect_address', disposition, note: 'לא ניתן היה למסור' },
+        }] }),
+      }), { DB: db });
+      assert.equal((await res.json()).results[0].status, 'accepted', disposition);
+      const update = updates.find((item) => item.sql.includes('retained_by_driver'));
+      assert.ok(update, `expected retained_by_driver to be written for ${disposition}`);
+      return update.args;
+    };
+
+    // The two retained dispositions record custody so dispatch keeps the order live, and
+    // timestamp it so the 24h auto-return can fire.
+    const returned = await send('return_to_origin');
+    assert.ok(returned.includes('return_to_origin'));
+    assert.ok(returned.some((value) => typeof value === 'number' && value > 0));
+    assert.ok((await send('hold_for_redelivery')).includes('hold_for_redelivery'));
+    // An alternate handoff released the package, so custody and its timestamp are cleared.
+    assert.ok((await send('left_with_alternate')).includes(null));
+  });
+
+  test('a retained return leg can be navigated and closed without jamming the driver', async () => {
+    const send = async (eventType, order) => {
+      const updates = [];
+      const db = fakeDb({
+        first: (call) => {
+          const auth = authenticatedFirst(call);
+          if (auth) return auth;
+          if (call.sql.startsWith('SELECT event_id')) return null;
+          if (call.sql.includes('FROM driver_shifts WHERE id')) return { id: 'sh_123' };
+          if (call.sql.includes('FROM driver_assignments')) return { order_id: 9001 };
+          if (call.sql.includes('FROM driver_route_stops s JOIN driver_routes')) {
+            return { stop_id: 'stop_r9001', task_type: 'dropoff' };
+          }
+          if (call.sql === 'SELECT * FROM orders WHERE id = ?') return order;
+          return null;
+        },
+        run: (call) => {
+          if (call.sql.startsWith('UPDATE orders')) updates.push(call.sql);
+          return { meta: { changes: 1 } };
+        },
+      });
+      const res = await handleDriverApi(request('/api/driver/v1/execution-events:batch', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({ events: [{
+          event_id: eventId,
+          event_type: eventType,
+          occurred_at: '2026-07-18T15:00:00Z',
+          recorded_at_monotonic_ms: 42,
+          shift_id: 'sh_123',
+          order_id: 'ord_9001',
+          stop_id: 'stop_r9001',
+          route_revision_seen: 13,
+          payload: eventType === 'delivery_failed'
+            ? { reason: 'unsafe_access', disposition: 'return_to_origin', note: 'שוב לא הצלחתי' }
+            : {},
+        }] }),
+      }), { DB: db });
+      return { result: (await res.json()).results[0], updates, order };
+    };
+    const retained = () => ({ id: 9001, status: 'failed', retained_by_driver: 'return_to_origin' });
+
+    // Driving to the return stop and arriving must not conflict: an accepted_conflict would
+    // make the app block every further action until a full route reload.
+    for (const eventType of ['navigation_started', 'arrived']) {
+      const { result } = await send(eventType, retained());
+      assert.equal(result.status, 'accepted', eventType);
+      assert.equal(result.conflict_type ?? null, null, eventType);
+    }
+
+    // Handing the package back ends custody but must NOT report the order as delivered —
+    // the recipient never received it.
+    const completed = await send('delivery_completed', retained());
+    assert.equal(completed.result.status, 'accepted');
+    assert.ok(completed.updates.some((sql) => sql.includes('retained_by_driver = NULL')));
+    assert.ok(!completed.updates.some((sql) => sql.includes("status = 'delivered'")));
+
+    // If the return itself fails, custody must survive: the package is still in the vehicle.
+    const failedAgain = await send('delivery_failed', retained());
+    assert.equal(failedAgain.result.status, 'accepted');
+    assert.ok(!failedAgain.updates.some((sql) => sql.includes('retained_by_driver')));
+
+    // A paid redelivery that reaches the recipient IS a delivery: promote to 'delivered' and
+    // end custody, unlike a return which sets no status and only clears custody. The delivered
+    // path is the one that writes both a status and delivered_at.
+    const redelivered = await send(
+      'delivery_completed',
+      { id: 9001, status: 'failed', retained_by_driver: 'redelivery' },
+    );
+    assert.equal(redelivered.result.status, 'accepted');
+    assert.ok(redelivered.updates.some((sql) => /UPDATE orders SET status = \?.*delivered_at/.test(sql)));
+    assert.ok(!completed.updates.some((sql) => /delivered_at/.test(sql)), 'a return must not set delivered_at');
   });
 
   test('records a cancelled-order completion as a conflict without changing the order', async () => {

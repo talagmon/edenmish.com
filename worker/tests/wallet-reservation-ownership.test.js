@@ -7,7 +7,7 @@ import worker from '../src/index.js';
 
 const schema = readFileSync(new URL('../schema.sql', import.meta.url), 'utf8');
 const migration = readFileSync(
-  new URL('../migrations/025_wallet_reservation_ownership.sql', import.meta.url),
+  new URL('../migrations/029_wallet_reservation_ownership.sql', import.meta.url),
   'utf8',
 );
 const stagingWorkflow = readFileSync(
@@ -228,10 +228,10 @@ describe('wallet reservation ownership', () => {
     assert.equal(index, undefined);
   });
 
-  test('deployment workflows require migration 025 before protected runtime behavior', () => {
-    assert.match(stagingWorkflow, /025_wallet_reservation_ownership\.sql/);
+  test('deployment workflows require migration 029 before protected runtime behavior', () => {
+    assert.match(stagingWorkflow, /029_wallet_reservation_ownership\.sql/);
     assert.match(stagingWorkflow, /duplicate_count/);
     assert.match(stagingWorkflow, /idx_orders_wallet_reservation_unique/);
-    assert.match(productionWorkflow, /025_wallet_reservation_ownership\.sql/);
+    assert.match(productionWorkflow, /029_wallet_reservation_ownership\.sql/);
   });
 });

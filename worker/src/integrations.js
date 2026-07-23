@@ -124,6 +124,53 @@ export async function createDraftOrder(env, order, priceNis) {
   return createShopifyDraftOrder(env, input);
 }
 
+// Corrected-address redelivery fee. This is deliberately a separate Draft Order
+// purpose from the original delivery: the Worker reconciles it into
+// redelivery_charges rather than mutating orders.payment_status or orders.price.
+export async function createRedeliveryDraftOrder(env, order, priceNis, chargeId) {
+  if (!env.SHOPIFY_SHOP || !env.SHOPIFY_ADMIN_TOKEN || !chargeId) return null;
+  const variantId = DELIVERY_VARIANT_IDS[order.service];
+  if (!variantId) return null;
+  const amount = Number(priceNis);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  const currencyCode = env.SHOPIFY_CURRENCY || 'ILS';
+  const input = {
+    lineItems: [{
+      variantId,
+      quantity: 1,
+      priceOverride: { amount: amount.toFixed(2), currencyCode },
+      customAttributes: [
+        { key: '_edenmish_redelivery_charge', value: String(chargeId) },
+        { key: '_tracking_token', value: String(order.token || '') },
+        { key: 'סוג חיוב', value: 'ניסיון מסירה נוסף' },
+        { key: 'כתובת מתוקנת', value: String(order.redelivery_dropoff || order.dropoff || '—') },
+      ],
+    }],
+    presentmentCurrencyCode: currencyCode,
+    tags: ['edenmish-redelivery'],
+    note: `EdenMish redelivery charge: ${chargeId}`,
+    metafields: [
+      {
+        namespace: 'edenmish',
+        key: 'redelivery_charge_id',
+        value: String(chargeId),
+        type: 'single_line_text_field',
+      },
+      {
+        namespace: 'edenmish',
+        key: 'tracking_token',
+        value: String(order.token || ''),
+        type: 'single_line_text_field',
+      },
+    ],
+  };
+  if (order.phone) input.phone = order.phone;
+  if (order.email) input.email = order.email;
+  if (order.name) input.customAttributes = [{ key: 'שם המזמין', value: String(order.name) }];
+  return createShopifyDraftOrder(env, input);
+}
+
 // Business wallet top-up. This intentionally has its own Draft Order shape so a
 // prepaid credit purchase can never be mistaken for a delivery order.
 export async function createWalletDraftOrder(env, topup, priceNis) {
@@ -197,15 +244,16 @@ export function parseShopifyOrderWebhook(body) {
     .join(' ');
   let token = null;
   let walletTopupToken = null;
+  let redeliveryChargeId = null;
   // The funnel embeds _tracking_token in line item properties
   const lines = o.line_items || [];
   for (const li of lines) {
     const props = li.properties || [];
     for (const p of props) {
-      if (p.name === '_tracking_token' && p.value) { token = p.value; break; }
+      if (p.name === '_tracking_token' && p.value) token = p.value;
       if (p.name === '_edenmish_wallet_topup' && p.value) walletTopupToken = p.value;
+      if (p.name === '_edenmish_redelivery_charge' && p.value) redeliveryChargeId = p.value;
     }
-    if (token) break;
   }
   // Fallback: metafield or note
   if (!token) {
@@ -224,6 +272,16 @@ export function parseShopifyOrderWebhook(body) {
     const m = o.note.match(/wallet\s+topup:\s*([A-Za-z0-9_-]+)/i);
     if (m) walletTopupToken = m[1];
   }
+  if (!redeliveryChargeId) {
+    const meta = (o.metafields || []).find(
+      m => m.namespace === 'edenmish' && m.key === 'redelivery_charge_id',
+    );
+    redeliveryChargeId = (meta && meta.value) || null;
+  }
+  if (!redeliveryChargeId && typeof o.note === 'string') {
+    const m = o.note.match(/redelivery\s+charge:\s*([A-Za-z0-9_-]+)/i);
+    if (m) redeliveryChargeId = m[1];
+  }
   // Conservative reconciliation: only a clearly paid/captured Shopify order is treated
   // as paid. `pending` / `authorized` / `partially_paid` / `voided` / `refunded` /
   // `partially_refunded` must NOT mark the internal order paid — the webhook handler's
@@ -232,6 +290,7 @@ export function parseShopifyOrderWebhook(body) {
   return {
     token,
     walletTopupToken,
+    redeliveryChargeId,
     shopifyOrderId: o.id || null,
     draftOrderId: o.draft_order_id || null,
     paid,

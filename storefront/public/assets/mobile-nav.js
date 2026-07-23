@@ -1,39 +1,117 @@
-// Auto-builds a mobile hamburger menu from each page's existing desktop nav.
+// Keeps the public navigation identical on every page and builds its mobile menu.
 (function () {
-  var headerEl = document.querySelector('header') || document.querySelector('nav.fixed');
+  var headerEl = document.querySelector('body > header.fixed') || document.querySelector('body > nav.fixed');
   if (!headerEl) return;
   var bar = headerEl.querySelector('div, nav');
   var desk = bar && bar.querySelector('[class*="md:flex"]');
   if (!desk) return;
-  var hasBusiness = Array.prototype.some.call(desk.querySelectorAll('a'), function (a) { return (a.textContent || '').trim() === 'לעסקים'; });
-  if (!hasBusiness) {
-    var aboutLink = Array.prototype.find.call(desk.querySelectorAll('a'), function (a) { return (a.textContent || '').trim() === 'אודות'; });
-    if (aboutLink) {
-      var businessLink = aboutLink.cloneNode(true);
-      businessLink.textContent = 'לעסקים';
-      businessLink.setAttribute('href', '/business');
-      desk.insertBefore(businessLink, aboutLink);
-    }
+
+  var navItems = [
+    { key: 'home', label: 'בית', href: '/' },
+    { key: 'services', label: 'שירותים', href: '/booking.html' },
+    { key: 'tracking', label: 'מעקב משלוחים', href: '/track.html' },
+    { key: 'business', label: 'לעסקים', href: '/business' },
+    { key: 'about', label: 'אודות', href: '/about.html' }
+  ];
+
+  function activeKey(pathname) {
+    var path = (pathname || '/').replace(/\/+$/, '') || '/';
+    if (path === '/' || path === '/index.html') return 'home';
+    if (path === '/booking' || path === '/booking.html') return 'services';
+    if (path === '/track' || path === '/track.html') return 'tracking';
+    if (path === '/business' || path === '/business.html' || path === '/business-account' || path === '/business-account.html') return 'business';
+    if (path === '/about' || path === '/about.html') return 'about';
+    return '';
   }
-  var links = [];
-  desk.querySelectorAll('a').forEach(function (a) { links.push(a.outerHTML); });
-  if (!links.length) return;
+
+  var currentKey = activeKey(window.location.pathname);
+
+  function buildLink(item, mobile) {
+    var link = document.createElement('a');
+    link.className = mobile ? 'site-nav-link eden-mobile-nav__link' : 'site-nav-link';
+    link.href = item.href;
+    link.textContent = item.label;
+    link.dataset.navKey = item.key;
+    if (item.key === currentKey) {
+      link.classList.add('site-nav-link--active');
+      link.setAttribute('aria-current', 'page');
+    }
+    return link;
+  }
+
+  desk.classList.add('site-nav');
+  desk.setAttribute('aria-label', 'ניווט ראשי');
+  desk.replaceChildren.apply(desk, navItems.map(function (item) { return buildLink(item, false); }));
+  bar.classList.add('eden-nav-bar');
+
+  var brand = bar.querySelector('a[href="/"]');
+  var cta = Array.prototype.find.call(bar.children, function (child) {
+    return child.tagName === 'A' && child !== brand && !desk.contains(child);
+  });
+  if (cta) {
+    cta.className = 'site-nav-cta';
+    cta.href = '/booking.html';
+    cta.textContent = 'שלחו עכשיו';
+  }
 
   var burger = document.createElement('button');
   burger.type = 'button';
-  burger.className = 'md:hidden shrink-0 p-2 text-on-surface hover:text-primary transition-colors';
+  burger.className = 'eden-nav-toggle';
   burger.setAttribute('aria-label', 'תפריט');
-  burger.innerHTML = '<span class="material-symbols-outlined">menu</span>';
-  var last = bar.children[bar.children.length - 1];
-  if (last) bar.insertBefore(burger, last); else bar.appendChild(burger);
+  burger.setAttribute('aria-expanded', 'false');
+  burger.setAttribute('aria-controls', 'eden-mobile-nav');
+  burger.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">menu</span>';
+  if (cta) bar.insertBefore(burger, cta); else bar.appendChild(burger);
 
   var panel = document.createElement('nav');
-  panel.className = 'md:hidden hidden glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-md flex flex-col gap-stack-md';
-  panel.innerHTML = links.join('');
+  panel.id = 'eden-mobile-nav';
+  panel.className = 'eden-mobile-nav';
+  panel.setAttribute('aria-label', 'ניווט ראשי במובייל');
+  panel.hidden = true;
+  navItems.forEach(function (item) { panel.appendChild(buildLink(item, true)); });
   headerEl.parentNode.insertBefore(panel, headerEl.nextSibling);
 
-  burger.addEventListener('click', function (e) { e.preventDefault(); panel.classList.toggle('hidden'); });
-  panel.addEventListener('click', function (e) { if (e.target.closest('a')) panel.classList.add('hidden'); });
+  var compactNav = window.matchMedia('(max-width: 1023px)');
+
+  function setMenu(open) {
+    if (!compactNav.matches) open = false;
+    panel.hidden = !open;
+    burger.setAttribute('aria-expanded', open ? 'true' : 'false');
+    burger.querySelector('.material-symbols-outlined').textContent = open ? 'close' : 'menu';
+  }
+
+  function syncNavigation() {
+    var compact = compactNav.matches;
+
+    // Inline display values are intentional. They keep the two navigation
+    // modes mutually exclusive even when a browser restores stale CSS from
+    // cache while loading the current navigation script.
+    desk.style.display = compact ? 'none' : 'flex';
+    burger.style.display = compact ? 'grid' : 'none';
+    if (cta) cta.style.display = compact ? 'none' : 'inline-flex';
+    if (!compact) setMenu(false);
+  }
+
+  syncNavigation();
+  if (typeof compactNav.addEventListener === 'function') {
+    compactNav.addEventListener('change', syncNavigation);
+  } else {
+    compactNav.addListener(syncNavigation);
+  }
+
+  burger.addEventListener('click', function (e) {
+    e.preventDefault();
+    setMenu(panel.hidden);
+  });
+  panel.addEventListener('click', function (e) {
+    if (e.target.closest('a')) setMenu(false);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !panel.hidden) {
+      setMenu(false);
+      burger.focus();
+    }
+  });
 })();
 
 // Footer: wire policy links to the legal pages + add missing legal links and business details.

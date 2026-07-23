@@ -27,7 +27,13 @@ export const DEFAULT_PRICING_RULES = {
   flash_z1: 85, flash_z2: 110, // flash_z3 intentionally absent (N/A)
   sur_medium: 15,
   sur_evening: 30,
-  weekend_mult: 1.5
+  weekend_mult: 1.5,
+  // Extra-stop fee for re-serving a package after a failed delivery (a return to the
+  // pickup point, or a redelivery to a corrected address). A re-attempt is ONE leg, not
+  // the pickup+dropoff pair the matrix above prices, so these are anchored at half the
+  // standard base per zone rather than one flat amount — a Zone 3 retry costs materially
+  // more to serve than a Zone 1 one.
+  retry_z1: 25, retry_z2: 35, retry_z3: 60
 };
 
 export function zoneOf(city) {
@@ -88,6 +94,68 @@ export function priceOrder(o, rules) {
       weekend_multiplier: weekendMultiplier,
       weekend_surcharge: weekendSurcharge,
       total: price,
+    },
+  };
+}
+
+// Suggested extra-stop fee for re-serving a package after a failed delivery.
+//
+// This is a SUGGESTION for the operator, never an automatic charge. Whether to charge at
+// all is a fault judgement a formula cannot make: `incorrect_address` does not say whether
+// the customer or our own geocoding produced the bad address, and our defects (and any
+// unsafe-access call by the driver) should be waived. Ops decides; this only removes the
+// arithmetic and the zone guesswork.
+//
+// Pass the cities of the leg actually being served:
+//   - return to origin  → dropoff_city = the original pickup city
+//   - redelivery        → dropoff_city = the corrected destination city
+// Zone is recomputed with the same max() rule as priceOrder, so pushing a package further
+// out costs more than bringing it home.
+//
+// Deliberately unlike priceOrder: the medium-size surcharge does NOT re-apply (same
+// package, already paid for once), and the result is capped at a full standard delivery for
+// the zone — a retry must never cost more than simply booking again.
+export function retryFee(o, rules) {
+  const R = { ...DEFAULT_PRICING_RULES, ...(rules || {}) };
+  const num = (v, d) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
+
+  const reasons = [];
+  const pz = zoneOf(o && o.pickup_city);
+  const dz = zoneOf(o && o.dropoff_city);
+  if (pz == null && dz == null) reasons.push('out_of_zone');
+  const zone = (pz || dz) ? Math.max(pz || 0, dz || 0) : null;
+  if (zone == null) {
+    return { fee: null, zone: null, base: null, capped: false, review: true, reasons };
+  }
+
+  const base = num(R['retry_z' + zone], null);
+  if (base == null) {
+    reasons.push('retry_rate_missing');
+    return { fee: null, zone, base: null, capped: false, review: true, reasons };
+  }
+
+  const hour = num(o && o.when_hour, -1);
+  const eveningSurcharge = hour >= 19 && hour < 22 ? num(R.sur_evening, 30) : 0;
+  const weekendMultiplier = isWeekend(o && o.when_date) ? num(R.weekend_mult, 1.5) : 1;
+
+  const uncapped = Math.round(base * weekendMultiplier) + eveningSurcharge;
+  const ceiling = num(R['std_z' + zone], null);
+  const capped = ceiling != null && uncapped > ceiling;
+  const fee = capped ? ceiling : uncapped;
+
+  return {
+    fee,
+    zone,
+    base,
+    capped,
+    review: reasons.length > 0,
+    reasons,
+    breakdown: {
+      base,
+      evening_surcharge: eveningSurcharge,
+      weekend_multiplier: weekendMultiplier,
+      cap: ceiling,
+      total: fee,
     },
   };
 }

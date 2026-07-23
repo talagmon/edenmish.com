@@ -234,6 +234,7 @@ input:focus{outline:none;border-color:#dfb7ff;box-shadow:0 0 14px rgba(139,92,24
 .ocard-actions{margin-top:10px;border-top:1px dashed rgba(255,255,255,.12);padding-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .inline-price{display:flex;gap:6px;align-items:stretch;width:100%}
 .inline-price input{flex:1;margin:0;padding:12px;border:1px solid rgba(139,92,246,.42);border-radius:12px;font-size:1.1rem;text-align:center;min-width:80px;background:rgba(17,23,53,.78);color:#fff}
+.inline-price select.fee-preset{margin:0;padding:12px 8px;border:1px solid rgba(139,92,246,.42);border-radius:12px;font-size:.95rem;background:rgba(17,23,53,.78);color:#fff;min-width:104px}
 .deliver-form{display:flex;flex-direction:column;gap:6px;width:100%}
 .deliver-form input{margin:0;padding:12px;border:1px solid rgba(139,92,246,.42);border-radius:12px;font-size:1rem;text-align:right;background:rgba(17,23,53,.78);color:#fff}
 .nlist{margin-top:8px;border-top:1px dashed rgba(255,255,255,.12);padding-top:8px}
@@ -369,6 +370,37 @@ function render(fails){
   var fp=(fails&&fails.length)?'<div class="qbucket"><div class="qhead"><span class="qhead-label" style="color:#C0392B">בעיות בשליחת הודעות</span><span class="qhead-count">'+fails.length+'</span></div><div class="qcards">'+fails.map(function(f){return '<div class="ocard" style="border-color:rgba(192,57,43,.3)"><div class="ocard-top"><span class="badge" style="background:#C0392B">'+esc(f.channel||'email')+'</span><b>'+(f.order_id?'#'+f.order_id:'—')+'</b><span class="muted" style="margin-inline-start:auto;font-size:.72rem">'+fmt(f.created_at)+'</span></div><div class="muted">'+esc(f.template||'')+(f.recipient?' · '+esc(maskRecip(f.recipient)):'')+'</div><div class="stale" style="margin-top:4px">'+esc(f.error||'שגיאה לא ידועה')+'</div></div>';}).join('')+'</div></div>':'';
   document.getElementById('app').innerHTML=toolbar+sections+fp;
 }
+// A failed delivery whose package is still with the driver. Surfaces it in the board so a held
+// package cannot go dark, and says what Ops must do: a return is already on its way back and
+// needs nothing; a hold is waiting on a corrected destination and the owner's fee payment.
+function retainedBanner(o){
+  var hold=o.retained_by_driver==='hold_for_redelivery';
+  var fee=Number(o.retry_fee_suggested)||0;
+  var pend=o.pending_redelivery;
+  var msg,color,icon;
+  if(o.retained_by_driver==='redelivery'){
+    msg='שוחרר למשלוח חוזר. היעד המעודכן ('+esc(o.dropoff||'')+') נשלח לשליח.';
+    color='#34D399';icon='local_shipping';
+  }else if(hold&&pend){
+    if(pend.payment_status==='paid'){
+      msg='המזמין עדכן יעד ושילם '+(pend.fee?'₪'+pend.fee:'את דמי המסירה החוזרת')+'. ניתן לשחרר את היעד החדש לשליח.';
+      color='#34D399';icon='verified';
+    }else if(pend.payment_status==='link_sent'){
+      msg='המזמין עדכן יעד חדש: '+esc(pend.dropoff||pend.city||'')+'. קישור תשלום בסך '+(pend.fee?'₪'+pend.fee:'דמי המסירה החוזרת')+' נוצר וממתין לתשלום.';
+      color='#f0b429';icon='payments';
+    }else{
+      msg='המזמין עדכן יעד חדש: '+esc(pend.dropoff||pend.city||'')+'. ממתין להשלמת תשלום המסירה החוזרת.';
+      color='#f0b429';icon='paid';
+    }
+  }else if(hold){
+    msg='החבילה אצל השליח וממתינה ליעד חדש. שלחו למזמין קישור לעדכון כתובת ותשלום'+(fee?' (מוצע: '+fee+' ₪'+(o.retry_fee_zone?' · אזור '+o.retry_fee_zone:'')+')':'')+'. ללא מענה תוחזר אוטומטית לנקודת האיסוף תוך 24 שעות.';
+    color='#dfb7ff';icon='inventory_2';
+  }else{
+    msg='החבילה אצל השליח ומוחזרת לנקודת האיסוף. אין צורך בפעולה.';
+    color='#91d3c8';icon='assignment_return';
+  }
+  return '<div style="margin-top:6px;padding:6px 10px;background:rgba(147,211,200,.08);border:1px solid '+color+'55;border-radius:8px;font-size:.78rem;color:'+color+'"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">'+icon+'</span> '+esc(msg)+'</div>';
+}
 function card(o){
   var s=o.status,id=o.id,isLive=LIVE.indexOf(s)>=0,isActive=o.id===activeId,isNew=['review','received','priced','payment_sent'].indexOf(s)>=0;
   var h='<div class="glass-card ocard'+(isActive?' ocard-active':'')+(isLive?' ocard-live':'')+(isNew?' ocard-new':'')+'">';
@@ -380,15 +412,38 @@ function card(o){
   if(o.urgent)h+='<span class="chip chip-urg">דחוף</span>';
   if(o.payment_status&&o.payment_status!=='none')h+='<span class="chip chip-pay">'+esc(o.payment_status)+'</span>';
   h+='</div>';
+  if(o.retained_by_driver)h+=retainedBanner(o);
   if(o.notes)h+='<div style="margin-top:6px;padding:6px 10px;background:rgba(251,191,36,.1);border-radius:8px;font-size:.78rem;color:#FBBF24"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">sticky_note_2</span> '+esc(o.notes)+'</div>';
   h+=orderProgress(s)+actions(o);if(notifOrderId===id)h+=notifPanel();h+='</div>';
   return h;
+}
+// Handling-fee presets, in shekels. Ops adds one to the price with a single pick instead of
+// doing the arithmetic by hand.
+//
+// When the order carries a server-computed suggestion (a package still with the driver after
+// a failed delivery), that zone-derived amount leads the list and is preselected — a flat
+// ladder is zone-blind, and charging a Zone 3 return the same as a Zone 1 one loses money at
+// one end and overcharges at the other. The full ladder stays available to override, because
+// whether and how much to charge is a fault judgement, not arithmetic.
+var FEE_PRESETS=[20,25,30,35,40,45,50,55,60];
+function feePresetHtml(id,suggested,zone){
+  var fee=Number(suggested)||0;
+  var h='<select class="fee-preset" data-fee-for="'+id+'" aria-label="הוספת דמי טיפול למחיר">';
+  if(fee>0){
+    h+='<option value="'+fee+'" selected>מוצע: +'+fee+' ₪'+(zone?' (אזור '+zone+')':'')+'</option>';
+  }
+  h+='<option value="">+ דמי טיפול ₪</option>';
+  for(var i=0;i<FEE_PRESETS.length;i++){
+    if(FEE_PRESETS[i]===fee)continue;
+    h+='<option value="'+FEE_PRESETS[i]+'">+'+FEE_PRESETS[i]+' ₪</option>';
+  }
+  return h+'</select>';
 }
 function actions(o){
   var s=o.status,id=o.id,h='<div class="ocard-actions">';
   if(LIVE.indexOf(s)>=0)h+=gpsControlHtml(id);
   if(s==='review'||s==='priced'||s==='received'){
-    h+='<div class="inline-price"><input type="number" inputmode="numeric" min="1" id="price-'+id+'" value="'+(o.price||'')+'" placeholder="מחיר ₪"><button class="btn sm go" data-act="approve" data-id="'+id+'">אישור מחיר ושליחת קישור תשלום</button></div>';
+    h+='<div class="inline-price"><input type="number" inputmode="numeric" min="1" id="price-'+id+'" value="'+(o.price||'')+'" placeholder="מחיר ₪">'+feePresetHtml(id,o.retry_fee_suggested,o.retry_fee_zone)+'<button class="btn sm go" data-act="approve" data-id="'+id+'">אישור מחיר ושליחת קישור תשלום</button></div>';
     if(o.review_flag)h+='<div class="stale" style="width:100%">חריג: '+esc(o.review_reason||'')+'</div>';
   }else if(s==='payment_sent'){
     if(o.payment_url)h+='<button class="btn sm" data-act="copy" data-pay="'+esc(o.payment_url)+'">העתק קישור תשלום</button><a class="btn sm alt" href="'+esc(o.payment_url)+'" target="_blank" rel="noopener">פתח קישור</a>';
@@ -400,6 +455,10 @@ function actions(o){
   }else if(NEXT[s]){
     h+='<button class="btn sm go" data-act="advance" data-id="'+id+'" data-next="'+NEXT[s]+'">'+NEXTLBL[s]+'</button><button class="btn sm danger" data-act="fail" data-id="'+id+'">סמן כנכשל</button>';
   }
+  // A verified paid webhook is the money gate. Ops still makes the operational
+  // release decision, but cannot release an unpaid corrected address.
+  if(o.pending_redelivery&&o.pending_redelivery.payment_status==='paid')h+='<button class="btn sm go" data-act="release-redelivery" data-id="'+id+'"><span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle">local_shipping</span> שחרר למשלוח חוזר'+(o.pending_redelivery.fee?' (שולם ₪'+o.pending_redelivery.fee+')':'')+'</button>';
+  if(o.pending_redelivery&&o.pending_redelivery.payment_status==='link_sent'&&o.pending_redelivery.payment_url)h+='<a class="btn sm alt" href="'+esc(o.pending_redelivery.payment_url)+'" target="_blank" rel="noopener">פתח קישור תשלום חוזר</a>';
   if(['picked_up','to_dropoff','delivered','failed'].indexOf(s)>=0)h+='<button class="btn sm alt" data-act="driverproofs" data-id="'+id+'"><span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle">verified</span> הוכחות מהשליח</button>';
   h+='<button class="btn sm alt" data-act="notifs" data-id="'+id+'">'+(notifOrderId===id?'▲ הסתר הודעות':'▼ הצגת הודעות')+'</button>';
   return h+'</div>';
@@ -426,6 +485,7 @@ function copyPay(url){if(navigator.clipboard&&navigator.clipboard.writeText){nav
 async function setStatus(id,st){try{var r=await api('/api/ops/orders/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:st})});if(!r.ok)throw 0;if(st==='picked_up'||st==='delivered'||st==='failed'||st==='cancelled')stopWatch();refresh();}catch(e){alert('לא הצלחנו לעדכן את ההזמנה. נסו שוב.');}}
 async function advance(id,cur){if(NEXT[cur])await setStatus(id,NEXT[cur]);}
 async function markPaid(id){if(!confirm('לסמן כשולם ידנית?'))return;await setStatus(id,'paid');}
+async function releaseRedelivery(id){if(!confirm('התשלום אומת. לשחרר את הכתובת המתוקנת למסלול השליח?'))return;try{var r=await api('/api/ops/orders/'+id+'/release-redelivery',{method:'POST'});if(!r.ok)throw 0;refresh();}catch(e){alert('לא הצלחנו לשחרר את המשלוח החוזר. ודאו שהתשלום אומת ונסו שוב.');}}
 var podOrderId=null,sigCtx=null,sigDrawing=false,sigHas=false;
 function showPod(id){podOrderId=id;var p=document.getElementById('pod');p.hidden=false;document.getElementById('pod-recv').value='';document.getElementById('pod-note').value='';document.getElementById('pod-photo').value='';document.getElementById('pod-photo-ph').innerHTML='<span class="material-symbols-outlined">photo_camera</span> לחצו לצלם את החבילה ביעד';clearSig();initSig();}
 function hidePod(){document.getElementById('pod').hidden=true;}
@@ -480,6 +540,12 @@ function updateGpsControl(id){var el=document.getElementById('gps-control-'+id);
 function toggleGps(id){if((watchId!==null||gpsState==='requesting')&&gpsOrderId===id)stopWatch();else startWatch(id);}
 function startWatch(id){if(!navigator.geolocation){gpsOrderId=id;gpsState='error';updateGpsControl(id);alert('שירותי מיקום אינם זמינים במכשיר הזה.');return;}if(watchId!==null)stopWatch();gpsOrderId=id;gpsState='requesting';updateGpsControl(id);try{watchId=navigator.geolocation.watchPosition(function(p){gpsState='active';updateGpsControl(id);var c=p.coords;api('/api/ops/orders/'+id+'/gps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lat:c.latitude,lng:c.longitude})}).catch(function(){});},function(err){if(watchId!==null)navigator.geolocation.clearWatch(watchId);watchId=null;gpsState=err&&err.code===1?'denied':'error';updateGpsControl(id);alert(gpsState==='denied'?'הרשאת המיקום נדחתה. ניתן לנסות שוב מהכפתור.':'לא הצלחנו לקבל מיקום. בדקו את שירותי המיקום ונסו שוב.');},{enableHighAccuracy:true,maximumAge:5000,timeout:15000});}catch(e){watchId=null;gpsState='error';updateGpsControl(id);alert('לא הצלחנו להפעיל שיתוף מיקום.');}}
 function stopWatch(){var id=gpsOrderId;if(watchId!==null)navigator.geolocation.clearWatch(watchId);watchId=null;gpsOrderId=null;gpsState='idle';if(id!=null)updateGpsControl(id);}
+document.getElementById('app').addEventListener('change',function(e){
+  var sel=e.target.closest('.fee-preset');if(!sel||!sel.value)return;
+  var inp=document.getElementById('price-'+sel.getAttribute('data-fee-for'));
+  if(inp)inp.value=String((Number(inp.value)||0)+Number(sel.value));
+  sel.value='';
+});
 function hideDriverAccess(){document.getElementById('driver-access').hidden=true;document.getElementById('driver-invite-result').hidden=true;}
 async function showDriverAccess(){document.getElementById('driver-access').hidden=false;document.getElementById('driver-invite-result').hidden=true;await loadDriverAccess();}
 function driverInviteState(invite){
@@ -535,6 +601,7 @@ document.getElementById('app').addEventListener('click',function(e){
   else if(act==='advance')advance(id,b.getAttribute('data-next'));
   else if(act==='fail'){if(confirm('לסמן את ההזמנה כנכשלת?'))setStatus(id,'failed');}
   else if(act==='markpaid')markPaid(id);
+  else if(act==='release-redelivery')releaseRedelivery(id);
   else if(act==='pod')showPod(id);
   else if(act==='driverproofs')showDriverProofs(id);
   else if(act==='copy'){copyPay(b.getAttribute('data-pay'));alert('הקישור הועתק ללוח ✓');}
