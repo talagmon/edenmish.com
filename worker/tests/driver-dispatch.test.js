@@ -146,6 +146,41 @@ describe('driver dispatch planning', () => {
     assert.deepEqual(blockedOrderIds, []);
   });
 
+  test('routes a return leg for a retained package and holds a redelivery until it is paid', () => {
+    const returning = order(5, 'failed', 34.77, 34.90, {
+      retained_by_driver: 'return_to_origin',
+      pickup: 'הרצל 42',
+      pickup_city: 'תל אביב',
+    });
+    const holding = order(6, 'failed', 34.81, 34.95, {
+      retained_by_driver: 'hold_for_redelivery',
+    });
+    const settled = order(7, 'failed', 34.83, 34.97, { retained_by_driver: null });
+
+    const { tasks, blockedOrderIds } = buildDispatchTasks([returning, holding, settled]);
+
+    // return_to_origin becomes a lone drop-off back at the pickup coordinates, under a stop id
+    // distinct from the stop_d5 that failed so a replayed failure cannot kill the new leg.
+    assert.deepEqual(tasks.map((task) => task.stopId), ['stop_r5']);
+    assert.equal(tasks[0].taskType, 'dropoff');
+    assert.equal(tasks[0].requiredPredecessorStopId, null);
+    assert.equal(tasks[0].location.longitude, 34.77);
+    assert.deepEqual(tasks[0].addressFingerprint, ['הרצל 42', null, 'תל אביב']);
+
+    // hold_for_redelivery yields no stop: the driver must not see a redelivery before Ops has
+    // created the fee and the owner has paid it. A settled failure yields nothing either.
+    assert.deepEqual(blockedOrderIds, []);
+  });
+
+  test('a retained return without pickup coordinates is blocked rather than mislocated', () => {
+    const { tasks, blockedOrderIds } = buildDispatchTasks([
+      { id: 8, status: 'failed', urgent: 0, retained_by_driver: 'return_to_origin' },
+    ]);
+
+    assert.deepEqual(tasks, []);
+    assert.deepEqual(blockedOrderIds, [8]);
+  });
+
   test('orders by distance while preserving pickup-before-drop-off precedence', () => {
     const { tasks } = buildDispatchTasks([
       order(10, 'picked_up', 34.70, 34.710),

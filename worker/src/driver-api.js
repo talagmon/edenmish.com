@@ -376,7 +376,11 @@ async function taskProof(req, env, auth, meta, shiftId, stopId) {
   }, 201, meta.requestId);
 }
 
-async function applyTaskEvent(env, eventType, task, order, orderId) {
+// Dispositions that leave the package physically with the driver, so the order must stay
+// dispatchable even though its canonical status becomes 'failed'.
+const RETAINED_FAILURE_DISPOSITIONS = new Set(['return_to_origin', 'hold_for_redelivery']);
+
+async function applyTaskEvent(env, eventType, task, order, orderId, payload = {}) {
   if (!order || order.status === 'cancelled') {
     return { status: 'accepted_conflict', conflictType: order ? 'order_cancelled' : 'order_missing', transitioned: false };
   }
@@ -408,6 +412,14 @@ async function applyTaskEvent(env, eventType, task, order, orderId) {
   const fields = targetStatus === 'picked_up' ? { picked_up_at: Date.now() }
     : targetStatus === 'delivered' ? { delivered_at: Date.now() }
     : {};
+  if (targetStatus === 'failed') {
+    // Record whether the driver still has the package. Dispatch keeps a retained order
+    // eligible and onboard so a return or redelivery leg can be routed; an alternate
+    // handoff clears it so the order settles as a normal failure.
+    fields.retained_by_driver = RETAINED_FAILURE_DISPOSITIONS.has(payload.disposition)
+      ? payload.disposition
+      : null;
+  }
   await setOrderStatus(env.DB, orderId, targetStatus, fields);
   return { status: 'accepted', conflictType: null, transitioned: true };
 }
@@ -467,7 +479,9 @@ async function processEvent(env, auth, meta, event, executionContext) {
       // This transition is committed below with its event and logical notification jobs.
       deliveryTransitionOrder = order;
     } else {
-      const applied = await applyTaskEvent(env, event.event_type, task, order, orderId);
+      const applied = await applyTaskEvent(
+        env, event.event_type, task, order, orderId, event.payload,
+      );
       status = applied.status;
       conflictType = applied.conflictType;
       transitioned = applied.transitioned;

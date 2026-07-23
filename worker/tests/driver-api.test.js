@@ -623,7 +623,14 @@ describe('driver API v1', () => {
 
     assert.equal((await res.json()).results[0].status, 'accepted');
     assert.equal(order.status, 'failed');
-    assert.ok(db.calls.some((call) => call.sql.includes("FROM orders WHERE status IN ('paid','to_pickup','picked_up','to_dropoff')")));
+    // Dispatch re-queried the dispatchable orders: the happy-path statuses plus any failed
+    // order whose package is still with the driver.
+    assert.ok(db.calls.some((call) => call.sql.includes(
+      "FROM orders WHERE (status IN ('paid','to_pickup','picked_up','to_dropoff')",
+    )));
+    assert.ok(db.calls.some((call) => call.sql.includes(
+      "OR (status = 'failed' AND retained_by_driver IN ('return_to_origin','hold_for_redelivery'))",
+    )));
     assert.ok(db.calls.some((call) => call.sql.startsWith('UPDATE driver_assignments SET active = 0')));
   });
 
@@ -697,6 +704,59 @@ describe('driver API v1', () => {
     const legacy = await send({});
     assert.equal(legacy.result.status, 'accepted');
     assert.equal(legacy.order.status, 'failed');
+  });
+
+  test('records whether a failed delivery left the package with the driver', async () => {
+    const send = async (disposition) => {
+      const order = { id: 9001, status: 'to_dropoff' };
+      const updates = [];
+      const db = fakeDb({
+        first: (call) => {
+          const auth = authenticatedFirst(call);
+          if (auth) return auth;
+          if (call.sql.startsWith('SELECT event_id')) return null;
+          if (call.sql.includes('FROM driver_shifts WHERE id')) return { id: 'sh_123' };
+          if (call.sql.includes('FROM driver_assignments')) return { order_id: 9001 };
+          if (call.sql.includes('FROM driver_route_stops s JOIN driver_routes')) {
+            return { stop_id: 'stop_d1', task_type: 'dropoff' };
+          }
+          if (call.sql === 'SELECT * FROM orders WHERE id = ?') return order;
+          return null;
+        },
+        run: (call) => {
+          if (call.sql.startsWith('UPDATE orders SET')) {
+            updates.push({ sql: call.sql, args: call.args });
+            order.status = call.args[0];
+          }
+          return { meta: { changes: 1 } };
+        },
+      });
+      const res = await handleDriverApi(request('/api/driver/v1/execution-events:batch', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({ events: [{
+          event_id: eventId,
+          event_type: 'delivery_failed',
+          occurred_at: '2026-07-18T15:00:00Z',
+          recorded_at_monotonic_ms: 42,
+          shift_id: 'sh_123',
+          order_id: 'ord_9001',
+          stop_id: 'stop_d1',
+          route_revision_seen: 13,
+          payload: { reason: 'incorrect_address', disposition, note: 'לא ניתן היה למסור' },
+        }] }),
+      }), { DB: db });
+      assert.equal((await res.json()).results[0].status, 'accepted', disposition);
+      const update = updates.find((item) => item.sql.includes('retained_by_driver'));
+      assert.ok(update, `expected retained_by_driver to be written for ${disposition}`);
+      return update.args;
+    };
+
+    // The two retained dispositions record custody so dispatch keeps the order live.
+    assert.ok((await send('return_to_origin')).includes('return_to_origin'));
+    assert.ok((await send('hold_for_redelivery')).includes('hold_for_redelivery'));
+    // An alternate handoff released the package, so custody is explicitly cleared.
+    assert.ok((await send('left_with_alternate')).includes(null));
   });
 
   test('records a cancelled-order completion as a conflict without changing the order', async () => {

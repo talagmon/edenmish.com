@@ -30,7 +30,10 @@ CREATE TABLE IF NOT EXISTS orders (
   email TEXT, email_verified INTEGER DEFAULT 0, otp_hash TEXT, otp_expires INTEGER,
   business_account_id INTEGER,
   wallet_reservation_id TEXT,
-  payment_method TEXT
+  payment_method TEXT,
+  -- Set when a failed delivery leaves the package with the driver, to the reported
+  -- disposition ('return_to_origin' | 'hold_for_redelivery'). See migration 023.
+  retained_by_driver TEXT
 );
 
 CREATE TABLE IF NOT EXISTS status_history (

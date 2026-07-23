@@ -38,7 +38,62 @@ function taskState(order, taskType) {
   return 'pending';
 }
 
+// A failed delivery whose package stayed with the driver. Such an order keeps its 'failed'
+// status but must remain dispatchable, because dispatch still owes a leg for the package.
+function retainedDisposition(order) {
+  if (order.status !== 'failed') return null;
+  const value = order.retained_by_driver;
+  return value === 'return_to_origin' || value === 'hold_for_redelivery' ? value : null;
+}
+
+export function isRetainedByDriver(order) {
+  return retainedDisposition(order) != null;
+}
+
 function routeTasksForOrder(order) {
+  const retained = retainedDisposition(order);
+  if (retained === 'hold_for_redelivery') {
+    // No stop is emitted, deliberately, and this is a gate rather than a gap: a redelivery to
+    // a different address is only dispatched once Ops has created the extra-stop fee in the
+    // dashboard AND the package owner has paid it. The driver is never part of that process —
+    // the app has no concept of fees — so the correct behaviour here is to show nothing until
+    // the system explicitly produces the new leg. Failing closed means an unpaid redelivery can
+    // never leak into a driver's route.
+    //
+    // Whoever implements the redelivery destination must keep both conditions: a corrected
+    // drop-off address, and the fee settled. See the hold-window rule (auto-return after 24h,
+    // never across a shift boundary) so an unpaid hold cannot ride around indefinitely.
+    //
+    // The order still counts as onboard so that the eventual leg is accepted by the client.
+    return { tasks: [], blocked: false };
+  }
+  if (retained === 'return_to_origin') {
+    // A return is NOT gated on payment: the package should come home regardless, and the return
+    // fee may be waived outright when the failure was our fault. Only a redelivery to a new
+    // address waits for the owner to pay.
+    const returnLocation = location(order.pickup_lat, order.pickup_lng);
+    if (!returnLocation) return { tasks: [], blocked: true };
+    // A lone drop-off back at the pickup address, with no predecessor because the package is
+    // already aboard. The stop id differs from the drop-off that failed (stop_d…) so the
+    // client's durable failure event cannot mark this new leg as failed as well.
+    return {
+      tasks: [{
+        stopId: `stop_r${order.id}`,
+        orderId: Number(order.id),
+        taskType: 'dropoff',
+        requiredPredecessorStopId: null,
+        state: 'pending',
+        location: returnLocation,
+        urgency: order.urgent ? 'urgent' : 'normal',
+        serviceDurationSeconds: DEFAULT_SERVICE_SECONDS,
+        addressFingerprint: [order.pickup, order.pickup_detail, order.pickup_city]
+          .map((value) => value ?? null),
+        promisedWindowFingerprint: [order.when_date, order.when_hour, order.service]
+          .map((value) => value ?? null),
+      }],
+      blocked: false,
+    };
+  }
   if (!ELIGIBLE_STATUSES.has(order.status)) return { tasks: [], blocked: false };
   const pickupLocation = location(order.pickup_lat, order.pickup_lng);
   const dropoffLocation = location(order.dropoff_lat, order.dropoff_lng);
@@ -198,12 +253,14 @@ async function optimizedTaskOrder(env, tasks, preferredCurrentStopId, now, vehic
 }
 
 async function eligibleOrders(DB, shiftId = null) {
-  const result = await DB.prepare(`SELECT id, status, urgent,
+  const result = await DB.prepare(`SELECT id, status, urgent, retained_by_driver,
       pickup, pickup_detail, pickup_city, pickup_lat, pickup_lng,
       dropoff, dropoff_detail, dropoff_city, dropoff_lat, dropoff_lng,
       when_date, when_hour, service
     FROM orders
-    WHERE status IN ('paid','to_pickup','picked_up','to_dropoff')
+    WHERE (status IN ('paid','to_pickup','picked_up','to_dropoff')
+        OR (status = 'failed'
+          AND retained_by_driver IN ('return_to_origin','hold_for_redelivery')))
       AND (? IS NULL OR NOT EXISTS (
         SELECT 1 FROM driver_execution_events rejected
         WHERE rejected.shift_id = ? AND rejected.order_id = orders.id
@@ -385,8 +442,13 @@ export async function syncDriverRoute(env, {
   );
   const revision = Number(latest?.revision || 0) + 1;
   const previousIds = new Set(previousStops.map((stop) => stop.stop_id));
+  // The driver app treats this as custody, and its route validation exempts a drop-off whose
+  // order is onboard from needing a pickup predecessor. A retained package must therefore stay
+  // listed, or the return/redelivery leg is rejected as missingPickupPredecessor and the whole
+  // snapshot is refused.
   const onboardOrderIds = [...new Set(orders
-    .filter((order) => ['picked_up', 'to_dropoff'].includes(order.status))
+    .filter((order) => ['picked_up', 'to_dropoff'].includes(order.status)
+      || isRetainedByDriver(order))
     .map((order) => Number(order.id)))];
   const current = optimized.tasks[0];
   let inserted;
