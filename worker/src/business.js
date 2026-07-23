@@ -660,10 +660,24 @@ export async function reserveWalletCredit(DB, accountId, amountAgorot, idempoten
 }
 
 export async function linkWalletReservationToOrder(DB, reservationId, orderId) {
-  await DB.batch([
-    DB.prepare(`UPDATE wallet_reservations SET order_id = ? WHERE id = ? AND order_id IS NULL`).bind(orderId, reservationId),
-    DB.prepare(`UPDATE orders SET wallet_reservation_id = ?, payment_method = 'wallet' WHERE id = ?`).bind(reservationId, orderId),
-  ]);
+  const claimed = await DB.prepare(
+    `UPDATE wallet_reservations
+     SET order_id = ?
+     WHERE id = ? AND (order_id IS NULL OR order_id = ?)
+     RETURNING order_id`
+  ).bind(orderId, reservationId, orderId).first();
+  if (!claimed || Number(claimed.order_id) !== Number(orderId)) {
+    throw new Error('wallet_reservation_already_linked');
+  }
+  const linked = await DB.prepare(
+    `UPDATE orders
+     SET wallet_reservation_id = ?, payment_method = 'wallet'
+     WHERE id = ? AND wallet_reservation_id = ?`
+  ).bind(reservationId, orderId, reservationId).run();
+  if (Number(linked && linked.meta && linked.meta.changes || 0) !== 1) {
+    throw new Error('wallet_order_link_failed');
+  }
+  return { linked: true };
 }
 
 const consumeLotsSql = `WITH target AS (

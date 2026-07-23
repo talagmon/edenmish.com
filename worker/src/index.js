@@ -2,6 +2,7 @@ import {
   createOrder,
   getOrderByToken,
   getOrderById,
+  getOrderByWalletReservationId,
   getOrderByShopifyOrderId,
   listOrders,
   setOrderStatus,
@@ -716,6 +717,7 @@ export default {
       };
 
       let walletReservation = null;
+      let walletReservationCreated = false;
       if (businessSession) {
         const idempotencyKey = req.headers.get('Idempotency-Key') || b.idempotency_key;
         if (!idempotencyKey) return json({ error: 'idempotency_key_required' }, 400, cors);
@@ -728,6 +730,7 @@ export default {
           }, 402, cors);
         }
         walletReservation = reservationResult.reservation;
+        walletReservationCreated = !reservationResult.unchanged;
         if (walletReservation && walletReservation.order_id) {
           const existingOrder = await getOrderById(env.DB, walletReservation.order_id);
           if (existingOrder) return json({ order_id: existingOrder.id, token: existingOrder.token, tracking_url: trackingUrl(env, existingOrder.token), status: existingOrder.status, price: existingOrder.price, wallet: true, idempotent: true }, 200, cors);
@@ -754,7 +757,37 @@ export default {
           ...discountFields
         });
       } catch (error) {
-        if (walletReservation) await releaseWalletReservation(env.DB, walletReservation.id).catch(() => {});
+        if (walletReservation) {
+          // The unique wallet_reservation_id index serializes concurrent retries.
+          // If another request already created the order, return that winner and
+          // heal the reservation's reverse link instead of releasing its funds.
+          let existingOrder = null;
+          let existingOrderLookupSucceeded = false;
+          try {
+            existingOrder = await getOrderByWalletReservationId(env.DB, walletReservation.id);
+            existingOrderLookupSucceeded = true;
+          } catch {
+            // A lookup failure is ambiguous: the INSERT may already have committed.
+            // Keep the reservation held so a later retry can heal the reverse link.
+          }
+          if (existingOrder) {
+            await linkWalletReservationToOrder(env.DB, walletReservation.id, existingOrder.id);
+            return json({
+              order_id: existingOrder.id,
+              token: existingOrder.token,
+              tracking_url: trackingUrl(env, existingOrder.token),
+              status: existingOrder.status,
+              price: existingOrder.price,
+              wallet: true,
+              idempotent: true,
+            }, 200, cors);
+          }
+          // Only the request that created an otherwise-unused reservation may
+          // release it. A retry must never release another request's hold.
+          if (walletReservationCreated && existingOrderLookupSucceeded) {
+            await releaseWalletReservation(env.DB, walletReservation.id).catch(() => {});
+          }
+        }
         throw error;
       }
       const token = created.token;

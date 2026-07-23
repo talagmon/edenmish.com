@@ -743,6 +743,38 @@ the grouped status query may return no rows.
 
 ---
 
+### 029_wallet_reservation_ownership.sql
+
+**Purpose:** Enforces the payment invariant that one non-null wallet reservation
+can fund exactly one delivery order. This closes a concurrent same-idempotency-key
+race in the business order API.
+
+**Preflight (must return zero rows):**
+```sql
+SELECT wallet_reservation_id, COUNT(*) AS order_count
+FROM orders
+WHERE wallet_reservation_id IS NOT NULL
+GROUP BY wallet_reservation_id
+HAVING COUNT(*) > 1;
+```
+
+If this query returns any rows, stop and review the affected orders and wallet
+ledger entries manually. The migration deliberately refuses to guess which
+payment record is authoritative.
+
+**Command:**
+```bash
+wrangler d1 execute edenmish --remote --file=./migrations/029_wallet_reservation_ownership.sql
+```
+
+**Verification query:**
+```sql
+SELECT name, sql FROM sqlite_master
+WHERE type = 'index' AND name = 'idx_orders_wallet_reservation_unique';
+```
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -773,6 +805,7 @@ the grouped status query may return no rows.
 - [ ] Run `026_redelivery_pending_address.sql` after 025 and before enabling corrected-address redelivery.
 - [ ] Run `027_retained_failure_notifications.sql` after 019 and before enabling retained-package customer emails.
 - [ ] Run `028_redelivery_charges.sql` after 026 and before enabling corrected-address redelivery payments.
+- [ ] Run `029_wallet_reservation_ownership.sql` after the duplicate-reference preflight and before deploying the Worker.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).

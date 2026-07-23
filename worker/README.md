@@ -203,6 +203,8 @@ wrangler d1 execute edenmish --remote --file=./migrations/025_delivery_failure_r
 wrangler d1 execute edenmish --remote --file=./migrations/026_redelivery_pending_address.sql
 wrangler d1 execute edenmish --remote --file=./migrations/027_retained_failure_notifications.sql
 wrangler d1 execute edenmish --remote --file=./migrations/028_redelivery_charges.sql
+# Run the duplicate-reference preflight in MIGRATIONS.md before migration 029:
+wrangler d1 execute edenmish --remote --file=./migrations/029_wallet_reservation_ownership.sql
 ```
 
 > Run only migrations that have not already been applied. Several `ALTER TABLE`

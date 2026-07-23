@@ -55,6 +55,9 @@ export async function getOrderByToken(DB, token) {
 export async function getOrderById(DB, id) {
   return DB.prepare(`SELECT * FROM orders WHERE id = ?`).bind(id).first();
 }
+export async function getOrderByWalletReservationId(DB, reservationId) {
+  return DB.prepare(`SELECT * FROM orders WHERE wallet_reservation_id = ?`).bind(reservationId).first();
+}
 export async function getOrderByShopifyOrderId(DB, shopifyOrderId) {
   return DB.prepare(`SELECT * FROM orders WHERE shopify_order_id = ?`).bind(shopifyOrderId).first();
 }

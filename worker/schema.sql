@@ -536,6 +536,9 @@ CREATE TABLE IF NOT EXISTS business_plan_enrollments (
 );
 
 CREATE INDEX IF NOT EXISTS idx_orders_business_account ON orders(business_account_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_wallet_reservation_unique
+  ON orders(wallet_reservation_id)
+  WHERE wallet_reservation_id IS NOT NULL;
 
 INSERT OR IGNORE INTO pricing_rules (name, value) VALUES
   ('base_envelope','59'),
