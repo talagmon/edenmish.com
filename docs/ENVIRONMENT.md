@@ -34,11 +34,18 @@ authentication and OTP flows fail closed when `SESSION_SECRET` is missing.
 | `SHOPIFY_ADMIN_TOKEN` | Creates Shopify Draft Orders (custom app token) | `shpat_replaceme` |
 | `SHOPIFY_WEBHOOK_SECRET` | Verifies `orders/paid`, `orders/updated`, and `refunds/create` webhook HMACs | `replace-me-from-shopify-webhook-page` |
 | `SENDGRID_API_KEY` | All outbound email (customer OTP/confirmation + Eden alerts) | `SG.replaceme` |
+| `WHATSAPP_PHONE_ID` | Optional WhatsApp Cloud API phone-number ID; keep unset until the account/template review and controlled test are ready | `replace-with-provider-phone-id` |
+| `WHATSAPP_TOKEN` | Optional least-privilege WhatsApp Cloud API token; rotate and revoke through the authorized Meta Business account | `replace-with-provider-token` |
 | `GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON` | Server-side driver route optimization; use a dedicated environment-specific service account and never ship it to Flutter | `{"type":"service_account",…}` |
 | `MESH_API_KEY` | **Future** — Mesh/J5 preauth processor. Not used today. | (unset for now) |
 
 > `SESSION_SECRET` is mandatory. The Worker refuses to create sessions or OTP hashes
 > when it is unset; set it before accepting orders or enabling the ops dashboard.
+>
+> WhatsApp automation is optional and fail-safe when either Cloud API secret is
+> absent. Before enabling it, follow `WHATSAPP_OPERATIONS.md`; the current adapter
+> sends free-form text, so proactive service messages may require a scoped
+> approved-template implementation.
 
 ## Worker non-secret vars (`worker/wrangler.toml [vars]`)
 
@@ -96,6 +103,9 @@ must not be embedded in the storefront repository.
 | Variable | Purpose |
 |---|---|
 | `GTM_CONTAINER_ID` | Google Tag Manager web-container ID (`GTM-…`) |
+
+Follow `ANALYTICS_OPERATIONS.md` for the event/data contract, account-owner steps,
+consent verification matrix, and emergency disable procedure.
 
 The canonical booking page uses `PlaceAutocompleteElement`, `gmp-select`, and
 `Place.fetchFields()` for addresses, plus the Maps JavaScript Routes library's
@@ -172,7 +182,7 @@ it** (per `../AGENTS.md` §2), then move it to a secret/setting.
 | Public (OK in repo) | Secret (NEVER in repo) |
 |---|---|
 | `SHOPIFY_SHOP`, `SHOPIFY_API_VERSION`, `SHOPIFY_APP_CLIENT_ID` | `SHOPIFY_ADMIN_TOKEN`, `SHOPIFY_CLI_THEME_TOKEN`, `SHOPIFY_WEBHOOK_SECRET` |
-| `BRAND`, `BOOKING_URL`, `WHATSAPP_NUMBER`, `OPS_EMAIL` | `OPS_PIN`, `SESSION_SECRET`, `DRIVER_ONE_TIME_CODE` |
+| `BRAND`, `BOOKING_URL`, `WHATSAPP_NUMBER`, `OPS_EMAIL` | `OPS_PIN`, `SESSION_SECRET`, `DRIVER_ONE_TIME_CODE`, `WHATSAPP_PHONE_ID`, `WHATSAPP_TOKEN` |
 | brand colors, Hebrew copy | `MAPS_KEY` (Worker + theme), `SENDGRID_API_KEY`, `GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON`, `MESH_API_KEY` |
 
 > The public business phone numbers and `eden@edenmish.com` are intentionally

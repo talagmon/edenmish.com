@@ -225,6 +225,14 @@ wrangler secret put SHOPIFY_WEBHOOK_SECRET
 wrangler secret put SENDGRID_API_KEY
 ```
 
+**Optional WhatsApp Cloud API** (leave unset until the account, template/message
+window, consent, and controlled test in `../docs/WHATSAPP_OPERATIONS.md` are ready):
+
+```bash
+wrangler secret put WHATSAPP_PHONE_ID
+wrangler secret put WHATSAPP_TOKEN
+```
+
 **Future only** (do not set today):
 
 ```bash
@@ -281,3 +289,5 @@ wrangler deploy
 - [ ] Confirm delivery completion always creates one email outbox job, creates a
       WhatsApp proof-link job only for a stored opt-in, and retries due failures.
 - [ ] Confirm per-order notification history appears in ops.
+- [ ] If WhatsApp Cloud API is enabled, complete the consent and controlled
+      delivery matrix in `../docs/WHATSAPP_OPERATIONS.md`.
