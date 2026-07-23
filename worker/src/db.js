@@ -98,6 +98,61 @@ export async function recordPayment(DB, orderId, p) {
   ).bind(orderId, p.amount, 'ILS', p.payplus_id || null, p.status || 'created', p.url || null, Date.now(), p.paid_at || null).run();
 }
 
+export async function getRedeliveryChargeByOrderId(DB, orderId) {
+  return DB.prepare('SELECT * FROM redelivery_charges WHERE order_id = ?')
+    .bind(orderId).first();
+}
+
+export async function getRedeliveryChargeById(DB, id) {
+  return DB.prepare('SELECT * FROM redelivery_charges WHERE id = ?')
+    .bind(id).first();
+}
+
+export async function getRedeliveryChargeByShopifyOrderId(DB, shopifyOrderId) {
+  return DB.prepare('SELECT * FROM redelivery_charges WHERE shopify_order_id = ?')
+    .bind(String(shopifyOrderId)).first();
+}
+
+export async function listRedeliveryCharges(DB) {
+  return DB.prepare(`SELECT id, order_id, amount_agorot, currency, status,
+    payment_url, expires_at, paid_at, released_at
+    FROM redelivery_charges
+    WHERE status != 'expired'
+    ORDER BY updated_at DESC
+    LIMIT 500`).all();
+}
+
+export async function createRedeliveryCharge(DB, {
+  id,
+  orderId,
+  amountAgorot,
+  addressSnapshotJson,
+  now = Date.now(),
+  expiresAt,
+}) {
+  await DB.prepare(`INSERT OR IGNORE INTO redelivery_charges
+    (id, order_id, amount_agorot, currency, address_snapshot_json,
+     status, created_at, updated_at, expires_at)
+    SELECT ?, id, ?, 'ILS', ?, 'pending', ?, ?, ?
+    FROM orders
+    WHERE id = ?
+      AND status = 'failed'
+      AND retained_by_driver = 'hold_for_redelivery'
+      AND pending_redelivery_json = ?`)
+    .bind(
+      id,
+      amountAgorot,
+      addressSnapshotJson,
+      now,
+      now,
+      expiresAt,
+      orderId,
+      addressSnapshotJson,
+    ).run();
+  const charge = await getRedeliveryChargeByOrderId(DB, orderId);
+  return charge?.address_snapshot_json === addressSnapshotJson ? charge : null;
+}
+
 export async function getRules(DB) {
   const rows = await DB.prepare(`SELECT name, value FROM pricing_rules`).all();
   const m = {};
@@ -269,13 +324,32 @@ export async function listCancellationRequests(DB, limit = 100) {
 // resolves the package rather than leaving it stuck. return_to_origin is left untouched — it
 // is already resolving.
 export async function runHeldPackageAutoReturn(DB, now = Date.now(), maxHoldMs = 24 * 60 * 60 * 1000) {
-  return DB.prepare(
+  const cutoff = now - maxHoldMs;
+  const expireCharges = DB.prepare(
+    `UPDATE redelivery_charges
+     SET status = 'expired', updated_at = ?
+     WHERE status IN ('pending', 'creating', 'link_sent')
+       AND order_id IN (
+         SELECT id FROM orders
+         WHERE status = 'failed'
+           AND retained_by_driver = 'hold_for_redelivery'
+           AND retained_at IS NOT NULL
+           AND retained_at < ?
+       )`
+  ).bind(now, cutoff);
+  const returnOrders = DB.prepare(
     `UPDATE orders SET retained_by_driver = 'return_to_origin', retained_at = ?
      WHERE status = 'failed'
        AND retained_by_driver = 'hold_for_redelivery'
        AND retained_at IS NOT NULL
-       AND retained_at < ?`
-  ).bind(now, now - maxHoldMs).run();
+       AND retained_at < ?
+       AND NOT EXISTS (
+         SELECT 1 FROM redelivery_charges
+         WHERE order_id = orders.id AND status IN ('paid', 'released')
+       )`
+  ).bind(now, cutoff);
+  const results = await DB.batch([expireCharges, returnOrders]);
+  return results[1];
 }
 
 export async function runRetentionCleanup(DB, now = Date.now()) {

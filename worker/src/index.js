@@ -1,4 +1,37 @@
-import { createOrder, getOrderByToken, getOrderById, getOrderByShopifyOrderId, listOrders, setOrderStatus, setOrderRating, getStatusHistory, addGps, latestGps, getGpsTrail, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof, listRecentNotificationFailures, listNotificationsForOrder, createCancellationRequest, listCancellationRequests, runRetentionCleanup, runHeldPackageAutoReturn } from './db.js';
+import {
+  createOrder,
+  getOrderByToken,
+  getOrderById,
+  getOrderByShopifyOrderId,
+  listOrders,
+  setOrderStatus,
+  setOrderRating,
+  getStatusHistory,
+  addGps,
+  latestGps,
+  getGpsTrail,
+  getRules,
+  recordPayment,
+  setEmailAndOtp,
+  verifyOtp,
+  getRateLimit,
+  incrRateLimit,
+  setRateLock,
+  resetRateLimit,
+  getDeliveryProof,
+  upsertDeliveryProof,
+  listRecentNotificationFailures,
+  listNotificationsForOrder,
+  createCancellationRequest,
+  listCancellationRequests,
+  runRetentionCleanup,
+  runHeldPackageAutoReturn,
+  createRedeliveryCharge,
+  getRedeliveryChargeById,
+  getRedeliveryChargeByOrderId,
+  getRedeliveryChargeByShopifyOrderId,
+  listRedeliveryCharges,
+} from './db.js';
 import { priceOrder, retryFee, zoneOf, ZONE_CITIES, DEFAULT_PRICING_RULES } from './pricing.js';
 import { makeSession, checkSession, getCookie, genOtp, hashOtp, timingSafeEqual } from './integrations.js';
 import { createCharge, createWalletCharge, verifyShopifyWebhook, parseShopifyOrderWebhook, parseShopifyRefundWebhook } from './payment.js';
@@ -81,6 +114,50 @@ const requestReceivedHtml = (env, o) => `<div dir="rtl" style="font-family:sans-
 // Sent by /approve: the confirmed price + Shopify checkout link (previously the link was
 // only copied to Eden's clipboard and the customer was never notified).
 const paymentLinkHtml = (env, o, url) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px;background:#ffffff;color:#1f2937;color-scheme:light;forced-color-adjust:none;padding:24px"><h2 style="color:#5B2A86;margin:0 0 8px">המחיר אושר ✓</h2><p>הזמנה #${o.id || ''} מוכנה לתשלום.</p><table style="border-collapse:collapse;font-size:15px;color:#1f2937"><tr><td style="padding:5px 14px;color:#4b5563">איסוף</td><td style="padding:5px 0">${escHtml(o.pickup)}</td></tr><tr><td style="padding:5px 14px;color:#4b5563">מסירה</td><td style="padding:5px 0">${escHtml(o.dropoff)}</td></tr><tr><td style="padding:5px 14px;color:#4b5563">מחיר</td><td style="padding:5px 0;font-weight:700;color:#246b62;font-size:18px">₪${o.price || ''}</td></tr></table><div style="text-align:center;margin:18px 0"><a href="${url}" style="display:inline-block;background:#5B2A86;color:#ffffff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px">לתשלום מאובטח ←</a></div><p style="color:#4b5563;font-size:13px">התשלום מתבצע בסביבה המאובטחת של Shopify ו‑PayPlus. EdenMish אינה שומרת פרטי כרטיס אשראי. לאחר התשלום יישלח קישור מעקב חי וקוד אימות למייל.</p>${transactionDisclosureHtml(env, o)}${SUPPORT_LINE}</div>`;
+const redeliveryPaidHtml = (env, order, amountNis) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px;background:#ffffff;color:#1f2937;color-scheme:light;forced-color-adjust:none;padding:24px"><h2 style="color:#5B2A86;margin:0 0 8px">התשלום למסירה החוזרת התקבל ✓</h2><p>קיבלנו תשלום בסך <b style="color:#246b62">₪${escHtml(amountNis)}</b> עבור ניסיון מסירה נוסף להזמנה #${escHtml(order.id)}.</p><p>הכתובת המתוקנת ממתינה לאישור תפעולי. נעדכן את מסלול השליח לאחר האישור.</p><div style="text-align:center;margin:18px 0"><a href="${trackingUrl(env, order.token)}" style="display:inline-block;background:#5B2A86;color:#ffffff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700">חזרה למעקב ←</a></div>${SUPPORT_LINE}</div>`;
+
+async function redeliveryPublicState(DB, order) {
+  if (!order || order.status !== 'failed' || !order.retained_by_driver) return null;
+  const charge = await getRedeliveryChargeByOrderId(DB, order.id);
+  let pending = null;
+  try {
+    pending = order.pending_redelivery_json ? JSON.parse(order.pending_redelivery_json) : null;
+  } catch {}
+  const expiresAt = Number(charge?.expires_at)
+    || (order.retained_at ? Number(order.retained_at) + 24 * 60 * 60 * 1000 : null);
+  const base = {
+    fee: charge ? Number(charge.amount_agorot) / 100 : pending?.fee ?? null,
+    currency: charge?.currency || 'ILS',
+    expires_at: expiresAt,
+    address: pending ? {
+      dropoff: pending.dropoff,
+      dropoff_detail: pending.dropoff_detail,
+      dropoff_city: pending.dropoff_city,
+      zone: pending.zone,
+    } : null,
+  };
+  if (order.retained_by_driver === 'return_to_origin') {
+    return { ...base, state: charge?.status === 'late_paid' ? 'late_payment_review' : 'returning' };
+  }
+  if (order.retained_by_driver === 'redelivery') return { ...base, state: 'released' };
+  if (charge?.status === 'paid') return { ...base, state: 'paid_pending_release' };
+  if (charge?.status === 'late_paid' || charge?.status === 'mismatch') {
+    return { ...base, state: 'payment_review' };
+  }
+  if (charge?.status === 'expired') return { ...base, state: 'expired' };
+  if (pending) {
+    return {
+      ...base,
+      state: 'payment_required',
+      payment_url: charge?.status === 'link_sent' ? charge.payment_url : null,
+    };
+  }
+  return {
+    ...base,
+    state: 'address_required',
+    verification_required: !order.email_verified,
+  };
+}
 
 // Single post-payment boundary for both an authenticated manual payment and a
 // reconciled Shopify orders/paid webhook. Callers must perform provider-specific
@@ -826,9 +903,25 @@ export default {
       }
       const proofP = o.status === 'delivered' ? getDeliveryProof(env.DB, o.id) : Promise.resolve(null);
       const trailP = getGpsTrail(env.DB, o.id);
-      const [history, gps, proof, trail] = await Promise.all([getStatusHistory(env.DB, o.id), latestGps(env.DB, o.id), proofP, trailP]);
+      const redeliveryP = redeliveryPublicState(env.DB, o);
+      const [history, gps, proof, trail, redelivery] = await Promise.all([
+        getStatusHistory(env.DB, o.id),
+        latestGps(env.DB, o.id),
+        proofP,
+        trailP,
+        redeliveryP,
+      ]);
       delete o.otp_hash;
-      return json({ order: o, history: history.results, gps, proof, gpsTrail: trail, otp_pending: false }, 200, cors);
+      delete o.pending_redelivery_json;
+      return json({
+        order: o,
+        history: history.results,
+        gps,
+        proof,
+        gpsTrail: trail,
+        redelivery,
+        otp_pending: false,
+      }, 200, cors);
     }
 
     // ---- email OTP verify / resend (public, token-based) ----
@@ -911,10 +1004,9 @@ export default {
     }
 
     // ---- redelivery: owner supplies a corrected address for a held package ----
-    // Token-gated, exactly like the rating write above: whoever holds the tracking token owns
-    // the order. Only valid while the package is held for redelivery; it stages the address and
-    // returns the fee, and deliberately does NOT dispatch — payment does that (a separate step),
-    // so an unpaid address can never route a free redelivery.
+    // The tracking token identifies the order and email OTP authorizes this sensitive write.
+    // Only valid while the package is held for redelivery; it stages the address and returns
+    // the fee, and deliberately does NOT dispatch — verified payment is a separate gate.
     if (path.startsWith('/api/orders/') && path.endsWith('/redelivery-address') && req.method === 'POST') {
       const token = path.split('/')[3];
       const o = await getOrderByToken(env.DB, token);
@@ -922,6 +1014,16 @@ export default {
       if (!(o.status === 'failed' && o.retained_by_driver === 'hold_for_redelivery')) {
         return json({ ok: false, error: 'not_awaiting_redelivery' }, 409, cors);
       }
+      const existingCharge = await getRedeliveryChargeByOrderId(env.DB, o.id);
+      if (existingCharge) {
+        return json({ ok: false, error: 'address_locked_after_payment_started' }, 409, cors);
+      }
+      // Changing a delivery address is a sensitive write. The magic-link token grants read-only
+      // tracking; a write must clear the same OTP bar the tracking model reserves for
+      // address/phone changes, so a leaked link alone cannot reroute someone's package. The
+      // owner verifies once via /verify-otp (a code to the email on file), which sets
+      // email_verified; the client runs that flow before enabling the address form.
+      if (!o.email_verified) return json({ ok: false, error: 'otp_required' }, 403, cors);
       let b; try { b = await req.json(); } catch { b = {}; }
       const dropoff = String(b.dropoff || '').trim().slice(0, 500);
       const dropoffDetail = b.dropoff_detail != null ? String(b.dropoff_detail).trim().slice(0, 500) : null;
@@ -955,10 +1057,130 @@ export default {
         fee: suggestion.fee,
         submitted_at: Date.now(),
       };
-      await env.DB.prepare('UPDATE orders SET pending_redelivery_json = ? WHERE id = ?')
+      const staged = await env.DB.prepare(`UPDATE orders
+        SET pending_redelivery_json = ?
+        WHERE id = ?
+          AND status = 'failed'
+          AND retained_by_driver = 'hold_for_redelivery'
+          AND NOT EXISTS (
+            SELECT 1 FROM redelivery_charges
+            WHERE order_id = orders.id
+          )`)
         .bind(JSON.stringify(pending), o.id).run();
+      if (!staged?.meta?.changes) {
+        return json({ ok: false, error: 'address_locked_after_payment_started' }, 409, cors);
+      }
       console.log('redelivery_address_staged', { order: o.id, zone: suggestion.zone, fee: suggestion.fee });
       return json({ ok: true, fee: suggestion.fee, zone: suggestion.zone, currency: 'ILS' }, 200, cors);
+    }
+
+    // ---- redelivery: create or resume the purpose-specific Shopify checkout ----
+    // The fee comes only from the server-staged address. It never mutates the
+    // original delivery's price/payment columns and cannot release dispatch.
+    if (path.startsWith('/api/orders/') && path.endsWith('/redelivery-payment') && req.method === 'POST') {
+      const token = path.split('/')[3];
+      const o = await getOrderByToken(env.DB, token);
+      if (!o) return json({ ok: false, error: 'not_found' }, 404, cors);
+      if (!(o.status === 'failed' && o.retained_by_driver === 'hold_for_redelivery')) {
+        return json({ ok: false, error: 'not_awaiting_redelivery' }, 409, cors);
+      }
+      let pending = null;
+      try { pending = o.pending_redelivery_json ? JSON.parse(o.pending_redelivery_json) : null; } catch {}
+      const amountNis = Number(pending?.fee);
+      if (!pending || !Number.isFinite(amountNis) || amountNis <= 0) {
+        return json({ ok: false, error: 'no_pending_address' }, 409, cors);
+      }
+      const now = Date.now();
+      const expiresAt = Number(o.retained_at || now) + 24 * 60 * 60 * 1000;
+      if (expiresAt <= now) return json({ ok: false, error: 'redelivery_window_expired' }, 409, cors);
+
+      let charge = await getRedeliveryChargeByOrderId(env.DB, o.id);
+      if (charge && charge.address_snapshot_json !== o.pending_redelivery_json) {
+        return json({ ok: false, error: 'redelivery_address_changed' }, 409, cors);
+      }
+      if (charge?.status === 'link_sent' && charge.payment_url) {
+        return json({
+          ok: true,
+          payment_url: charge.payment_url,
+          fee: Number(charge.amount_agorot) / 100,
+          currency: charge.currency,
+          idempotent: true,
+        }, 200, cors);
+      }
+      if (charge?.status === 'paid' || charge?.status === 'released') {
+        return json({ ok: true, paid: true, fee: Number(charge.amount_agorot) / 100 }, 200, cors);
+      }
+      if (charge && !['pending', 'creating'].includes(charge.status)) {
+        return json({ ok: false, error: 'redelivery_payment_unavailable' }, 409, cors);
+      }
+      if (!charge) {
+        charge = await createRedeliveryCharge(env.DB, {
+          id: `rdl_${crypto.randomUUID()}`,
+          orderId: o.id,
+          amountAgorot: Math.round(amountNis * 100),
+          addressSnapshotJson: o.pending_redelivery_json,
+          now,
+          expiresAt,
+        });
+        if (!charge) {
+          return json({ ok: false, error: 'redelivery_address_changed' }, 409, cors);
+        }
+      }
+      const claimed = await env.DB.prepare(`UPDATE redelivery_charges
+        SET status = 'creating', updated_at = ?
+        WHERE id = ? AND (
+          status = 'pending'
+          OR (status = 'creating' AND updated_at < ?)
+        )`).bind(now, charge.id, now - 2 * 60 * 1000).run();
+      if (!claimed?.meta?.changes) {
+        const current = await getRedeliveryChargeById(env.DB, charge.id);
+        if (current?.status === 'link_sent' && current.payment_url) {
+          return json({
+            ok: true,
+            payment_url: current.payment_url,
+            fee: Number(current.amount_agorot) / 100,
+            currency: current.currency,
+            idempotent: true,
+          }, 200, cors);
+        }
+        return json({ ok: false, error: 'redelivery_payment_in_progress' }, 409, cors);
+      }
+      const chargeResult = await createCharge(env, {
+        ...o,
+        redelivery_dropoff: pending.dropoff,
+      }, amountNis, {
+        purpose: 'redelivery',
+        reference: charge.id,
+      });
+      if (!chargeResult) {
+        await env.DB.prepare(`UPDATE redelivery_charges
+          SET status = 'pending', updated_at = ?
+          WHERE id = ? AND status = 'creating'`)
+          .bind(Date.now(), charge.id).run();
+        return json({ ok: false, error: 'payment_provider_unavailable' }, 503, cors);
+      }
+      await env.DB.prepare(`UPDATE redelivery_charges
+        SET status = 'link_sent', payment_url = ?, processor_ref = ?,
+            shopify_draft_order_id = ?, updated_at = ?
+        WHERE id = ? AND status = 'creating'`)
+        .bind(
+          chargeResult.checkoutUrl,
+          chargeResult.processorRef,
+          chargeResult.draftOrderId,
+          now,
+          charge.id,
+        ).run();
+      await recordPayment(env.DB, o.id, {
+        amount: Math.round(amountNis * 100),
+        status: 'redelivery_link_sent',
+        url: chargeResult.checkoutUrl,
+      });
+      return json({
+        ok: true,
+        payment_url: chargeResult.checkoutUrl,
+        fee: amountNis,
+        currency: 'ILS',
+      }, 201, cors);
     }
 
     // ---- customer tracking page (find.) ----
@@ -1068,7 +1290,13 @@ export default {
 
     if (onOps && path === '/api/ops/orders' && req.method === 'GET') {
       if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
-      const r = await listOrders(env.DB);
+      const [r, redeliveryRows] = await Promise.all([
+        listOrders(env.DB),
+        listRedeliveryCharges(env.DB),
+      ]);
+      const redeliveryByOrder = new Map(
+        (redeliveryRows.results || []).map((charge) => [Number(charge.order_id), charge]),
+      );
       // Suggest an extra-stop fee for packages a driver is still carrying after a failed
       // delivery, so the operator does not have to work out the zone rate by hand. It is a
       // suggestion only: whether to charge at all is a fault judgement Ops makes.
@@ -1088,11 +1316,18 @@ export default {
           when_hour: order.when_hour,
         });
         const { pending_redelivery_json, ...rest } = order;
+        const redeliveryCharge = redeliveryByOrder.get(Number(order.id));
         return {
           ...rest,
           retry_fee_suggested: suggestion.fee,
           retry_fee_zone: suggestion.zone,
-          pending_redelivery: pending && { city: pending.dropoff_city, dropoff: pending.dropoff, fee: pending.fee },
+          pending_redelivery: pending && {
+            city: pending.dropoff_city,
+            dropoff: pending.dropoff,
+            fee: pending.fee,
+            payment_status: redeliveryCharge?.status || null,
+            payment_url: redeliveryCharge?.payment_url || null,
+          },
         };
       });
       return json({
@@ -1243,11 +1478,9 @@ export default {
       return json({ ok: true, order: o, proof });
     }
 
-    // Release a paid redelivery: Ops confirms the extra-stop fee is collected, and this promotes
-    // the staged corrected address onto the live dropoff columns and flips the hold to a
-    // 'redelivery' state that dispatch routes. The fee itself is collected by Ops (a payment link
-    // or manual mark) — auto-reconciling a second charge via the Shopify webhook is deferred to
-    // the pre-auth (Mesh) phase, so a human confirms the money here.
+    // Release a paid redelivery: the signed Shopify webhook has already reconciled the
+    // purpose-specific charge. Ops promotes that exact staged address onto the live dropoff
+    // columns and flips the hold to the 'redelivery' state that dispatch routes.
     if (onOps && path.includes('/api/ops/orders/') && path.endsWith('/release-redelivery') && req.method === 'POST') {
       if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
       const id = Number(path.split('/')[4]);
@@ -1264,18 +1497,41 @@ export default {
       if (!pending || pending.dropoff_lat == null || pending.dropoff_lng == null) {
         return json({ error: 'no_pending_address' }, 409);
       }
+      const charge = await getRedeliveryChargeByOrderId(env.DB, id);
+      if (!charge || charge.status !== 'paid') {
+        return json({ error: 'redelivery_payment_required' }, 409);
+      }
+      if (charge.address_snapshot_json !== o.pending_redelivery_json) {
+        return json({ error: 'redelivery_address_changed' }, 409);
+      }
       // Overwrite the live destination with the corrected one and mark the order a redelivery.
       // Status stays 'failed' (canonically the first attempt did fail); dispatch routes a fresh
       // drop-off (stop_x…) to the new address on the driver's next route poll.
-      await env.DB.prepare(
+      const releaseOrder = env.DB.prepare(
         `UPDATE orders SET dropoff = ?, dropoff_detail = ?, dropoff_lat = ?, dropoff_lng = ?,
            dropoff_city = ?, retained_by_driver = 'redelivery', retained_at = ?,
            pending_redelivery_json = NULL
-         WHERE id = ?`
+         WHERE id = ? AND status = 'failed' AND retained_by_driver = 'hold_for_redelivery'
+           AND EXISTS (
+             SELECT 1 FROM redelivery_charges
+             WHERE order_id = ? AND status = 'paid'
+           )`
       ).bind(
         pending.dropoff, pending.dropoff_detail ?? null, pending.dropoff_lat, pending.dropoff_lng,
-        pending.dropoff_city, Date.now(), id,
-      ).run();
+        pending.dropoff_city, Date.now(), id, id,
+      );
+      const releaseCharge = env.DB.prepare(`UPDATE redelivery_charges
+        SET status = 'released', released_at = ?, updated_at = ?
+        WHERE id = ? AND status = 'paid'
+          AND EXISTS (
+            SELECT 1 FROM orders
+            WHERE id = ? AND retained_by_driver = 'redelivery'
+          )`)
+        .bind(Date.now(), Date.now(), charge.id, id);
+      const released = await env.DB.batch([releaseOrder, releaseCharge]);
+      if (!released[0]?.meta?.changes || !released[1]?.meta?.changes) {
+        return json({ error: 'redelivery_release_conflict' }, 409);
+      }
       console.log('redelivery_released', { order: id, city: pending.dropoff_city, fee: pending.fee });
       return json({ ok: true, order: await getOrderById(env.DB, id) });
     }
@@ -1367,6 +1623,21 @@ export default {
       if (topic === 'refunds/create') {
         const refund = parseShopifyRefundWebhook(b);
         if (!refund.shopifyOrderId) return json({ received: true, reconciled: false });
+        const redeliveryCharge = await getRedeliveryChargeByShopifyOrderId(
+          env.DB,
+          refund.shopifyOrderId,
+        );
+        if (redeliveryCharge) {
+          await env.DB.batch([
+            env.DB.prepare(`UPDATE redelivery_charges
+              SET status = 'mismatch', updated_at = ?
+              WHERE id = ?`).bind(Date.now(), redeliveryCharge.id),
+            env.DB.prepare(`UPDATE orders
+              SET review_flag = 1, review_reason = 'redelivery_refund_review'
+              WHERE id = ?`).bind(redeliveryCharge.order_id),
+          ]);
+          return json({ received: true, reconciled: false });
+        }
         const o = await getOrderByShopifyOrderId(env.DB, refund.shopifyOrderId);
         if (!o) return json({ received: true, reconciled: false });
         const result = await reconcileShopifyRefund(env, o, refund);
@@ -1374,6 +1645,112 @@ export default {
       }
 
       const parsed = parseShopifyOrderWebhook(b);
+      if (parsed.redeliveryChargeId) {
+        const charge = await getRedeliveryChargeById(env.DB, parsed.redeliveryChargeId);
+        if (!charge) return json({ received: true, reconciled: false });
+        const order = await getOrderById(env.DB, charge.order_id);
+        if (!order) return json({ received: true, reconciled: false });
+        if (parsed.paid && ['paid', 'released', 'late_paid', 'mismatch'].includes(charge.status)) {
+          return json({
+            received: true,
+            reconciled: ['paid', 'released'].includes(charge.status),
+          });
+        }
+        const financialStatus = String(parsed.financial_status || '').toLowerCase();
+        if (financialStatus === 'refunded' || financialStatus === 'partially_refunded') {
+          await env.DB.batch([
+            env.DB.prepare(`UPDATE redelivery_charges
+              SET status = 'mismatch', shopify_order_id = ?, updated_at = ?
+              WHERE id = ?`).bind(parsed.shopifyOrderId, Date.now(), charge.id),
+            env.DB.prepare(`UPDATE orders
+              SET review_flag = 1, review_reason = 'redelivery_refund_review'
+              WHERE id = ?`).bind(order.id),
+          ]);
+          return json({ received: true, reconciled: false });
+        }
+        if (!parsed.paid) return json({ received: true, reconciled: false });
+
+        const paidAmount = Number(parsed.total);
+        const expectedAmount = Number(charge.amount_agorot) / 100;
+        const amountMatches = Number.isFinite(paidAmount)
+          && Math.abs(paidAmount - expectedAmount) < 0.005;
+        const currencyMatches = String(parsed.currency || '').toUpperCase()
+          === String(charge.currency || 'ILS').toUpperCase();
+        const draftMatches = !charge.shopify_draft_order_id || !parsed.draftOrderId
+          || String(charge.shopify_draft_order_id) === String(parsed.draftOrderId);
+        const now = Date.now();
+        if (!amountMatches || !currencyMatches || !draftMatches) {
+          await env.DB.batch([
+            env.DB.prepare(`UPDATE redelivery_charges
+              SET status = 'mismatch', shopify_order_id = ?, updated_at = ?
+              WHERE id = ?`).bind(parsed.shopifyOrderId, now, charge.id),
+            env.DB.prepare(`UPDATE orders
+              SET review_flag = 1, review_reason = 'redelivery_payment_mismatch'
+              WHERE id = ?`).bind(order.id),
+          ]);
+          console.error('redelivery_payment_mismatch', {
+            order: order.id,
+            charge: charge.id,
+            amountMatches,
+            currencyMatches,
+            draftMatches,
+          });
+          return json({ received: true, reconciled: false });
+        }
+
+        const awaitingRedelivery = order.status === 'failed'
+          && order.retained_by_driver === 'hold_for_redelivery'
+          && order.pending_redelivery_json
+          && Number(charge.expires_at) > now;
+        const paidStatus = awaitingRedelivery ? 'paid' : 'late_paid';
+        const paidTransition = await env.DB.batch([
+          env.DB.prepare(`UPDATE redelivery_charges
+            SET status = ?, shopify_order_id = ?, paid_at = ?, updated_at = ?
+            WHERE id = ? AND status IN ('pending', 'creating', 'link_sent', 'expired')`)
+            .bind(paidStatus, parsed.shopifyOrderId, now, now, charge.id),
+          ...(awaitingRedelivery ? [] : [
+            env.DB.prepare(`UPDATE orders
+              SET review_flag = 1, review_reason = 'redelivery_payment_after_hold'
+              WHERE id = ?`).bind(order.id),
+          ]),
+        ]);
+        if (!paidTransition[0]?.meta?.changes) {
+          const current = await getRedeliveryChargeById(env.DB, charge.id);
+          return json({
+            received: true,
+            reconciled: ['paid', 'released'].includes(current?.status),
+          });
+        }
+        await recordPayment(env.DB, order.id, {
+          amount: charge.amount_agorot,
+          status: paidStatus === 'paid' ? 'redelivery_paid' : 'redelivery_late_paid',
+          payplus_id: parsed.shopifyOrderId,
+          paid_at: now,
+        });
+        if (paidStatus === 'paid') {
+          if (order.email) {
+            try {
+              await notifyEmail(env, env.DB, {
+                orderId: order.id,
+                template: 'customer_redelivery_payment_received',
+                recipient: order.email,
+                subject: `התשלום למסירה החוזרת התקבל ✓ — הזמנה #${order.id}`,
+                html: redeliveryPaidHtml(env, order, expectedAmount),
+              });
+            } catch {}
+          }
+          try {
+            await notifyEmail(env, env.DB, {
+              orderId: order.id,
+              template: 'ops_redelivery_payment_received',
+              recipient: env.OPS_EMAIL,
+              subject: `מסירה חוזרת שולמה #${order.id} — ₪${expectedAmount}`,
+              html: `הכתובת המתוקנת והתשלום אומתו. ניתן לשחרר את המסירה החוזרת ב-ops.edenmish.com.`,
+            });
+          } catch {}
+        }
+        return json({ received: true, reconciled: paidStatus === 'paid' });
+      }
       if (parsed.walletTopupToken) {
         const topup = await getWalletTopup(env.DB, parsed.walletTopupToken);
         if (!topup) return json({ received: true, reconciled: false });

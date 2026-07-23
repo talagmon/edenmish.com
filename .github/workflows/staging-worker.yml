@@ -191,6 +191,23 @@ jobs:
           else
             echo "Retained-failure notification migration 027 is already applied."
           fi
+      - name: Apply staging redelivery charge migration when needed
+        working-directory: worker
+        run: |
+          readiness_json="$(npx wrangler d1 execute edenmish-staging --remote --yes --json \
+            --config wrangler.staging.generated.toml \
+            --command "SELECT (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='redelivery_charges') + (SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_redelivery_charges_status') AS ready")"
+          ready="$(printf '%s' "$readiness_json" | jq -r '.[0].results[0].ready // 0')"
+          if [ "$ready" = "0" ]; then
+            npx wrangler d1 execute edenmish-staging --remote --yes \
+              --config wrangler.staging.generated.toml \
+              --file=./migrations/028_redelivery_charges.sql
+          elif [ "$ready" != "2" ]; then
+            echo "::error::Redelivery charge migration is only partially applied ($ready/2 schema items)."
+            exit 1
+          else
+            echo "Redelivery charge migration 028 is already applied."
+          fi
       - name: Verify remote driver schema readiness
         working-directory: worker
         run: node scripts/validate-driver-schema.mjs --database edenmish-staging --config wrangler.staging.generated.toml

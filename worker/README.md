@@ -94,7 +94,7 @@ Database name: `edenmish`. Binding: `DB`.
 ### Schema and migrations
 
 `schema.sql` is the **fresh-DB source of truth** — it defines every current table.
-The numbered migrations (`003`–`027`) add tables/columns that were introduced after the
+The numbered migrations (`003`–`028`) add tables/columns that were introduced after the
 initial schema. Tables are idempotent (`CREATE TABLE IF NOT EXISTS`); `ALTER TABLE …
 ADD COLUMN` migrations (`006`–`010`, `015`, `016`, and `024`–`026`) must run only on
 DBs that predate their columns.
@@ -202,6 +202,7 @@ wrangler d1 execute edenmish --remote --file=./migrations/024_phone_delivery_lin
 wrangler d1 execute edenmish --remote --file=./migrations/025_delivery_failure_retained_package.sql
 wrangler d1 execute edenmish --remote --file=./migrations/026_redelivery_pending_address.sql
 wrangler d1 execute edenmish --remote --file=./migrations/027_retained_failure_notifications.sql
+wrangler d1 execute edenmish --remote --file=./migrations/028_redelivery_charges.sql
 ```
 
 > Run only migrations that have not already been applied. Several `ALTER TABLE`

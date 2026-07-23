@@ -702,6 +702,47 @@ states, and the due-job index exists.
 
 ---
 
+### 028_redelivery_charges.sql
+
+**Purpose:** Adds the purpose-specific redelivery charge ledger. A corrected-address
+retry fee gets its own immutable amount, Shopify Draft Order reference, expiry, and
+webhook reconciliation state instead of overwriting the original delivery payment.
+
+**Command:**
+```bash
+# Staging (render the config first; run from worker/):
+npx wrangler d1 execute edenmish-staging --remote --yes \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/028_redelivery_charges.sql
+
+# Local verification:
+wrangler d1 execute edenmish --local \
+  --file=./migrations/028_redelivery_charges.sql
+
+# Production (after merge, before Worker deploy):
+wrangler d1 execute edenmish --remote \
+  --file=./migrations/028_redelivery_charges.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM sqlite_master
+WHERE type='table' AND name='redelivery_charges';
+
+SELECT name FROM pragma_index_list('redelivery_charges')
+WHERE name='idx_redelivery_charges_status';
+
+SELECT status, COUNT(*)
+FROM redelivery_charges
+GROUP BY status
+ORDER BY status;
+```
+
+Expected result: the table and status/expiry index exist. Before the feature is used,
+the grouped status query may return no rows.
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -731,6 +772,7 @@ states, and the due-job index exists.
 - [ ] Run `025_delivery_failure_retained_package.sql` before accepting retained-package dispositions.
 - [ ] Run `026_redelivery_pending_address.sql` after 025 and before enabling corrected-address redelivery.
 - [ ] Run `027_retained_failure_notifications.sql` after 019 and before enabling retained-package customer emails.
+- [ ] Run `028_redelivery_charges.sql` after 026 and before enabling corrected-address redelivery payments.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).

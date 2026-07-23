@@ -857,6 +857,18 @@ describe('Frontend: Tracking page', () => {
     assertContains(html, 'flash: "מהיר"');
   });
 
+  test('offers an OTP-gated corrected-address and redelivery checkout flow', () => {
+    assertContains(html, 'redelivery.verification_required', 'redelivery OTP gate');
+    assertContains(html, '/redelivery-address', 'corrected-address endpoint');
+    assertContains(html, '/redelivery-payment', 'redelivery payment endpoint');
+    assertContains(html, 'PlaceAutocompleteElement', 'routable Google Places selection');
+    assertContains(html, 'ניסיון מסירה נוסף', 'retry fee disclosure');
+    assertContains(html, 'התשלום התקבל. הכתובת המתוקנת ממתינה לשחרור תפעולי', 'paid pending-release state');
+    assertContains(html, 'רק לאחר התשלום הכתובת תשוחרר לשליח', 'paid-only dispatch copy');
+    assertContains(html, 'ACTIVE_REDELIVERY_STATES', 'active redelivery polling policy');
+    assertContains(html, 'redeliveryState!==lastRedeliveryState', 'same-status redelivery refresh');
+  });
+
   test('tracking refresh is fast only for live GPS and stops on terminal states', () => {
     const policy = trackingRefreshPolicy();
     assert.equal(policy.pollDelayForStatus('to_pickup'), 5000);
@@ -876,7 +888,7 @@ describe('Frontend: Tracking page', () => {
     assertContains(html, 'לא הצלחנו לעדכן כרגע. ננסה שוב אוטומטית.', 'transient retry copy');
     assertContains(html, 'scheduleTrackPoll(lastStatus)', 'transient retry scheduling');
     assertContains(html, 'if(needsMap && !mapsReady) loadMapsForTrack()', 'lazy Maps loader');
-    assertContains(html, 'if(nextToken !== token) stopTrackPoll()', 'old token timer cleanup');
+    assertContains(html, 'if(nextToken !== token){ stopTrackPoll()', 'old token timer cleanup');
     assertContains(html, 's.onerror=()=>{ mapsRequested=false; }', 'Maps script retry guard');
     assert.ok(!html.includes('\nloadMapsForTrack();\n'), 'Maps must not load eagerly during page startup');
   });

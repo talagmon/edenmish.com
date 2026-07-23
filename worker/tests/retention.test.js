@@ -12,7 +12,12 @@ test('retention cleanup applies bounded periods without deleting core orders', a
           return { run: async () => ({ success: true }) };
         }
       };
-    }
+    },
+    async batch(statements) {
+      const results = [];
+      for (const statement of statements) results.push(await statement.run());
+      return results;
+    },
   };
   const now = Date.UTC(2026, 6, 12);
   await runRetentionCleanup(DB, now);
@@ -36,16 +41,26 @@ test('held-package auto-return reverts only stale holds and always resolves them
           return { run: async () => ({ meta: { changes: 1 } }) };
         }
       };
-    }
+    },
+    async batch(statements) {
+      const results = [];
+      for (const statement of statements) results.push(await statement.run());
+      return results;
+    },
   };
   const now = Date.UTC(2026, 6, 12);
   await runHeldPackageAutoReturn(DB, now);
 
-  const call = calls[0];
+  const expireCall = calls[0];
+  const call = calls[1];
+  assert.match(expireCall.sql, /UPDATE redelivery_charges/);
+  assert.match(expireCall.sql, /SET status = 'expired'/);
   // It only touches failed orders still held for redelivery — never a return already resolving,
   // and never a live order.
   assert.match(call.sql, /status = 'failed'/);
   assert.match(call.sql, /retained_by_driver = 'hold_for_redelivery'/);
+  assert.match(call.sql, /NOT EXISTS/);
+  assert.match(call.sql, /status IN \('paid', 'released'\)/);
   // And it converts to a return (dispatched without a payment gate), so the package is never
   // left stuck; retained_at is reset so the new return is timestamped fresh.
   assert.match(call.sql, /SET retained_by_driver = 'return_to_origin', retained_at = \?/);

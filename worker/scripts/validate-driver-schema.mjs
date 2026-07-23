@@ -47,7 +47,12 @@ const READINESS_SQL = `SELECT
       ))) AS migration_023_items,
   (SELECT COUNT(*) FROM sqlite_master
     WHERE type = 'table' AND name = 'delivery_notification_outbox'
-      AND sql LIKE '%delivery_failed_retained%') AS migration_027_items;`;
+      AND sql LIKE '%delivery_failed_retained%') AS migration_027_items,
+  ((SELECT COUNT(*) FROM sqlite_master
+      WHERE type = 'table' AND name = 'redelivery_charges') +
+   (SELECT COUNT(*) FROM sqlite_master
+      WHERE type = 'index' AND name = 'idx_redelivery_charges_status'))
+    AS migration_028_items;`;
 
 const EXPECTED = Object.freeze({
   migration_014_items: 10,
@@ -57,6 +62,7 @@ const EXPECTED = Object.freeze({
   migration_019_items: 3,
   migration_023_items: 3,
   migration_027_items: 1,
+  migration_028_items: 2,
 });
 
 export function validateDriverSchemaSnapshot(snapshot) {
@@ -116,7 +122,8 @@ function main() {
     `Driver schema ready: migration 014 (${snapshot.migration_014_items}/10), `
     + `015 (${snapshot.migration_015_columns}/4), 016 (${snapshot.migration_016_items}/4), `
     + `017 (${snapshot.migration_017_items}/2), 019 (${snapshot.migration_019_items}/3), `
-    + `023 (${snapshot.migration_023_items}/3), 027 (${snapshot.migration_027_items}/1).`,
+    + `023 (${snapshot.migration_023_items}/3), 027 (${snapshot.migration_027_items}/1), `
+    + `028 (${snapshot.migration_028_items}/2).`,
   );
 }
 

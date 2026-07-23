@@ -14,6 +14,10 @@ const redeliveryMigration = readFileSync(
   resolve(here, '../migrations/026_redelivery_pending_address.sql'),
   'utf8',
 );
+const redeliveryChargesMigration = readFileSync(
+  resolve(here, '../migrations/028_redelivery_charges.sql'),
+  'utf8',
+);
 
 test('migrations 025 and 026 add retained-package and staged-redelivery state', () => {
   const db = new DatabaseSync(':memory:');
@@ -37,7 +41,7 @@ test('migrations 025 and 026 add retained-package and staged-redelivery state', 
   );
 });
 
-test('deployment workflows require migrations 025 and 026 before redelivery is enabled', () => {
+test('deployment workflows require migrations 025, 026, and 028 before redelivery is enabled', () => {
   const staging = readFileSync(
     resolve(here, '../../.github/workflows/staging-worker.yml'),
     'utf8',
@@ -49,8 +53,37 @@ test('deployment workflows require migrations 025 and 026 before redelivery is e
   for (const filename of [
     '025_delivery_failure_retained_package.sql',
     '026_redelivery_pending_address.sql',
+    '028_redelivery_charges.sql',
   ]) {
     assert.match(staging, new RegExp(filename.replace('.', '\\.')));
     assert.match(production, new RegExp(filename.replace('.', '\\.')));
   }
+});
+
+test('migration 028 creates a purpose-specific redelivery charge ledger', () => {
+  const db = new DatabaseSync(':memory:');
+  db.exec('CREATE TABLE orders (id INTEGER PRIMARY KEY)');
+  db.exec(redeliveryChargesMigration);
+
+  db.exec(`INSERT INTO orders (id) VALUES (9001);
+    INSERT INTO redelivery_charges (
+      id, order_id, amount_agorot, currency, address_snapshot_json,
+      status, created_at, updated_at, expires_at
+    ) VALUES ('rdl_test', 9001, 2500, 'ILS', '{}', 'pending', 1, 1, 2);`);
+
+  assert.deepEqual(
+    { ...db.prepare(`SELECT order_id, amount_agorot, address_snapshot_json, status
+      FROM redelivery_charges WHERE id = 'rdl_test'`).get() },
+    {
+      order_id: 9001,
+      amount_agorot: 2500,
+      address_snapshot_json: '{}',
+      status: 'pending',
+    },
+  );
+  assert.equal(
+    db.prepare(`SELECT COUNT(*) AS count FROM pragma_index_list('redelivery_charges')
+      WHERE name = 'idx_redelivery_charges_status'`).get().count,
+    1,
+  );
 });
