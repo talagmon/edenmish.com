@@ -4,7 +4,7 @@ import worker from '../src/index.js';
 import { makeSession } from '../src/integrations.js';
 
 // A held order awaiting a corrected redelivery address, keyed by tracking token.
-function redeliveryDb(order) {
+function redeliveryDb(order, { stageChanges = 1 } = {}) {
   const state = { updated: null };
   return {
     state,
@@ -19,7 +19,8 @@ function redeliveryDb(order) {
             },
             async run() {
               if (s.startsWith('UPDATE orders SET pending_redelivery_json')) {
-                state.updated = { json: args[0], id: args[1] };
+                if (stageChanges) state.updated = { json: args[0], id: args[1] };
+                return { meta: { changes: stageChanges } };
               }
               return { meta: { changes: 1 } };
             },
@@ -85,6 +86,15 @@ describe('POST /api/orders/:token/redelivery-address', () => {
     assert.equal(db.state.updated, null, 'an unverified caller must not stage an address');
   });
 
+  test('fails closed if payment starts between the charge check and address staging', async () => {
+    const db = redeliveryDb(held, { stageChanges: 0 });
+    const res = await worker.fetch(request('trk_abc', newAddress), { DB: db });
+
+    assert.equal(res.status, 409);
+    assert.equal((await res.json()).error, 'address_locked_after_payment_started');
+    assert.equal(db.state.updated, null, 'a racing address must not replace the charged snapshot');
+  });
+
   test('rejects an order that is not awaiting redelivery', async () => {
     const notHeld = { ...held, retained_by_driver: null };
     const res = await worker.fetch(request('trk_abc', newAddress), { DB: redeliveryDb(notHeld) });
@@ -124,7 +134,12 @@ describe('POST /api/orders/:token/redelivery-address', () => {
 function releaseDb(order, chargeStatus = 'paid') {
   const state = {
     released: null,
-    charge: chargeStatus ? { id: 'rdl_test', order_id: order?.id, status: chargeStatus } : null,
+    charge: chargeStatus ? {
+      id: 'rdl_test',
+      order_id: order?.id,
+      status: chargeStatus,
+      address_snapshot_json: order?.pending_redelivery_json,
+    } : null,
   };
   const DB = {
     state,

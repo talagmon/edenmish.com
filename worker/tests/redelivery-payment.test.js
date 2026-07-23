@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
 import worker from '../src/index.js';
+import { createRedeliveryCharge } from '../src/db.js';
 import { makeSession } from '../src/integrations.js';
 
 class SQLiteD1Statement {
@@ -117,6 +118,37 @@ const realFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = realFetch; });
 
 describe('redelivery Shopify payment boundary', () => {
+  test('does not create a charge from an address snapshot that has already changed', async () => {
+    const DB = new SQLiteD1();
+    const now = Date.now();
+    DB.seedHeldOrder(now);
+    const staleSnapshot = DB.row(
+      'SELECT pending_redelivery_json FROM orders WHERE id = 9001',
+    ).pending_redelivery_json;
+    const changedSnapshot = JSON.stringify({
+      ...JSON.parse(staleSnapshot),
+      dropoff: 'כתובת מתוקנת אחרת',
+      submitted_at: now + 1,
+    });
+    DB.db.prepare('UPDATE orders SET pending_redelivery_json = ? WHERE id = 9001')
+      .run(changedSnapshot);
+
+    const charge = await createRedeliveryCharge(DB, {
+      id: 'rdl_stale',
+      orderId: 9001,
+      amountAgorot: 2500,
+      addressSnapshotJson: staleSnapshot,
+      now,
+      expiresAt: now + 24 * 60 * 60 * 1000,
+    });
+
+    assert.equal(charge, null);
+    assert.equal(
+      DB.db.prepare('SELECT COUNT(*) AS count FROM redelivery_charges').get().count,
+      0,
+    );
+  });
+
   test('tracking exposes an OTP-gated redelivery action without leaking staged JSON', async () => {
     const DB = new SQLiteD1();
     DB.seedHeldOrder();
@@ -172,6 +204,11 @@ describe('redelivery Shopify payment boundary', () => {
     assert.match(body.payment_url, /checkout\.shopify\.test\/redelivery/);
     const charge = DB.row('SELECT * FROM redelivery_charges WHERE order_id = 9001');
     assert.equal(charge.amount_agorot, 2500);
+    assert.equal(
+      charge.address_snapshot_json,
+      DB.row('SELECT pending_redelivery_json FROM orders WHERE id = 9001')
+        .pending_redelivery_json,
+    );
     assert.equal(charge.status, 'link_sent');
     assert.equal(charge.shopify_draft_order_id, '8001');
     assert.equal(DB.row('SELECT price, payment_status FROM orders WHERE id = 9001').price, 50);
@@ -199,8 +236,9 @@ describe('redelivery Shopify payment boundary', () => {
     DB.seedHeldOrder(now);
     DB.db.prepare(`INSERT INTO redelivery_charges (
       id, order_id, amount_agorot, currency, status, payment_url, processor_ref,
-      shopify_draft_order_id, created_at, updated_at, expires_at
-    ) VALUES (?, 9001, 2500, 'ILS', 'link_sent', ?, '8001', '8001', ?, ?, ?)`).run(
+      shopify_draft_order_id, address_snapshot_json, created_at, updated_at, expires_at
+    ) VALUES (?, 9001, 2500, 'ILS', 'link_sent', ?, '8001', '8001',
+      (SELECT pending_redelivery_json FROM orders WHERE id = 9001), ?, ?, ?)`).run(
       'rdl_test',
       'https://checkout.shopify.test/redelivery',
       now,
@@ -248,14 +286,55 @@ describe('redelivery Shopify payment boundary', () => {
     assert.equal(DB.row("SELECT status FROM redelivery_charges WHERE id = 'rdl_test'").status, 'released');
   });
 
+  test('does not release an address that differs from the paid charge snapshot', async () => {
+    const DB = new SQLiteD1();
+    const now = Date.now();
+    DB.seedHeldOrder(now);
+    DB.db.prepare(`INSERT INTO redelivery_charges (
+      id, order_id, amount_agorot, currency, status, address_snapshot_json,
+      created_at, updated_at, expires_at, paid_at
+    ) VALUES ('rdl_changed', 9001, 2500, 'ILS', 'paid',
+      (SELECT pending_redelivery_json FROM orders WHERE id = 9001), ?, ?, ?, ?)`).run(
+      now,
+      now,
+      now + 24 * 60 * 60 * 1000,
+      now,
+    );
+    DB.db.prepare(`UPDATE orders
+      SET pending_redelivery_json = json_set(
+        pending_redelivery_json,
+        '$.dropoff',
+        'כתובת שלא שולמה'
+      )
+      WHERE id = 9001`).run();
+
+    const session = await makeSession({ SESSION_SECRET: 'test-secret' });
+    const release = await worker.fetch(new Request(
+      'https://ops.edenmish.com/api/ops/orders/9001/release-redelivery',
+      { method: 'POST', headers: { 'X-Ops': session } },
+    ), { DB, SESSION_SECRET: 'test-secret' });
+
+    assert.equal(release.status, 409);
+    assert.equal((await release.json()).error, 'redelivery_address_changed');
+    assert.deepEqual(
+      DB.row('SELECT dropoff, retained_by_driver FROM orders WHERE id = 9001'),
+      { dropoff: 'כתובת ישנה', retained_by_driver: 'hold_for_redelivery' },
+    );
+    assert.equal(
+      DB.row("SELECT status FROM redelivery_charges WHERE id = 'rdl_changed'").status,
+      'paid',
+    );
+  });
+
   test('flags a redelivery refund for manual review without changing the original payment', async () => {
     const DB = new SQLiteD1();
     const now = Date.now();
     DB.seedHeldOrder(now);
     DB.db.prepare(`INSERT INTO redelivery_charges (
       id, order_id, amount_agorot, currency, status, shopify_order_id,
-      created_at, updated_at, expires_at, paid_at
-    ) VALUES ('rdl_refund', 9001, 2500, 'ILS', 'paid', '9100', ?, ?, ?, ?)`).run(
+      address_snapshot_json, created_at, updated_at, expires_at, paid_at
+    ) VALUES ('rdl_refund', 9001, 2500, 'ILS', 'paid', '9100',
+      (SELECT pending_redelivery_json FROM orders WHERE id = 9001), ?, ?, ?, ?)`).run(
       now,
       now,
       now + 24 * 60 * 60 * 1000,

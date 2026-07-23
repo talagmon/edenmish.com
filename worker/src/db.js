@@ -126,14 +126,31 @@ export async function createRedeliveryCharge(DB, {
   id,
   orderId,
   amountAgorot,
+  addressSnapshotJson,
   now = Date.now(),
   expiresAt,
 }) {
   await DB.prepare(`INSERT OR IGNORE INTO redelivery_charges
-    (id, order_id, amount_agorot, currency, status, created_at, updated_at, expires_at)
-    VALUES (?, ?, ?, 'ILS', 'pending', ?, ?, ?)`)
-    .bind(id, orderId, amountAgorot, now, now, expiresAt).run();
-  return getRedeliveryChargeByOrderId(DB, orderId);
+    (id, order_id, amount_agorot, currency, address_snapshot_json,
+     status, created_at, updated_at, expires_at)
+    SELECT ?, id, ?, 'ILS', ?, 'pending', ?, ?, ?
+    FROM orders
+    WHERE id = ?
+      AND status = 'failed'
+      AND retained_by_driver = 'hold_for_redelivery'
+      AND pending_redelivery_json = ?`)
+    .bind(
+      id,
+      amountAgorot,
+      addressSnapshotJson,
+      now,
+      now,
+      expiresAt,
+      orderId,
+      addressSnapshotJson,
+    ).run();
+  const charge = await getRedeliveryChargeByOrderId(DB, orderId);
+  return charge?.address_snapshot_json === addressSnapshotJson ? charge : null;
 }
 
 export async function getRules(DB) {

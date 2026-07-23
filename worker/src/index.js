@@ -1057,8 +1057,19 @@ export default {
         fee: suggestion.fee,
         submitted_at: Date.now(),
       };
-      await env.DB.prepare('UPDATE orders SET pending_redelivery_json = ? WHERE id = ?')
+      const staged = await env.DB.prepare(`UPDATE orders
+        SET pending_redelivery_json = ?
+        WHERE id = ?
+          AND status = 'failed'
+          AND retained_by_driver = 'hold_for_redelivery'
+          AND NOT EXISTS (
+            SELECT 1 FROM redelivery_charges
+            WHERE order_id = orders.id
+          )`)
         .bind(JSON.stringify(pending), o.id).run();
+      if (!staged?.meta?.changes) {
+        return json({ ok: false, error: 'address_locked_after_payment_started' }, 409, cors);
+      }
       console.log('redelivery_address_staged', { order: o.id, zone: suggestion.zone, fee: suggestion.fee });
       return json({ ok: true, fee: suggestion.fee, zone: suggestion.zone, currency: 'ILS' }, 200, cors);
     }
@@ -1084,6 +1095,9 @@ export default {
       if (expiresAt <= now) return json({ ok: false, error: 'redelivery_window_expired' }, 409, cors);
 
       let charge = await getRedeliveryChargeByOrderId(env.DB, o.id);
+      if (charge && charge.address_snapshot_json !== o.pending_redelivery_json) {
+        return json({ ok: false, error: 'redelivery_address_changed' }, 409, cors);
+      }
       if (charge?.status === 'link_sent' && charge.payment_url) {
         return json({
           ok: true,
@@ -1104,9 +1118,13 @@ export default {
           id: `rdl_${crypto.randomUUID()}`,
           orderId: o.id,
           amountAgorot: Math.round(amountNis * 100),
+          addressSnapshotJson: o.pending_redelivery_json,
           now,
           expiresAt,
         });
+        if (!charge) {
+          return json({ ok: false, error: 'redelivery_address_changed' }, 409, cors);
+        }
       }
       const claimed = await env.DB.prepare(`UPDATE redelivery_charges
         SET status = 'creating', updated_at = ?
@@ -1460,11 +1478,9 @@ export default {
       return json({ ok: true, order: o, proof });
     }
 
-    // Release a paid redelivery: Ops confirms the extra-stop fee is collected, and this promotes
-    // the staged corrected address onto the live dropoff columns and flips the hold to a
-    // 'redelivery' state that dispatch routes. The fee itself is collected by Ops (a payment link
-    // or manual mark) — auto-reconciling a second charge via the Shopify webhook is deferred to
-    // the pre-auth (Mesh) phase, so a human confirms the money here.
+    // Release a paid redelivery: the signed Shopify webhook has already reconciled the
+    // purpose-specific charge. Ops promotes that exact staged address onto the live dropoff
+    // columns and flips the hold to the 'redelivery' state that dispatch routes.
     if (onOps && path.includes('/api/ops/orders/') && path.endsWith('/release-redelivery') && req.method === 'POST') {
       if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
       const id = Number(path.split('/')[4]);
@@ -1484,6 +1500,9 @@ export default {
       const charge = await getRedeliveryChargeByOrderId(env.DB, id);
       if (!charge || charge.status !== 'paid') {
         return json({ error: 'redelivery_payment_required' }, 409);
+      }
+      if (charge.address_snapshot_json !== o.pending_redelivery_json) {
+        return json({ error: 'redelivery_address_changed' }, 409);
       }
       // Overwrite the live destination with the corrected one and mark the order a redelivery.
       // Status stays 'failed' (canonically the first attempt did fail); dispatch routes a fresh

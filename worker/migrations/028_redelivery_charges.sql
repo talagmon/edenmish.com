@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS redelivery_charges (
   order_id INTEGER NOT NULL UNIQUE,
   amount_agorot INTEGER NOT NULL CHECK(amount_agorot > 0),
   currency TEXT NOT NULL DEFAULT 'ILS',
+  address_snapshot_json TEXT NOT NULL,
   status TEXT NOT NULL CHECK(status IN (
     'pending', 'creating', 'link_sent', 'paid', 'released', 'expired', 'mismatch', 'late_paid'
   )),

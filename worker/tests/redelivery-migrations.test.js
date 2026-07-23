@@ -67,13 +67,19 @@ test('migration 028 creates a purpose-specific redelivery charge ledger', () => 
 
   db.exec(`INSERT INTO orders (id) VALUES (9001);
     INSERT INTO redelivery_charges (
-      id, order_id, amount_agorot, currency, status, created_at, updated_at, expires_at
-    ) VALUES ('rdl_test', 9001, 2500, 'ILS', 'pending', 1, 1, 2);`);
+      id, order_id, amount_agorot, currency, address_snapshot_json,
+      status, created_at, updated_at, expires_at
+    ) VALUES ('rdl_test', 9001, 2500, 'ILS', '{}', 'pending', 1, 1, 2);`);
 
   assert.deepEqual(
-    { ...db.prepare(`SELECT order_id, amount_agorot, status
+    { ...db.prepare(`SELECT order_id, amount_agorot, address_snapshot_json, status
       FROM redelivery_charges WHERE id = 'rdl_test'`).get() },
-    { order_id: 9001, amount_agorot: 2500, status: 'pending' },
+    {
+      order_id: 9001,
+      amount_agorot: 2500,
+      address_snapshot_json: '{}',
+      status: 'pending',
+    },
   );
   assert.equal(
     db.prepare(`SELECT COUNT(*) AS count FROM pragma_index_list('redelivery_charges')
