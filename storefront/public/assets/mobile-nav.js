@@ -71,10 +71,32 @@
   navItems.forEach(function (item) { panel.appendChild(buildLink(item, true)); });
   headerEl.parentNode.insertBefore(panel, headerEl.nextSibling);
 
+  var compactNav = window.matchMedia('(max-width: 1023px)');
+
   function setMenu(open) {
+    if (!compactNav.matches) open = false;
     panel.hidden = !open;
     burger.setAttribute('aria-expanded', open ? 'true' : 'false');
     burger.querySelector('.material-symbols-outlined').textContent = open ? 'close' : 'menu';
+  }
+
+  function syncNavigation() {
+    var compact = compactNav.matches;
+
+    // Inline display values are intentional. They keep the two navigation
+    // modes mutually exclusive even when a browser restores stale CSS from
+    // cache while loading the current navigation script.
+    desk.style.display = compact ? 'none' : 'flex';
+    burger.style.display = compact ? 'grid' : 'none';
+    if (cta) cta.style.display = compact ? 'none' : 'inline-flex';
+    if (!compact) setMenu(false);
+  }
+
+  syncNavigation();
+  if (typeof compactNav.addEventListener === 'function') {
+    compactNav.addEventListener('change', syncNavigation);
+  } else {
+    compactNav.addListener(syncNavigation);
   }
 
   burger.addEventListener('click', function (e) {
