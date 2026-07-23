@@ -581,7 +581,13 @@ export default {
       // A typo'd phone is a failed delivery — normalize to E.164 or reject up front.
       const phone = normalizeIlPhone(b.phone);
       if (!phone) return json({ error: 'invalid phone' }, 400, cors);
-      b = { ...b, phone };
+      const phoneDeliveryLinkOptIn = b.phone_delivery_link_opt_in === true;
+      b = {
+        ...b,
+        phone,
+        phone_delivery_link_opt_in: phoneDeliveryLinkOptIn,
+        phone_delivery_link_opt_in_at: phoneDeliveryLinkOptIn ? Date.now() : null,
+      };
 
       if (!['eco', 'standard', 'flash'].includes(b.service)) return json({ error: 'invalid service' }, 400, cors);
       if (!['small', 'medium'].includes(b.size)) return json({ error: 'invalid size' }, 400, cors);
@@ -1145,13 +1151,11 @@ export default {
       if (!wasDelivered) {
         completion = await persistOpsDeliveryCompletion(env.DB, before, {
           deliveredAt: before.delivered_at || Date.now(),
-          sendWhatsApp: true,
         });
       }
       const o = await getOrderById(env.DB, id);
       if (!wasDelivered && o && completion?.transitioned) {
         await runDeliveryCompletionSideEffects(env, o, {
-          sendWhatsApp: true,
           notificationsAlreadyEnqueued: true,
           processNotifications: false,
           eventId: completion?.eventId,

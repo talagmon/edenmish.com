@@ -542,7 +542,7 @@ async function processEvent(env, auth, meta, event, executionContext) {
         event.event_id, auth.driver_id, correlationId,
       );
     const outbox = deliveryNotificationOutboxStatements(
-      env.DB, deliveryTransitionOrder, event.event_id, now, { sendWhatsApp: true },
+      env.DB, deliveryTransitionOrder, event.event_id, now,
     );
     const results = await env.DB.batch([eventInsert, transition, updateOrder, addHistory, ...outbox]);
     inserted = results[0];
@@ -582,7 +582,6 @@ async function processEvent(env, auth, meta, event, executionContext) {
     const deliveredOrder = await getOrderById(env.DB, orderId);
     if (deliveredOrder && executionContext?.waitUntil) {
       const deferred = runDeliveryCompletionSideEffects(env, deliveredOrder, {
-        sendWhatsApp: true,
         notificationsAlreadyEnqueued: true,
         eventId: event.event_id,
       }).catch((error) => {

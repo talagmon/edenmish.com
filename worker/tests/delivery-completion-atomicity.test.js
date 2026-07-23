@@ -42,6 +42,7 @@ class SQLiteD1 {
         status TEXT NOT NULL,
         email TEXT,
         phone TEXT,
+        phone_delivery_link_opt_in INTEGER NOT NULL DEFAULT 0,
         payment_method TEXT,
         delivered_at INTEGER,
         payment_status TEXT
@@ -171,7 +172,6 @@ describe('delivery completion transaction', () => {
       persistOpsDeliveryCompletion(DB, order, {
         eventId: 'ops-delivered-9001',
         now: 1_000,
-        sendWhatsApp: true,
       }),
       /injected_batch_failure/,
     );
@@ -182,19 +182,17 @@ describe('delivery completion transaction', () => {
     assert.equal(DB.scalar('SELECT COUNT(*) AS count FROM delivery_notification_outbox').count, 0);
   });
 
-  test('competing completion identities produce one transition and one job per channel', async () => {
+  test('competing completion identities produce one transition and one email job', async () => {
     const DB = new SQLiteD1();
     seed(DB);
 
     const first = await persistOpsDeliveryCompletion(DB, order, {
       eventId: 'ops-completion-a',
       now: 1_000,
-      sendWhatsApp: true,
     });
     const competing = await persistOpsDeliveryCompletion(DB, order, {
       eventId: 'ops-completion-b',
       now: 1_001,
-      sendWhatsApp: true,
     });
 
     assert.equal(first.transitioned, true);
@@ -202,7 +200,7 @@ describe('delivery completion transaction', () => {
     assert.equal(DB.scalar('SELECT status FROM orders WHERE id = 9001').status, 'delivered');
     assert.equal(DB.scalar('SELECT COUNT(*) AS count FROM status_history').count, 1);
     assert.equal(DB.scalar('SELECT COUNT(*) AS count FROM delivery_completion_transitions').count, 1);
-    assert.equal(DB.scalar('SELECT COUNT(*) AS count FROM delivery_notification_outbox').count, 2);
+    assert.equal(DB.scalar('SELECT COUNT(*) AS count FROM delivery_notification_outbox').count, 1);
   });
 
   test('does not overwrite a concurrent terminal state after the Ops snapshot', async () => {
@@ -213,7 +211,6 @@ describe('delivery completion transaction', () => {
     const result = await persistOpsDeliveryCompletion(DB, order, {
       eventId: 'ops-delivered-stale',
       now: 1_000,
-      sendWhatsApp: true,
     });
 
     assert.equal(result.transitioned, false);
@@ -231,7 +228,6 @@ describe('delivery completion transaction', () => {
     const result = await persistOpsDeliveryCompletion(DB, { ...order, status: 'paid' }, {
       eventId: 'ops-delivered-illegal-source',
       now: 1_000,
-      sendWhatsApp: true,
     });
 
     assert.equal(result.transitioned, false);
@@ -262,7 +258,7 @@ describe('delivery completion transaction', () => {
     assert.equal(DB.scalar('SELECT COUNT(*) AS count FROM delivery_notification_outbox').count, 0);
   });
 
-  test('competing driver event IDs create one transition and one job per channel', async () => {
+  test('competing driver event IDs create one transition and one email job', async () => {
     const DB = new SQLiteD1();
     seedDriverRoute(DB);
 
@@ -285,6 +281,6 @@ describe('delivery completion transaction', () => {
     assert.equal(DB.scalar('SELECT COUNT(*) AS count FROM driver_execution_events').count, 2);
     assert.equal(DB.scalar('SELECT COUNT(*) AS count FROM status_history').count, 1);
     assert.equal(DB.scalar('SELECT COUNT(*) AS count FROM delivery_completion_transitions').count, 1);
-    assert.equal(DB.scalar('SELECT COUNT(*) AS count FROM delivery_notification_outbox').count, 2);
+    assert.equal(DB.scalar('SELECT COUNT(*) AS count FROM delivery_notification_outbox').count, 1);
   });
 });

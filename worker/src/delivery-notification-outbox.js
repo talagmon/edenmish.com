@@ -22,12 +22,10 @@ export function deliveryCompletionTransitionStatement(
     .bind(orderId, eventId, now, orderId, eventId, driverId, correlationId);
 }
 
-export function deliveryNotificationOutboxStatements(DB, order, eventId, now, {
-  sendWhatsApp = false,
-} = {}) {
+export function deliveryNotificationOutboxStatements(DB, order, eventId, now) {
   const channels = [];
   if (order?.email) channels.push('email');
-  if (sendWhatsApp && order?.phone) channels.push('whatsapp');
+  if (order?.phone_delivery_link_opt_in && order?.phone) channels.push('whatsapp');
   return channels.map((channel) => DB.prepare(`INSERT OR IGNORE INTO delivery_notification_outbox
     (order_id, transition, event_id, channel, template, state, attempt_count,
      next_attempt_at, created_at, updated_at)
@@ -45,7 +43,6 @@ export async function persistOpsDeliveryCompletion(DB, order, {
   now = Date.now(),
   deliveredAt = now,
   paymentStatus = order.payment_method === 'wallet' ? 'wallet_paid' : 'paid',
-  sendWhatsApp = false,
 } = {}) {
   const transition = DB.prepare(`INSERT OR IGNORE INTO delivery_completion_transitions
     (order_id, event_id, created_at)
@@ -65,9 +62,7 @@ export async function persistOpsDeliveryCompletion(DB, order, {
       AND NOT EXISTS (SELECT 1 FROM status_history
         WHERE order_id = ? AND status = 'delivered')`)
     .bind(order.id, now, order.id, eventId, order.id);
-  const outbox = deliveryNotificationOutboxStatements(
-    DB, order, eventId, now, { sendWhatsApp },
-  );
+  const outbox = deliveryNotificationOutboxStatements(DB, order, eventId, now);
   const results = await DB.batch([transition, updateOrder, addHistory, ...outbox]);
   return {
     eventId,
@@ -78,11 +73,10 @@ export async function persistOpsDeliveryCompletion(DB, order, {
 export async function enqueueDeliveryNotificationJobs(DB, order, {
   eventId = `ops-delivered-${order.id}`,
   now = Date.now(),
-  sendWhatsApp = false,
 } = {}) {
   const direct = [];
   if (order?.email) direct.push('email');
-  if (sendWhatsApp && order?.phone) direct.push('whatsapp');
+  if (order?.phone_delivery_link_opt_in && order?.phone) direct.push('whatsapp');
   if (!direct.length) return [];
   return DB.batch(direct.map((channel) => DB.prepare(`INSERT OR IGNORE INTO delivery_notification_outbox
     (order_id, transition, event_id, channel, template, state, attempt_count,
@@ -103,11 +97,18 @@ async function defaultDeliver(env, job, order) {
     });
   }
   if (job.channel === 'whatsapp') {
+    if (!order.phone_delivery_link_opt_in || !order.phone) {
+      return { ok: false, error: 'phone_channel_requires_opt_in', permanent: true };
+    }
+    const base = (
+      env.STOREFRONT_BASE || env.BOOKING_URL || 'https://edenmish.com'
+    ).replace(/\/+$/, '');
+    const proofUrl = `${base}/delivered.html?t=${encodeURIComponent(order.token || '')}`;
     return notifyWhatsApp(env, env.DB, {
       orderId: order.id,
       template: TEMPLATE,
       recipient: order.phone,
-      body: `המשלוח שלך הגיע ✓\n${order.dropoff || ''}\nתודה שבחרת ב-EdenMish!`,
+      body: `המשלוח שלך הגיע ✓\nלצפייה בהוכחת המסירה: ${proofUrl}\nתודה שבחרת ב-EdenMish!`,
     });
   }
   return { ok: false, error: 'unsupported_channel', permanent: true };
@@ -196,6 +197,8 @@ export async function processDeliveryNotificationOutbox(env, {
 
 export const deliveryNotificationOutboxPolicy = Object.freeze({
   template: TEMPLATE,
+  channels: Object.freeze(['email', 'whatsapp_opt_in']),
+  phoneDeliveryRequiresPersistedOptIn: true,
   defaultLimit: DEFAULT_LIMIT,
   defaultMaxAttempts: DEFAULT_MAX_ATTEMPTS,
   defaultLeaseMs: DEFAULT_LEASE_MS,

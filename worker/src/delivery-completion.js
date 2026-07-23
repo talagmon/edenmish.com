@@ -33,14 +33,13 @@ export const deliverySummaryHtml = (env, order) => `<div dir="rtl" style="font-f
 // Call this only when canonical state changes to delivered. The durable outbox owns
 // logical-job uniqueness and bounded at-least-once provider attempts.
 export async function runDeliveryCompletionSideEffects(env, order, {
-  sendWhatsApp = false,
   notificationsAlreadyEnqueued = false,
   processNotifications = true,
   eventId,
 } = {}) {
   const settlement = await settleOrder(env, order);
   if (!notificationsAlreadyEnqueued) {
-    await enqueueDeliveryNotificationJobs(env.DB, order, { eventId, sendWhatsApp });
+    await enqueueDeliveryNotificationJobs(env.DB, order, { eventId });
   }
   const notifications = processNotifications
     ? await processDeliveryNotificationOutbox(env)
