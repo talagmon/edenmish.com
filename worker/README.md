@@ -94,7 +94,7 @@ Database name: `edenmish`. Binding: `DB`.
 ### Schema and migrations
 
 `schema.sql` is the **fresh-DB source of truth** — it defines every current table.
-The numbered migrations (`003`–`022`) add tables/columns that were introduced after the
+The numbered migrations (`003`–`024`) add tables/columns that were introduced after the
 initial schema. Tables are idempotent (`CREATE TABLE IF NOT EXISTS`); `ALTER TABLE …
 ADD COLUMN` migrations (`006`–`010`, `015`, and `016`) must run only on DBs that predate their columns.
 
@@ -127,7 +127,9 @@ See `../docs/ENVIRONMENT.md` for the full list and placeholders.
 |---|---|---|
 | `OPS_PIN` | ops dashboard login | shared PIN today |
 | `SESSION_SECRET` | signed/hashed ops + business sessions, links and OTPs | mandatory; auth flows fail closed if unset |
-| `DRIVER_ONE_TIME_CODE` | driver app bootstrap login | single use; 6–12 digits; rotate after every successful exchange |
+| `DRIVER_REVIEW_CODE` | dedicated Apple App Review login | reusable only for review; 6–12 digits; rate-limited and audited; rotate or disable outside review windows |
+| `DRIVER_ONE_TIME_CODE` | compatibility fallback for Apple App Review | used only when `DRIVER_REVIEW_CODE` is unset; keep while the current App Store review record references it |
+| `DRIVER_ADDITIONAL_ONE_TIME_CODES` | legacy emergency driver bootstrap logins | comma-separated 6–12 digit codes; each code remains single use; prefer expiring Ops invitations |
 | `MAPS_KEY` | tracking page live map (injected into HTML) | Google Maps JS key |
 | `SHOPIFY_ADMIN_TOKEN` | creating Draft Orders (`shpat_…`) | Worker-side charge |
 | `SHOPIFY_WEBHOOK_SECRET` | verifying Shopify payment/refund webhooks | webhook fails closed (401) if unset |
@@ -194,6 +196,8 @@ wrangler d1 execute edenmish --remote --file=./migrations/019_delivery_notificat
 wrangler d1 execute edenmish --remote --file=./migrations/020_business_wallet_schema_repair.sql
 wrangler d1 execute edenmish --remote --file=./migrations/021_business_entry_plans.sql
 wrangler d1 execute edenmish --remote --file=./migrations/022_business_plan_coupons.sql
+wrangler d1 execute edenmish --remote --file=./migrations/023_driver_login_invitations.sql
+wrangler d1 execute edenmish --remote --file=./migrations/024_phone_delivery_link_consent.sql
 ```
 
 > Run only migrations that have not already been applied. Several `ALTER TABLE`
@@ -204,6 +208,9 @@ wrangler d1 execute edenmish --remote --file=./migrations/022_business_plan_coup
 ```bash
 wrangler secret put OPS_PIN
 wrangler secret put SESSION_SECRET
+# Preferred for a dedicated Apple review credential:
+wrangler secret put DRIVER_REVIEW_CODE
+# Compatibility fallback while an existing review record still uses this name:
 wrangler secret put DRIVER_ONE_TIME_CODE
 wrangler secret put MAPS_KEY
 wrangler secret put SHOPIFY_ADMIN_TOKEN
@@ -264,5 +271,6 @@ wrangler deploy
 - [ ] Confirm inline price approval works for a review order.
 - [ ] Confirm delivery proof can be saved (receiver name + note).
 - [ ] Confirm notification audit rows are created.
-- [ ] Confirm delivery completion creates unique email/WhatsApp outbox jobs and due failures retry.
+- [ ] Confirm delivery completion always creates one email outbox job, creates a
+      WhatsApp proof-link job only for a stored opt-in, and retries due failures.
 - [ ] Confirm per-order notification history appears in ops.

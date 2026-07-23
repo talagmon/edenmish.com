@@ -12,6 +12,10 @@ import {
   deliveryCompletionTransitionStatement,
   deliveryNotificationOutboxStatements,
 } from './delivery-notification-outbox.js';
+import {
+  findUsableDriverInvitation,
+  markDriverInvitationConsumed,
+} from './driver-invitations.js';
 
 const ACCESS_TTL_MS = 15 * 60 * 1000;
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -92,6 +96,25 @@ async function constantTimeTextEqual(a, b) {
   return diff === 0;
 }
 
+function configuredReviewCode(env) {
+  const code = (env.DRIVER_REVIEW_CODE || env.DRIVER_ONE_TIME_CODE || '').trim();
+  return /^\d{6,12}$/.test(code) ? code : null;
+}
+
+function configuredLegacyCodes(env) {
+  return (env.DRIVER_ADDITIONAL_ONE_TIME_CODES || '').split(',')
+    .map((code) => code.trim())
+    .filter((code) => /^\d{6,12}$/.test(code));
+}
+
+async function matchesConfiguredDriverLoginCode(input, configuredCodes) {
+  let matched = false;
+  for (const configuredCode of configuredCodes) {
+    matched = (await constantTimeTextEqual(input, configuredCode)) || matched;
+  }
+  return matched;
+}
+
 async function authenticate(req, env, meta) {
   const authorization = req.headers.get('authorization') || '';
   const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
@@ -105,26 +128,47 @@ async function authenticate(req, env, meta) {
 }
 
 async function createSession(req, env, meta) {
-  if (!env.DRIVER_ONE_TIME_CODE || !env.SESSION_SECRET) return response({ code: 'driver_auth_unconfigured', message: 'Driver authentication is unavailable.', request_id: meta.requestId }, 503, meta.requestId);
+  if (!env.SESSION_SECRET) return response({ code: 'driver_auth_unconfigured', message: 'Driver authentication is unavailable.', request_id: meta.requestId }, 503, meta.requestId);
   const rateKey = 'drvlogin:' + await anonKey(env, clientIp(req));
   const rate = await incrRateLimit(env.DB, rateKey, 10 * 60 * 1000);
   if (rate.count > 5) return response({ code: 'rate_limited', message: 'Too many attempts.', request_id: meta.requestId }, 429, meta.requestId, { 'Retry-After': '600' });
   let body;
   try { body = await readJson(req); } catch (error) { return response({ code: error.message, message: 'Invalid request.', request_id: meta.requestId }, error.status || 400, meta.requestId); }
-  if (!body || typeof body.one_time_code !== 'string' || !/^\d{6,12}$/.test(body.one_time_code)
-    || !(await constantTimeTextEqual(body.one_time_code, env.DRIVER_ONE_TIME_CODE))) {
+  const inputCode = body?.one_time_code;
+  if (typeof inputCode !== 'string' || !/^\d{6,12}$/.test(inputCode)) {
     return response({ code: 'invalid_credentials', message: 'Invalid credentials.', request_id: meta.requestId }, 401, meta.requestId);
   }
+
   const now = Date.now();
-  const driverId = env.DRIVER_ID || 'drv_eden';
-  const displayName = env.DRIVER_DISPLAY_NAME || 'Eden';
-  await env.DB.prepare(`INSERT INTO drivers (id, display_name, locale, active, created_at)
-    VALUES (?, ?, 'he-IL', 1, ?) ON CONFLICT(id) DO UPDATE SET display_name = excluded.display_name`)
-    .bind(driverId, displayName, now).run();
-  const codeHash = await hmacHex(env.SESSION_SECRET, `driver-login:${body.one_time_code}`);
+  const invitation = await findUsableDriverInvitation(env, inputCode, now);
+  const reviewCode = configuredReviewCode(env);
+  const isReviewCredential = !invitation && reviewCode
+    ? await constantTimeTextEqual(inputCode, reviewCode) : false;
+  const isLegacyCredential = !invitation && !isReviewCredential
+    ? await matchesConfiguredDriverLoginCode(inputCode, configuredLegacyCodes(env)) : false;
+  if (!invitation && !isReviewCredential && !isLegacyCredential) {
+    return response({ code: 'invalid_credentials', message: 'Invalid credentials.', request_id: meta.requestId }, 401, meta.requestId);
+  }
+
+  const driverId = invitation?.driver_id || env.DRIVER_ID || 'drv_eden';
+  const displayName = invitation?.display_name || env.DRIVER_DISPLAY_NAME || 'Eden';
+  const locale = invitation?.locale || 'he-IL';
+  if (!invitation) {
+    await env.DB.prepare(`INSERT INTO drivers (id, display_name, locale, active, created_at)
+      VALUES (?, ?, ?, 1, ?) ON CONFLICT(id) DO UPDATE SET display_name = excluded.display_name`)
+      .bind(driverId, displayName, locale, now).run();
+  }
+
   const accessToken = randomToken();
   const refreshToken = randomToken();
   const sessionId = 'ds_' + crypto.randomUUID().replace(/-/g, '');
+  const codeHash = invitation?.code_hash
+    || (isReviewCredential
+      ? await hmacHex(
+        env.SESSION_SECRET,
+        `driver-review-session:${meta.installationId}:${sessionId}`,
+      )
+      : await hmacHex(env.SESSION_SECRET, `driver-login:${inputCode}`));
   const inserted = await env.DB.prepare(`INSERT OR IGNORE INTO driver_sessions
     (id, driver_id, installation_id, login_code_hash, access_token_hash, refresh_token_hash, access_expires_at, refresh_expires_at, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
@@ -134,12 +178,20 @@ async function createSession(req, env, meta) {
   if (!inserted?.meta?.changes) {
     return response({ code: 'invalid_credentials', message: 'Invalid credentials.', request_id: meta.requestId }, 401, meta.requestId);
   }
+  if (invitation) {
+    await markDriverInvitationConsumed(env.DB, {
+      invitationId: invitation.id,
+      sessionId,
+      installationId: meta.installationId,
+      now,
+    });
+  }
   await resetRateLimit(env.DB, rateKey);
   return response({
     access_token: accessToken,
     access_token_expires_at: new Date(now + ACCESS_TTL_MS).toISOString(),
     refresh_token: refreshToken,
-    driver: { driver_id: driverId, display_name: displayName, locale: 'he-IL' },
+    driver: { driver_id: driverId, display_name: displayName, locale },
   }, 201, meta.requestId);
 }
 
@@ -196,6 +248,14 @@ function onboardOrderIds(value) {
   } catch {
     return [];
   }
+}
+
+function publicRouteReason(reason) {
+  // `queue_changed` was the original internal persistence value. It was never
+  // part of the mobile v1 contract, whose equivalent reason is
+  // `dispatch_reordered`. Keep existing route revisions readable by released
+  // clients while new revisions are persisted with the public value.
+  return reason === 'queue_changed' ? 'dispatch_reordered' : reason;
 }
 
 function routeTask(stop, executionState = null) {
@@ -255,7 +315,7 @@ async function routeSnapshot(env, auth, meta, shiftId) {
   const stops = (rows.results || []).map((stop) => routeTask(stop, executionStateByStop.get(stop.stop_id)));
   const activeStop = stops.find((stop) => !['completed', 'failed', 'cancelled', 'skipped_by_dispatch'].includes(stop.state));
   return response({
-    shift_id: shiftId, revision: route.revision, generated_at: new Date(route.generated_at).toISOString(), reason: route.reason,
+    shift_id: shiftId, revision: route.revision, generated_at: new Date(route.generated_at).toISOString(), reason: publicRouteReason(route.reason),
     current_stop_id: activeStop?.stop_id || route.current_stop_id,
     current_stop_locked: !!activeStop && ['navigating', 'arrived'].includes(activeStop.state),
     delay_minutes: route.delay_minutes,
@@ -482,7 +542,7 @@ async function processEvent(env, auth, meta, event, executionContext) {
         event.event_id, auth.driver_id, correlationId,
       );
     const outbox = deliveryNotificationOutboxStatements(
-      env.DB, deliveryTransitionOrder, event.event_id, now, { sendWhatsApp: true },
+      env.DB, deliveryTransitionOrder, event.event_id, now,
     );
     const results = await env.DB.batch([eventInsert, transition, updateOrder, addHistory, ...outbox]);
     inserted = results[0];
@@ -522,7 +582,6 @@ async function processEvent(env, auth, meta, event, executionContext) {
     const deliveredOrder = await getOrderById(env.DB, orderId);
     if (deliveredOrder && executionContext?.waitUntil) {
       const deferred = runDeliveryCompletionSideEffects(env, deliveredOrder, {
-        sendWhatsApp: true,
         notificationsAlreadyEnqueued: true,
         eventId: event.event_id,
       }).catch((error) => {

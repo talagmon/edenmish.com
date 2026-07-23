@@ -35,6 +35,8 @@ describe('order persistence', () => {
       service: 'standard',
       size: 'medium',
       price: 65,
+      phone_delivery_link_opt_in: true,
+      phone_delivery_link_opt_in_at: 1_721_000_000_000,
     });
 
     const insert = db.calls.find((call) => call.sql.includes('INSERT INTO orders'));
@@ -44,6 +46,8 @@ describe('order persistence', () => {
     assert.equal(insert.args[17], 10);
     assert.equal(insert.args[18], 'standard');
     assert.equal(insert.args[19], 'medium');
+    assert.equal(insert.args.at(-2), 1);
+    assert.equal(insert.args.at(-1), 1_721_000_000_000);
   });
 });
 

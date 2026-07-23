@@ -360,6 +360,38 @@ describe('Frontend: SEO foundations', () => {
     for (const city of cities) assertContains(html, `>${city}</span>`, `${city} service-area card`);
   });
 
+  test('Homepage ships the responsive glass presentation without changing customer destinations', () => {
+    const html = readPage('index.html');
+    const styles = readFileSync(join(process.cwd(), 'src', 'styles.css'), 'utf8');
+    for (const hook of [
+      'class="home-page ',
+      'class="home-header ',
+      'class="home-hero ',
+      'class="home-hero-backdrop ',
+      'class="home-live-card ',
+      'class="home-process ',
+      'home-service-areas',
+      'home-benefits',
+      'home-story',
+      'home-final-cta',
+    ]) {
+      assertContains(html, hook, `${hook} presentation hook`);
+    }
+    for (const destination of ['href="/booking.html"', 'href="/track.html"', 'href="/about.html"', 'href="/cancel.html"']) {
+      assertContains(html, destination, `${destination} customer destination`);
+    }
+    for (const deliveryState of ['התקבלה', 'אושר', 'לאיסוף', 'למסירה', 'נמסר']) {
+      assertContains(html, deliveryState, `${deliveryState} live-delivery state`);
+    }
+    assertContains(html, 'src="/assets/edenmish-home-hero-neon.webp"', 'motorcycle courier hero artwork with neon route trail');
+    assert.ok(existsSync(join(PUB, 'assets', 'edenmish-home-hero-neon.webp')), 'neon motorcycle hero artwork not found');
+    assertContains(html, 'src="/assets/edenmish-v0.mp4"', 'service-area logistics video');
+    assertContains(styles, '.home-page {', 'homepage-only skin scope');
+    assertContains(styles, '@media (max-width: 767px)', 'mobile presentation breakpoint');
+    assertContains(styles, '.home-process-step:not(:last-child)::after', 'connected journey presentation');
+    assertContains(styles, 'backdrop-filter: blur(28px) saturate(155%);', 'layered glass navigation');
+  });
+
   test('Publishes the EdenMish platform story with professional attribution and honest launch copy', () => {
     const homepage = readPage('index.html');
     const about = readPage('about.html');
@@ -496,7 +528,11 @@ describe('Frontend: Stylesheet + fonts', () => {
     });
   }
   test('Homepage cache-busts the current compiled stylesheet', () => {
-    assertContains(readPage('index.html'), '/assets/styles.css?v=1af9999');
+    assert.match(
+      readPage('index.html'),
+      /href="\/assets\/styles\.css\?v=[^"]+"/,
+      'homepage stylesheet URL must include a non-empty build fingerprint',
+    );
   });
 });
 
@@ -552,6 +588,11 @@ describe('Frontend: Booking form', () => {
     assertContains(html, 'תקנון', 'terms link');
     assertContains(html, 'מדיניות פרטיות', 'privacy link');
     assertContains(html, 'אין חובה חוקית למסור', 'privacy collection notice');
+    assertContains(html, 'כולל אישור והוכחת מסירה', 'transactional POD email disclosure');
+    assertContains(html, 'באמצעות SendGrid', 'transactional email processor disclosure');
+    assertContains(html, 'יישלח רק לאחר הסכמה נפרדת', 'separate phone-channel consent');
+    assertContains(html, 'id="phone-pod-opt-in"', 'optional WhatsApp POD-link consent');
+    assertContains(html, 'phone_delivery_link_opt_in:', 'persisted phone-link consent payload');
     assertContains(html, 'לא יישלח דיוור שיווקי מכוח אישור זה', 'no bundled marketing consent');
     assert.ok(!html.includes('הנני מסכים/ה לקבל עדכונים'), 'transaction acceptance must not be bundled with communications consent');
     assertContains(html, 'EdenMish אינה שומרת פרטי כרטיס אשראי', 'accurate hosted-payment disclosure');
@@ -880,6 +921,33 @@ describe('Frontend: Security and accessibility hardening', () => {
     assertContains(html, 'catch(e){return connectionErrorView();}');
   });
 
+  test('ops authentication uses the translucent iOS-style glass treatment', () => {
+    const html = readPage('dash.html');
+    assertContains(html, '.dashboard-auth-card::before', 'layered translucent glass');
+    assertContains(html, 'backdrop-filter:blur(26px)', 'glass blur');
+    assertContains(html, 'dashboard-auth-icon', 'iOS-style app tile');
+    assertContains(html, 'dashboard-auth-input', 'embedded PIN control');
+    assertContains(html, 'dashboard-auth-button', 'embedded primary action');
+    assertContains(html, 'inputmode="numeric"', 'mobile numeric keypad');
+  });
+
+  test('ops dashboard exposes secure per-driver invitation and QR controls', () => {
+    const html = readPage('dash.html');
+    assertContains(html, 'onclick="showDriverAccess()"', 'driver connection action');
+    assertContains(html, 'חיבור אפליקציית נהג', 'driver connection dialog');
+    assertContains(html, '/api/ops/driver/invitations', 'invitation API');
+    assertContains(html, 'data.invitation.qr_svg', 'pairing QR');
+    assertContains(html, 'הקוד נחשף פעם אחת', 'single-display warning');
+    assertContains(html, 'function revokeDriverInvite', 'invitation revocation');
+    assert.ok(!html.includes('localStorage.setItem'), 'invitation codes must not be persisted in localStorage');
+  });
+
+  test('storefront builds fingerprint the shared stylesheet for Safari', () => {
+    const script = readFileSync(join(process.cwd(), 'scripts', 'inject-version.js'), 'utf8');
+    assertContains(script, 'ASSET_VERSION', 'stylesheet release fingerprint');
+    assertContains(script, '/assets/styles.css?v=', 'versioned stylesheet URL');
+  });
+
   test('ops dashboard requests GPS only from an explicit start/stop control', () => {
     const html = readPage('dash.html');
     assertContains(html, 'התחלת שיתוף מיקום');
@@ -959,6 +1027,18 @@ describe('Frontend: Ops daily summary and queue ordering', () => {
     assertContains(html, 'מסירות היום');
     assertContains(html, 'הכנסה היום');
     assertContains(html, 'ממתינות מעל שעה');
+  });
+
+  test('renders Ops queue orders with the native iOS card hierarchy and six-stage progress', () => {
+    const html = readPage('dash.html');
+    assertContains(html, 'class="ops-queue-grid"', 'responsive queue grid');
+    assertContains(html, 'class="ios-order-card ', 'native card shell');
+    assertContains(html, 'class="ios-order-number">הזמנה #', 'prominent order number');
+    assertContains(html, 'function queueTimingInfo(o)', 'time remaining or service-window summary');
+    assertContains(html, 'function queueProgressHtml(o)', 'queue progress renderer');
+    for (const label of ['נתקבלה', 'אושר', 'לאיסוף', 'נאסף', 'למסירה', 'נמסר']) {
+      assertContains(html, `label:"${label}"`, `progress milestone ${label}`);
+    }
   });
 });
 

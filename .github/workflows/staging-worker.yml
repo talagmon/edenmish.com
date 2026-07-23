@@ -117,6 +117,29 @@ jobs:
           npx wrangler d1 execute edenmish-staging --remote --yes
           --config wrangler.staging.generated.toml
           --file=./migrations/019_delivery_notification_outbox.sql
+      - name: Apply staging driver login invitations migration
+        working-directory: worker
+        run: >-
+          npx wrangler d1 execute edenmish-staging --remote --yes
+          --config wrangler.staging.generated.toml
+          --file=./migrations/023_driver_login_invitations.sql
+      - name: Apply staging phone delivery-link consent migration
+        working-directory: worker
+        run: |
+          readiness_json="$(npx wrangler d1 execute edenmish-staging --remote --yes --json \
+            --config wrangler.staging.generated.toml \
+            --command "SELECT COUNT(*) AS ready FROM pragma_table_info('orders') WHERE name IN ('phone_delivery_link_opt_in','phone_delivery_link_opt_in_at')")"
+          ready="$(printf '%s' "$readiness_json" | jq -r '.[0].results[0].ready')"
+          if [ "$ready" = "0" ]; then
+            npx wrangler d1 execute edenmish-staging --remote --yes \
+              --config wrangler.staging.generated.toml \
+              --file=./migrations/024_phone_delivery_link_consent.sql
+          elif [ "$ready" != "2" ]; then
+            echo "::error::Phone delivery-link consent migration is only partially applied ($ready/2 columns)."
+            exit 1
+          else
+            echo "Phone delivery-link consent migration 024 is already applied."
+          fi
       - name: Verify remote driver schema readiness
         working-directory: worker
         run: node scripts/validate-driver-schema.mjs --database edenmish-staging --config wrangler.staging.generated.toml
