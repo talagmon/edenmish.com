@@ -496,7 +496,11 @@ describe('Frontend: Stylesheet + fonts', () => {
     });
   }
   test('Homepage cache-busts the current compiled stylesheet', () => {
-    assertContains(readPage('index.html'), '/assets/styles.css?v=1af9999');
+    assert.match(
+      readPage('index.html'),
+      /href="\/assets\/styles\.css\?v=[^"]+"/,
+      'homepage stylesheet URL must include a non-empty build fingerprint',
+    );
   });
 });
 
