@@ -1182,6 +1182,43 @@ export default {
       return json({ ok: true, order: o, proof });
     }
 
+    // Release a paid redelivery: Ops confirms the extra-stop fee is collected, and this promotes
+    // the staged corrected address onto the live dropoff columns and flips the hold to a
+    // 'redelivery' state that dispatch routes. The fee itself is collected by Ops (a payment link
+    // or manual mark) — auto-reconciling a second charge via the Shopify webhook is deferred to
+    // the pre-auth (Mesh) phase, so a human confirms the money here.
+    if (onOps && path.includes('/api/ops/orders/') && path.endsWith('/release-redelivery') && req.method === 'POST') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      const id = Number(path.split('/')[4]);
+      const o = await getOrderById(env.DB, id);
+      if (!o) return json({ error: 'not found' }, 404);
+      if (o.status === 'failed' && o.retained_by_driver === 'redelivery') {
+        return json({ ok: true, already: true }); // idempotent re-release
+      }
+      if (!(o.status === 'failed' && o.retained_by_driver === 'hold_for_redelivery')) {
+        return json({ error: 'not_awaiting_redelivery' }, 409);
+      }
+      let pending = null;
+      try { pending = o.pending_redelivery_json ? JSON.parse(o.pending_redelivery_json) : null; } catch { pending = null; }
+      if (!pending || pending.dropoff_lat == null || pending.dropoff_lng == null) {
+        return json({ error: 'no_pending_address' }, 409);
+      }
+      // Overwrite the live destination with the corrected one and mark the order a redelivery.
+      // Status stays 'failed' (canonically the first attempt did fail); dispatch routes a fresh
+      // drop-off (stop_x…) to the new address on the driver's next route poll.
+      await env.DB.prepare(
+        `UPDATE orders SET dropoff = ?, dropoff_detail = ?, dropoff_lat = ?, dropoff_lng = ?,
+           dropoff_city = ?, retained_by_driver = 'redelivery', retained_at = ?,
+           pending_redelivery_json = NULL
+         WHERE id = ?`
+      ).bind(
+        pending.dropoff, pending.dropoff_detail ?? null, pending.dropoff_lat, pending.dropoff_lng,
+        pending.dropoff_city, Date.now(), id,
+      ).run();
+      console.log('redelivery_released', { order: id, city: pending.dropoff_city, fee: pending.fee });
+      return json({ ok: true, order: await getOrderById(env.DB, id) });
+    }
+
     if (onOps && path.includes('/api/ops/orders/') && path.endsWith('/driver-proofs') && req.method === 'GET') {
       if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
       const id = Number(path.split('/')[4]);

@@ -629,7 +629,7 @@ describe('driver API v1', () => {
       "FROM orders WHERE (status IN ('paid','to_pickup','picked_up','to_dropoff')",
     )));
     assert.ok(db.calls.some((call) => call.sql.includes(
-      "OR (status = 'failed' AND retained_by_driver IN ('return_to_origin','hold_for_redelivery'))",
+      "OR (status = 'failed' AND retained_by_driver IN ('return_to_origin','hold_for_redelivery','redelivery'))",
     )));
     assert.ok(db.calls.some((call) => call.sql.startsWith('UPDATE driver_assignments SET active = 0')));
   });
@@ -823,6 +823,17 @@ describe('driver API v1', () => {
     const failedAgain = await send('delivery_failed', retained());
     assert.equal(failedAgain.result.status, 'accepted');
     assert.ok(!failedAgain.updates.some((sql) => sql.includes('retained_by_driver')));
+
+    // A paid redelivery that reaches the recipient IS a delivery: promote to 'delivered' and
+    // end custody, unlike a return which sets no status and only clears custody. The delivered
+    // path is the one that writes both a status and delivered_at.
+    const redelivered = await send(
+      'delivery_completed',
+      { id: 9001, status: 'failed', retained_by_driver: 'redelivery' },
+    );
+    assert.equal(redelivered.result.status, 'accepted');
+    assert.ok(redelivered.updates.some((sql) => /UPDATE orders SET status = \?.*delivered_at/.test(sql)));
+    assert.ok(!completed.updates.some((sql) => /delivered_at/.test(sql)), 'a return must not set delivered_at');
   });
 
   test('records a cancelled-order completion as a conflict without changing the order', async () => {

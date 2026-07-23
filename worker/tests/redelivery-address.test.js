@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../src/index.js';
+import { makeSession } from '../src/integrations.js';
 
 // A held order awaiting a corrected redelivery address, keyed by tracking token.
 function redeliveryDb(order) {
@@ -106,5 +107,85 @@ describe('POST /api/orders/:token/redelivery-address', () => {
   test('an unknown token is not found', async () => {
     const res = await worker.fetch(request('nope', newAddress), { DB: redeliveryDb(null) });
     assert.equal(res.status, 404);
+  });
+});
+
+// ---- Ops release of a paid redelivery ----
+function releaseDb(order) {
+  const state = { released: null };
+  return {
+    state,
+    prepare(sql) {
+      const s = sql.replace(/\s+/g, ' ').trim();
+      return {
+        bind(...args) {
+          return {
+            async first() {
+              if (s.startsWith('SELECT * FROM orders WHERE id')) return order;
+              return null;
+            },
+            async run() {
+              if (s.startsWith('UPDATE orders SET dropoff')) state.released = { sql: s, args };
+              return { meta: { changes: 1 } };
+            },
+            async all() { return { results: [] }; },
+          };
+        },
+      };
+    },
+  };
+}
+
+async function opsRequest(id) {
+  const session = await makeSession({ SESSION_SECRET: 'test-secret' });
+  return new Request(`https://ops.edenmish.com/api/ops/orders/${id}/release-redelivery`, {
+    method: 'POST',
+    headers: { 'X-Ops': session },
+  });
+}
+const opsEnv = (db) => ({ DB: db, SESSION_SECRET: 'test-secret' });
+
+describe('POST /api/ops/orders/:id/release-redelivery', () => {
+  const staged = {
+    id: 9001,
+    status: 'failed',
+    retained_by_driver: 'hold_for_redelivery',
+    pending_redelivery_json: JSON.stringify({
+      dropoff: 'ויצמן 14', dropoff_detail: 'דירה 3', dropoff_lat: 32.07, dropoff_lng: 34.81,
+      dropoff_city: 'גבעתיים', zone: 1, fee: 25, submitted_at: 1,
+    }),
+  };
+
+  test('promotes the staged address to the live destination and marks it a redelivery', async () => {
+    const db = releaseDb({ ...staged });
+    const res = await worker.fetch(await opsRequest(9001), opsEnv(db));
+
+    assert.equal(res.status, 200);
+    assert.ok(db.state.released, 'expected the corrected address to be promoted');
+    assert.match(db.state.released.sql, /retained_by_driver = 'redelivery'/);
+    assert.match(db.state.released.sql, /pending_redelivery_json = NULL/);
+    assert.ok(db.state.released.args.includes('גבעתיים'));
+  });
+
+  test('refuses to release an order that is not awaiting redelivery', async () => {
+    const notStaged = { id: 9001, status: 'failed', retained_by_driver: 'return_to_origin', pending_redelivery_json: null };
+    const db = releaseDb(notStaged);
+    const res = await worker.fetch(await opsRequest(9001), opsEnv(db));
+    assert.equal(res.status, 409);
+    assert.equal((await res.json()).error, 'not_awaiting_redelivery');
+    assert.equal(db.state.released, null);
+  });
+
+  test('is idempotent once already released', async () => {
+    const already = { id: 9001, status: 'failed', retained_by_driver: 'redelivery' };
+    const res = await worker.fetch(await opsRequest(9001), opsEnv(releaseDb(already)));
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).already, true);
+  });
+
+  test('rejects an unauthenticated caller', async () => {
+    const req = new Request('https://ops.edenmish.com/api/ops/orders/9001/release-redelivery', { method: 'POST' });
+    const res = await worker.fetch(req, opsEnv(releaseDb({ ...staged })));
+    assert.equal(res.status, 401);
   });
 });

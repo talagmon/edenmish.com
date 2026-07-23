@@ -40,10 +40,13 @@ function taskState(order, taskType) {
 
 // A failed delivery whose package stayed with the driver. Such an order keeps its 'failed'
 // status but must remain dispatchable, because dispatch still owes a leg for the package.
+//   return_to_origin    -> bring it back to the pickup point (no payment gate)
+//   hold_for_redelivery -> held, no destination and/or fee yet: emit nothing
+//   redelivery          -> owner paid the fee and Ops released a corrected destination: route it
+const RETAINED_ROUTABLE = new Set(['return_to_origin', 'hold_for_redelivery', 'redelivery']);
 function retainedDisposition(order) {
   if (order.status !== 'failed') return null;
-  const value = order.retained_by_driver;
-  return value === 'return_to_origin' || value === 'hold_for_redelivery' ? value : null;
+  return RETAINED_ROUTABLE.has(order.retained_by_driver) ? order.retained_by_driver : null;
 }
 
 export function isRetainedByDriver(order) {
@@ -66,6 +69,30 @@ function routeTasksForOrder(order) {
     //
     // The order still counts as onboard so that the eventual leg is accepted by the client.
     return { tasks: [], blocked: false };
+  }
+  if (retained === 'redelivery') {
+    // The fee is paid and Ops has promoted the corrected address onto the live dropoff_*
+    // columns. Route a lone drop-off to it, under a stop id distinct from both the failed
+    // drop-off (stop_d…) and a return (stop_r…) so no earlier terminal event can touch it.
+    const redeliveryLocation = location(order.dropoff_lat, order.dropoff_lng);
+    if (!redeliveryLocation) return { tasks: [], blocked: true };
+    return {
+      tasks: [{
+        stopId: `stop_x${order.id}`,
+        orderId: Number(order.id),
+        taskType: 'dropoff',
+        requiredPredecessorStopId: null,
+        state: 'pending',
+        location: redeliveryLocation,
+        urgency: order.urgent ? 'urgent' : 'normal',
+        serviceDurationSeconds: DEFAULT_SERVICE_SECONDS,
+        addressFingerprint: [order.dropoff, order.dropoff_detail, order.dropoff_city]
+          .map((value) => value ?? null),
+        promisedWindowFingerprint: [order.when_date, order.when_hour, order.service]
+          .map((value) => value ?? null),
+      }],
+      blocked: false,
+    };
   }
   if (retained === 'return_to_origin') {
     // A return is NOT gated on payment: the package should come home regardless, and the return
@@ -260,7 +287,7 @@ async function eligibleOrders(DB, shiftId = null) {
     FROM orders
     WHERE (status IN ('paid','to_pickup','picked_up','to_dropoff')
         OR (status = 'failed'
-          AND retained_by_driver IN ('return_to_origin','hold_for_redelivery')))
+          AND retained_by_driver IN ('return_to_origin','hold_for_redelivery','redelivery')))
       AND (? IS NULL OR NOT EXISTS (
         SELECT 1 FROM driver_execution_events rejected
         WHERE rejected.shift_id = ? AND rejected.order_id = orders.id

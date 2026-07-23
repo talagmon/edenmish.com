@@ -172,6 +172,26 @@ describe('driver dispatch planning', () => {
     assert.deepEqual(blockedOrderIds, []);
   });
 
+  test('a released redelivery routes a fresh drop-off to the corrected destination', () => {
+    // After Ops releases it, the corrected address is on the live dropoff_* columns and the
+    // order carries retained_by_driver = 'redelivery'.
+    const redelivery = order(9, 'failed', 34.77, 34.83, {
+      retained_by_driver: 'redelivery',
+      dropoff: 'ויצמן 14',
+      dropoff_city: 'גבעתיים',
+    });
+    const { tasks, blockedOrderIds } = buildDispatchTasks([redelivery]);
+
+    // A lone drop-off to the new destination, under stop_x9 — distinct from both stop_d9 (the
+    // failed attempt) and stop_r9 (a return), so no earlier terminal event can touch it.
+    assert.deepEqual(tasks.map((task) => task.stopId), ['stop_x9']);
+    assert.equal(tasks[0].taskType, 'dropoff');
+    assert.equal(tasks[0].requiredPredecessorStopId, null);
+    assert.equal(tasks[0].location.longitude, 34.83);
+    assert.deepEqual(tasks[0].addressFingerprint, ['ויצמן 14', null, 'גבעתיים']);
+    assert.deepEqual(blockedOrderIds, []);
+  });
+
   test('a retained return without pickup coordinates is blocked rather than mislocated', () => {
     const { tasks, blockedOrderIds } = buildDispatchTasks([
       { id: 8, status: 'failed', urgent: 0, retained_by_driver: 'return_to_origin' },

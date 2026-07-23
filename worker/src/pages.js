@@ -293,9 +293,12 @@ function retainedBanner(o){
   var fee=Number(o.retry_fee_suggested)||0;
   var pend=o.pending_redelivery;
   var msg,color,icon;
-  if(hold&&pend){
+  if(o.retained_by_driver==='redelivery'){
+    msg='שוחרר למשלוח חוזר. היעד המעודכן ('+esc(o.dropoff||'')+') נשלח לשליח.';
+    color='#34D399';icon='local_shipping';
+  }else if(hold&&pend){
     // The owner responded with a corrected address; a payment for the fee is the last gate.
-    msg='המזמין עדכן יעד חדש: '+esc(pend.dropoff||pend.city||'')+'. ממתין לתשלום דמי טיפול'+(pend.fee?' ('+pend.fee+' ₪)':'')+' לפני שהמשלוח החוזר יישלח לשליח.';
+    msg='המזמין עדכן יעד חדש: '+esc(pend.dropoff||pend.city||'')+'. גבו דמי טיפול'+(pend.fee?' ('+pend.fee+' ₪)':'')+' ושחררו למשלוח חוזר.';
     color='#f0b429';icon='paid';
   }else if(hold){
     msg='החבילה אצל השליח וממתינה ליעד חדש. שלחו למזמין קישור לעדכון כתובת ותשלום'+(fee?' (מוצע: '+fee+' ₪'+(o.retry_fee_zone?' · אזור '+o.retry_fee_zone:'')+')':'')+'. ללא מענה תוחזר אוטומטית לנקודת האיסוף תוך 24 שעות.';
@@ -361,6 +364,9 @@ function actions(o){
   }else if(NEXT[s]){
     h+='<button class="btn sm go" data-act="advance" data-id="'+id+'" data-next="'+NEXT[s]+'">'+NEXTLBL[s]+'</button><button class="btn sm danger" data-act="fail" data-id="'+id+'">סמן כנכשל</button>';
   }
+  // A held package whose owner supplied a corrected address: once the fee is collected, Ops
+  // releases it and dispatch routes the redelivery on the driver's next poll.
+  if(o.pending_redelivery)h+='<button class="btn sm go" data-act="release-redelivery" data-id="'+id+'"><span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle">local_shipping</span> שחרר למשלוח חוזר'+(o.pending_redelivery.fee?' (₪'+o.pending_redelivery.fee+' נגבו)':'')+'</button>';
   if(['picked_up','to_dropoff','delivered','failed'].indexOf(s)>=0)h+='<button class="btn sm alt" data-act="driverproofs" data-id="'+id+'"><span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle">verified</span> הוכחות מהשליח</button>';
   h+='<button class="btn sm alt" data-act="notifs" data-id="'+id+'">'+(notifOrderId===id?'▲ הסתר הודעות':'▼ הצגת הודעות')+'</button>';
   return h+'</div>';
@@ -387,6 +393,7 @@ function copyPay(url){if(navigator.clipboard&&navigator.clipboard.writeText){nav
 async function setStatus(id,st){try{var r=await api('/api/ops/orders/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:st})});if(!r.ok)throw 0;if(st==='picked_up'||st==='delivered'||st==='failed'||st==='cancelled')stopWatch();refresh();}catch(e){alert('לא הצלחנו לעדכן את ההזמנה. נסו שוב.');}}
 async function advance(id,cur){if(NEXT[cur])await setStatus(id,NEXT[cur]);}
 async function markPaid(id){if(!confirm('לסמן כשולם ידנית?'))return;await setStatus(id,'paid');}
+async function releaseRedelivery(id){if(!confirm('לאשר שדמי הטיפול נגבו ולשחרר את המשלוח החוזר לשליח?'))return;try{var r=await api('/api/ops/orders/'+id+'/release-redelivery',{method:'POST'});if(!r.ok)throw 0;refresh();}catch(e){alert('לא הצלחנו לשחרר את המשלוח החוזר. נסו שוב.');}}
 var podOrderId=null,sigCtx=null,sigDrawing=false,sigHas=false;
 function showPod(id){podOrderId=id;var p=document.getElementById('pod');p.hidden=false;document.getElementById('pod-recv').value='';document.getElementById('pod-note').value='';document.getElementById('pod-photo').value='';document.getElementById('pod-photo-ph').innerHTML='📸 לחצו לצלם את החבילה ביעד';clearSig();initSig();}
 function hidePod(){document.getElementById('pod').hidden=true;}
@@ -455,6 +462,7 @@ document.getElementById('app').addEventListener('click',function(e){
   else if(act==='advance')advance(id,b.getAttribute('data-next'));
   else if(act==='fail'){if(confirm('לסמן את ההזמנה כנכשלת?'))setStatus(id,'failed');}
   else if(act==='markpaid')markPaid(id);
+  else if(act==='release-redelivery')releaseRedelivery(id);
   else if(act==='pod')showPod(id);
   else if(act==='driverproofs')showDriverProofs(id);
   else if(act==='copy'){copyPay(b.getAttribute('data-pay'));alert('הקישור הועתק ללוח ✓');}
