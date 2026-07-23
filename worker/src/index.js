@@ -1,5 +1,5 @@
 import { createOrder, getOrderByToken, getOrderById, getOrderByShopifyOrderId, listOrders, setOrderStatus, setOrderRating, getStatusHistory, addGps, latestGps, getGpsTrail, getRules, recordPayment, setEmailAndOtp, verifyOtp, getRateLimit, incrRateLimit, setRateLock, resetRateLimit, getDeliveryProof, upsertDeliveryProof, listRecentNotificationFailures, listNotificationsForOrder, createCancellationRequest, listCancellationRequests, runRetentionCleanup } from './db.js';
-import { priceOrder, ZONE_CITIES, DEFAULT_PRICING_RULES } from './pricing.js';
+import { priceOrder, retryFee, ZONE_CITIES, DEFAULT_PRICING_RULES } from './pricing.js';
 import { makeSession, checkSession, getCookie, genOtp, hashOtp, timingSafeEqual } from './integrations.js';
 import { createCharge, createWalletCharge, verifyShopifyWebhook, parseShopifyOrderWebhook, parseShopifyRefundWebhook } from './payment.js';
 import { trackingHtml, opsHtml } from './pages.js';
@@ -955,8 +955,23 @@ export default {
     if (onOps && path === '/api/ops/orders' && req.method === 'GET') {
       if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
       const r = await listOrders(env.DB);
+      // Suggest an extra-stop fee for packages a driver is still carrying after a failed
+      // delivery, so the operator does not have to work out the zone rate by hand. It is a
+      // suggestion only: whether to charge at all is a fault judgement Ops makes.
+      const orders = (r.results || []).map((order) => {
+        if (!order || !order.retained_by_driver) return order;
+        const suggestion = retryFee({
+          pickup_city: order.pickup_city,
+          // A retained package is being routed back to its origin, so the leg ends where it
+          // was collected. A redelivery to a corrected address is re-quoted once Ops has one.
+          dropoff_city: order.pickup_city,
+          when_date: order.when_date,
+          when_hour: order.when_hour,
+        });
+        return { ...order, retry_fee_suggested: suggestion.fee, retry_fee_zone: suggestion.zone };
+      });
       return json({
-        orders: r.results,
+        orders,
         integrations: { shopify_webhooks: shopifyWebhookRegistrar.status() },
       });
     }

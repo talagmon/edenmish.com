@@ -301,14 +301,24 @@ function card(o){
   h+=actions(o);if(notifOrderId===id)h+=notifPanel();h+='</div>';
   return h;
 }
-// Handling-fee presets, in shekels. Ops adds one to the price with a single pick instead
-// of doing the arithmetic by hand — used for an extra stop after a failed delivery
-// (return or redelivery) and for any other manual surcharge.
+// Handling-fee presets, in shekels. Ops adds one to the price with a single pick instead of
+// doing the arithmetic by hand.
+//
+// When the order carries a server-computed suggestion (a package still with the driver after
+// a failed delivery), that zone-derived amount leads the list and is preselected — a flat
+// ladder is zone-blind, and charging a Zone 3 return the same as a Zone 1 one loses money at
+// one end and overcharges at the other. The full ladder stays available to override, because
+// whether and how much to charge is a fault judgement, not arithmetic.
 var FEE_PRESETS=[20,25,30,35,40,45,50,55,60];
-function feePresetHtml(id){
-  var h='<select class="fee-preset" data-fee-for="'+id+'" aria-label="הוספת דמי טיפול למחיר">'
-    +'<option value="">+ דמי טיפול ₪</option>';
+function feePresetHtml(id,suggested,zone){
+  var fee=Number(suggested)||0;
+  var h='<select class="fee-preset" data-fee-for="'+id+'" aria-label="הוספת דמי טיפול למחיר">';
+  if(fee>0){
+    h+='<option value="'+fee+'" selected>מוצע: +'+fee+' ₪'+(zone?' (אזור '+zone+')':'')+'</option>';
+  }
+  h+='<option value="">+ דמי טיפול ₪</option>';
   for(var i=0;i<FEE_PRESETS.length;i++){
+    if(FEE_PRESETS[i]===fee)continue;
     h+='<option value="'+FEE_PRESETS[i]+'">+'+FEE_PRESETS[i]+' ₪</option>';
   }
   return h+'</select>';
@@ -317,7 +327,7 @@ function actions(o){
   var s=o.status,id=o.id,h='<div class="ocard-actions">';
   if(LIVE.indexOf(s)>=0)h+=gpsControlHtml(id);
   if(s==='review'||s==='priced'||s==='received'){
-    h+='<div class="inline-price"><input type="number" inputmode="numeric" min="1" id="price-'+id+'" value="'+(o.price||'')+'" placeholder="מחיר ₪">'+feePresetHtml(id)+'<button class="btn sm go" data-act="approve" data-id="'+id+'">אישור מחיר ושליחת קישור תשלום</button></div>';
+    h+='<div class="inline-price"><input type="number" inputmode="numeric" min="1" id="price-'+id+'" value="'+(o.price||'')+'" placeholder="מחיר ₪">'+feePresetHtml(id,o.retry_fee_suggested,o.retry_fee_zone)+'<button class="btn sm go" data-act="approve" data-id="'+id+'">אישור מחיר ושליחת קישור תשלום</button></div>';
     if(o.review_flag)h+='<div class="stale" style="width:100%">חריג: '+esc(o.review_reason||'')+'</div>';
   }else if(s==='payment_sent'){
     if(o.payment_url)h+='<button class="btn sm" data-act="copy" data-pay="'+esc(o.payment_url)+'">העתק קישור תשלום</button><a class="btn sm alt" href="'+esc(o.payment_url)+'" target="_blank" rel="noopener">פתח קישור</a>';
