@@ -289,13 +289,15 @@
   .home-hero-backdrop__media {
     object-position: 42% 58%;
     transform: scale(1.02);
+    filter: saturate(1.24) contrast(1.04) brightness(1.04);
   }
 
   .home-hero-backdrop__shade {
     z-index: 1;
     background:
-      linear-gradient(90deg, rgba(9, 13, 36, 0.28) 0%, rgba(9, 13, 36, 0.46) 48%, rgba(9, 13, 36, 0.92) 100%),
-      linear-gradient(180deg, rgba(9, 13, 36, 0.18) 0%, rgba(9, 13, 36, 0.08) 55%, rgba(9, 13, 36, 0.72) 100%);
+      radial-gradient(circle at 80% 38%, rgba(9, 13, 36, 0.48), transparent 42%),
+      linear-gradient(90deg, rgba(9, 13, 36, 0.2) 0%, rgba(9, 13, 36, 0.34) 48%, rgba(9, 13, 36, 0.9) 100%),
+      linear-gradient(180deg, rgba(9, 13, 36, 0.14) 0%, rgba(9, 13, 36, 0.04) 55%, rgba(9, 13, 36, 0.22) 100%);
   }
 
   .home-hero-grid {
@@ -775,14 +777,14 @@
     }
 
     .home-hero-backdrop__media {
-      object-position: 42% 54%;
+      object-position: 25% 54%;
       transform: scale(1.01);
     }
 
     .home-hero-backdrop__shade {
       background:
-        linear-gradient(180deg, rgba(9, 13, 36, 0.82) 0%, rgba(9, 13, 36, 0.58) 42%, rgba(9, 13, 36, 0.48) 66%, rgba(9, 13, 36, 0.82) 100%),
-        linear-gradient(90deg, rgba(9, 13, 36, 0.3), rgba(9, 13, 36, 0.08), rgba(9, 13, 36, 0.3));
+        linear-gradient(180deg, rgba(9, 13, 36, 0.78) 0%, rgba(9, 13, 36, 0.48) 42%, rgba(9, 13, 36, 0.32) 66%, rgba(9, 13, 36, 0.46) 100%),
+        linear-gradient(90deg, rgba(9, 13, 36, 0.24), rgba(9, 13, 36, 0.04), rgba(9, 13, 36, 0.24));
     }
 
     .home-eyebrow {
