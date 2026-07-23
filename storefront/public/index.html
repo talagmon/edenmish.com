@@ -110,117 +110,143 @@ html.eden-a11y-motion *,html.eden-a11y-motion *::before,html.eden-a11y-motion *:
 @media (prefers-reduced-motion:reduce){.eden-floating-button{transition:none}}
 </style>
 </head>
-<body class="bg-surface-dim selection:bg-primary-container selection:text-on-primary-container">
+<body class="home-page bg-surface-dim selection:bg-primary-container selection:text-on-primary-container">
 <!-- TopNavBar -->
-<header class="fixed top-0 w-full z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border shadow-sm">
-<div class="flex flex-row-reverse justify-between items-center px-gutter-desktop max-w-container-max mx-auto h-16">
-<a href="/" class="font-display-lg text-headline-md font-bold text-primary">EdenMish</a>
+<header class="home-header fixed top-0 w-full z-50">
+<div class="home-nav flex flex-row-reverse justify-between items-center px-gutter-mobile md:px-gutter-desktop max-w-container-max mx-auto h-16">
+<a href="/" class="home-brand font-display-lg text-headline-md font-bold">EdenMish</a>
 <nav class="hidden md:flex gap-stack-lg items-center">
-<a class="font-body-md text-body-md text-primary font-bold border-b-2 border-primary pb-1 transition-colors duration-200" href="/">בית</a>
-<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors duration-200" href="/booking.html">שירותים</a>
-<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors duration-200" href="/track.html">מעקב משלוחים</a>
-<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors duration-200" href="/about.html">אודות</a>
-<a class="font-body-md text-body-md text-error font-bold hover:opacity-80 transition-colors duration-200" href="/cancel.html">ביטול עסקה</a>
+<a class="home-nav-link home-nav-link--active font-body-md text-body-md font-bold transition-colors duration-200" href="/">בית</a>
+<a class="home-nav-link font-body-md text-body-md transition-colors duration-200" href="/booking.html">שירותים</a>
+<a class="home-nav-link font-body-md text-body-md transition-colors duration-200" href="/track.html">מעקב משלוחים</a>
+<a class="home-nav-link font-body-md text-body-md transition-colors duration-200" href="/about.html">אודות</a>
+<a class="home-nav-link home-nav-link--danger font-body-md text-body-md font-bold transition-colors duration-200" href="/cancel.html">ביטול עסקה</a>
 </nav>
-<a href="/booking.html" class="bg-primary-container text-on-primary-container px-6 py-2 rounded-lg font-label-bold active:scale-95 transition-transform hover:opacity-90">
+<a href="/booking.html" class="home-nav-cta px-5 md:px-6 py-2 rounded-xl font-label-bold active:scale-95 transition-transform">
 שלחו עכשיו
 </a>
 </div>
 </header>
-<main class="relative pt-16">
+<main class="home-main relative pt-16">
 <!-- Decorative Glows -->
-<div class="bg-glow top-[-100px] left-[-100px]"></div>
-<div class="bg-glow bottom-[20%] right-[-100px] opacity-50"></div>
+<div class="home-ambient home-ambient--one" aria-hidden="true"></div>
+<div class="home-ambient home-ambient--two" aria-hidden="true"></div>
 <!-- Hero Section -->
-<section class="relative min-h-[870px] flex items-center px-gutter-desktop max-w-container-max mx-auto">
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-stack-lg items-center w-full py-stack-lg">
-<div class="text-center lg:text-right space-y-stack-md z-10">
-<span class="inline-block px-4 py-1 rounded-full bg-secondary-container text-on-secondary-container font-label-bold text-label-sm border border-secondary/20">
-דור חדש של לוגיסטיקה
+<section class="home-hero relative flex items-center px-gutter-mobile md:px-gutter-desktop max-w-container-max mx-auto">
+<div class="home-hero-grid grid grid-cols-1 lg:grid-cols-2 gap-stack-lg items-center w-full">
+<div class="home-hero-copy text-center lg:text-right space-y-stack-md z-10">
+<span class="home-eyebrow inline-flex items-center gap-2 px-4 py-2 rounded-full font-label-bold text-label-sm">
+<span class="home-live-dot" aria-hidden="true"></span>
+דור חדש של לוגיסטיקה חכמה
 </span>
-<h1 class="font-display-lg text-display-lg md:text-display-lg text-on-surface leading-tight">
+<h1 class="home-title font-display-lg text-on-surface">
 משלוחים חכמים <br/>
-<span class="text-primary">בגוש דן</span>
+<span>בגוש דן</span>
 </h1>
-<p class="font-body-lg text-body-lg text-on-surface-variant max-w-xl mx-auto lg:mr-0 lg:ml-auto">
+<p class="home-lead font-body-lg text-body-lg text-on-surface-variant max-w-xl mx-auto lg:mr-0 lg:ml-auto">
 טכנולוגיה מתקדמת פוגשת שירות אישי. אנחנו משנים את הדרך שבה חבילות נעות במרכז הארץ, עם דיוק מקסימלי ושקיפות מלאה.
 </p>
-<div class="flex flex-col sm:flex-row-reverse justify-center lg:justify-start gap-stack-md pt-4">
-<a href="/booking.html" class="bg-primary hover:bg-primary-fixed-dim text-on-primary px-10 py-4 rounded-xl font-headline-md shadow-lg shadow-primary/20 active:scale-95 transition-all text-center">
+<div class="home-actions flex flex-col sm:flex-row-reverse justify-center lg:justify-start gap-stack-md pt-4">
+<a href="/booking.html" class="home-primary-action text-on-primary px-10 py-4 rounded-xl font-headline-md active:scale-95 transition-all text-center">
 הזמינו עכשיו
 </a>
-<a href="/track.html" class="glass-card text-on-surface px-10 py-4 rounded-xl font-headline-md flex items-center justify-center gap-2 hover:bg-white/10 active:scale-95 transition-all">
-<span class="material-symbols-outlined">track_changes</span>
+<a href="/track.html" class="home-secondary-action text-on-surface px-10 py-4 rounded-xl font-headline-md flex items-center justify-center gap-2 active:scale-95 transition-all">
+<span class="material-symbols-outlined" aria-hidden="true">track_changes</span>
 עקבו אחרי משלוח
 </a>
 </div>
 </div>
-<div class="relative flex justify-center items-center h-[400px] md:h-[600px]">
-<div class="absolute inset-0 z-0">
-<div class="w-full h-full relative">
-<div class="relative z-10 w-full h-full glass-card rounded-[2rem] overflow-hidden group">
-<video class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" autoplay muted loop playsinline poster="https://lh3.googleusercontent.com/aida-public/AB6AXuAefTbgISpDksONmzlpy8RxuhBcdlJ2WykbxAv6gaKXkj7igh9Xtw-qSI3DmTGZWvqTkWIAv40dkjPn3XVYaA5EMKTbQQ1SypFTqhTZgTYSx8YzbDDSELPDtq-oRdkfDdElE8Bof_tk7iFmVppKy6--YBDBOu7_W6hS2sy1pagpfA1VYhuJxjenBXbcPCK8KvaXwirke1eEHDlrd36Muprg2zG4deAyr07U-f7kRvdGW12uqq9b2-c4">
+<div class="home-hero-visual relative flex justify-center items-center">
+<div class="home-visual-shell relative z-10 w-full overflow-hidden">
+<video class="home-visual-media w-full h-full object-cover" autoplay muted loop playsinline poster="https://lh3.googleusercontent.com/aida-public/AB6AXuAefTbgISpDksONmzlpy8RxuhBcdlJ2WykbxAv6gaKXkj7igh9Xtw-qSI3DmTGZWvqTkWIAv40dkjPn3XVYaA5EMKTbQQ1SypFTqhTZgTYSx8YzbDDSELPDtq-oRdkfDdElE8Bof_tk7iFmVppKy6--YBDBOu7_W6hS2sy1pagpfA1VYhuJxjenBXbcPCK8KvaXwirke1eEHDlrd36Muprg2zG4deAyr07U-f7kRvdGW12uqq9b2-c4">
   <source src="/assets/edenmish-v0.mp4" type="video/mp4">
   <img class="w-full h-full object-cover" alt="הדמיה של רשת לוגיסטית עתידנית עם נקודות עגולות סגולות וקווי אור ירוקים מעל מפת גוש דן" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAefTbgISpDksONmzlpy8RxuhBcdlJ2WykbxAv6gaKXkj7igh9Xtw-qSI3DmTGZWvqTkWIAv40dkjPn3XVYaA5EMKTbQQ1SypFTqhTZgTYSx8YzbDDSELPDtq-oRdkfDdElE8Bof_tk7iFmVppKy6--YBDBOu7_W6hS2sy1pagpfA1VYhuJxjenBXbcPCK8KvaXwirke1eEHDlrd36Muprg2zG4deAyr07U-f7kRvdGW12uqq9b2-c4"/>
 </video>
-<div class="absolute inset-0 bg-gradient-to-t from-surface-dim via-transparent to-transparent"></div>
-<div class="absolute bottom-8 right-8 text-right p-6 glass-card rounded-xl">
-<div class="text-primary font-bold text-headline-md">14:22</div>
-<div class="text-on-surface-variant text-label-sm uppercase tracking-widest">סטטוס משלוח חי</div>
+<div class="home-visual-vignette absolute inset-0" aria-hidden="true"></div>
+<article class="home-live-card absolute text-right" aria-label="דוגמה לסטטוס משלוח חי">
+<div class="home-live-card__top flex items-center justify-between gap-4">
+<div>
+<div class="home-live-kicker flex items-center gap-2 font-label-bold text-label-sm"><span class="home-live-dot" aria-hidden="true"></span>משלוח חי</div>
+<div class="text-on-surface-variant text-label-sm">מתעדכן עכשיו</div>
+</div>
+<div class="home-live-order font-label-bold">איסוף <span>#9101</span></div>
+</div>
+<div class="home-live-card__main">
+<div>
+<h2 class="home-live-name">נועה לוי</h2>
+<p class="home-live-address"><span class="material-symbols-outlined" aria-hidden="true">location_on</span>הרצל 42, תל אביב</p>
+</div>
+<div class="home-live-eta">
+<span>שעת יעד</span>
+<strong>23:18</strong>
+<small>17 דק׳ ליעד</small>
 </div>
 </div>
+<div class="home-delivery-progress" aria-label="שלבי המשלוח: התקבלה, אושר, לאיסוף, למסירה, נמסר">
+<div class="home-progress-step is-done"><span class="material-symbols-outlined" aria-hidden="true">check</span><small>התקבלה</small></div>
+<div class="home-progress-line is-done"></div>
+<div class="home-progress-step is-done"><span class="material-symbols-outlined" aria-hidden="true">check</span><small>אושר</small></div>
+<div class="home-progress-line is-done"></div>
+<div class="home-progress-step is-current"><span class="material-symbols-outlined" aria-hidden="true">two_wheeler</span><small>לאיסוף</small></div>
+<div class="home-progress-line"></div>
+<div class="home-progress-step"><span></span><small>למסירה</small></div>
+<div class="home-progress-line"></div>
+<div class="home-progress-step"><span></span><small>נמסר</small></div>
 </div>
-</div>
+<a href="/track.html" class="home-live-track flex items-center justify-center gap-2"><span class="material-symbols-outlined" aria-hidden="true">near_me</span>עקבו אחרי משלוח</a>
+</article>
 </div>
 </div>
 </section>
 <!-- How It Works Section -->
-<section class="py-stack-lg px-gutter-desktop max-w-container-max mx-auto overflow-hidden">
-<div class="text-right mb-stack-lg">
-<h2 class="font-headline-lg text-headline-lg text-on-surface mb-2">איך זה עובד?</h2>
-<div class="h-1.5 w-24 bg-primary rounded-full"></div>
+<section class="home-process px-gutter-mobile md:px-gutter-desktop max-w-container-max mx-auto overflow-hidden">
+<div class="home-process-shell">
+<div class="text-center mb-stack-lg">
+<span class="home-section-kicker">מהזמנה למסירה</span>
+<h2 class="font-headline-lg text-headline-lg text-on-surface mt-2">איך זה עובד?</h2>
 </div>
-<div class="grid grid-cols-1 md:grid-cols-4 gap-stack-md">
-<div class="glass-card p-stack-lg rounded-3xl flex flex-col items-end gap-stack-md hover:border-primary/50 transition-colors group">
-<div class="w-12 h-12 rounded-xl bg-primary-container flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+<div class="home-process-steps grid grid-cols-1 md:grid-cols-4">
+<article class="home-process-step">
+<div class="home-process-icon home-process-icon--purple">
 <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">add_shopping_cart</span>
 </div>
 <div class="text-right">
 <h3 class="font-headline-md text-headline-md text-on-surface">1. הזמנה</h3>
 <p class="font-body-md text-body-md text-on-surface-variant">הזינו את פרטי המשלוח במערכת החכמה שלנו תוך פחות מדקה.</p>
 </div>
-</div>
-<div class="glass-card p-stack-lg rounded-3xl flex flex-col items-end gap-stack-md hover:border-primary/50 transition-colors group">
-<div class="w-12 h-12 rounded-xl bg-secondary-container flex items-center justify-center text-secondary group-hover:scale-110 transition-transform">
+</article>
+<article class="home-process-step">
+<div class="home-process-icon home-process-icon--mint">
 <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">two_wheeler</span>
 </div>
 <div class="text-right">
 <h3 class="font-headline-md text-headline-md text-on-surface">2. איסוף מהיר</h3>
 <p class="font-body-md text-body-md text-on-surface-variant">שליח מגיע אליכם ברגע שההזמנה אושרה. אין המתנה מיותרת.</p>
 </div>
-</div>
-<div class="glass-card p-stack-lg rounded-3xl flex flex-col items-end gap-stack-md hover:border-primary/50 transition-colors group">
-<div class="w-12 h-12 rounded-xl bg-tertiary-container flex items-center justify-center text-tertiary group-hover:scale-110 transition-transform">
+</article>
+<article class="home-process-step">
+<div class="home-process-icon home-process-icon--purple">
 <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">map</span>
 </div>
 <div class="text-right">
 <h3 class="font-headline-md text-headline-md text-on-surface">3. מעקב חי</h3>
 <p class="font-body-md text-body-md text-on-surface-variant">צפו במיקום המדויק של השליח על המפה בזמן אמת, בכל רגע נתון.</p>
 </div>
-</div>
-<div class="glass-card p-stack-lg rounded-3xl flex flex-col items-end gap-stack-md hover:border-primary/50 transition-colors group">
-<div class="w-12 h-12 rounded-xl bg-success-mint/20 flex items-center justify-center text-success-mint group-hover:scale-110 transition-transform">
+</article>
+<article class="home-process-step">
+<div class="home-process-icon home-process-icon--mint">
 <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">verified</span>
 </div>
 <div class="text-right">
 <h3 class="font-headline-md text-headline-md text-on-surface">4. מסירה ואישור</h3>
 <p class="font-body-md text-body-md text-on-surface-variant">קבלת חתימה דיגיטלית וצילום POD (הוכחת מסירה) ישירות לנייד.</p>
 </div>
+</article>
 </div>
 </div>
 </section>
 <!-- Service Areas Section -->
-<section class="py-stack-lg bg-surface-container-low/50 relative">
+<section class="home-section home-service-areas py-stack-lg relative">
 <div class="service-areas-layout px-gutter-desktop max-w-container-max mx-auto grid grid-cols-1 lg:grid-cols-2 gap-stack-lg items-start">
 <div class="service-areas-map-slot order-2 lg:order-1">
 <div class="service-areas-map h-[400px] rounded-3xl overflow-hidden glass-card shadow-2xl relative">
@@ -266,7 +292,7 @@ html.eden-a11y-motion *,html.eden-a11y-motion *::before,html.eden-a11y-motion *:
 </div>
 </section>
 <!-- Why Choose Us -->
-<section class="py-stack-lg px-gutter-desktop max-w-container-max mx-auto">
+<section class="home-section home-benefits py-stack-lg px-gutter-mobile md:px-gutter-desktop max-w-container-max mx-auto">
 <div class="text-center mb-stack-lg">
 <h2 class="font-display-lg text-headline-lg md:text-display-lg text-on-surface">למה לבחור ב-EdenMish?</h2>
 </div>
@@ -295,7 +321,7 @@ html.eden-a11y-motion *,html.eden-a11y-motion *::before,html.eden-a11y-motion *:
 </div>
 </section>
 <!-- Behind the Scenes -->
-<section id="behind-the-scenes" class="py-stack-lg px-gutter-desktop max-w-container-max mx-auto" aria-labelledby="behind-the-scenes-title">
+<section id="behind-the-scenes" class="home-section home-story py-stack-lg px-gutter-mobile md:px-gutter-desktop max-w-container-max mx-auto" aria-labelledby="behind-the-scenes-title">
 <div class="glass-card rounded-3xl overflow-hidden grid grid-cols-1 md:grid-cols-2">
 <div class="relative overflow-hidden bg-surface-container-low">
 <img class="w-full h-full object-cover" src="/assets/edenmish-security-review.webp" alt="EdenMish Security Review: פרטיות, גישה ותשלומים" loading="lazy"/>
@@ -327,8 +353,8 @@ EdenMish היא מערכת תפעולית שמחברת בין הזמנה, תמח
 </div>
 </section>
 <!-- CTA Section -->
-<section class="py-stack-lg px-gutter-desktop">
-<div class="max-w-container-max mx-auto glass-card rounded-[3rem] p-stack-lg overflow-hidden relative">
+<section class="home-section home-final-cta py-stack-lg px-gutter-mobile md:px-gutter-desktop">
+<div class="home-final-cta-shell max-w-container-max mx-auto glass-card p-stack-lg overflow-hidden relative">
 <div class="relative z-10 text-center space-y-stack-md py-8">
 <h2 class="font-display-lg text-headline-lg md:text-display-lg text-on-surface">מוכנים לשלוח?</h2>
 <p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl mx-auto">
@@ -363,7 +389,7 @@ EdenMish היא מערכת תפעולית שמחברת בין הזמנה, תמח
   </a>
 </div>
 <!-- Footer -->
-<footer class="w-full pt-stack-lg pb-stack-md bg-surface-container-lowest border-t border-glass-border">
+<footer class="home-footer w-full pt-stack-lg pb-stack-md border-t border-glass-border">
 <div class="flex flex-col md:flex-row-reverse justify-between items-center px-gutter-desktop max-w-container-max mx-auto gap-stack-md">
 <div class="font-display-lg text-headline-md font-bold text-primary">EdenMish</div>
 <div class="flex flex-wrap justify-center gap-x-stack-lg gap-y-stack-sm">
