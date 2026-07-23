@@ -291,11 +291,20 @@ function render(fails){
 function retainedBanner(o){
   var hold=o.retained_by_driver==='hold_for_redelivery';
   var fee=Number(o.retry_fee_suggested)||0;
-  var msg=hold
-    ?'החבילה אצל השליח וממתינה ליעד חדש. שלחו למזמין קישור לעדכון כתובת ותשלום'+(fee?' (מוצע: '+fee+' ₪'+(o.retry_fee_zone?' · אזור '+o.retry_fee_zone:'')+')':'')+'. ללא מענה תוחזר אוטומטית לנקודת האיסוף תוך 24 שעות.'
-    :'החבילה אצל השליח ומוחזרת לנקודת האיסוף. אין צורך בפעולה.';
-  var color=hold?'#dfb7ff':'#91d3c8';
-  return '<div style="margin-top:6px;padding:6px 10px;background:rgba(147,211,200,.08);border:1px solid '+color+'55;border-radius:8px;font-size:.78rem;color:'+color+'"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">'+(hold?'inventory_2':'assignment_return')+'</span> '+esc(msg)+'</div>';
+  var pend=o.pending_redelivery;
+  var msg,color,icon;
+  if(hold&&pend){
+    // The owner responded with a corrected address; a payment for the fee is the last gate.
+    msg='המזמין עדכן יעד חדש: '+esc(pend.dropoff||pend.city||'')+'. ממתין לתשלום דמי טיפול'+(pend.fee?' ('+pend.fee+' ₪)':'')+' לפני שהמשלוח החוזר יישלח לשליח.';
+    color='#f0b429';icon='paid';
+  }else if(hold){
+    msg='החבילה אצל השליח וממתינה ליעד חדש. שלחו למזמין קישור לעדכון כתובת ותשלום'+(fee?' (מוצע: '+fee+' ₪'+(o.retry_fee_zone?' · אזור '+o.retry_fee_zone:'')+')':'')+'. ללא מענה תוחזר אוטומטית לנקודת האיסוף תוך 24 שעות.';
+    color='#dfb7ff';icon='inventory_2';
+  }else{
+    msg='החבילה אצל השליח ומוחזרת לנקודת האיסוף. אין צורך בפעולה.';
+    color='#91d3c8';icon='assignment_return';
+  }
+  return '<div style="margin-top:6px;padding:6px 10px;background:rgba(147,211,200,.08);border:1px solid '+color+'55;border-radius:8px;font-size:.78rem;color:'+color+'"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">'+icon+'</span> '+esc(msg)+'</div>';
 }
 function card(o){
   var s=o.status,id=o.id,isLive=LIVE.indexOf(s)>=0,isActive=o.id===activeId;

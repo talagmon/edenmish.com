@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS orders (
   -- Set when a failed delivery leaves the package with the driver, to the reported
   -- disposition ('return_to_origin' | 'hold_for_redelivery'). See migration 023.
   retained_by_driver TEXT,
-  retained_at INTEGER              -- epoch ms the package was retained; drives 24h auto-return
+  retained_at INTEGER,             -- epoch ms the package was retained; drives 24h auto-return
+  pending_redelivery_json TEXT     -- staged corrected address + fee for a redelivery. Migration 024
 );
 
 CREATE TABLE IF NOT EXISTS status_history (
