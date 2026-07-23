@@ -916,6 +916,16 @@ describe('Frontend: Security and accessibility hardening', () => {
     assertContains(html, 'catch(e){return connectionErrorView();}');
   });
 
+  test('ops authentication uses the translucent iOS-style glass treatment', () => {
+    const html = readPage('dash.html');
+    assertContains(html, '.dashboard-auth-card::before', 'layered translucent glass');
+    assertContains(html, 'backdrop-filter:blur(26px)', 'glass blur');
+    assertContains(html, 'dashboard-auth-icon', 'iOS-style app tile');
+    assertContains(html, 'dashboard-auth-input', 'embedded PIN control');
+    assertContains(html, 'dashboard-auth-button', 'embedded primary action');
+    assertContains(html, 'inputmode="numeric"', 'mobile numeric keypad');
+  });
+
   test('ops dashboard exposes secure per-driver invitation and QR controls', () => {
     const html = readPage('dash.html');
     assertContains(html, 'onclick="showDriverAccess()"', 'driver connection action');
