@@ -129,7 +129,7 @@ CREATE TABLE IF NOT EXISTS delivery_completion_transitions (
 CREATE TABLE IF NOT EXISTS delivery_notification_outbox (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   order_id INTEGER NOT NULL,
-  transition TEXT NOT NULL CHECK(transition = 'delivered'),
+  transition TEXT NOT NULL CHECK(transition IN ('delivered','delivery_failed_retained')),
   event_id TEXT NOT NULL,
   channel TEXT NOT NULL CHECK(channel IN ('email', 'whatsapp')),
   template TEXT NOT NULL,

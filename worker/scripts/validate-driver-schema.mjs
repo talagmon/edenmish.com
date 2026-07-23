@@ -44,7 +44,10 @@ const READINESS_SQL = `SELECT
       WHERE type = 'index' AND name IN (
         'idx_driver_login_invitations_driver',
         'idx_driver_login_invitations_active'
-      ))) AS migration_023_items;`;
+      ))) AS migration_023_items,
+  (SELECT COUNT(*) FROM sqlite_master
+    WHERE type = 'table' AND name = 'delivery_notification_outbox'
+      AND sql LIKE '%delivery_failed_retained%') AS migration_027_items;`;
 
 const EXPECTED = Object.freeze({
   migration_014_items: 10,
@@ -53,6 +56,7 @@ const EXPECTED = Object.freeze({
   migration_017_items: 2,
   migration_019_items: 3,
   migration_023_items: 3,
+  migration_027_items: 1,
 });
 
 export function validateDriverSchemaSnapshot(snapshot) {
@@ -112,7 +116,7 @@ function main() {
     `Driver schema ready: migration 014 (${snapshot.migration_014_items}/10), `
     + `015 (${snapshot.migration_015_columns}/4), 016 (${snapshot.migration_016_items}/4), `
     + `017 (${snapshot.migration_017_items}/2), 019 (${snapshot.migration_019_items}/3), `
-    + `023 (${snapshot.migration_023_items}/3).`,
+    + `023 (${snapshot.migration_023_items}/3), 027 (${snapshot.migration_027_items}/1).`,
   );
 }
 
