@@ -9,12 +9,19 @@
 @layer base {
   html { overflow-x: clip; }
   body {
-    background-color: #0F172A;
-    color: #F8FAFC;
+    min-height: 100dvh;
+    background:
+      radial-gradient(circle at 12% 8%, rgba(91, 42, 134, 0.3), transparent 34rem),
+      radial-gradient(circle at 90% 74%, rgba(45, 226, 208, 0.1), transparent 30rem),
+      linear-gradient(180deg, #090d24 0%, #0b1029 48%, #090d24 100%);
+    background-attachment: fixed;
+    color: #FFFFFF;
     font-family: "Hanken Grotesk", sans-serif;
     overflow-x: clip;
     overflow-wrap: break-word;
     -webkit-text-size-adjust: 100%;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
   input[type="text"]:focus,
   input[type="tel"]:focus,
@@ -30,16 +37,24 @@
 
 @layer components {
   .glass-card {
-    background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025));
+    backdrop-filter: blur(24px) saturate(145%);
+    -webkit-backdrop-filter: blur(24px) saturate(145%);
+    border: 1px solid rgba(209, 218, 255, 0.14);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 24px 80px rgba(0, 0, 0, 0.24);
   }
   .glass-panel {
-    background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.02));
+    backdrop-filter: blur(22px) saturate(140%);
+    -webkit-backdrop-filter: blur(22px) saturate(140%);
+    border: 1px solid rgba(209, 218, 255, 0.12);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.07),
+      0 18px 54px rgba(0, 0, 0, 0.18);
   }
   .bg-glow {
     position: absolute;
@@ -68,6 +83,130 @@
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+
+  /* Shared Apple-style glass shell for every public surface outside the
+     bespoke homepage hero. The selectors intentionally target only visual
+     primitives; page structure and application behaviour remain unchanged. */
+  body:not(.home-page) > header.fixed,
+  body:not(.home-page) > nav.fixed {
+    top: 16px;
+    right: auto;
+    left: 50%;
+    width: min(calc(100% - 32px), 1424px);
+    transform: translateX(-50%);
+    height: 64px;
+    overflow: hidden;
+    border: 1px solid rgba(209, 218, 255, 0.16);
+    border-radius: 20px;
+    background:
+      linear-gradient(115deg, rgba(35, 45, 82, 0.8), rgba(17, 23, 53, 0.58));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 18px 50px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(28px) saturate(155%);
+    -webkit-backdrop-filter: blur(28px) saturate(155%);
+  }
+
+  body:not(.home-page) > header.fixed::before,
+  body:not(.home-page) > nav.fixed::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(110deg, rgba(255, 255, 255, 0.07), transparent 38%, rgba(128, 102, 232, 0.07));
+    pointer-events: none;
+  }
+
+  body:not(.home-page) > header.fixed > *,
+  body:not(.home-page) > nav.fixed > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  body:not(.home-page) > header.fixed a[href="/"],
+  body:not(.home-page) > nav.fixed a[href="/"] {
+    flex: 0 0 auto;
+    color: #b893ff;
+    letter-spacing: -0.03em;
+    white-space: nowrap;
+    text-shadow: 0 0 28px rgba(139, 92, 246, 0.28);
+  }
+
+  body:not(.home-page) > footer {
+    border-top-color: rgba(209, 218, 255, 0.12);
+    background:
+      linear-gradient(180deg, rgba(9, 13, 36, 0.58), rgba(7, 11, 29, 0.92));
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  body:not(.home-page) main > .glass-card,
+  body:not(.home-page) main > .glass-panel,
+  body:not(.home-page) article.glass-card,
+  body:not(.home-page) section.glass-card,
+  body:not(.home-page) section.glass-panel {
+    border-radius: 24px;
+  }
+
+  body:not(.home-page) input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  body:not(.home-page) textarea,
+  body:not(.home-page) select {
+    border-color: rgba(139, 92, 246, 0.48);
+    background:
+      linear-gradient(145deg, rgba(17, 23, 53, 0.82), rgba(9, 13, 36, 0.74));
+    color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  body:not(.home-page) input::placeholder,
+  body:not(.home-page) textarea::placeholder {
+    color: rgba(184, 184, 200, 0.76);
+  }
+
+  body:not(.home-page) button[type="submit"],
+  body:not(.home-page) a.bg-primary,
+  body:not(.home-page) a.bg-tertiary,
+  body:not(.home-page) button.bg-primary,
+  body:not(.home-page) button.bg-tertiary {
+    border: 1px solid rgba(223, 183, 255, 0.28);
+    background: linear-gradient(135deg, #5b2a86 0%, #8066e8 100%);
+    color: #fff;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.16),
+      0 16px 34px rgba(91, 42, 134, 0.28);
+  }
+
+  body:not(.home-page) button[type="submit"]:hover,
+  body:not(.home-page) a.bg-primary:hover,
+  body:not(.home-page) a.bg-tertiary:hover,
+  body:not(.home-page) button.bg-primary:hover,
+  body:not(.home-page) button.bg-tertiary:hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+  }
+
+  @media (max-width: 767px) {
+    body:not(.home-page) > header.fixed,
+    body:not(.home-page) > nav.fixed {
+      top: 8px;
+      right: auto;
+      left: 50%;
+      width: calc(100% - 16px);
+      border-radius: 16px;
+    }
+
+    body:not(.home-page):has(> header.fixed) main,
+    body:not(.home-page):has(> nav.fixed) main {
+      padding-top: 88px;
+    }
+
+    body:not(.home-page) .glass-card,
+    body:not(.home-page) .glass-panel {
+      backdrop-filter: blur(18px) saturate(135%);
+      -webkit-backdrop-filter: blur(18px) saturate(135%);
+    }
   }
 
   /* On desktop, flatten the content wrappers so the map and every city card
@@ -192,8 +331,10 @@
 
   .home-brand {
     position: relative;
+    flex: 0 0 auto;
     color: #b893ff;
     letter-spacing: -0.03em;
+    white-space: nowrap;
     text-shadow: 0 0 28px rgba(139, 92, 246, 0.28);
   }
 
@@ -228,6 +369,7 @@
 
   .home-nav-cta {
     position: relative;
+    flex: 0 0 auto;
     color: #dfb7ff;
     border: 1px solid rgba(223, 183, 255, 0.22);
     background: rgba(91, 42, 134, 0.12);
@@ -777,14 +919,15 @@
     }
 
     .home-hero-backdrop__media {
-      object-position: 25% 54%;
-      transform: scale(1.01);
+      object-position: 40% 55%;
+      transform: scale(1.02);
+      filter: saturate(1.28) contrast(1.06) brightness(1.08);
     }
 
     .home-hero-backdrop__shade {
       background:
-        linear-gradient(180deg, rgba(9, 13, 36, 0.78) 0%, rgba(9, 13, 36, 0.48) 42%, rgba(9, 13, 36, 0.32) 66%, rgba(9, 13, 36, 0.46) 100%),
-        linear-gradient(90deg, rgba(9, 13, 36, 0.24), rgba(9, 13, 36, 0.04), rgba(9, 13, 36, 0.24));
+        linear-gradient(180deg, rgba(9, 13, 36, 0.84) 0%, rgba(9, 13, 36, 0.62) 38%, rgba(9, 13, 36, 0.3) 66%, rgba(9, 13, 36, 0.18) 100%),
+        linear-gradient(90deg, rgba(9, 13, 36, 0.18), rgba(9, 13, 36, 0.02), rgba(9, 13, 36, 0.2));
     }
 
     .home-eyebrow {
