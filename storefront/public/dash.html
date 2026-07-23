@@ -4,15 +4,61 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <title>מעקב הזמנות | עדן מיש</title>
-<meta name="app-version" content="v0.2.0(274272)">
+<meta name="app-version" content="v0.28.0(293096)">
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="/assets/styles.css"/>
+<link rel="stylesheet" href="/assets/styles.css?v=0.28.0-293096-a8d8b91"/>
 <link rel="icon" href="/assets/favicon.ico"/>
 <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"/>
 <meta name="theme-color" content="#8B5CF6"/>
+<style>
+.dashboard-auth-shell{position:relative;isolation:isolate;overflow:hidden;background:#090d24 url("/assets/edenmish-home-hero-neon.webp") center/cover no-repeat}
+.dashboard-auth-shell::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,rgba(9,13,36,.34),rgba(9,13,36,.64) 54%,rgba(9,13,36,.9)),linear-gradient(180deg,rgba(9,13,36,.22),rgba(9,13,36,.48))}
+.dashboard-auth-card{background:linear-gradient(145deg,rgba(35,45,82,.84),rgba(17,23,53,.72));border:1px solid rgba(209,218,255,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 30px 90px rgba(0,0,0,.45);backdrop-filter:blur(28px) saturate(150%);-webkit-backdrop-filter:blur(28px) saturate(150%)}
+.ops-queue-grid{display:grid;grid-template-columns:minmax(0,1fr);align-items:start;gap:14px}
+.ios-order-wrap{position:relative;overflow:hidden;align-self:start;border-radius:20px}
+.ios-order-card{position:relative;z-index:1;overflow:hidden;padding:16px;border:1px solid rgba(209,218,255,.15);border-radius:20px;background:linear-gradient(145deg,#1e264b,#111735);box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 20px 60px rgba(0,0,0,.24);backdrop-filter:blur(24px) saturate(145%);-webkit-backdrop-filter:blur(24px) saturate(145%);transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
+.ios-order-card::before{content:"";position:absolute;inset:0 0 auto;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.24),transparent);pointer-events:none}
+.ios-order-card:hover{transform:translateY(-1px);border-color:rgba(223,183,255,.34);box-shadow:inset 0 1px 0 rgba(255,255,255,.11),0 24px 70px rgba(0,0,0,.3)}
+.ios-order-card.is-new{border-color:rgba(223,183,255,.44);background:linear-gradient(145deg,#342052,#111735)}
+.ios-order-card.is-live{border-color:rgba(145,211,200,.68);background:linear-gradient(145deg,#203b48,#111735);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 34px rgba(45,226,208,.12),0 22px 62px rgba(0,0,0,.25)}
+.ios-order-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.ios-order-number{font:600 .75rem ui-monospace,SFMono-Regular,Menlo,monospace;color:#b8b8c8;direction:rtl}
+.ios-order-price{margin-inline-start:auto;color:#91d3c8;font-size:1.25rem;font-weight:800;font-variant-numeric:tabular-nums}
+.ios-order-identity{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:12px;align-items:start}
+.ios-order-icon{width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:50%;color:#fff;background:linear-gradient(135deg,#5b2a86,#8066e8);border:1px solid rgba(223,183,255,.4);box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 8px 22px rgba(91,42,134,.28)}
+.ios-order-icon.is-live{color:#090d24;background:#91d3c8;border-color:rgba(145,211,200,.75);box-shadow:0 0 24px rgba(45,226,208,.22)}
+.ios-order-name{color:#fff;font-size:1.1rem;font-weight:800;line-height:1.25}
+.ios-order-status{display:flex;align-items:center;gap:6px;margin-top:3px;color:#91d3c8;font-size:.78rem;font-weight:700}
+.ios-order-live-dot{width:8px;height:8px;display:inline-block;flex:none;border-radius:50%;background:#91d3c8;box-shadow:0 0 12px rgba(45,226,208,.55);animation:pulse 1.4s infinite}
+.ios-order-route{display:grid;grid-template-columns:18px minmax(0,1fr);gap:7px 8px;margin:13px 0 10px;padding:12px;color:#b8b8c8;font-size:.85rem;line-height:1.42;border:1px solid rgba(209,218,255,.1);border-radius:14px;background:rgba(9,13,36,.3)}
+.ios-order-route .material-symbols-outlined{font-size:17px}
+.ios-order-route strong{color:#fff;font-weight:600}
+.ios-order-address{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.ios-order-timing{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-top:10px}
+.ios-order-timing-label{color:#b8b8c8;font-size:.68rem}
+.ios-order-timing-value{margin-top:2px;color:#fff;font-size:1rem;font-weight:800;font-variant-numeric:tabular-nums}
+.ios-order-timing-value.is-late{color:#fda4af}
+.ios-order-timing-value.is-soon{color:#dfb7ff}
+.ios-order-created{color:#8d8da2;font-size:.68rem;text-align:left}
+.ios-order-progress{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));direction:rtl;gap:2px;margin:14px 0 0;padding:11px 0 4px;border-top:1px solid rgba(209,218,255,.1)}
+.ios-order-step{position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0;color:#79798d}
+.ios-order-step::after{content:"";position:absolute;top:8px;right:calc(50% + 9px);width:calc(100% - 18px);height:2px;background:#30305c}
+.ios-order-step:first-child::after{display:none}
+.ios-order-step-dot{position:relative;z-index:1;width:18px;height:18px;display:flex;align-items:center;justify-content:center;border:2px solid #54546f;border-radius:50%;background:#111735;color:transparent;font-size:12px}
+.ios-order-step-label{max-width:100%;overflow:hidden;color:inherit;font-size:.58rem;font-weight:600;white-space:nowrap;text-overflow:ellipsis}
+.ios-order-step.is-done{color:#91d3c8}
+.ios-order-step.is-done::after{background:#91d3c8}
+.ios-order-step.is-done .ios-order-step-dot{color:#090d24;border-color:#91d3c8;background:#91d3c8}
+.ios-order-step.is-current{color:#dfb7ff}
+.ios-order-step.is-current::after{background:linear-gradient(90deg,#91d3c8,#8b5cf6)}
+.ios-order-step.is-current .ios-order-step-dot{color:#fff;border-color:#8b5cf6;background:#5b2a86;box-shadow:0 0 0 4px rgba(139,92,246,.14),0 0 18px rgba(139,92,246,.42)}
+.ios-order-terminal{display:flex;align-items:center;gap:7px;margin-top:14px;padding:11px 2px 0;color:#b8b8c8;font-size:.78rem;font-weight:700;border-top:1px solid rgba(209,218,255,.1)}
+@media(min-width:900px){.ops-queue-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.dashboard-auth-shell{background-position:19% center}.dashboard-auth-shell::before{background:linear-gradient(180deg,rgba(9,13,36,.48),rgba(9,13,36,.84))}.ios-order-card{padding:14px;border-radius:18px}.ios-order-identity{grid-template-columns:40px minmax(0,1fr) auto;gap:10px}.ios-order-icon{width:40px;height:40px}.ios-order-name{font-size:1.02rem}.ios-order-step-label{font-size:.53rem}}
+</style>
 </head>
 <body class="bg-surface-dim">
 <div id="app">טוען…</div>
@@ -35,8 +81,8 @@ function showTransientError(message){
   el.textContent=message;el.hidden=false;clearTimeout(el._timer);el._timer=setTimeout(function(){el.hidden=true;},5000);
 }
 function connectionErrorView(){
-  $("app").innerHTML = '<div class="min-h-screen flex items-center justify-center p-gutter-mobile">'+
-    '<div class="glass-card rounded-2xl p-stack-lg max-w-sm w-full text-center" role="alert">'+
+  $("app").innerHTML = '<div class="dashboard-auth-shell min-h-screen flex items-center justify-center p-gutter-mobile">'+
+    '<div class="dashboard-auth-card glass-card rounded-3xl p-stack-lg max-w-sm w-full text-center" role="alert">'+
     '<span class="material-symbols-outlined text-error text-5xl mb-stack-sm">cloud_off</span>'+
     '<h1 class="font-headline-md text-headline-md text-primary mb-stack-sm">לא ניתן להתחבר למרכז הבקרה</h1>'+
     '<p class="text-body-md text-on-surface-variant mb-stack-lg">סביבת השרת אינה זמינה כרגע. לא בוצע שום שינוי בהזמנות.</p>'+
@@ -54,8 +100,8 @@ async function api(path,opts){
 // persists the bearer credential; the initial refresh at the end probes it.
 
 function loginView(){
-  $("app").innerHTML = '<div class="min-h-screen flex items-center justify-center p-gutter-mobile">'+
-    '<div class="glass-card rounded-2xl p-stack-lg max-w-sm w-full text-center">'+
+  $("app").innerHTML = '<div class="dashboard-auth-shell min-h-screen flex items-center justify-center p-gutter-mobile">'+
+    '<div class="dashboard-auth-card glass-card rounded-3xl p-stack-lg max-w-sm w-full text-center">'+
     '<div class="w-16 h-16 rounded-full bg-tertiary flex items-center justify-center mx-auto mb-stack-md">'+
     '<span class="material-symbols-outlined text-on-tertiary text-4xl">two_wheeler</span></div>'+
     '<h1 class="font-label-bold text-label-bold text-primary mb-1">מעקב הזמנות | עדן מיש</h1>'+
@@ -207,10 +253,10 @@ function renderQueue(){
     '<div class="flex gap-2 mt-2 overflow-x-auto scrollbar-hide pb-1">'+
     tabBtn("all","הכל",counts.all)+tabBtn("inbox","חדשות",counts.inbox)+tabBtn("active","פעילות",counts.active)+tabBtn("done","הושלם",counts.done)+tabBtn("cancelled","בוטלו",counts.cancelled)+tabBtn("problems","תקלות",counts.problems)+
     '</div></div>'+
-    '<div class="px-gutter-mobile py-stack-sm max-w-lg mx-auto space-y-3 pb-24">'+
+    '<div class="px-gutter-mobile py-stack-sm max-w-6xl mx-auto space-y-3 pb-24">'+
     driverPanel()+
     webhookWarning()+
-    (cards || '<div class="glass-card rounded-2xl p-stack-lg text-center text-on-surface-variant">אין הזמנות בקטגוריה זו.</div>')+
+    (cards?'<div class="ops-queue-grid">'+cards+'</div>':'<div class="glass-card rounded-2xl p-stack-lg text-center text-on-surface-variant">אין הזמנות בקטגוריה זו.</div>')+
     '</div>';
   attachSwipeHandlers();
 }
@@ -421,6 +467,35 @@ function timeLeftBadge(o){
   if(mins<30) return '<span class="text-label-sm text-alert-amber flex items-center gap-0.5"><span class="material-symbols-outlined text-[14px]">timer</span>'+label+'</span>';
   return '<span class="text-label-sm text-success-mint flex items-center gap-0.5"><span class="material-symbols-outlined text-[14px]">timer</span>'+label+'</span>';
 }
+function compactDuration(ms){
+  var mins=Math.max(0,Math.floor(Math.abs(ms)/60000)),hrs=Math.floor(mins/60),rest=mins%60;
+  return hrs>0?hrs+'ש׳ '+rest+'ד׳':mins+' דק׳';
+}
+function queueTimingInfo(o){
+  var dl=deliveryDeadline(o),terminal=o.status==="delivered",active=["paid","to_pickup","picked_up","to_dropoff"].includes(o.status);
+  if(dl&&(active||terminal)){
+    var ref=terminal&&o.delivered_at?Number(o.delivered_at):Date.now(),diff=dl-ref;
+    if(terminal)return {label:"עמידה ביעד",value:diff>=0?"הושלם בזמן":"איחור "+compactDuration(diff),tone:diff>=0?"":" is-late"};
+    return {label:diff>=0?"זמן שנותר":"איחור",value:compactDuration(diff),tone:diff<0?" is-late":diff<30*60*1000?" is-soon":""};
+  }
+  return {label:"חלון שירות",value:o.when_text||[o.when_date,o.when_hour].filter(Boolean).join(" · ")||"בתיאום",tone:""};
+}
+function queueProgressHtml(o){
+  var problem=["failed","cancelled","refund_pending"].includes(o.status);
+  if(problem)return '<div class="ios-order-terminal"><span class="material-symbols-outlined">'+(o.status==="cancelled"?"cancel":"error")+'</span>'+esc(HE[o.status]||o.status)+'</div>';
+  var cur=statusStepIdx(o.status);
+  return '<div class="ios-order-progress" role="img" aria-label="שלב '+(cur+1)+' מתוך '+STEPS.length+'">'+STEPS.map(function(step,index){
+    var cls=index<cur?" is-done":index===cur?" is-current":"";
+    var mark=index<cur?"✓":index===cur?"•":"";
+    return '<div class="ios-order-step'+cls+'"><span class="ios-order-step-dot">'+mark+'</span><span class="ios-order-step-label">'+step.label+'</span></div>';
+  }).join("")+'</div>';
+}
+function queueOrderIcon(o){
+  if(o.status==="delivered")return "task_alt";
+  if(LIVE.includes(o.status))return "two_wheeler";
+  if(o.status==="picked_up")return "inventory_2";
+  return "package_2";
+}
 function renderStats(){
   var delivered=orders.filter(function(o){return o.status==='delivered';});
   var failed=orders.filter(function(o){return ['failed','cancelled'].includes(o.status);});
@@ -467,43 +542,39 @@ function discountBadgeHtml(o){
 }
 function queueCard(o){
   var isLive = LIVE.includes(o.status);
+  var isNew = ["received","priced","review","payment_sent"].includes(o.status);
   var isUrgent = o.urgent || o.review_flag;
   var isTerminal = ["delivered","cancelled","failed"].includes(o.status);
-  var color = isUrgent?"border-status-alert":(isLive?"border-secondary":(o.status==="delivered"?"border-success-mint/40":"border-glass-border"));
-  var liveDot = isLive?'<span class="w-2 h-2 bg-secondary rounded-full animate-pulse"></span>':"";
   var urgentBadge = isUrgent?'<span class="bg-error/20 text-error font-label-bold text-label-sm px-2 py-0.5 rounded-full flex items-center gap-0.5"><span class="material-symbols-outlined text-[14px]">priority_high</span>דחוף</span>':"";
   var svcLabel = o.service==='flash'?'מהיר':o.service==='standard'?'רגיל':o.service==='eco'?'חסכוני':"";
   var svcChip = svcLabel?'<span class="text-label-sm px-2 py-0.5 rounded-full '+(o.service==='flash'?'bg-error/10 text-error':o.service==='standard'?'bg-primary/10 text-primary':'bg-secondary/10 text-secondary')+'">'+svcLabel+'</span>':"";
-  var nameLine = o.name?'<div class="flex items-center gap-2 mt-1"><span class="material-symbols-outlined text-on-surface-variant text-lg">person</span><b class="text-on-surface text-body-md">'+esc(o.name)+'</b></div>':"";
-  var notesLine = o.notes?'<div class="mt-1 text-label-sm text-alert-amber">📝 '+esc(o.notes.slice(0,40))+'</div>':"";
-  var pickupShort = esc((o.pickup||"—").split(",")[0]);
-  var dropoffShort = esc((o.dropoff||"—").split(",")[0]);
-  var whenLine = o.when_text?'<span class="text-label-sm text-on-surface-variant">'+esc(o.when_text)+'</span>':"";
-  var reviewReason = o.review_reason?'<span class="text-label-sm text-alert-amber">'+esc(o.review_reason)+'</span>':"";
+  var notesLine = o.notes?'<div class="mt-2 flex items-start gap-1.5 text-label-sm text-alert-amber"><span class="material-symbols-outlined text-[16px]">sticky_note_2</span><span>'+esc(o.notes.slice(0,80))+'</span></div>':"";
+  var reviewReason = o.review_reason?'<div class="mt-2 flex items-start gap-1.5 text-label-sm text-alert-amber"><span class="material-symbols-outlined text-[16px]">warning</span><span>'+esc(o.review_reason)+'</span></div>':"";
   var discountBadge = discountBadgeHtml(o);
+  var timing = queueTimingInfo(o);
   var canCancel = !isTerminal;
   var cardId = 'card-'+o.id;
 
-  return '<div class="relative overflow-hidden rounded-xl" id="wrap-'+cardId+'">'+
+  return '<div class="ios-order-wrap" id="wrap-'+cardId+'">'+
     (canCancel?'<div class="absolute inset-y-0 left-0 flex items-center justify-center bg-error/90 px-8" style="z-index:0"><span class="material-symbols-outlined text-white text-2xl">delete</span></div>':"")+
-    '<div id="'+cardId+'" class="glass-card rounded-xl p-stack-md border-r-4 '+color+' '+(isUrgent?'ring-1 ring-error/30':"")+' active:scale-[0.98] transition-transform cursor-pointer relative" style="z-index:1" '+
+    '<div id="'+cardId+'" class="ios-order-card '+(isNew?'is-new ':"")+(isLive?'is-live ':"")+(isUrgent?'ring-1 ring-error/30 ':"")+'cursor-pointer active:scale-[0.99]" '+
     (canCancel?'data-oid="'+o.id+'"':'')+
-    ' onclick="openOrder('+o.id+')">'+
-    '<div class="flex items-center gap-2 flex-wrap">'+
-    liveDot+
+    ' role="button" tabindex="0" aria-label="פתיחת הזמנה '+o.id+'" onclick="openOrder('+o.id+')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openOrder('+o.id+')}">'+
+    '<div class="ios-order-top">'+
+    (isLive?'<span class="ios-order-live-dot" aria-hidden="true"></span>':"")+
     '<span class="bg-primary-container text-on-primary-container font-label-bold text-label-sm px-3 py-1 rounded-full">'+esc(HE[o.status]||o.status)+'</span>'+
     svcChip+urgentBadge+
-    '<span class="text-on-surface-variant text-label-sm">#'+o.id+'</span>'+
+    '<span class="ios-order-number">הזמנה #'+o.id+'</span>'+
     discountBadge+
-    '<b class="font-headline-md text-headline-md text-secondary mr-auto">₪'+(o.price||"?")+'</b></div>'+
-    nameLine+
-    '<div class="flex items-start gap-2 mt-1">'+
-    '<span class="material-symbols-outlined text-secondary text-lg">arrow_upward</span>'+
-    '<span class="text-body-md text-on-surface-variant flex-1">'+pickupShort+'</span>'+
-    '<span class="material-symbols-outlined text-primary text-lg">location_on</span>'+
-    '<span class="text-body-md text-on-surface-variant flex-1">'+dropoffShort+'</span></div>'+
-    (whenLine||reviewReason||timeLeftBadge(o)?'<div class="flex items-center gap-2 mt-1 flex-wrap">'+whenLine+reviewReason+timeLeftBadge(o)+'</div>':"")+
-    notesLine+
+    (o.price!=null?'<b class="ios-order-price">₪'+esc(o.price)+'</b>':"")+'</div>'+
+    '<div class="ios-order-identity"><div class="ios-order-icon '+(isLive?'is-live':"")+'"><span class="material-symbols-outlined">'+queueOrderIcon(o)+'</span></div>'+
+    '<div><div class="ios-order-name">'+esc(o.name||"לקוח EdenMish")+'</div><div class="ios-order-status">'+(isLive?'<span class="ios-order-live-dot" aria-hidden="true"></span>':'<span class="material-symbols-outlined text-[15px]">'+(isNew?'fiber_new':'schedule')+'</span>')+esc(HE[o.status]||o.status)+'</div></div>'+
+    '<span class="material-symbols-outlined text-on-surface-variant mt-1">chevron_left</span></div>'+
+    '<div class="ios-order-route"><span class="material-symbols-outlined text-primary">inventory_2</span><div><strong>איסוף</strong><div class="ios-order-address">'+esc(o.pickup||"—")+'</div></div>'+
+    '<span class="material-symbols-outlined text-secondary">location_on</span><div><strong>מסירה</strong><div class="ios-order-address">'+esc(o.dropoff||"—")+'</div></div></div>'+
+    '<div class="ios-order-timing"><div><div class="ios-order-timing-label">'+timing.label+'</div><div class="ios-order-timing-value'+timing.tone+'">'+esc(timing.value)+'</div></div><div class="ios-order-created">נוצרה '+fmt(o.created_at)+'</div></div>'+
+    reviewReason+notesLine+
+    queueProgressHtml(o)+
     '</div></div>';
 }
 var _swipe = {id:null,x:0,startX:0,el:null,moved:false,suppressClick:false};

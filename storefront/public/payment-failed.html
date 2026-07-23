@@ -4,9 +4,10 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <title>EdenMish | התשלום לא הושלם</title>
+<meta name="app-version" content="v0.28.0(293096)">
 <meta name="description" content="התשלום ל-EdenMish לא הושלם. אפשר לחזור בבטחה לעמוד התשלום ולנסות שוב."/>
 <meta name="robots" content="noindex, nofollow"/>
-<meta name="theme-color" content="#0b1020"/>
+<meta name="theme-color" content="#090d24"/>
 <link rel="canonical" href="https://edenmish.com/payment-failed.html"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -16,9 +17,9 @@
 <style>
   :root {
     color-scheme: dark;
-    --surface: #0b1020;
-    --surface-soft: rgba(24, 30, 54, 0.78);
-    --outline: rgba(223, 183, 255, 0.18);
+    --surface: #090d24;
+    --surface-soft: rgba(17, 23, 53, 0.72);
+    --outline: rgba(209, 218, 255, 0.16);
     --primary: #dfb7ff;
     --mint: #91d3c8;
     --text: #f6f2fb;
@@ -33,8 +34,8 @@
     overflow-x: hidden;
     background:
       radial-gradient(circle at 82% 10%, rgba(91, 42, 134, 0.34), transparent 35rem),
-      radial-gradient(circle at 10% 90%, rgba(145, 211, 200, 0.12), transparent 28rem),
-      var(--surface);
+      radial-gradient(circle at 10% 90%, rgba(45, 226, 208, 0.12), transparent 28rem),
+      linear-gradient(180deg, var(--surface), #0b1029 48%, var(--surface));
     color: var(--text);
     font-family: "Hanken Grotesk", system-ui, sans-serif;
   }
@@ -69,9 +70,9 @@
   .message {
     min-width: 0;
     border: 1px solid var(--outline);
-    background: var(--surface-soft);
-    box-shadow: 0 28px 90px rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(22px);
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 28px 90px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(24px) saturate(145%);
   }
 
   .art {
@@ -173,7 +174,7 @@
     transition: transform 180ms ease, filter 180ms ease, background 180ms ease;
   }
 
-  .cta.primary { background: var(--mint); color: #10201f; box-shadow: 0 14px 32px rgba(145, 211, 200, 0.18); }
+  .cta.primary { background: linear-gradient(135deg, #5b2a86, #8066e8); color: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,.16), 0 16px 34px rgba(91,42,134,.28); }
   .cta.secondary { border-color: var(--outline); background: rgba(255, 255, 255, 0.035); color: var(--primary); }
   .cta:hover { filter: brightness(1.07); }
   .cta:active { transform: scale(0.985); }
