@@ -1048,10 +1048,11 @@ describe('Frontend: Security and accessibility hardening', () => {
     assert.ok(!html.includes('localStorage.setItem'), 'invitation codes must not be persisted in localStorage');
   });
 
-  test('storefront builds fingerprint the shared stylesheet for Safari', () => {
+  test('storefront fingerprints coupled navigation assets for cache consistency', () => {
     const script = readFileSync(join(process.cwd(), 'scripts', 'inject-version.js'), 'utf8');
-    assertContains(script, 'ASSET_VERSION', 'stylesheet release fingerprint');
+    assertContains(script, 'ASSET_VERSION', 'shared release fingerprint');
     assertContains(script, '/assets/styles.css?v=', 'versioned stylesheet URL');
+    assertContains(script, '/assets/mobile-nav.js?v=', 'versioned navigation URL');
   });
 
   test('ops dashboard requests GPS only from an explicit start/stop control', () => {
@@ -1221,6 +1222,9 @@ describe('Frontend: Mobile nav', () => {
     assert.ok(!js.includes('gesturestart'), 'must not block iOS zoom');
     assert.ok(!js.includes('touches.length > 1'), 'must not block pinch zoom');
     assertContains(js, 'burger', 'hamburger builder');
+    assertContains(js, "matchMedia('(max-width: 1023px)')", 'responsive navigation boundary');
+    assertContains(js, "desk.style.display = compact ? 'none' : 'flex'", 'exclusive desktop navigation state');
+    assertContains(js, "burger.style.display = compact ? 'grid' : 'none'", 'exclusive hamburger state');
     assertContains(js, 'עוסק פטור', 'legal footer line');
   });
 
