@@ -530,6 +530,46 @@ business redemption table.
 
 ---
 
+### 023_driver_login_invitations.sql
+
+**Purpose:** Adds per-driver, expiring login invitations used by the Ops dashboard
+for manual-code and QR pairing. Only an HMAC of the code is stored. Each invitation
+is bound to one active driver, expires after 5–60 minutes, and can be consumed once
+or explicitly revoked.
+
+**Command:**
+```bash
+# Staging (render the config first; run from worker/):
+npx wrangler d1 execute edenmish-staging --remote --yes \
+  --config wrangler.staging.generated.toml \
+  --file=./migrations/023_driver_login_invitations.sql
+
+# Local verification:
+wrangler d1 execute edenmish --local \
+  --file=./migrations/023_driver_login_invitations.sql
+
+# Production (after merge, before Worker deploy):
+wrangler d1 execute edenmish --remote \
+  --file=./migrations/023_driver_login_invitations.sql
+```
+
+**Verification query:**
+```sql
+SELECT name FROM sqlite_master
+WHERE type='table' AND name='driver_login_invitations';
+SELECT name FROM sqlite_master
+WHERE type='index' AND name IN (
+  'idx_driver_login_invitations_driver',
+  'idx_driver_login_invitations_active'
+)
+ORDER BY name;
+```
+
+Expected result: one table and both indexes. The table must contain `code_hash`
+and must not contain a raw `code` column.
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -554,6 +594,7 @@ business redemption table.
 - [ ] Run `020_business_wallet_schema_repair.sql` only when migration 018 readiness is incomplete.
 - [ ] Run `021_business_entry_plans.sql` after 018/020 and before enabling Trial or Business Wallet checkout.
 - [ ] Run `022_business_plan_coupons.sql` after 021 and before enabling business-plan coupons.
+- [ ] Run `023_driver_login_invitations.sql` after 014 and before enabling Ops driver pairing.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).

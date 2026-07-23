@@ -127,8 +127,9 @@ See `../docs/ENVIRONMENT.md` for the full list and placeholders.
 |---|---|---|
 | `OPS_PIN` | ops dashboard login | shared PIN today |
 | `SESSION_SECRET` | signed/hashed ops + business sessions, links and OTPs | mandatory; auth flows fail closed if unset |
-| `DRIVER_ONE_TIME_CODE` | driver app bootstrap login | single use; 6–12 digits; rotate after every successful exchange |
-| `DRIVER_ADDITIONAL_ONE_TIME_CODES` | optional independent driver bootstrap logins | comma-separated 6–12 digit codes; each code remains single use |
+| `DRIVER_REVIEW_CODE` | dedicated Apple App Review login | reusable only for review; 6–12 digits; rate-limited and audited; rotate or disable outside review windows |
+| `DRIVER_ONE_TIME_CODE` | compatibility fallback for Apple App Review | used only when `DRIVER_REVIEW_CODE` is unset; keep while the current App Store review record references it |
+| `DRIVER_ADDITIONAL_ONE_TIME_CODES` | legacy emergency driver bootstrap logins | comma-separated 6–12 digit codes; each code remains single use; prefer expiring Ops invitations |
 | `MAPS_KEY` | tracking page live map (injected into HTML) | Google Maps JS key |
 | `SHOPIFY_ADMIN_TOKEN` | creating Draft Orders (`shpat_…`) | Worker-side charge |
 | `SHOPIFY_WEBHOOK_SECRET` | verifying Shopify payment/refund webhooks | webhook fails closed (401) if unset |
@@ -195,6 +196,7 @@ wrangler d1 execute edenmish --remote --file=./migrations/019_delivery_notificat
 wrangler d1 execute edenmish --remote --file=./migrations/020_business_wallet_schema_repair.sql
 wrangler d1 execute edenmish --remote --file=./migrations/021_business_entry_plans.sql
 wrangler d1 execute edenmish --remote --file=./migrations/022_business_plan_coupons.sql
+wrangler d1 execute edenmish --remote --file=./migrations/023_driver_login_invitations.sql
 ```
 
 > Run only migrations that have not already been applied. Several `ALTER TABLE`
@@ -205,6 +207,9 @@ wrangler d1 execute edenmish --remote --file=./migrations/022_business_plan_coup
 ```bash
 wrangler secret put OPS_PIN
 wrangler secret put SESSION_SECRET
+# Preferred for a dedicated Apple review credential:
+wrangler secret put DRIVER_REVIEW_CODE
+# Compatibility fallback while an existing review record still uses this name:
 wrangler secret put DRIVER_ONE_TIME_CODE
 wrangler secret put MAPS_KEY
 wrangler secret put SHOPIFY_ADMIN_TOKEN

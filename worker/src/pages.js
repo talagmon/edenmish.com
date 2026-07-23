@@ -227,6 +227,16 @@ input:focus{outline:none;border-color:#dfb7ff;box-shadow:0 0 10px rgba(223,183,2
 .driver-proof-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
 .driver-proof-media{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:10px}
 .driver-proof-media img{display:block;width:100%;max-height:260px;object-fit:contain;border-radius:10px;background:#090d24;border:1px solid rgba(255,255,255,.1)}
+.driver-access-grid{display:grid;grid-template-columns:1fr 120px;gap:10px}
+.driver-access-grid select{background:rgba(13,8,20,.6);border:1px solid rgba(255,255,255,.14);color:#dae2fd;border-radius:10px;padding:12px;font-family:inherit}
+.driver-invite-result{text-align:center;padding:16px;border:1px solid rgba(145,211,200,.35);border-radius:14px;background:rgba(0,83,75,.12)}
+.driver-invite-code{font:800 2rem ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.18em;direction:ltr;color:#dfb7ff;margin:8px 0}
+.driver-invite-qr{display:inline-flex;background:#fff;border-radius:14px;padding:10px;margin:10px auto}
+.driver-invite-qr svg{display:block;width:min(240px,68vw);height:auto}
+.driver-invite-list{display:flex;flex-direction:column;gap:8px}
+.driver-invite-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px;border:1px solid rgba(255,255,255,.1);border-radius:10px}
+.driver-invite-row .btn{margin-inline-start:auto}
+@media(max-width:520px){.driver-access-grid{grid-template-columns:1fr}}
 </style></head><body><div class="wrap">
 <div id="app"></div>
 </div>
@@ -246,6 +256,26 @@ input:focus{outline:none;border-color:#dfb7ff;box-shadow:0 0 10px rgba(223,183,2
 <div id="driver-proofs-content" class="muted">טוען…</div>
 </div>
 </div>
+<div id="driver-access" class="pod-overlay" hidden>
+<div class="pod-card">
+<div class="pod-head"><b>חיבור אפליקציית נהג</b><button class="pod-x" onclick="hideDriverAccess()" aria-label="סגור">✕</button></div>
+<p class="muted">יוצרים קוד זמני לנהג. אפשר להקליד אותו או לסרוק את קוד ה־QR. הקוד נחשף פעם אחת בלבד.</p>
+<div class="driver-access-grid">
+<select id="driver-invite-driver" aria-label="בחירת נהג"></select>
+<select id="driver-invite-expiry" aria-label="תוקף הקוד">
+<option value="15">תקף ל־15 דקות</option>
+<option value="30">תקף ל־30 דקות</option>
+<option value="60">תקף לשעה</option>
+</select>
+</div>
+<button class="btn go" id="driver-invite-create" onclick="createDriverInvite()" type="button">יצירת קוד חיבור</button>
+<div id="driver-invite-result" hidden></div>
+<div>
+<div class="pod-head" style="margin-bottom:8px"><b style="font-size:.95rem">קודים אחרונים</b><button class="btn sm alt" onclick="loadDriverAccess()" type="button">רענון</button></div>
+<div id="driver-invite-list" class="driver-invite-list muted">טוען…</div>
+</div>
+</div>
+</div>
 <script>
 const HE=${JSON.stringify(opsLabelMap())};
 const QL=${JSON.stringify(QUEUE_LAYOUT)};
@@ -256,7 +286,7 @@ const LIVE=['to_pickup','to_dropoff'];
 const NSTAT={pending:'ממתין',sent:'נשלח',failed:'נכשל',skipped:'דולג'};
 const NCHAN={email:'אימייל',whatsapp_future:'וואטסאפ',sms_future:'SMS',system:'מערכת'};
 const NTPL={ops_new_order:'הזמנה חדשה לעדן',customer_otp:'קוד אימות',customer_payment_confirmation:'אישור תשלום',ops_payment_received:'תשלום התקבל',customer_delivery_summary:'סיכום מסירה',customer_request_received:'אישור קבלת בקשה',customer_payment_link:'קישור תשלום ללקוח'};
-let orders=[], activeId=null, watchId=null, gpsOrderId=null, gpsState='idle', doneOpen=false, notifOrderId=null, notifs=[];
+let orders=[], activeId=null, watchId=null, gpsOrderId=null, gpsState='idle', doneOpen=false, notifOrderId=null, notifs=[], driverInvitations=[];
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function maskRecip(s){if(!s)return '';s=String(s);var at=s.indexOf('@');return at<1?s:(s[0]+'•••@'+s.slice(at+1));}
 function bucketOf(s){return QOF[s]||'inbox';}
@@ -280,7 +310,7 @@ function render(fails){
   var active=orders.filter(function(o){return LIVE.indexOf(o.status)>=0;}).length;
   var pending=orders.filter(function(o){return ['review','priced','received','payment_sent'].indexOf(o.status)>=0;}).length;
   var done=orders.filter(function(o){return o.status==='delivered';}).length;
-  var toolbar='<div class="glass-card" style="border-radius:16px;padding:16px;margin:0 0 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px"><div><div style="display:flex;align-items:center;gap:8px"><span class="material-symbols-outlined" style="font-size:22px;color:#91d3c8">two_wheeler</span><strong style="color:#dfb7ff;font-size:1.1rem;font-family:Hanken Grotesk,sans-serif">EdenMish Ops</strong><span class="vstamp" title="גרסה">'+versionString()+'</span></div><div style="color:#cec3d2;font-size:.75rem;margin-top:2px">מרכז הבקרה: תל אביב וגוש דן</div></div><div style="display:flex;gap:8px"><div class="glass-card" style="padding:6px 14px;border-radius:12px;text-align:center"><div style="color:#91d3c8;font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700">פעילות</div><div style="color:#dae2fd;font-size:1.2rem;font-weight:700">'+active+'</div></div><div class="glass-card" style="padding:6px 14px;border-radius:12px;text-align:center"><div style="color:#dfb7ff;font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700">בתור</div><div style="color:#dae2fd;font-size:1.2rem;font-weight:700">'+pending+'</div></div><div class="glass-card" style="padding:6px 14px;border-radius:12px;text-align:center"><div style="color:#34D399;font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700">הושלם</div><div style="color:#dae2fd;font-size:1.2rem;font-weight:700">'+done+'</div></div></div><div style="display:flex;gap:6px"><button class="btn sm alt" data-act="refresh" title="רענן"><span class="material-symbols-outlined" style="font-size:18px">refresh</span></button><button class="btn sm danger" data-act="logout" title="התנתק"><span class="material-symbols-outlined" style="font-size:18px">logout</span></button></div></div>';
+  var toolbar='<div class="glass-card" style="border-radius:16px;padding:16px;margin:0 0 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px"><div><div style="display:flex;align-items:center;gap:8px"><span class="material-symbols-outlined" style="font-size:22px;color:#91d3c8">two_wheeler</span><strong style="color:#dfb7ff;font-size:1.1rem;font-family:Hanken Grotesk,sans-serif">EdenMish Ops</strong><span class="vstamp" title="גרסה">'+versionString()+'</span></div><div style="color:#cec3d2;font-size:.75rem;margin-top:2px">מרכז הבקרה: תל אביב וגוש דן</div></div><div style="display:flex;gap:8px"><div class="glass-card" style="padding:6px 14px;border-radius:12px;text-align:center"><div style="color:#91d3c8;font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700">פעילות</div><div style="color:#dae2fd;font-size:1.2rem;font-weight:700">'+active+'</div></div><div class="glass-card" style="padding:6px 14px;border-radius:12px;text-align:center"><div style="color:#dfb7ff;font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700">בתור</div><div style="color:#dae2fd;font-size:1.2rem;font-weight:700">'+pending+'</div></div><div class="glass-card" style="padding:6px 14px;border-radius:12px;text-align:center"><div style="color:#34D399;font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700">הושלם</div><div style="color:#dae2fd;font-size:1.2rem;font-weight:700">'+done+'</div></div></div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm alt" data-act="driveraccess" title="חיבור נהג"><span class="material-symbols-outlined" style="font-size:18px">qr_code_2</span> חיבור נהג</button><button class="btn sm alt" data-act="refresh" title="רענן"><span class="material-symbols-outlined" style="font-size:18px">refresh</span></button><button class="btn sm danger" data-act="logout" title="התנתק"><span class="material-symbols-outlined" style="font-size:18px">logout</span></button></div></div>';
   var fp=(fails&&fails.length)?'<div class="qbucket"><div class="qhead"><span class="qhead-label" style="color:#C0392B">בעיות בשליחת הודעות</span><span class="qhead-count">'+fails.length+'</span></div><div class="qcards">'+fails.map(function(f){return '<div class="ocard" style="border-color:rgba(192,57,43,.3)"><div class="ocard-top"><span class="badge" style="background:#C0392B">'+esc(f.channel||'email')+'</span><b>'+(f.order_id?'#'+f.order_id:'—')+'</b><span class="muted" style="margin-inline-start:auto;font-size:.72rem">'+fmt(f.created_at)+'</span></div><div class="muted">'+esc(f.template||'')+(f.recipient?' · '+esc(maskRecip(f.recipient)):'')+'</div><div class="stale" style="margin-top:4px">'+esc(f.error||'שגיאה לא ידועה')+'</div></div>';}).join('')+'</div></div>':'';
   document.getElementById('app').innerHTML=toolbar+sections+fp;
 }
@@ -396,6 +426,53 @@ function updateGpsControl(id){var el=document.getElementById('gps-control-'+id);
 function toggleGps(id){if((watchId!==null||gpsState==='requesting')&&gpsOrderId===id)stopWatch();else startWatch(id);}
 function startWatch(id){if(!navigator.geolocation){gpsOrderId=id;gpsState='error';updateGpsControl(id);alert('שירותי מיקום אינם זמינים במכשיר הזה.');return;}if(watchId!==null)stopWatch();gpsOrderId=id;gpsState='requesting';updateGpsControl(id);try{watchId=navigator.geolocation.watchPosition(function(p){gpsState='active';updateGpsControl(id);var c=p.coords;api('/api/ops/orders/'+id+'/gps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lat:c.latitude,lng:c.longitude})}).catch(function(){});},function(err){if(watchId!==null)navigator.geolocation.clearWatch(watchId);watchId=null;gpsState=err&&err.code===1?'denied':'error';updateGpsControl(id);alert(gpsState==='denied'?'הרשאת המיקום נדחתה. ניתן לנסות שוב מהכפתור.':'לא הצלחנו לקבל מיקום. בדקו את שירותי המיקום ונסו שוב.');},{enableHighAccuracy:true,maximumAge:5000,timeout:15000});}catch(e){watchId=null;gpsState='error';updateGpsControl(id);alert('לא הצלחנו להפעיל שיתוף מיקום.');}}
 function stopWatch(){var id=gpsOrderId;if(watchId!==null)navigator.geolocation.clearWatch(watchId);watchId=null;gpsOrderId=null;gpsState='idle';if(id!=null)updateGpsControl(id);}
+function hideDriverAccess(){document.getElementById('driver-access').hidden=true;document.getElementById('driver-invite-result').hidden=true;}
+async function showDriverAccess(){document.getElementById('driver-access').hidden=false;document.getElementById('driver-invite-result').hidden=true;await loadDriverAccess();}
+function driverInviteState(invite){
+  if(invite.state==='active')return '<span class="badge" style="background:#00534b">פעיל</span>';
+  if(invite.state==='consumed')return '<span class="badge" style="background:#5b2a86">מומש</span>';
+  if(invite.state==='revoked')return '<span class="badge" style="background:#7f1d1d">בוטל</span>';
+  return '<span class="badge" style="background:#4b5563">פג תוקף</span>';
+}
+function renderDriverInvitations(){
+  var target=document.getElementById('driver-invite-list');
+  if(!driverInvitations.length){target.innerHTML='<div class="muted">עדיין לא נוצרו קודי חיבור.</div>';return;}
+  target.innerHTML=driverInvitations.map(function(invite){
+    var revoke=invite.state==='active'?'<button class="btn sm danger" type="button" onclick="revokeDriverInvite(\\''+esc(invite.invitation_id)+'\\')">ביטול</button>':'';
+    return '<div class="driver-invite-row">'+driverInviteState(invite)+'<b>'+esc(invite.driver_name||invite.driver_id)+'</b><span class="muted">עד '+fmt(invite.expires_at)+'</span>'+revoke+'</div>';
+  }).join('');
+}
+async function loadDriverAccess(){
+  var target=document.getElementById('driver-invite-list');target.innerHTML='טוען…';
+  try{
+    var r=await api('/api/ops/driver/invitations'),d=await r.json();if(!r.ok)throw 0;
+    var select=document.getElementById('driver-invite-driver'),selected=select.value;
+    select.innerHTML=(d.drivers||[]).map(function(driver){return '<option value="'+esc(driver.driver_id)+'">'+esc(driver.display_name)+' · '+esc(driver.driver_id)+'</option>';}).join('');
+    if(selected&&[...select.options].some(function(option){return option.value===selected;}))select.value=selected;
+    driverInvitations=d.invitations||[];renderDriverInvitations();
+  }catch(e){target.innerHTML='<div class="stale">לא הצלחנו לטעון את הגדרות החיבור.</div>';}
+}
+async function createDriverInvite(){
+  var button=document.getElementById('driver-invite-create'),driver=document.getElementById('driver-invite-driver').value,minutes=Number(document.getElementById('driver-invite-expiry').value);
+  if(!driver){alert('לא נמצא נהג פעיל');return;}
+  button.disabled=true;button.textContent='יוצר קוד…';
+  try{
+    var r=await api('/api/ops/driver/invitations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({driver_id:driver,expires_in_minutes:minutes})}),d=await r.json();
+    if(!r.ok||!d.invitation)throw 0;
+    var invite=d.invitation,result=document.getElementById('driver-invite-result');
+    result.innerHTML='<div class="driver-invite-result"><div class="muted">קוד זמני עבור '+esc(invite.driver_name)+'</div><div class="driver-invite-code">'+esc(invite.code)+'</div><div class="muted">תקף עד '+fmt(invite.expires_at)+'</div><div class="driver-invite-qr" aria-label="קוד QR לחיבור האפליקציה">'+invite.qr_svg+'</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" type="button" onclick="copyDriverInvite(\\''+esc(invite.code)+'\\')">העתקת הקוד</button><button class="btn sm alt" type="button" onclick="copyDriverPairingURI(\\''+esc(invite.pairing_uri)+'\\')">העתקת קישור</button></div><p class="muted" style="margin-top:10px">לאחר שימוש ראשון הקוד מתבטל אוטומטית.</p></div>';
+    result.hidden=false;await loadDriverAccess();
+  }catch(e){alert('לא הצלחנו ליצור קוד חיבור. נסו שוב.');}
+  finally{button.disabled=false;button.textContent='יצירת קוד חיבור';}
+}
+function copyText(value){if(navigator.clipboard&&navigator.clipboard.writeText)return navigator.clipboard.writeText(value);var t=document.createElement('textarea');t.value=value;document.body.appendChild(t);t.select();document.execCommand('copy');document.body.removeChild(t);return Promise.resolve();}
+function copyDriverInvite(code){copyText(code).then(function(){alert('הקוד הועתק ✓');});}
+function copyDriverPairingURI(uri){copyText(uri).then(function(){alert('קישור החיבור הועתק ✓');});}
+async function revokeDriverInvite(invitationId){
+  if(!confirm('לבטל את קוד החיבור הפעיל?'))return;
+  try{var r=await api('/api/ops/driver/invitations/'+encodeURIComponent(invitationId)+'/revoke',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});if(!r.ok)throw 0;await loadDriverAccess();}
+  catch(e){alert('לא הצלחנו לבטל את הקוד.');}
+}
 document.getElementById('app').addEventListener('click',function(e){
   var b=e.target.closest('[data-act]');if(!b)return;
   var act=b.getAttribute('data-act'),id=Number(b.getAttribute('data-id'));e.preventDefault();
@@ -407,6 +484,7 @@ document.getElementById('app').addEventListener('click',function(e){
   else if(act==='pod')showPod(id);
   else if(act==='driverproofs')showDriverProofs(id);
   else if(act==='copy'){copyPay(b.getAttribute('data-pay'));alert('הקישור הועתק ללוח ✓');}
+  else if(act==='driveraccess')showDriverAccess();
   else if(act==='refresh')refresh();
   else if(act==='logout')logout();
   else if(act==='toggledone')toggleDone();
