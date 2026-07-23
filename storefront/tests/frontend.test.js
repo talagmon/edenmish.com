@@ -382,6 +382,7 @@ describe('Frontend: SEO foundations', () => {
     for (const deliveryState of ['התקבלה', 'אושר', 'לאיסוף', 'למסירה', 'נמסר']) {
       assertContains(html, deliveryState, `${deliveryState} live-delivery state`);
     }
+    assertContains(html, 'src="/assets/edenmish-thank-you-bike.webp"', 'motorcycle courier hero artwork');
     assertContains(styles, '.home-page {', 'homepage-only skin scope');
     assertContains(styles, '@media (max-width: 767px)', 'mobile presentation breakpoint');
     assertContains(styles, '.home-process-step:not(:last-child)::after', 'connected journey presentation');
