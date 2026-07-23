@@ -260,10 +260,16 @@ async function isOps(req, env) {
   return await checkSession(env, c);
 }
 
-function isTrustedOpsMutationOrigin(req) {
+function isTrustedOpsMutationOrigin(req, env) {
   if (req.headers.get('X-Ops')) return true;
   const origin = req.headers.get('Origin');
-  return !!origin && origin === new URL(req.url).origin;
+  if (!origin) return false;
+  if (origin === new URL(req.url).origin) return true;
+  try {
+    return origin === new URL(storefrontBase(env)).origin;
+  } catch {
+    return false;
+  }
 }
 
 export default {
@@ -963,7 +969,7 @@ export default {
 
     if (onOps && path === '/api/ops/driver/invitations' && req.method === 'POST') {
       if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
-      if (!isTrustedOpsMutationOrigin(req)) return json({ error: 'untrusted_origin' }, 403);
+      if (!isTrustedOpsMutationOrigin(req, env)) return json({ error: 'untrusted_origin' }, 403);
       let b; try { b = await readJson(req); } catch (error) {
         return json({ error: error.message }, error.status || 400);
       }
@@ -983,7 +989,7 @@ export default {
     const driverInvitationRevoke = /^\/api\/ops\/driver\/invitations\/([^/]+)\/revoke$/.exec(path);
     if (onOps && driverInvitationRevoke && req.method === 'POST') {
       if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
-      if (!isTrustedOpsMutationOrigin(req)) return json({ error: 'untrusted_origin' }, 403);
+      if (!isTrustedOpsMutationOrigin(req, env)) return json({ error: 'untrusted_origin' }, 403);
       const invitationId = decodeURIComponent(driverInvitationRevoke[1]);
       const result = await revokeDriverInvitation(env.DB, invitationId);
       if (!result.ok) return json({ error: result.error }, result.status);

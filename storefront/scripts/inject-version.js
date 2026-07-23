@@ -9,7 +9,8 @@
 //
 // For every public/*.html it:
 //   1. Adds/updates <meta name="app-version" content="X.Y.Z+#bn (sha)"> in <head>.
-//   2. Injects a small footer stamp right after the credits line.
+//   2. Versions the shared stylesheet URL so Safari cannot reuse stale CSS.
+//   3. Injects a small footer stamp right after the credits line.
 //
 // Wired into package.json: `npm run build` runs tailwind then this script.
 // No-op safe — if the storefront has no HTML yet, exits cleanly.
@@ -57,6 +58,7 @@ const VERSION = process.env.APP_VERSION || readCurrentVersion();
 const BUILD = process.env.APP_BUILD || readBuildNumber();
 const SHA = process.env.APP_SHA || readGitSha();
 const STAMP = `v${VERSION}(${BUILD})`;
+const ASSET_VERSION = encodeURIComponent(`${VERSION}-${BUILD}-${SHA}`);
 
 if (!fs.existsSync(PUBLIC_DIR)) {
   console.log('inject-version: no public/ yet, skipping');
@@ -80,7 +82,15 @@ for (const file of htmlFiles) {
     html = html.replace(/<\/title>/, `</title>\n${newMeta}`);
   }
 
-  // 2. Footer stamp.
+  // 2. Cache-bust the generated Tailwind bundle on every build. Cloudflare can
+  // still cache the immutable URL, while Safari always requests the release's
+  // exact stylesheet instead of keeping a stale response under a shared path.
+  html = html.replace(
+    /href="\/assets\/styles\.css(?:\?v=[^"]*)?"/g,
+    `href="/assets/styles.css?v=${ASSET_VERSION}"`,
+  );
+
+  // 3. Footer stamp.
   const stampHtml = `<span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">${STAMP}</span>`;
   const stampRegex = /<span class="vstamp"[^>]*>[^<]*<\/span>/;
   if (stampRegex.test(html)) {
