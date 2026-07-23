@@ -128,6 +128,7 @@ See `../docs/ENVIRONMENT.md` for the full list and placeholders.
 | `OPS_PIN` | ops dashboard login | shared PIN today |
 | `SESSION_SECRET` | signed/hashed ops + business sessions, links and OTPs | mandatory; auth flows fail closed if unset |
 | `DRIVER_ONE_TIME_CODE` | driver app bootstrap login | single use; 6–12 digits; rotate after every successful exchange |
+| `DRIVER_ADDITIONAL_ONE_TIME_CODES` | optional independent driver bootstrap logins | comma-separated 6–12 digit codes; each code remains single use |
 | `MAPS_KEY` | tracking page live map (injected into HTML) | Google Maps JS key |
 | `SHOPIFY_ADMIN_TOKEN` | creating Draft Orders (`shpat_…`) | Worker-side charge |
 | `SHOPIFY_WEBHOOK_SECRET` | verifying Shopify payment/refund webhooks | webhook fails closed (401) if unset |
