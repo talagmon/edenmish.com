@@ -313,7 +313,7 @@ async function persistRouteRevision(DB, {
         shiftId,
         revision,
         now,
-        latest ? 'queue_changed' : 'shift_started',
+        latest ? 'dispatch_reordered' : 'shift_started',
         current.stopId,
         current.state === 'navigating' ? 1 : 0,
         tasks.length,
