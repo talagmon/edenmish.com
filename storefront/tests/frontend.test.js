@@ -1013,6 +1013,18 @@ describe('Frontend: Ops daily summary and queue ordering', () => {
     assertContains(html, 'הכנסה היום');
     assertContains(html, 'ממתינות מעל שעה');
   });
+
+  test('renders Ops queue orders with the native iOS card hierarchy and six-stage progress', () => {
+    const html = readPage('dash.html');
+    assertContains(html, 'class="ops-queue-grid"', 'responsive queue grid');
+    assertContains(html, 'class="ios-order-card ', 'native card shell');
+    assertContains(html, 'class="ios-order-number">הזמנה #', 'prominent order number');
+    assertContains(html, 'function queueTimingInfo(o)', 'time remaining or service-window summary');
+    assertContains(html, 'function queueProgressHtml(o)', 'queue progress renderer');
+    for (const label of ['נתקבלה', 'אושר', 'לאיסוף', 'נאסף', 'למסירה', 'נמסר']) {
+      assertContains(html, `label:"${label}"`, `progress milestone ${label}`);
+    }
+  });
 });
 
 describe('Frontend: Legal pages', () => {

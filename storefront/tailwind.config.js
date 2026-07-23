@@ -20,17 +20,17 @@ module.exports = {
     extend: {
       colors: {
         // ---- Background hierarchy ----
-        "background": "#0F172A",
-        "surface-deep": "#0F172A",
-        "surface-dim": "#0F172A",
-        "surface": "#0F172A",
-        "surface-container-lowest": "#0A0F1F",
-        "surface-container-low": "#131B2E",
-        "surface-container": "#1B2335",
-        "surface-container-high": "#222C42",
-        "surface-container-highest": "#232E45",
-        "surface-bright": "#2D3A55",
-        "surface-variant": "#232E45",
+        "background": "#090D24",
+        "surface-deep": "#090D24",
+        "surface-dim": "#090D24",
+        "surface": "#090D24",
+        "surface-container-lowest": "#070B1D",
+        "surface-container-low": "#0D1330",
+        "surface-container": "#111735",
+        "surface-container-high": "#171E41",
+        "surface-container-highest": "#1C244A",
+        "surface-bright": "#25305A",
+        "surface-variant": "#1C244A",
 
         // ---- Purple accent (Option 1 — softer lavender) ----
         "primary": "#8B5CF6",
@@ -66,19 +66,19 @@ module.exports = {
         "on-tertiary-fixed-variant": "#5a00c6",
 
         // ---- Text hierarchy ----
-        "on-surface": "#F8FAFC",
-        "on-background": "#F8FAFC",
-        "on-surface-variant": "#94A3B8",
+        "on-surface": "#FFFFFF",
+        "on-background": "#FFFFFF",
+        "on-surface-variant": "#B8B8C8",
         "outline": "#64748B",
         "outline-variant": "#475569",
         "inverse-surface": "#dae2fd",
         "inverse-on-surface": "#1A2234",
 
         // ---- Glass surfaces ----
-        "glass-bg": "rgba(255, 255, 255, 0.03)",
-        "glass-border": "rgba(255, 255, 255, 0.08)",
-        "surface-glass": "rgba(255, 255, 255, 0.04)",
-        "glass-white": "#F8FAFC",
+        "glass-bg": "rgba(17, 23, 53, 0.68)",
+        "glass-border": "rgba(209, 218, 255, 0.14)",
+        "surface-glass": "rgba(255, 255, 255, 0.055)",
+        "glass-white": "#FFFFFF",
 
         // ---- Status colors ----
         "success-mint": "#4ADE80",
