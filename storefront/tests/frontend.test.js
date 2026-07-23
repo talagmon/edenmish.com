@@ -496,7 +496,11 @@ describe('Frontend: Stylesheet + fonts', () => {
     });
   }
   test('Homepage cache-busts the current compiled stylesheet', () => {
-    assertContains(readPage('index.html'), '/assets/styles.css?v=1af9999');
+    assert.match(
+      readPage('index.html'),
+      /href="\/assets\/styles\.css\?v=[^"]+"/,
+      'homepage stylesheet URL must include a non-empty build fingerprint',
+    );
   });
 });
 
@@ -878,6 +882,23 @@ describe('Frontend: Security and accessibility hardening', () => {
     assertContains(html, 'לא ניתן להתחבר למרכז הבקרה');
     assertContains(html, 'onclick="refresh()"');
     assertContains(html, 'catch(e){return connectionErrorView();}');
+  });
+
+  test('ops dashboard exposes secure per-driver invitation and QR controls', () => {
+    const html = readPage('dash.html');
+    assertContains(html, 'onclick="showDriverAccess()"', 'driver connection action');
+    assertContains(html, 'חיבור אפליקציית נהג', 'driver connection dialog');
+    assertContains(html, '/api/ops/driver/invitations', 'invitation API');
+    assertContains(html, 'data.invitation.qr_svg', 'pairing QR');
+    assertContains(html, 'הקוד נחשף פעם אחת', 'single-display warning');
+    assertContains(html, 'function revokeDriverInvite', 'invitation revocation');
+    assert.ok(!html.includes('localStorage.setItem'), 'invitation codes must not be persisted in localStorage');
+  });
+
+  test('storefront builds fingerprint the shared stylesheet for Safari', () => {
+    const script = readFileSync(join(process.cwd(), 'scripts', 'inject-version.js'), 'utf8');
+    assertContains(script, 'ASSET_VERSION', 'stylesheet release fingerprint');
+    assertContains(script, '/assets/styles.css?v=', 'versioned stylesheet URL');
   });
 
   test('ops dashboard requests GPS only from an explicit start/stop control', () => {
