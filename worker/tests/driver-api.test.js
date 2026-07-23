@@ -627,6 +627,78 @@ describe('driver API v1', () => {
     assert.ok(db.calls.some((call) => call.sql.startsWith('UPDATE driver_assignments SET active = 0')));
   });
 
+  test('validates the package disposition on a failed delivery without breaking legacy clients', async () => {
+    const failureDb = () => {
+      const order = { id: 9001, status: 'to_dropoff' };
+      const db = fakeDb({
+        first: (call) => {
+          const auth = authenticatedFirst(call);
+          if (auth) return auth;
+          if (call.sql.startsWith('SELECT event_id')) return null;
+          if (call.sql.includes('FROM driver_shifts WHERE id')) return { id: 'sh_123' };
+          if (call.sql.includes('FROM driver_assignments')) return { order_id: 9001 };
+          if (call.sql.includes('FROM driver_route_stops s JOIN driver_routes')) {
+            return { stop_id: 'stop_d1', task_type: 'dropoff' };
+          }
+          if (call.sql === 'SELECT * FROM orders WHERE id = ?') return order;
+          return null;
+        },
+        run: (call) => {
+          if (call.sql.startsWith('UPDATE orders SET')) order.status = call.args[0];
+          return { meta: { changes: 1 } };
+        },
+      });
+      return { db, order };
+    };
+    const send = async (payload) => {
+      const { db, order } = failureDb();
+      const res = await handleDriverApi(request('/api/driver/v1/execution-events:batch', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({ events: [{
+          event_id: eventId,
+          event_type: 'delivery_failed',
+          occurred_at: '2026-07-18T15:00:00Z',
+          recorded_at_monotonic_ms: 42,
+          shift_id: 'sh_123',
+          order_id: 'ord_9001',
+          stop_id: 'stop_d1',
+          route_revision_seen: 13,
+          payload,
+        }] }),
+      }), { DB: db });
+      return { result: (await res.json()).results[0], order, db };
+    };
+
+    // Each known disposition is accepted and still closes the order as failed.
+    for (const disposition of ['return_to_origin', 'hold_for_redelivery', 'left_with_alternate']) {
+      const { result, order } = await send({
+        reason: 'incorrect_address',
+        disposition,
+        note: 'לא ניתן היה למסור',
+      });
+      assert.equal(result.status, 'accepted', disposition);
+      assert.equal(order.status, 'failed', disposition);
+    }
+
+    // An unrecognised disposition is a contract defect: refuse it and never touch the
+    // order, so the dispatch layer can trust any stored value.
+    const unknown = await send({
+      reason: 'incorrect_address',
+      disposition: 'teleport_home',
+      note: 'לא ניתן היה למסור',
+    });
+    assert.equal(unknown.result.status, 'rejected_invalid');
+    assert.equal(unknown.order.status, 'to_dropoff');
+    assert.ok(!unknown.db.calls.some((call) => call.sql.startsWith('UPDATE orders SET')));
+
+    // The stable Flutter client reports failures with no disposition at all; that must
+    // keep working exactly as before.
+    const legacy = await send({});
+    assert.equal(legacy.result.status, 'accepted');
+    assert.equal(legacy.order.status, 'failed');
+  });
+
   test('records a cancelled-order completion as a conflict without changing the order', async () => {
     const db = fakeDb({
       first: (call) => {

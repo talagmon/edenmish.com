@@ -38,6 +38,18 @@ const TASK_STATE_FOR_EVENT = {
   delivery_completed: 'completed',
   delivery_failed: 'failed',
 };
+// What the driver did with the package on a failed delivery. return_to_origin and
+// hold_for_redelivery mean the driver still carries it and dispatch owes a return or
+// redelivery leg; left_with_alternate means it was handed off.
+//
+// The field is optional on purpose: the stable Flutter client predates it and reports
+// failures without it, and rejecting those would break failure reporting for the
+// production app (rejected_invalid is non-retryable). Absent keeps the legacy
+// behaviour. A value we do not recognise is a contract defect and is refused, so the
+// dispatch layer can trust any value that is stored.
+const DELIVERY_FAILURE_DISPOSITIONS = new Set([
+  'return_to_origin', 'hold_for_redelivery', 'left_with_alternate',
+]);
 
 const response = (body, status = 200, requestId = null, extra = {}) => new Response(JSON.stringify(body), {
   status,
@@ -423,6 +435,11 @@ async function processEvent(env, auth, meta, event, executionContext) {
     || (event.stop_id != null && !ID.test(event.stop_id))
     || event.payload == null || typeof event.payload !== 'object' || Array.isArray(event.payload)
     || Object.keys(event.payload).length > 10) {
+    return { event_id: event.event_id, status: 'rejected_invalid', server_received_at: new Date().toISOString() };
+  }
+  if (event.event_type === 'delivery_failed'
+    && event.payload.disposition != null
+    && !DELIVERY_FAILURE_DISPOSITIONS.has(event.payload.disposition)) {
     return { event_id: event.event_id, status: 'rejected_invalid', server_received_at: new Date().toISOString() };
   }
   const shift = await env.DB.prepare('SELECT id FROM driver_shifts WHERE id = ? AND driver_id = ?').bind(event.shift_id, auth.driver_id).first();
