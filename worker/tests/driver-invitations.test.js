@@ -308,8 +308,10 @@ describe('driver login invitations', () => {
     );
   });
 
-  test('requires Ops authentication and a trusted browser origin to issue a code', async () => {
+  test('requires Ops authentication and accepts only the Ops or configured storefront origin', async () => {
     const env = environment();
+    env.STOREFRONT_BASE = 'https://edenmish.com';
+    env.ALLOWED_ORIGINS = 'https://edenmish.com';
     const session = await makeSession(env);
     const body = JSON.stringify({
       driver_id: 'drv_eden',
@@ -330,12 +332,24 @@ describe('driver login invitations', () => {
         headers: {
           'content-type': 'application/json',
           cookie: `ops_sess=${session}`,
+          origin: 'https://attacker.example',
+        },
+        body,
+      },
+    ), env);
+    const storefront = await worker.fetch(new Request(
+      'https://ops.edenmish.com/api/ops/driver/invitations',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          cookie: `ops_sess=${session}`,
           origin: 'https://edenmish.com',
         },
         body,
       },
     ), env);
-    const trusted = await worker.fetch(new Request(
+    const sameOrigin = await worker.fetch(new Request(
       'https://ops.edenmish.com/api/ops/driver/invitations',
       {
         method: 'POST',
@@ -350,7 +364,12 @@ describe('driver login invitations', () => {
 
     assert.equal(unauthenticated.status, 401);
     assert.equal(untrusted.status, 403);
-    assert.equal(trusted.status, 201);
-    assert.match((await trusted.json()).invitation.code, /^\d{8}$/);
+    assert.equal(storefront.status, 201);
+    assert.equal(
+      storefront.headers.get('access-control-allow-origin'),
+      'https://edenmish.com',
+    );
+    assert.match((await storefront.json()).invitation.code, /^\d{8}$/);
+    assert.equal(sameOrigin.status, 201);
   });
 });

@@ -24,7 +24,7 @@ var LIVE = ["to_pickup","to_dropoff"];
 var ACTIVE = ["to_pickup","picked_up","to_dropoff"];
 var NEXT = {paid:"to_pickup",to_pickup:"picked_up",picked_up:"to_dropoff"};
 var NEXTLBL = {paid:"אשר יציאה לאיסוף",to_pickup:"אשר איסוף ✓",picked_up:"אשר יציאה למסירה"};
-var orders = [], coupons = [], webhookHealth = null, driverDispatch = null, activeOrder = null, podOrderId = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, gpsOrderId = null, gpsState = "idle", activeFilter = "active", currentView = "queue";
+var orders = [], coupons = [], driverInvitations = [], driverInviteLatest = null, webhookHealth = null, driverDispatch = null, activeOrder = null, podOrderId = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, gpsOrderId = null, gpsState = "idle", activeFilter = "active", currentView = "queue";
 
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
 function fmt(t){return t?new Date(t).toLocaleString("he-IL",{timeZone:"Asia/Jerusalem",hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"}):"—";}
@@ -195,10 +195,8 @@ function renderQueue(){
     '<div class="sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm">'+
     '<div class="flex items-center justify-between gap-stack-sm">'+
     '<div class="flex items-center gap-2 min-w-0"><strong class="font-label-bold text-label-bold text-primary truncate">מעקב הזמנות | עדן מיש</strong>'+(urgentCount?'<span class="bg-error/20 text-error text-label-sm px-2 py-0.5 rounded-full animate-pulse flex items-center gap-1 shrink-0"><span class="material-symbols-outlined text-[14px]">priority_high</span>'+urgentCount+'</span>':'')+'</div>'+
-    '<div class="flex gap-2 shrink-0">'+
-    '<button onclick="refresh()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">refresh</span></button>'+
-    '<button onclick="logout()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-error"><span class="material-symbols-outlined">logout</span></button>'+
-    '</div></div>'+
+    headerActionsHtml()+
+    '</div>'+
     '<div class="flex gap-2 mt-2">'+viewTabsHtml()+'</div>'+
     '<div class="grid grid-cols-3 gap-2 mt-2">'+
     dailyCard("מסירות היום",daily.delivered,"task_alt","secondary")+dailyCard("הכנסה היום","₪"+daily.revenue,"payments","success-mint")+dailyCard("ממתינות מעל שעה",daily.stalePayment,"schedule",daily.stalePayment>0?"error":"on-surface-variant")+
@@ -263,6 +261,135 @@ function viewTabsHtml(){
     '<button onclick="setView(\'coupons\')" class="flex-1 px-3 py-1 rounded-lg text-label-sm '+(currentView==='coupons'?'bg-primary-container text-on-primary-container':'text-on-surface-variant')+'">קופונים</button>'+
   '</div>';
 }
+function headerActionsHtml(){
+  return '<div class="flex gap-2 shrink-0">'+
+    '<button onclick="showDriverAccess()" class="glass-card px-2.5 py-2 rounded-lg text-secondary hover:text-primary flex items-center gap-1" title="חיבור אפליקציית נהג" aria-label="חיבור אפליקציית נהג"><span class="material-symbols-outlined">qr_code_2</span><span class="hidden sm:inline text-label-sm font-label-bold">חיבור נהג</span></button>'+
+    '<button onclick="refresh()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-primary" title="רענון" aria-label="רענון"><span class="material-symbols-outlined">refresh</span></button>'+
+    '<button onclick="logout()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-error" title="התנתקות" aria-label="התנתקות"><span class="material-symbols-outlined">logout</span></button>'+
+  '</div>';
+}
+function showDriverAccess(){
+  if(document.querySelector(".driver-access-overlay"))return;
+  var html =
+    '<div class="driver-access-overlay fixed inset-0 z-[100] bg-background/95 backdrop-blur-xl p-4 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="driver-access-title">'+
+    '<div class="glass-card rounded-2xl p-stack-lg max-w-md mx-auto space-y-stack-md border border-primary/30">'+
+    '<div class="flex justify-between items-start gap-3"><div><h2 id="driver-access-title" class="font-headline-md text-headline-md-mobile text-primary">חיבור אפליקציית נהג</h2><p class="text-label-sm text-on-surface-variant mt-1">קוד זמני ואישי לנהג. אפשר להקליד אותו או לסרוק QR.</p></div>'+
+    '<button onclick="closeDriverAccess()" class="text-on-surface-variant hover:text-error p-2" aria-label="סגירה"><span class="material-symbols-outlined">close</span></button></div>'+
+    '<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">'+
+    '<div><label for="driver-invite-driver" class="text-label-sm text-on-surface-variant block mb-1">נהג</label><select id="driver-invite-driver" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3"><option value="">טוען נהגים…</option></select></div>'+
+    '<div><label for="driver-invite-expiry" class="text-label-sm text-on-surface-variant block mb-1">תוקף</label><select id="driver-invite-expiry" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3"><option value="15">15 דקות</option><option value="30">30 דקות</option><option value="60">שעה</option></select></div>'+
+    '</div>'+
+    '<button id="driver-invite-create" onclick="createDriverInvite()" class="w-full bg-primary text-on-primary font-headline-md py-3 rounded-xl shadow-lg shadow-primary/20 active:scale-95 flex items-center justify-center gap-2"><span class="material-symbols-outlined">add_link</span>יצירת קוד חיבור</button>'+
+    '<div id="driver-invite-result" class="hidden"></div>'+
+    '<section><div class="flex items-center justify-between mb-2"><h3 class="font-label-bold text-on-surface">קודים אחרונים</h3><button onclick="loadDriverAccess()" class="text-label-sm text-secondary flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">refresh</span>רענון</button></div><div id="driver-invite-list" class="space-y-2 text-on-surface-variant text-label-sm">טוען…</div></section>'+
+    '<p class="text-label-sm text-on-surface-variant flex items-start gap-1"><span class="material-symbols-outlined text-secondary text-[18px]">lock</span><span>הקוד נחשף פעם אחת, פג אוטומטית וניתן לשימוש במכשיר אחד בלבד.</span></p>'+
+    '</div></div>';
+  var shell=document.createElement("div");
+  shell.innerHTML=html;
+  document.body.appendChild(shell.firstElementChild);
+  loadDriverAccess();
+}
+function closeDriverAccess(){
+  var modal=document.querySelector(".driver-access-overlay");
+  if(modal)modal.remove();
+  driverInviteLatest=null;
+}
+function driverInvitationState(state){
+  if(state==="active")return {label:"פעיל",classes:"bg-success-mint/15 text-success-mint"};
+  if(state==="consumed")return {label:"שומש",classes:"bg-primary/15 text-primary"};
+  if(state==="expired")return {label:"פג תוקף",classes:"bg-alert-amber/15 text-alert-amber"};
+  return {label:"בוטל",classes:"bg-error/15 text-error"};
+}
+function renderDriverInvitations(){
+  var list=$("driver-invite-list");
+  if(!list)return;
+  if(!driverInvitations.length){
+    list.innerHTML='<div class="glass-card rounded-xl p-3 text-center">אין קודים מהשבוע האחרון.</div>';
+    return;
+  }
+  list.innerHTML=driverInvitations.map(function(invitation){
+    var state=driverInvitationState(invitation.state);
+    return '<div class="glass-card rounded-xl p-3 flex items-center gap-3">'+
+      '<span class="material-symbols-outlined text-secondary">person</span><div class="min-w-0 flex-1"><div class="font-label-bold text-on-surface truncate">'+esc(invitation.driver_name||invitation.driver_id)+'</div><div class="text-label-sm text-on-surface-variant">תוקף עד '+fmt(invitation.expires_at)+'</div></div>'+
+      '<span class="'+state.classes+' text-label-sm font-label-bold px-2 py-1 rounded-full">'+state.label+'</span>'+
+      (invitation.state==="active"?'<button onclick="revokeDriverInvite(\''+esc(invitation.invitation_id)+'\')" class="text-error p-1" aria-label="ביטול קוד"><span class="material-symbols-outlined">link_off</span></button>':'')+
+      '</div>';
+  }).join("");
+}
+async function loadDriverAccess(){
+  var list=$("driver-invite-list");
+  try{
+    var r=await api("/api/ops/driver/invitations");
+    if(r.status===401){closeDriverAccess();return loginView();}
+    var data=await r.json();
+    if(!r.ok)throw new Error(data.error||"request_failed");
+    var select=$("driver-invite-driver");
+    var selected=select&&select.value;
+    if(select){
+      select.innerHTML=(data.drivers||[]).map(function(driver){
+        return '<option value="'+esc(driver.driver_id)+'">'+esc(driver.display_name)+'</option>';
+      }).join("");
+      if(selected&&Array.from(select.options).some(function(option){return option.value===selected;}))select.value=selected;
+    }
+    driverInvitations=data.invitations||[];
+    renderDriverInvitations();
+  }catch(e){
+    if(list)list.innerHTML='<div class="glass-card rounded-xl p-3 text-error">לא ניתן לטעון קודי חיבור כרגע.</div>';
+  }
+}
+async function createDriverInvite(){
+  var driver=$("driver-invite-driver");
+  var expiry=$("driver-invite-expiry");
+  var button=$("driver-invite-create");
+  if(!driver||!driver.value)return showTransientError("לא נמצא נהג פעיל לחיבור.");
+  button.disabled=true;
+  button.innerHTML='<span class="material-symbols-outlined animate-spin">progress_activity</span>יוצר קוד…';
+  try{
+    var r=await api("/api/ops/driver/invitations",{method:"POST",body:JSON.stringify({driver_id:driver.value,expires_in_minutes:Number(expiry.value)})});
+    var data=await r.json();
+    if(!r.ok)throw new Error(data.error||"request_failed");
+    driverInviteLatest=data.invitation;
+    var result=$("driver-invite-result");
+    result.classList.remove("hidden");
+    result.innerHTML=
+      '<div class="glass-card rounded-2xl p-4 border border-secondary/40 text-center space-y-3">'+
+      '<div><div class="text-label-sm text-secondary font-label-bold">קוד חד־פעמי עבור '+esc(data.invitation.driver_name)+'</div><div class="text-4xl font-bold tracking-[0.2em] text-on-surface mt-2" dir="ltr">'+esc(data.invitation.code)+'</div><div class="text-label-sm text-on-surface-variant mt-1">בתוקף עד '+fmt(data.invitation.expires_at)+'</div></div>'+
+      '<div class="bg-white rounded-xl p-3 w-fit mx-auto [&_svg]:max-w-[180px] [&_svg]:h-auto">'+data.invitation.qr_svg+'</div>'+
+      '<div class="grid grid-cols-2 gap-2"><button onclick="copyDriverInvite(\'code\')" class="glass-card text-secondary font-label-bold py-2 rounded-xl flex items-center justify-center gap-1"><span class="material-symbols-outlined text-[18px]">content_copy</span>העתקת קוד</button><button onclick="copyDriverInvite(\'link\')" class="glass-card text-primary font-label-bold py-2 rounded-xl flex items-center justify-center gap-1"><span class="material-symbols-outlined text-[18px]">link</span>העתקת קישור</button></div>'+
+      '<p class="text-label-sm text-alert-amber">זהו המקום היחיד שבו הקוד המלא מוצג. יצירת קוד חדש תבטל קוד פעיל קודם.</p></div>';
+    await loadDriverAccess();
+  }catch(e){
+    showTransientError(e&&e.message==="untrusted_origin"?"החיבור נחסם מטעמי אבטחה. רעננו את הדף ונסו שוב.":"לא הצלחנו ליצור קוד חיבור.");
+  }finally{
+    button.disabled=false;
+    button.innerHTML='<span class="material-symbols-outlined">add_link</span>יצירת קוד חיבור';
+  }
+}
+function copyDriverInvite(kind){
+  if(!driverInviteLatest)return;
+  var value=kind==="link"?driverInviteLatest.pairing_uri:driverInviteLatest.code;
+  function copied(){showTransientError(kind==="link"?"קישור החיבור הועתק.":"קוד החיבור הועתק.");}
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(value).then(copied).catch(function(){showTransientError("לא הצלחנו להעתיק. אפשר לסמן את הקוד ידנית.");});
+  }else{
+    var input=document.createElement("textarea");input.value=value;document.body.appendChild(input);input.select();
+    try{document.execCommand("copy");copied();}catch(e){showTransientError("לא הצלחנו להעתיק. אפשר לסמן את הקוד ידנית.");}
+    input.remove();
+  }
+}
+async function revokeDriverInvite(invitationId){
+  if(!confirm("לבטל את קוד החיבור הפעיל?"))return;
+  try{
+    var r=await api("/api/ops/driver/invitations/"+encodeURIComponent(invitationId)+"/revoke",{method:"POST",body:"{}"});
+    if(!r.ok)throw 0;
+    if(driverInviteLatest&&driverInviteLatest.invitation_id===invitationId){
+      driverInviteLatest=null;
+      var result=$("driver-invite-result");
+      if(result){result.classList.add("hidden");result.innerHTML="";}
+    }
+    await loadDriverAccess();
+  }catch(e){showTransientError("לא הצלחנו לבטל את הקוד.");}
+}
 function setFilter(f){activeFilter=f;renderQueue();}
 function setView(v){currentView=v;if(v==="stats")renderStats();else if(v==="coupons"){renderCoupons();refreshCoupons();}else renderQueue();}
 
@@ -321,7 +448,7 @@ function renderStats(){
   var sBars=Object.entries(sc).filter(function(e){return e[1]>0;}).sort(function(a,b){return b[1]-a[1];}).map(function(e){var p=e[1]/sMax*100;return '<div class="flex items-center gap-2"><span class="text-label-sm text-on-surface-variant w-20 truncate">'+HE[e[0]]+'</span><div class="flex-1 bg-surface-container-low rounded-full h-4 overflow-hidden"><div class="h-full bg-primary-container rounded-full" style="width:'+p+'%"></div></div><span class="text-label-bold text-on-surface w-5 text-center">'+e[1]+'</span></div>';}).join('');
   var hdr=viewTabsHtml();
   $("app").innerHTML=
-    '<div class="sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm"><div class="flex items-center justify-between gap-stack-sm"><strong class="font-label-bold text-label-bold text-primary truncate">מעקב הזמנות | עדן מיש</strong><div class="flex gap-2 shrink-0"><button onclick="refresh()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">refresh</span></button><button onclick="logout()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-error"><span class="material-symbols-outlined">logout</span></button></div></div><div class="flex gap-2 mt-2">'+hdr+'</div></div>'+
+    '<div class="sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm"><div class="flex items-center justify-between gap-stack-sm"><strong class="font-label-bold text-label-bold text-primary truncate">מעקב הזמנות | עדן מיש</strong>'+headerActionsHtml()+'</div><div class="flex gap-2 mt-2">'+hdr+'</div></div>'+
     '<div class="px-gutter-mobile py-stack-sm max-w-lg mx-auto space-y-3 pb-24">'+
     '<div class="grid grid-cols-2 gap-3">'+kpi('אחוז הצלחה',sr+'%','verified','#91d3c8')+kpi('זמן ממוצע',at>0?at+' דק\'':'—','schedule','#8B5CF6')+kpi('דירוג ממוצע',ar,'star','#fbbf24')+kpi('הכנסה','₪'+rev,'payments','#91d3c8')+'</div>'+
     '<div class="glass-card rounded-2xl p-stack-md"><h3 class="font-headline-md text-on-surface mb-3">הזמנות ליום</h3><svg viewBox="0 0 280 100" class="w-full">'+bars+'</svg></div>'+
@@ -771,10 +898,8 @@ function renderCoupons(){
     '<div class="sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm">'+
     '<div class="flex items-center justify-between gap-stack-sm">'+
     '<div class="flex items-center gap-2 min-w-0"><strong class="font-label-bold text-label-bold text-primary truncate">מעקב הזמנות | עדן מיש</strong></div>'+
-    '<div class="flex gap-2 shrink-0">'+
-    '<button onclick="refresh()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">refresh</span></button>'+
-    '<button onclick="logout()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-error"><span class="material-symbols-outlined">logout</span></button>'+
-    '</div></div>'+
+    headerActionsHtml()+
+    '</div>'+
     '<div class="flex gap-2 mt-2">'+hdr+'</div>'+
     '</div>'+
     '<div class="px-gutter-mobile py-stack-sm max-w-3xl mx-auto space-y-3 pb-24">'+
