@@ -12,6 +12,12 @@ import { getStatusMeta, getNextStatuses, isTerminalStatus } from './status.js';
 import { shopifyWebhookRegistrar } from './shopify-webhooks.js';
 import { handleDriverApi } from './driver-api.js';
 import { driverDispatchStatus, startDriverShift, endDriverShift } from './driver-dispatch.js';
+import {
+  createDriverInvitation,
+  listActiveDrivers,
+  listDriverInvitations,
+  revokeDriverInvitation,
+} from './driver-invitations.js';
 import { applyBusinessPlanPricing, businessCouponCustomerKey, businessSessionCookie, cancelWalletTopup, captureWalletReservation, cleanupBusinessSecurity, clearBusinessSessionCookie, createWalletTopup, creditWalletTopup, getBusinessSession, getBusinessSnapshot, getWalletTopup, hydrateBusinessProfileFromPayment, linkWalletReservationToOrder, markWalletTopupCheckout, publicBusinessPlans, releaseWalletReservation, requestBusinessLogin, reserveWalletCredit, revokeBusinessSession, shouldHydrateBusinessProfile, updateBusinessProfile, verifyBusinessLogin } from './business.js';
 import { runDeliveryCompletionSideEffects } from './delivery-completion.js';
 import {
@@ -252,6 +258,12 @@ async function isOps(req, env) {
   if (xOps && await checkSession(env, xOps)) return true;
   const c = getCookie(req, 'ops_sess');
   return await checkSession(env, c);
+}
+
+function isTrustedOpsMutationOrigin(req) {
+  if (req.headers.get('X-Ops')) return true;
+  const origin = req.headers.get('Origin');
+  return !!origin && origin === new URL(req.url).origin;
 }
 
 export default {
@@ -938,6 +950,45 @@ export default {
     if (onOps && path === '/api/ops/driver' && req.method === 'GET') {
       if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
       return json(await driverDispatchStatus(env));
+    }
+
+    if (onOps && path === '/api/ops/driver/invitations' && req.method === 'GET') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      const [drivers, invitations] = await Promise.all([
+        listActiveDrivers(env.DB),
+        listDriverInvitations(env.DB),
+      ]);
+      return json({ drivers, invitations });
+    }
+
+    if (onOps && path === '/api/ops/driver/invitations' && req.method === 'POST') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      if (!isTrustedOpsMutationOrigin(req)) return json({ error: 'untrusted_origin' }, 403);
+      let b; try { b = await readJson(req); } catch (error) {
+        return json({ error: error.message }, error.status || 400);
+      }
+      const result = await createDriverInvitation(env, {
+        driverId: b.driver_id,
+        expiresInMinutes: b.expires_in_minutes,
+      });
+      if (!result.ok) return json({ error: result.error }, result.status);
+      console.log('driver_invitation_created', {
+        invitation_id: result.invitation.invitation_id,
+        driver_id: result.invitation.driver_id,
+        expires_at: result.invitation.expires_at,
+      });
+      return json({ ok: true, invitation: result.invitation }, result.status);
+    }
+
+    const driverInvitationRevoke = /^\/api\/ops\/driver\/invitations\/([^/]+)\/revoke$/.exec(path);
+    if (onOps && driverInvitationRevoke && req.method === 'POST') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      if (!isTrustedOpsMutationOrigin(req)) return json({ error: 'untrusted_origin' }, 403);
+      const invitationId = decodeURIComponent(driverInvitationRevoke[1]);
+      const result = await revokeDriverInvitation(env.DB, invitationId);
+      if (!result.ok) return json({ error: result.error }, result.status);
+      console.log('driver_invitation_revoked', { invitation_id: invitationId });
+      return json({ ok: true });
     }
 
     if (onOps && path === '/api/ops/driver/shift/start' && req.method === 'POST') {

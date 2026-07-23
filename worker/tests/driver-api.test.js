@@ -105,7 +105,7 @@ describe('driver API v1', () => {
     });
   });
 
-  test('exchanges a single-use code and persists only token/code digests', async () => {
+  test('exchanges the review credential and persists only token/code digests', async () => {
     const db = fakeDb({
       first: (call) => call.sql.includes('FROM rate_limits') ? null : null,
     });
@@ -175,18 +175,19 @@ describe('driver API v1', () => {
     assert.equal((await res.json()).code, 'invalid_credentials');
   });
 
-  test('rejects a bootstrap code that has already been consumed', async () => {
+  test('rejects a legacy additional code that has already been consumed', async () => {
     const db = fakeDb({
       first: () => null,
       run: (call) => ({ meta: { changes: call.sql.includes('INSERT OR IGNORE INTO driver_sessions') ? 0 : 1 } }),
     });
     const res = await handleDriverApi(request('/api/driver/v1/session', {
       method: 'POST',
-      body: JSON.stringify({ one_time_code: '845921' }),
+      body: JSON.stringify({ one_time_code: '76120493' }),
     }), {
       DB: db,
       SESSION_SECRET: 'test-session-secret-with-enough-entropy',
       DRIVER_ONE_TIME_CODE: '845921',
+      DRIVER_ADDITIONAL_ONE_TIME_CODES: '76120493',
     });
 
     assert.equal(res.status, 401);
