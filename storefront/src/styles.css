@@ -2674,6 +2674,29 @@
     -webkit-backdrop-filter: blur(24px);
   }
 
+  .home-footer-brand {
+    color: #f8fafc;
+    text-shadow:
+      0 0 18px rgba(223, 183, 255, 0.26),
+      0 1px 0 rgba(255, 255, 255, 0.18);
+  }
+
+  .home-footer-meta {
+    color: rgba(244, 247, 255, 0.84);
+  }
+
+  .home-footer-meta p {
+    color: rgba(225, 231, 249, 0.72);
+  }
+
+  .home-footer-credit {
+    color: rgba(235, 239, 255, 0.78);
+  }
+
+  .home-footer-credit a {
+    color: #f8fafc;
+  }
+
   .home-header + nav {
     position: fixed;
     z-index: 49;
