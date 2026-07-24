@@ -1,7 +1,9 @@
 import { getOrderById } from './db.js';
 import { notifyEmail, notifyWhatsApp } from './notify.js';
+import { WHATSAPP_MESSAGE_CLASSES } from './whatsapp.js';
 
 const DELIVERED_TEMPLATE = 'customer_delivery_summary';
+const OPS_PAYMENT_TEMPLATE = 'ops_payment_received';
 const RETAINED_FAILURE_TEMPLATES = Object.freeze({
   return_to_origin: 'customer_delivery_failed_returning',
   hold_for_redelivery: 'customer_delivery_failed_redelivery_hold',
@@ -112,6 +114,88 @@ export async function enqueueDeliveryNotificationJobs(DB, order, {
     .bind(order.id, eventId, channel, DELIVERED_TEMPLATE, now, now, now)));
 }
 
+export async function enqueueOpsPaymentWhatsAppJob(DB, orderId, {
+  eventId = `payment-received-${orderId}`,
+  now = Date.now(),
+} = {}) {
+  return DB.prepare(`INSERT OR IGNORE INTO delivery_notification_outbox
+    (order_id, transition, event_id, channel, template, state, attempt_count,
+     next_attempt_at, created_at, updated_at)
+    VALUES (?, 'payment_received', ?, 'whatsapp', ?, 'pending', 0, ?, ?, ?)`)
+    .bind(orderId, eventId, OPS_PAYMENT_TEMPLATE, now, now, now).run();
+}
+
+export async function persistPaidOrderAndOpsWhatsAppJob(DB, orderId, {
+  amountAgorot,
+  paymentRef = null,
+  shopifyOrderId = null,
+  eventId = `payment-received-${orderId}`,
+  now = Date.now(),
+} = {}) {
+  if (!Number.isSafeInteger(amountAgorot) || amountAgorot < 0) {
+    throw new Error('invalid_paid_amount');
+  }
+
+  // D1 batch statements commit atomically. The unique outbox job is the
+  // transition claim: if any payment/status/outbox write fails, none persist.
+  const claim = DB.prepare(`INSERT OR IGNORE INTO delivery_notification_outbox
+    (order_id, transition, event_id, channel, template, state, attempt_count,
+     next_attempt_at, created_at, updated_at)
+    SELECT ?, 'payment_received', ?, 'whatsapp', ?, 'pending', 0, ?, ?, ?
+    FROM orders
+    WHERE id = ? AND COALESCE(payment_status, '') != 'paid'`)
+    .bind(orderId, eventId, OPS_PAYMENT_TEMPLATE, now, now, now, orderId);
+
+  const orderSets = ['status = ?', 'payment_status = ?'];
+  const orderValues = ['paid', 'paid'];
+  if (shopifyOrderId != null) {
+    orderSets.push('shopify_order_id = ?');
+    orderValues.push(shopifyOrderId);
+  }
+  const updateOrder = DB.prepare(`UPDATE orders
+    SET ${orderSets.join(', ')}
+    WHERE id = ? AND COALESCE(payment_status, '') != 'paid'
+      AND EXISTS (SELECT 1 FROM delivery_notification_outbox
+        WHERE order_id = ? AND transition = 'payment_received'
+          AND channel = 'whatsapp' AND template = ? AND event_id = ?)`)
+    .bind(...orderValues, orderId, orderId, OPS_PAYMENT_TEMPLATE, eventId);
+
+  const payment = DB.prepare(`INSERT INTO payments
+    (order_id, amount, currency, payplus_id, status, url, created_at, paid_at)
+    SELECT ?, ?, 'ILS', ?, 'paid', NULL, ?, ?
+    WHERE EXISTS (SELECT 1 FROM delivery_notification_outbox
+      WHERE order_id = ? AND transition = 'payment_received'
+        AND channel = 'whatsapp' AND template = ? AND event_id = ?)
+      AND NOT EXISTS (SELECT 1 FROM payments
+        WHERE order_id = ? AND status = 'paid')`)
+    .bind(
+      orderId,
+      amountAgorot,
+      paymentRef,
+      now,
+      now,
+      orderId,
+      OPS_PAYMENT_TEMPLATE,
+      eventId,
+      orderId,
+    );
+
+  const history = DB.prepare(`INSERT INTO status_history (order_id, status, at, note)
+    SELECT ?, 'paid', ?, NULL
+    WHERE EXISTS (SELECT 1 FROM delivery_notification_outbox
+      WHERE order_id = ? AND transition = 'payment_received'
+        AND channel = 'whatsapp' AND template = ? AND event_id = ?)
+      AND NOT EXISTS (SELECT 1 FROM status_history
+        WHERE order_id = ? AND status = 'paid')`)
+    .bind(orderId, now, orderId, OPS_PAYMENT_TEMPLATE, eventId, orderId);
+
+  const results = await DB.batch([claim, updateOrder, payment, history]);
+  return {
+    eventId,
+    transitioned: !!results[0]?.meta?.changes,
+  };
+}
+
 const escHtml = (value) => String(value == null ? '' : value).replace(
   /[&<>"']/g,
   (character) => ({
@@ -166,21 +250,22 @@ async function defaultDeliver(env, job, order) {
     });
   }
   if (job.channel === 'whatsapp') {
-    if (job.template !== DELIVERED_TEMPLATE) {
+    if (job.template === OPS_PAYMENT_TEMPLATE && job.transition === 'payment_received') {
+      return notifyWhatsApp(env, env.DB, {
+        orderId: order.id,
+        messageClass: WHATSAPP_MESSAGE_CLASSES.opsPaymentReceived,
+      });
+    }
+    if (job.template !== DELIVERED_TEMPLATE || job.transition !== 'delivered') {
       return { ok: false, error: 'phone_channel_not_permitted_for_template', permanent: true };
     }
     if (!order.phone_delivery_link_opt_in || !order.phone) {
       return { ok: false, error: 'phone_channel_requires_opt_in', permanent: true };
     }
-    const base = (
-      env.STOREFRONT_BASE || env.BOOKING_URL || 'https://edenmish.com'
-    ).replace(/\/+$/, '');
-    const proofUrl = `${base}/delivered.html?t=${encodeURIComponent(order.token || '')}`;
     return notifyWhatsApp(env, env.DB, {
       orderId: order.id,
-      template: DELIVERED_TEMPLATE,
+      messageClass: WHATSAPP_MESSAGE_CLASSES.customerDeliverySummary,
       recipient: order.phone,
-      body: `המשלוח שלך הגיע ✓\nלצפייה בהוכחת המסירה: ${proofUrl}\nתודה שבחרת ב-EdenMish!`,
     });
   }
   return { ok: false, error: 'unsupported_channel', permanent: true };
@@ -247,8 +332,17 @@ export async function processDeliveryNotificationOutbox(env, {
     if (result?.ok) {
       const sent = await env.DB.prepare(`UPDATE delivery_notification_outbox
         SET state = 'sent', sent_at = ?, lease_token = NULL,
-            lease_expires_at = NULL, last_error = NULL, updated_at = ?
-        WHERE id = ? AND lease_token = ?`).bind(now, now, job.id, leaseToken).run();
+            lease_expires_at = NULL, last_error = NULL, updated_at = ?,
+            provider_ref = ?, provider_status = ?, provider_updated_at = ?
+        WHERE id = ? AND lease_token = ?`).bind(
+        now,
+        now,
+        result.providerRef || null,
+        result.providerStatus || null,
+        null,
+        job.id,
+        leaseToken,
+      ).run();
       if (sent?.meta?.changes) summary.sent += 1;
       continue;
     }
@@ -271,10 +365,11 @@ export const deliveryNotificationOutboxPolicy = Object.freeze({
   template: DELIVERED_TEMPLATE,
   templates: Object.freeze({
     delivered: DELIVERED_TEMPLATE,
+    opsPaymentReceived: OPS_PAYMENT_TEMPLATE,
     retainedReturning: RETAINED_FAILURE_TEMPLATES.return_to_origin,
     retainedRedeliveryHold: RETAINED_FAILURE_TEMPLATES.hold_for_redelivery,
   }),
-  transitions: Object.freeze(['delivered', 'delivery_failed_retained']),
+  transitions: Object.freeze(['delivered', 'delivery_failed_retained', 'payment_received']),
   channels: Object.freeze(['email', 'whatsapp_opt_in']),
   retainedFailureChannels: Object.freeze(['email']),
   phoneDeliveryRequiresPersistedOptIn: true,

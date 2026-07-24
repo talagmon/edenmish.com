@@ -233,6 +233,31 @@ jobs:
           else
             echo "Wallet reservation ownership migration 029 is already applied."
           fi
+      - name: Apply staging WhatsApp template audit migration when needed
+        working-directory: worker
+        run: |
+          duplicate_json="$(npx wrangler d1 execute edenmish-staging --remote --yes --json \
+            --config wrangler.staging.generated.toml \
+            --command "SELECT COUNT(*) AS duplicate_count FROM (SELECT provider_ref FROM notifications WHERE provider_ref IS NOT NULL GROUP BY provider_ref HAVING COUNT(*) > 1)")"
+          duplicate_count="$(printf '%s' "$duplicate_json" | jq -r '.[0].results[0].duplicate_count')"
+          if [ "$duplicate_count" != "0" ]; then
+            echo "::error::Found $duplicate_count duplicate WhatsApp provider references. Review them before migration 030."
+            exit 1
+          fi
+          readiness_json="$(npx wrangler d1 execute edenmish-staging --remote --yes --json \
+            --config wrangler.staging.generated.toml \
+            --command "SELECT (SELECT COUNT(*) FROM pragma_table_info('notifications') WHERE name IN ('provider_status','provider_updated_at')) + (SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_notifications_provider_ref') + (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='delivery_notification_outbox' AND sql LIKE '%payment_received%') + (SELECT COUNT(*) FROM pragma_table_info('delivery_notification_outbox') WHERE name IN ('provider_ref','provider_status','provider_updated_at')) + (SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_delivery_notification_outbox_provider_ref') AS ready")"
+          ready="$(printf '%s' "$readiness_json" | jq -r '.[0].results[0].ready // 0')"
+          if [ "$ready" = "0" ]; then
+            npx wrangler d1 execute edenmish-staging --remote --yes \
+              --config wrangler.staging.generated.toml \
+              --file=./migrations/030_whatsapp_template_delivery_audit.sql
+          elif [ "$ready" != "8" ]; then
+            echo "::error::WhatsApp template audit migration is only partially applied ($ready/8 schema items)."
+            exit 1
+          else
+            echo "WhatsApp template audit migration 030 is already applied."
+          fi
       - name: Verify remote driver schema readiness
         working-directory: worker
         run: node scripts/validate-driver-schema.mjs --database edenmish-staging --config wrangler.staging.generated.toml

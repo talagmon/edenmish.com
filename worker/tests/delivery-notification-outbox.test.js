@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   deliveryNotificationOutboxPolicy,
   enqueueDeliveryNotificationJobs,
+  enqueueOpsPaymentWhatsAppJob,
   processDeliveryNotificationOutbox,
   retainedFailureNotificationOutboxStatements,
   retainedPackageFailureHtml,
@@ -73,16 +74,29 @@ class OutboxDb {
         }
         if (normalized.startsWith('INSERT OR IGNORE INTO delivery_notification_outbox')) {
           const retainedFailure = normalized.includes("'delivery_failed_retained'");
+          const opsPayment = normalized.includes("'payment_received'");
           const [
             orderId, eventId, channelOrTemplate, templateOrNextAttempt,
             nextAttemptOrCreated, createdOrUpdated, updatedAt,
           ] = this.args;
-          const transition = retainedFailure ? 'delivery_failed_retained' : 'delivered';
-          const channel = retainedFailure ? 'email' : channelOrTemplate;
-          const template = retainedFailure ? channelOrTemplate : templateOrNextAttempt;
-          const nextAttemptAt = retainedFailure ? templateOrNextAttempt : nextAttemptOrCreated;
-          const createdAt = retainedFailure ? nextAttemptOrCreated : createdOrUpdated;
-          const finalUpdatedAt = retainedFailure ? createdOrUpdated : updatedAt;
+          const transition = retainedFailure
+            ? 'delivery_failed_retained'
+            : (opsPayment ? 'payment_received' : 'delivered');
+          const channel = retainedFailure
+            ? 'email'
+            : (opsPayment ? 'whatsapp' : channelOrTemplate);
+          const template = retainedFailure || opsPayment
+            ? channelOrTemplate
+            : templateOrNextAttempt;
+          const nextAttemptAt = retainedFailure || opsPayment
+            ? templateOrNextAttempt
+            : nextAttemptOrCreated;
+          const createdAt = retainedFailure || opsPayment
+            ? nextAttemptOrCreated
+            : createdOrUpdated;
+          const finalUpdatedAt = retainedFailure || opsPayment
+            ? createdOrUpdated
+            : updatedAt;
           const duplicate = db.jobs.some((job) => (
             job.order_id === orderId && job.transition === transition
             && job.channel === channel && job.template === template
@@ -125,12 +139,23 @@ class OutboxDb {
           return { meta: { changes: 1 } };
         }
         if (normalized.startsWith("UPDATE delivery_notification_outbox SET state = 'sent'")) {
-          const [sentAt, updatedAt, id, token] = this.args;
+          const [
+            sentAt,
+            updatedAt,
+            providerRef,
+            providerStatus,
+            providerUpdatedAt,
+            id,
+            token,
+          ] = this.args;
           const job = db.jobs.find((value) => value.id === id && value.lease_token === token);
           if (!job) return { meta: { changes: 0 } };
           Object.assign(job, {
             state: 'sent', sent_at: sentAt, updated_at: updatedAt,
             lease_token: null, lease_expires_at: null, last_error: null,
+            provider_ref: providerRef,
+            provider_status: providerStatus,
+            provider_updated_at: providerUpdatedAt,
           });
           return { meta: { changes: 1 } };
         }
@@ -184,7 +209,7 @@ describe('delivery notification outbox', () => {
     assert.equal(deliveryNotificationOutboxPolicy.phoneDeliveryRequiresPersistedOptIn, true);
   });
 
-  test('explicit persisted phone consent adds one WhatsApp proof-link job', async () => {
+  test('explicit persisted phone consent adds one WhatsApp template job', async () => {
     const DB = new OutboxDb();
     await enqueueDeliveryNotificationJobs(
       DB,
@@ -195,7 +220,7 @@ describe('delivery notification outbox', () => {
     assert.deepEqual(DB.jobs.map((job) => job.channel), ['email', 'whatsapp']);
   });
 
-  test('retained failures enqueue one email job without reusing proof-link phone consent', async () => {
+  test('retained failures enqueue one email job without reusing phone consent', async () => {
     const DB = new OutboxDb();
     const retained = {
       ...order,
@@ -272,7 +297,7 @@ describe('delivery notification outbox', () => {
     assert.doesNotMatch(html, /#<9001>/);
   });
 
-  test('consented WhatsApp delivery contains the customer proof link', async () => {
+  test('consented WhatsApp delivery uses an approved template without a proof token', async () => {
     const DB = new OutboxDb();
     const consented = {
       ...order,
@@ -290,7 +315,12 @@ describe('delivery notification outbox', () => {
     let outbound;
     globalThis.fetch = async (_url, options) => {
       outbound = JSON.parse(options.body);
-      return { ok: true };
+      return new Response(JSON.stringify({
+        messages: [{ id: 'wamid.customer-delivery' }],
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     };
 
     try {
@@ -299,12 +329,203 @@ describe('delivery notification outbox', () => {
         STOREFRONT_BASE: 'https://edenmish.com',
         WHATSAPP_TOKEN: 'test-token',
         WHATSAPP_PHONE_ID: 'test-phone-id',
+        WHATSAPP_CUSTOMER_DELIVERED_TEMPLATE: 'eden_delivery_complete',
+        WHATSAPP_CUSTOMER_TEMPLATE_LANGUAGE: 'he',
       }, { now: 1_000 });
 
       assert.deepEqual(summary, { claimed: 1, sent: 1, retried: 0, dead: 0 });
-      assert.match(
-        outbound.text.body,
-        /https:\/\/edenmish\.com\/delivered\.html\?t=proof-token-9001/,
+      assert.equal(outbound.type, 'template');
+      assert.equal(outbound.template.name, 'eden_delivery_complete');
+      assert.equal(outbound.template.language.code, 'he');
+      assert.deepEqual(outbound.template.components, []);
+      assert.doesNotMatch(JSON.stringify(outbound), /proof-token-9001|delivered\.html/);
+      assert.equal(DB.jobs[0].provider_ref, 'wamid.customer-delivery');
+      assert.equal(DB.jobs[0].provider_status, 'accepted');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('paid-order replay creates one PII-free operations template job', async () => {
+    const DB = new OutboxDb();
+    DB.orders.set(order.id, {
+      ...order,
+      name: 'Private Customer',
+      pickup: 'Private pickup address',
+      dropoff: 'Private dropoff address',
+      token: 'private-tracking-token',
+    });
+    await Promise.all([
+      enqueueOpsPaymentWhatsAppJob(DB, order.id, { now: 1_000 }),
+      enqueueOpsPaymentWhatsAppJob(DB, order.id, { now: 1_000 }),
+    ]);
+    const originalFetch = globalThis.fetch;
+    let outbound;
+    globalThis.fetch = async (_url, options) => {
+      outbound = JSON.parse(options.body);
+      return new Response(JSON.stringify({
+        messages: [{ id: 'wamid.ops-payment' }],
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+
+    try {
+      const summary = await processDeliveryNotificationOutbox({
+        DB,
+        WHATSAPP_TOKEN: 'test-token',
+        WHATSAPP_PHONE_ID: 'test-phone-id',
+        WHATSAPP_NUMBER: '972500000000',
+        WHATSAPP_OPS_RECIPIENT: '972500000001',
+        WHATSAPP_OPS_PAYMENT_TEMPLATE: 'eden_ops_payment_received',
+        WHATSAPP_OPS_TEMPLATE_LANGUAGE: 'he',
+      }, { now: 1_000 });
+
+      assert.equal(DB.jobs.length, 1);
+      assert.deepEqual(summary, { claimed: 1, sent: 1, retried: 0, dead: 0 });
+      assert.equal(outbound.to, '972500000001');
+      assert.equal(outbound.type, 'template');
+      assert.deepEqual(outbound.template.components, []);
+      assert.doesNotMatch(
+        JSON.stringify(outbound),
+        /Private Customer|Private pickup|Private dropoff|private-tracking-token|9001/,
+      );
+      assert.equal(DB.jobs[0].provider_ref, 'wamid.ops-payment');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('retryable provider failures back off while permanent failures dead-letter', async () => {
+    const originalFetch = globalThis.fetch;
+    const env = {
+      WHATSAPP_TOKEN: 'token',
+      WHATSAPP_PHONE_ID: 'phone-id',
+      WHATSAPP_NUMBER: '972500000000',
+      WHATSAPP_OPS_RECIPIENT: '972500000001',
+      WHATSAPP_OPS_PAYMENT_TEMPLATE: 'eden_ops_payment_received',
+      WHATSAPP_OPS_TEMPLATE_LANGUAGE: 'he',
+    };
+    try {
+      const retrying = new OutboxDb();
+      await enqueueOpsPaymentWhatsAppJob(retrying, order.id, { now: 1_000 });
+      let calls = 0;
+      globalThis.fetch = async () => {
+        calls += 1;
+        if (calls === 1) {
+          return new Response(JSON.stringify({ error: { code: 2 } }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({
+          messages: [{ id: 'wamid.retry-success' }],
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      };
+      assert.deepEqual(
+        await processDeliveryNotificationOutbox({ DB: retrying, ...env }, {
+          now: 1_000,
+          retryMs: 100,
+        }),
+        { claimed: 1, sent: 0, retried: 1, dead: 0 },
+      );
+      assert.equal(retrying.jobs[0].last_error, 'provider_http_500_code_2');
+      assert.deepEqual(
+        await processDeliveryNotificationOutbox({ DB: retrying, ...env }, {
+          now: 1_100,
+          retryMs: 100,
+        }),
+        { claimed: 1, sent: 1, retried: 0, dead: 0 },
+      );
+
+      const permanent = new OutboxDb();
+      await enqueueOpsPaymentWhatsAppJob(permanent, order.id, { now: 2_000 });
+      globalThis.fetch = async () => new Response(
+        JSON.stringify({ error: { code: 132001 } }),
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+      assert.deepEqual(
+        await processDeliveryNotificationOutbox({ DB: permanent, ...env }, {
+          now: 2_000,
+        }),
+        { claimed: 1, sent: 0, retried: 0, dead: 1 },
+      );
+      assert.equal(permanent.jobs[0].last_error, 'provider_http_400_code_132001');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('missing credentials and class-specific config fail closed without network calls', async () => {
+    const originalFetch = globalThis.fetch;
+    let networkCalls = 0;
+    globalThis.fetch = async () => {
+      networkCalls += 1;
+      throw new Error('must not send');
+    };
+
+    try {
+      const noCredentials = new OutboxDb();
+      const consented = { ...order, email: null, phone_delivery_link_opt_in: 1 };
+      noCredentials.orders.set(order.id, consented);
+      await enqueueDeliveryNotificationJobs(noCredentials, consented, {
+        eventId: 'no-credentials',
+        now: 1_000,
+      });
+      await processDeliveryNotificationOutbox({ DB: noCredentials }, { now: 1_000 });
+
+      const onlyOps = new OutboxDb();
+      onlyOps.orders.set(order.id, consented);
+      await enqueueDeliveryNotificationJobs(onlyOps, consented, {
+        eventId: 'only-ops',
+        now: 1_000,
+      });
+      await processDeliveryNotificationOutbox({
+        DB: onlyOps,
+        WHATSAPP_TOKEN: 'token',
+        WHATSAPP_PHONE_ID: 'phone-id',
+        WHATSAPP_OPS_RECIPIENT: '972500000001',
+        WHATSAPP_OPS_PAYMENT_TEMPLATE: 'eden_ops_payment_received',
+        WHATSAPP_OPS_TEMPLATE_LANGUAGE: 'he',
+      }, { now: 1_000 });
+
+      const onlyCustomer = new OutboxDb();
+      await enqueueOpsPaymentWhatsAppJob(onlyCustomer, order.id, { now: 1_000 });
+      await processDeliveryNotificationOutbox({
+        DB: onlyCustomer,
+        WHATSAPP_TOKEN: 'token',
+        WHATSAPP_PHONE_ID: 'phone-id',
+        WHATSAPP_CUSTOMER_DELIVERED_TEMPLATE: 'eden_delivery_complete',
+        WHATSAPP_CUSTOMER_TEMPLATE_LANGUAGE: 'he',
+      }, { now: 1_000 });
+
+      const reusedPublicNumber = new OutboxDb();
+      await enqueueOpsPaymentWhatsAppJob(reusedPublicNumber, order.id, { now: 1_000 });
+      await processDeliveryNotificationOutbox({
+        DB: reusedPublicNumber,
+        WHATSAPP_TOKEN: 'token',
+        WHATSAPP_PHONE_ID: 'phone-id',
+        WHATSAPP_NUMBER: '972500000001',
+        WHATSAPP_OPS_RECIPIENT: '972500000001',
+        WHATSAPP_OPS_PAYMENT_TEMPLATE: 'eden_ops_payment_received',
+        WHATSAPP_OPS_TEMPLATE_LANGUAGE: 'he',
+      }, { now: 1_000 });
+
+      assert.equal(networkCalls, 0);
+      assert.equal(noCredentials.jobs[0].state, 'dead');
+      assert.equal(onlyOps.jobs[0].state, 'dead');
+      assert.equal(onlyCustomer.jobs[0].state, 'dead');
+      assert.equal(reusedPublicNumber.jobs[0].state, 'dead');
+      assert.equal(
+        reusedPublicNumber.jobs[0].last_error,
+        'whatsapp_ops_recipient_not_distinct',
       );
     } finally {
       globalThis.fetch = originalFetch;

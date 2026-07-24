@@ -205,6 +205,8 @@ wrangler d1 execute edenmish --remote --file=./migrations/027_retained_failure_n
 wrangler d1 execute edenmish --remote --file=./migrations/028_redelivery_charges.sql
 # Run the duplicate-reference preflight in MIGRATIONS.md before migration 029:
 wrangler d1 execute edenmish --remote --file=./migrations/029_wallet_reservation_ownership.sql
+# Run the provider-reference preflight in MIGRATIONS.md before migration 030:
+wrangler d1 execute edenmish --remote --file=./migrations/030_whatsapp_template_delivery_audit.sql
 ```
 
 > Run only migrations that have not already been applied. Several `ALTER TABLE`
@@ -225,13 +227,21 @@ wrangler secret put SHOPIFY_WEBHOOK_SECRET
 wrangler secret put SENDGRID_API_KEY
 ```
 
-**Optional WhatsApp Cloud API** (leave unset until code prerequisite #218, legal
-gate #216, account/template setup, and the controlled tests in
-`../docs/WHATSAPP_OPERATIONS.md` are complete):
+**Optional WhatsApp Cloud API** (leave unset until issue #216 records its
+retained activation evidence and the approved templates, separate operations
+recipient, and controlled tests in `../docs/WHATSAPP_OPERATIONS.md` are
+complete):
 
 ```bash
 wrangler secret put WHATSAPP_PHONE_ID
 wrangler secret put WHATSAPP_TOKEN
+wrangler secret put WHATSAPP_APP_SECRET
+wrangler secret put WHATSAPP_WEBHOOK_VERIFY_TOKEN
+wrangler secret put WHATSAPP_OPS_RECIPIENT
+wrangler secret put WHATSAPP_OPS_PAYMENT_TEMPLATE
+wrangler secret put WHATSAPP_OPS_TEMPLATE_LANGUAGE
+wrangler secret put WHATSAPP_CUSTOMER_DELIVERED_TEMPLATE
+wrangler secret put WHATSAPP_CUSTOMER_TEMPLATE_LANGUAGE
 ```
 
 **Future only** (do not set today):
@@ -288,7 +298,8 @@ wrangler deploy
 - [ ] Confirm delivery proof can be saved (receiver name + note).
 - [ ] Confirm notification audit rows are created.
 - [ ] Confirm delivery completion always creates one email outbox job, creates a
-      WhatsApp proof-link job only for a stored opt-in, and retries due failures.
+      zero-component WhatsApp template job only for a stored opt-in, and retries
+      due failures without sending proof URLs or tokens to Meta.
 - [ ] Confirm per-order notification history appears in ops.
 - [ ] If WhatsApp Cloud API is enabled, complete the consent and controlled
       delivery matrix in `../docs/WHATSAPP_OPERATIONS.md`.

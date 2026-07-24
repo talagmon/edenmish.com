@@ -52,7 +52,20 @@ const READINESS_SQL = `SELECT
       WHERE type = 'table' AND name = 'redelivery_charges') +
    (SELECT COUNT(*) FROM sqlite_master
       WHERE type = 'index' AND name = 'idx_redelivery_charges_status'))
-    AS migration_028_items;`;
+    AS migration_028_items,
+  ((SELECT COUNT(*) FROM pragma_table_info('notifications')
+      WHERE name IN ('provider_status', 'provider_updated_at')) +
+   (SELECT COUNT(*) FROM sqlite_master
+      WHERE type = 'index' AND name = 'idx_notifications_provider_ref') +
+   (SELECT COUNT(*) FROM sqlite_master
+      WHERE type = 'table' AND name = 'delivery_notification_outbox'
+        AND sql LIKE '%payment_received%') +
+   (SELECT COUNT(*) FROM pragma_table_info('delivery_notification_outbox')
+      WHERE name IN ('provider_ref', 'provider_status', 'provider_updated_at')) +
+   (SELECT COUNT(*) FROM sqlite_master
+      WHERE type = 'index'
+        AND name = 'idx_delivery_notification_outbox_provider_ref'))
+    AS migration_030_items;`;
 
 const EXPECTED = Object.freeze({
   migration_014_items: 10,
@@ -63,6 +76,7 @@ const EXPECTED = Object.freeze({
   migration_023_items: 3,
   migration_027_items: 1,
   migration_028_items: 2,
+  migration_030_items: 8,
 });
 
 export function validateDriverSchemaSnapshot(snapshot) {
@@ -123,7 +137,8 @@ function main() {
     + `015 (${snapshot.migration_015_columns}/4), 016 (${snapshot.migration_016_items}/4), `
     + `017 (${snapshot.migration_017_items}/2), 019 (${snapshot.migration_019_items}/3), `
     + `023 (${snapshot.migration_023_items}/3), 027 (${snapshot.migration_027_items}/1), `
-    + `028 (${snapshot.migration_028_items}/2).`,
+    + `028 (${snapshot.migration_028_items}/2), `
+    + `030 (${snapshot.migration_030_items}/8).`,
   );
 }
 
