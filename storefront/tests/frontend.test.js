@@ -718,7 +718,7 @@ describe('Frontend: Booking form', () => {
     assert.ok(!html.includes('הנני מסכים/ה לקבל עדכונים'), 'transaction acceptance must not be bundled with communications consent');
     assertContains(
       html,
-      'EdenMish אינה שומרת פרטי כרטיס אשראי. פרטי התשלום מוזנים ומעובדים בסביבה המאובטחת של Shopify ו‑PayPlus.',
+      'EdenMish אינה שומרת פרטי כרטיס אשראי. התשלום מתבצע בסביבה המאובטחת של Shopify באמצעות שער התשלומים PayPlus.',
       'accurate hosted-payment disclosure',
     );
   });
