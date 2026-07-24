@@ -159,3 +159,66 @@ The final homepage preserves the approved composition, wet-road motorcycle artwo
   after seeing it on Eden's physical phone in direct sunlight.
 
 final result: passed
+
+## Follow-up · guided order flow
+
+### Comparison
+
+- Source of truth: current EdenMish homepage at `http://localhost:8788/`
+- Implementation: guided order flow at `http://localhost:8788/booking.html`
+- Shared viewport: 801 × 862
+- Same-state homepage/order comparison: `/tmp/edenmish-home-order-comparison.png`
+- Submit-button regression comparison:
+  `/tmp/edenmish-order-button-comparison.png`
+- Date and coupon verification captures:
+  `/tmp/edenmish-order-final-fixes.png`
+- Product hierarchy references: the approved seven-step order mockups and the
+  provided equal-width mobile glass-layer example
+
+### Visual review
+
+- Navigation, background atmosphere, typography, purple/mint palette, glass
+  opacity, hairline borders, radii, and CTA material match the current homepage.
+- The order UI uses quieter, iPhone-like layered translucency instead of the
+  stronger neon glow from the early concept.
+- Every primary layer uses one centered 960px content width with identical
+  mobile gutters.
+- The seven-stage rail is RTL: step 1 begins on the right and progresses left.
+- The primary continuation arrow points left; the back control points right.
+- The action is on the right and the price is on the left in one compact bottom
+  material.
+- Mobile and desktop preserve aligned outer edges; only internal grids and
+  padding change.
+- Reduced-motion behavior is provided.
+
+### Functionality review
+
+- The original package, contact, pickup, drop-off, service, schedule, business
+  plan, coupon, legal, privacy, WhatsApp consent, and final-price controls remain.
+- Step 1 advances to step 2.
+- Empty required fields block advancement and expose a visible alert.
+- Completed steps remain editable through the progress rail and summary chips.
+- The complete seven-step path reaches review without changing the existing
+  order payload or backend submission.
+- Authoritative Worker pricing, business-wallet restrictions, map fallback,
+  scheduling, email typo handling, coupons, Shopify payment handoff, and
+  tracking redirects remain intact.
+- Storefront inline-script syntax check: passed.
+- A future date chip now synchronizes the editable date field; selecting
+  27/07 displays 27/07/2026 and marks the chip pressed.
+- The date field and its explicit calendar button both invoke the native date
+  picker when supported.
+- The coupon prompt is right-aligned and the expanded apply action is on the
+  right.
+- Submit loading states update only the label wrapper, preserving the Material
+  arrow icon instead of exposing its internal `arrow_back` name.
+- Storefront tests: 152 passed, 0 failed; the two live API suites remain skipped
+  by their existing local-test guard.
+
+### Findings
+
+- P0: none.
+- P1: none.
+- P2: none.
+
+final result: passed
