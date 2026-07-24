@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="/assets/styles.css?v=0.28.0-293096-a8d8b91"/>
+<link rel="stylesheet" href="/assets/site-nav.css" data-eden-site-nav-styles/>
 <script src="/assets/analytics.js" defer></script>
 <link rel="icon" href="/assets/favicon.ico"/>
 <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"/>
@@ -20,16 +21,20 @@
   .star { font-variation-settings: 'FILL' 0, 'wght' 400; cursor: pointer; transition: color .15s, font-variation-settings .15s; user-select: none; }
   .star.fill { font-variation-settings: 'FILL' 1, 'wght' 500; }
   .tile-empty { background: repeating-linear-gradient(45deg, rgba(255,255,255,.02) 0 10px, rgba(255,255,255,.04) 10px 20px); }
+  .delivery-app { padding-top: 100px; }
+  @media (max-width: 767px) { .delivery-app { padding-top: 82px; } }
 </style>
 </head>
 <body class="bg-background text-on-surface antialiased min-h-screen">
-<div id="app" class="max-w-[600px] mx-auto p-gutter-mobile md:p-gutter-desktop">
+<header data-eden-site-nav></header>
+<div id="app" class="delivery-app max-w-[600px] mx-auto p-gutter-mobile md:p-gutter-desktop">
   <div id="state-loading" class="py-stack-lg text-center text-on-surface-variant">
     <span class="material-symbols-outlined text-4xl animate-pulse">hourglass_top</span>
     <p class="mt-2">טוען פרטי משלוח…</p>
   </div>
 </div>
 <script src="/assets/api-origin.js"></script>
+<script src="/assets/mobile-nav.js" defer></script>
 <script>
 const API = window.EDEN_API.find;
 const WHATSAPP = "972534058498";
