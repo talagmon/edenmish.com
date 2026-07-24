@@ -1202,6 +1202,12 @@ describe('Frontend: Ops daily summary and queue ordering', () => {
 describe('Frontend: Legal pages', () => {
   const businessAddress = 'קריניצי 111, רמת גן, ישראל';
 
+  test('Homepage exposes the verified legal business identity', () => {
+    const h = readPage('index.html');
+    assertContains(h, 'EdenMish מופעלת על ידי עדן אריאלי · עוסק פטור 211568928', 'visible legal identity');
+    assertContains(h, '"legalName": "עדן אריאלי"', 'structured legal name');
+  });
+
   test('Terms page has עוסק פטור + number', () => {
     const h = readPage('terms.html');
     assertContains(h, 'עוסק פטור');
