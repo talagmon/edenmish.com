@@ -1233,13 +1233,15 @@ describe('Frontend: Legal pages', () => {
 describe('Frontend: Mobile nav', () => {
   test('mobile-nav.js exists and does not block zoom gestures', () => {
     const js = readFileSync(join(PUB, 'assets', 'mobile-nav.js'), 'utf8');
+    const css = readFileSync(join(PUB, 'assets', 'site-nav.css'), 'utf8');
     assert.ok(!js.includes('gesturestart'), 'must not block iOS zoom');
     assert.ok(!js.includes('touches.length > 1'), 'must not block pinch zoom');
     assertContains(js, 'burger', 'hamburger builder');
-    assertContains(js, "matchMedia('(max-width: 1023px)')", 'responsive navigation boundary');
-    assertContains(js, "desk.style.display = compact ? 'none' : 'flex'", 'exclusive desktop navigation state');
-    assertContains(js, "burger.style.display = compact ? 'grid' : 'none'", 'exclusive hamburger state');
     assertContains(js, 'עוסק פטור', 'legal footer line');
+    assertContains(js, "new URL('site-nav.css', assetBase)", 'canonical navigation stylesheet loader');
+    assertContains(css, '.eden-site-header {', 'fixed canonical header shell');
+    assertContains(css, '.eden-site-mobile-nav {', 'canonical mobile menu');
+    assertContains(css, 'backdrop-filter: blur(24px) saturate(150%);', 'homepage glass treatment');
   });
 
   test('Shared header uses one canonical order and keeps cancellation in the footer', () => {
@@ -1264,8 +1266,26 @@ describe('Frontend: Mobile nav', () => {
   });
 
   test('Pages include mobile-nav.js', () => {
-    for (const page of ['index.html', 'booking.html', 'track.html', 'about.html', 'error.html', 'success.html']) {
-      assertContains(readPage(page), 'mobile-nav.js', `${page} mobile-nav script`);
+    for (const page of [
+      'index.html', 'booking.html', 'track.html', 'about.html', 'business.html',
+      'privacy.html', 'terms.html', 'refund.html', 'accessibility.html', 'cancel.html',
+      'error.html', 'success.html', 'delivered.html', '404.html',
+      'payment-failed.html', 'thank-you.html', 'blog/edenmish-information-security.html',
+    ]) {
+      const html = readPage(page);
+      assertContains(html, 'mobile-nav.js', `${page} mobile-nav script`);
+      assertContains(html, 'site-nav.css', `${page} canonical navigation styles`);
+    }
+  });
+
+  test('Business login ships dedicated desktop and mobile 3D backgrounds', () => {
+    for (const asset of [
+      'edenmish-business-login-bg-desktop.webp',
+      'edenmish-business-login-bg-mobile.webp',
+    ]) {
+      const path = join(PUB, 'assets', asset);
+      assert.ok(existsSync(path), `${asset} not found`);
+      assert.ok(readFileSync(path).byteLength > 80_000, `${asset} is unexpectedly small`);
     }
   });
 });

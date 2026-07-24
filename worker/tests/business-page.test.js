@@ -118,6 +118,15 @@ describe('business profile patching', () => {
 describe('business account dashboard', () => {
   const html = businessAccountHtml('https://edenmish.example');
 
+  test('uses the canonical storefront navigation and responsive login artwork', () => {
+    assert.match(html, /data-eden-site-nav data-storefront-origin="https:\/\/edenmish\.example"/);
+    assert.match(html, /https:\/\/edenmish\.example\/assets\/mobile-nav\.js/);
+    assert.match(html, /edenmish-business-login-bg-desktop\.webp/);
+    assert.match(html, /edenmish-business-login-bg-mobile\.webp/);
+    assert.match(html, /id="auth-backdrop"/);
+    assert.match(html, /auth-backdrop'\)\.classList\.add\('hidden'\)/);
+  });
+
   test('renders all five approved programs as account top-ups with their real artwork', () => {
     assert.match(html, /trial:'חבילת ניסיון'/);
     assert.match(html, /wallet:'ארנק עסקי'/);
