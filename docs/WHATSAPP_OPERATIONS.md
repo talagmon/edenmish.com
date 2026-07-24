@@ -20,6 +20,9 @@ WhatsApp text is in Hebrew; operator instructions and evidence remain in English
 - Paid-order alerts are unique durable jobs. The provider receives only the
   separate operations number and generic approved template—no name, address,
   order ID, tracking token, price, URL, or free text.
+- Delivery is at-least-once. An ambiguous network failure after provider
+  acceptance can be retried before EdenMish receives a provider reference, so
+  both generic templates must remain safe and understandable if received twice.
 - Delivery receipts require a valid Meta app-secret signature and update only a
   sanitized provider reference, lifecycle status, provider timestamp, and numeric
   error code. Duplicate/stale receipts are no-ops.
@@ -27,9 +30,13 @@ WhatsApp text is in Hebrew; operator instructions and evidence remain in English
   transport address is covered by the approved service-message boundary, is never
   a template component, and is not retained in EdenMish's WhatsApp audit rows.
 
-The owner confirmed the applicable legal/privacy add-ons as approved on
-2026-07-24. Production credentials must still remain unset until the account,
-recipient, templates, webhook, and controlled-test setup below are complete.
+The owner confirmed the WhatsApp-specific legal/privacy add-ons as approved on
+2026-07-24. That confirmation does not by itself close the evidence and
+final-published-version checklist in issue
+[#216](https://github.com/talagmon/edenmish.com/issues/216). Production
+credentials must remain unset until #216 records that activation gate as
+complete and the account, recipient, templates, webhook, and controlled-test
+setup below are complete.
 
 ## Business account checklist
 

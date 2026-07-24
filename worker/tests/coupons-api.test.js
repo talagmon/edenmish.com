@@ -36,6 +36,7 @@ function apiDb({ coupon = null, raceRedemptions = false, orderRow = null } = {})
     state,
     prepare(sql) {
       return {
+        sql,
         args: [],
         bind(...args) { this.args = args; return this; },
         async first() {
@@ -87,7 +88,7 @@ function apiDb({ coupon = null, raceRedemptions = false, orderRow = null } = {})
             orderRow.delivered_at = this.args[0];
             orderRow.payment_status = this.args[1];
           }
-          if (/UPDATE orders SET status = \?/.test(sql) && orderRow) {
+          if (/UPDATE orders\s+SET status = \?/.test(sql) && orderRow) {
             orderRow.status = this.args[0];
             const columns = [...sql.matchAll(/(\w+) = \?/g)].map(m => m[1]);
             columns.forEach((column, index) => { orderRow[column] = this.args[index]; });
@@ -765,8 +766,8 @@ describe('manual paid confirmation', () => {
     assert.equal(payments.length, 1);
     assert.equal(payments[0].args[0], 12);
     assert.equal(payments[0].args[1], 5000);
-    assert.equal(payments[0].args[4], 'paid');
-    assert.equal(payments[0].args[3], null, 'manual payment must not invent a provider reference');
+    assert.match(payments[0].sql, /'paid'/);
+    assert.equal(payments[0].args[2], null, 'manual payment must not invent a provider reference');
 
     const otpUpdate = db.state.runs.find(c => /UPDATE orders SET email = \?/.test(c.sql));
     assert.ok(otpUpdate, 'fresh OTP fields should be written');
@@ -806,6 +807,42 @@ describe('manual paid confirmation', () => {
       'retry must not add notification attempts',
     );
     assert.equal(db.state.outboxKeys.size, outboxCount, 'retry must not duplicate the ops job');
+  });
+
+  test('fails the payment transition atomically when the ops outbox claim fails', async () => {
+    const orderRow = {
+      id: 13,
+      token: 'atomicpaidtoken123456',
+      status: 'payment_sent',
+      payment_status: 'link_sent',
+      price: 50,
+      currency: 'ILS',
+      email: null,
+    };
+    const db = apiDb({ orderRow });
+    let batchCalls = 0;
+    db.batch = async (statements) => {
+      batchCalls += 1;
+      assert.equal(statements.length, 4);
+      assert.match(statements[0].sql || '', /delivery_notification_outbox/);
+      throw new Error('simulated_atomic_write_failure');
+    };
+
+    await assert.rejects(
+      worker.fetch(
+        await opsPost('/api/ops/orders/13/status', { status: 'paid' }),
+        envFor(db),
+      ),
+      /simulated_atomic_write_failure/,
+    );
+    assert.equal(batchCalls, 1);
+    assert.equal(orderRow.status, 'payment_sent');
+    assert.equal(orderRow.payment_status, 'link_sent');
+    assert.equal(db.state.outboxKeys.size, 0);
+    assert.equal(
+      db.state.runs.filter(({ sql }) => /INSERT INTO payments/.test(sql)).length,
+      0,
+    );
   });
 });
 
