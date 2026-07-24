@@ -24,9 +24,9 @@ copy and the sensitive-URL/paid-conversion work in
 legal activation gate in
 [#216](https://github.com/talagmon/edenmish.com/issues/216) is satisfied.
 
-## Data contract
+## Business-event data contract
 
-The first-party event layer accepts only these events:
+The public `window.edenAnalytics.track()` API accepts only these business events:
 
 | Browser event | GTM event | Intended measurement |
 |---|---|---|
@@ -37,10 +37,16 @@ The first-party event layer accepts only these events:
 | `whatsapp_clicked` | `eden_whatsapp_clicked` | Public WhatsApp CTA clicked |
 | `cancellation_submitted` | `eden_cancellation_submitted` | Cancellation request submitted |
 
-Allowed parameters are limited to `service`, `size`, `review`, `currency`, `value`,
-and `source`, plus the first-party page path. Do not add names, email addresses,
-phone numbers, addresses, coordinates, order numbers, tracking tokens, free text,
-or stable customer identifiers.
+Business-event parameters are limited to `service`, `size`, `review`, `currency`,
+`value`, and `source`, plus the first-party page path. Do not add names, email
+addresses, phone numbers, addresses, coordinates, order numbers, tracking tokens,
+free text, or stable customer identifiers.
+
+The consent/container lifecycle also writes non-business control entries directly
+to `dataLayer`: Google consent commands, the `gtm.js` bootstrap event, and
+`eden_consent_updated` with `eden_consent`. These do not pass through
+`safeParams()` and must be reviewed separately. They must never acquire customer,
+order, full-location, referrer, query, or free-text fields.
 
 Issue #6 also asks for paid-order measurement. There is currently no authoritative
 `paid_order` browser event: the booking success page is not proof that Shopify
@@ -54,8 +60,9 @@ tracking or business-login tokens.
 1. Complete #219 and the applicable pre-activation review in #216.
 2. The account owner creates/selects the EdenMish GA4 property, web stream, and
    production GTM web container without publishing it.
-3. Make the consent and privacy copy describe the providers actually enabled;
-   GA4-only activation must not claim Meta is active.
+3. Under #219, implement, test, and deploy consent/privacy copy that describes the
+   providers actually enabled. This is a storefront code change, not a GTM/GA4
+   console checkbox; GA4-only activation must not claim Meta is active.
 4. In GTM, configure GA4 using the existing consent state. Do not add a second
    hardcoded consent banner or load tags outside the first-party boundary.
 5. Map only the `eden_*` events above. Mark conversions only after their business
@@ -81,7 +88,8 @@ Run in a clean browser profile with network logging:
 | Essential-only choice | Choice persists; service works; no analytics request |
 | Measurement accepted | GTM loads once; consent state updates; allowlisted events may emit |
 | Preference revoked | Subsequent events stop; consent update is visible to the loaded container |
-| Event payload inspection | Only allowlisted keys and non-PII values are present |
+| Business-event payload inspection | Every `eden_*` business event uses only its allowlisted keys and non-PII values |
+| Control-event payload inspection | Consent commands, `gtm.js`, and `eden_consent_updated` contain only reviewed lifecycle fields and no customer/page data |
 | Sensitive URL inspection | No tracking/business-login token, query string, fragment, full page location, or sensitive referrer is transmitted |
 | Provider-specific copy | The consent dialog and privacy notice name only the providers/purposes actually enabled |
 | Staging | No production container or dataset receives staging traffic |
@@ -89,6 +97,25 @@ Run in a clean browser profile with network logging:
 Use GA4 DebugView/Realtime and the browser network panel with controlled test data.
 Record the environment, event name, consent state, and pass/fail result. Do not
 attach analytics payloads containing customer data.
+
+## Withdrawal requirements
+
+The current storefront is not ready for production analytics withdrawal:
+
+- the visible preference control exists only on `privacy.html` and stays hidden
+  while no container is configured;
+- changing the choice to denied updates consent and stops the first-party business
+  event API, but does not remove the already loaded GTM script;
+- the storefront does not currently remove analytics cookies or other provider
+  storage created before withdrawal.
+
+Before activation, #219 must add an easily discoverable preferences control across
+customer pages, make withdrawal no harder than granting consent, and define the
+reviewed provider behavior for the loaded script and existing cookies/storage.
+Browser-network tests must prove that withdrawal stops subsequent measurement and
+storage writes. Where the approved provider/legal design requires deletion of
+existing analytics cookies or storage, the implementation and tests must perform
+and verify it explicitly.
 
 ## Disable and recover
 

@@ -95,7 +95,7 @@ record for activation testing.
 | Delivery-proof opt-in true | One email job and one WhatsApp job |
 | Approved service/template send | The approved template arrives at a controlled customer test number and audit status becomes sent |
 | Invalid/revoked credential | No customer retry storm; audit shows a sanitized failure |
-| Paid-order operations alert | Eden receives one PII-minimized alert at the separate verified operations recipient |
+| Paid-order operations alert (after #218) | Eden receives one PII-minimized alert at the separate verified operations recipient |
 
 Record the date, environment, order fixture ID, notification audit result, and a
 redacted provider message ID. Do not record message bodies, phone numbers, tokens,
