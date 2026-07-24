@@ -325,6 +325,8 @@ git push origin "v$(./scripts/current_version.sh)"
      wrangler d1 execute edenmish --remote --file=./migrations/028_redelivery_charges.sql
      # Run the duplicate-reference preflight from worker/MIGRATIONS.md first:
      wrangler d1 execute edenmish --remote --file=./migrations/029_wallet_reservation_ownership.sql
+     # Run the provider-reference preflight from worker/MIGRATIONS.md first:
+     wrangler d1 execute edenmish --remote --file=./migrations/030_whatsapp_template_delivery_audit.sql
 3. Configure the production Worker bootstrap secret if it is not already present:
      cd worker
      wrangler secret put DRIVER_ONE_TIME_CODE

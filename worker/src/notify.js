@@ -7,8 +7,9 @@
 // - NEVER stores the email body/html or OTP codes — only metadata + outcome.
 // - The audit row itself is best-effort: if D1 is unavailable we still attempt the send.
 
-import { sendEmail, sendWhatsApp } from './integrations.js';
+import { sendEmail } from './integrations.js';
 import { createNotificationAttempt, markNotificationSent, markNotificationFailed, markNotificationSkipped } from './db.js';
+import { resolveWhatsAppMessage, sendWhatsAppTemplate } from './whatsapp.js';
 
 const sanitizeError = (e) => {
   let s = e && e.message ? e.message : String(e == null ? '' : e);
@@ -55,35 +56,45 @@ export async function notifyEmail(env, db, { orderId, template, recipient, subje
   }
 }
 
-// notifyWhatsApp(env, db, { orderId, template, recipient, body })
-// Best-effort WhatsApp Business Cloud API send with the same durable audit trail.
-// Skips cleanly when WHATSAPP_TOKEN / WHATSAPP_PHONE_ID are not configured.
-export async function notifyWhatsApp(env, db, { orderId, template, recipient, body }) {
+// notifyWhatsApp(env, db, { orderId, messageClass, recipient })
+// Approved-template WhatsApp send. Recipient values are never retained in the
+// audit table, and the supported classes have no dynamic provider components.
+export async function notifyWhatsApp(env, db, { orderId, messageClass, recipient }) {
   let id = null;
   try {
     id = await createNotificationAttempt(db, {
       order_id: orderId ?? null,
       channel: 'whatsapp',
-      template: template || null,
-      recipient: recipient || null,
+      template: messageClass || null,
+      recipient: null,
       subject: null,
       status: 'pending',
     });
   } catch (e) { id = null; }
 
-  if (!recipient || !env || !env.WHATSAPP_TOKEN || !env.WHATSAPP_PHONE_ID) {
+  const message = resolveWhatsAppMessage(env, messageClass, recipient);
+  if (!message.ok) {
     if (id) { try { await markNotificationSkipped(db, id); } catch (e) {} }
-    return { ok: false, skipped: true, id };
+    return { ...message, id };
   }
 
   try {
-    const ok = await sendWhatsApp(env, { to: recipient, body });
-    if (ok) {
-      if (id) { try { await markNotificationSent(db, id, null); } catch (e) {} }
-      return { ok: true, id };
+    const result = await sendWhatsAppTemplate(env, message);
+    if (result.ok) {
+      if (id) {
+        try {
+          await markNotificationSent(
+            db,
+            id,
+            result.providerRef,
+            result.providerStatus,
+          );
+        } catch (e) {}
+      }
+      return { ...result, id };
     }
-    if (id) { try { await markNotificationFailed(db, id, 'send_failed'); } catch (e) {} }
-    return { ok: false, id, error: 'send_failed' };
+    if (id) { try { await markNotificationFailed(db, id, result.error); } catch (e) {} }
+    return { ...result, id };
   } catch (e) {
     if (id) { try { await markNotificationFailed(db, id, sanitizeError(e)); } catch (e2) {} }
     return { ok: false, id, error: sanitizeError(e) };

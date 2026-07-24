@@ -353,21 +353,6 @@ export async function sendEmail(env, { to, subject, html }) {
   return !!(res && (res.ok || res.status === 202));
 }
 
-// ---- WhatsApp Business Cloud API (optional) ----
-// Gated on env.WHATSAPP_TOKEN + env.WHATSAPP_PHONE_ID; no-ops cleanly otherwise.
-// Note: business-initiated messages to a recipient may require a pre-approved
-// template depending on the WhatsApp Business account setup.
-export async function sendWhatsApp(env, { to, body }) {
-  if (!env.WHATSAPP_TOKEN || !env.WHATSAPP_PHONE_ID || !to) return null;
-  const num = String(to).replace(/\D/g, '');
-  const res = await fetch(`https://graph.facebook.com/v20.0/${env.WHATSAPP_PHONE_ID}/messages`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messaging_product: 'whatsapp', to: num, type: 'text', text: { body: String(body).slice(0, 4000) } })
-  }).catch(() => null);
-  return !!(res && res.ok);
-}
-
 // ---- OTP helpers ----
 export function genOtp() { return String(Math.floor(100000 + Math.random() * 900000)); }
 export async function hashOtp(env, code) {

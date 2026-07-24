@@ -34,11 +34,27 @@ authentication and OTP flows fail closed when `SESSION_SECRET` is missing.
 | `SHOPIFY_ADMIN_TOKEN` | Creates Shopify Draft Orders (custom app token) | `shpat_replaceme` |
 | `SHOPIFY_WEBHOOK_SECRET` | Verifies `orders/paid`, `orders/updated`, and `refunds/create` webhook HMACs | `replace-me-from-shopify-webhook-page` |
 | `SENDGRID_API_KEY` | All outbound email (customer OTP/confirmation + Eden alerts) | `SG.replaceme` |
+| `WHATSAPP_PHONE_ID` | Optional WhatsApp Cloud API phone-number ID; keep unset until the account/template review and controlled test are ready | `replace-with-provider-phone-id` |
+| `WHATSAPP_TOKEN` | Optional least-privilege WhatsApp Cloud API token; rotate and revoke through the authorized Meta Business account | `replace-with-provider-token` |
+| `WHATSAPP_APP_SECRET` | Verifies `X-Hub-Signature-256` on delivery-receipt webhooks | `replace-with-meta-app-secret` |
+| `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | Private challenge token for registering `/webhooks/whatsapp` | `replace-with-random-verify-token` |
+| `WHATSAPP_OPS_RECIPIENT` | Separate verified internal operations recipient; never reuse `WHATSAPP_NUMBER` | `replace-with-operations-number` |
+| `WHATSAPP_OPS_PAYMENT_TEMPLATE` | Approved zero-component internal paid-order template name | `eden_ops_payment_received` |
+| `WHATSAPP_OPS_TEMPLATE_LANGUAGE` | Explicit language code for the internal template | `he` |
+| `WHATSAPP_CUSTOMER_DELIVERED_TEMPLATE` | Approved zero-component customer delivery template name | `eden_delivery_complete` |
+| `WHATSAPP_CUSTOMER_TEMPLATE_LANGUAGE` | Explicit language code for the customer template | `he` |
 | `GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON` | Server-side driver route optimization; use a dedicated environment-specific service account and never ship it to Flutter | `{"type":"service_account",…}` |
 | `MESH_API_KEY` | **Future** — Mesh/J5 preauth processor. Not used today. | (unset for now) |
 
 > `SESSION_SECRET` is mandatory. The Worker refuses to create sessions or OTP hashes
 > when it is unset; set it before accepting orders or enabling the ops dashboard.
+>
+> WhatsApp automation is optional and fail-safe. Shared credentials cannot
+> activate either message class without that class's separate template/language
+> configuration; operations also requires its distinct recipient. Follow
+> `WHATSAPP_OPERATIONS.md` before adding any production value, and keep the
+> values unset until issue #216 records the retained legal-approval and
+> final-published-version activation evidence as complete.
 
 ## Worker non-secret vars (`worker/wrangler.toml [vars]`)
 
@@ -96,6 +112,11 @@ must not be embedded in the storefront repository.
 | Variable | Purpose |
 |---|---|
 | `GTM_CONTAINER_ID` | Google Tag Manager web-container ID (`GTM-…`) |
+
+Follow `ANALYTICS_OPERATIONS.md` for the event/data contract, account-owner steps,
+consent verification matrix, and emergency disable procedure. Keep this variable
+unset until the code prerequisite in issue #219 and the legal activation gate in
+issue #216 are complete.
 
 The canonical booking page uses `PlaceAutocompleteElement`, `gmp-select`, and
 `Place.fetchFields()` for addresses, plus the Maps JavaScript Routes library's
@@ -172,7 +193,7 @@ it** (per `../AGENTS.md` §2), then move it to a secret/setting.
 | Public (OK in repo) | Secret (NEVER in repo) |
 |---|---|
 | `SHOPIFY_SHOP`, `SHOPIFY_API_VERSION`, `SHOPIFY_APP_CLIENT_ID` | `SHOPIFY_ADMIN_TOKEN`, `SHOPIFY_CLI_THEME_TOKEN`, `SHOPIFY_WEBHOOK_SECRET` |
-| `BRAND`, `BOOKING_URL`, `WHATSAPP_NUMBER`, `OPS_EMAIL` | `OPS_PIN`, `SESSION_SECRET`, `DRIVER_ONE_TIME_CODE` |
+| `BRAND`, `BOOKING_URL`, `WHATSAPP_NUMBER`, `OPS_EMAIL` | `OPS_PIN`, `SESSION_SECRET`, `DRIVER_ONE_TIME_CODE`, `WHATSAPP_PHONE_ID`, `WHATSAPP_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN`, `WHATSAPP_OPS_RECIPIENT`, and both class-specific template/language pairs |
 | brand colors, Hebrew copy | `MAPS_KEY` (Worker + theme), `SENDGRID_API_KEY`, `GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON`, `MESH_API_KEY` |
 
 > The public business phone numbers and `eden@edenmish.com` are intentionally
