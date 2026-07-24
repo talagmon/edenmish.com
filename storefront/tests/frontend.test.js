@@ -716,7 +716,11 @@ describe('Frontend: Booking form', () => {
     assertContains(html, 'phone_delivery_link_opt_in:', 'persisted phone-link consent payload');
     assertContains(html, 'לא יישלח דיוור שיווקי מכוח אישור זה', 'no bundled marketing consent');
     assert.ok(!html.includes('הנני מסכים/ה לקבל עדכונים'), 'transaction acceptance must not be bundled with communications consent');
-    assertContains(html, 'EdenMish אינה שומרת פרטי כרטיס אשראי', 'accurate hosted-payment disclosure');
+    assertContains(
+      html,
+      'EdenMish אינה שומרת פרטי כרטיס אשראי. פרטי התשלום מוזנים ומעובדים בסביבה המאובטחת של Shopify ו‑PayPlus.',
+      'accurate hosted-payment disclosure',
+    );
   });
 
   test('Uses Places API (New) with a plain-input fallback', () => {
