@@ -207,6 +207,7 @@ wrangler d1 execute edenmish --remote --file=./migrations/028_redelivery_charges
 wrangler d1 execute edenmish --remote --file=./migrations/029_wallet_reservation_ownership.sql
 # Run the provider-reference preflight in MIGRATIONS.md before migration 030:
 wrangler d1 execute edenmish --remote --file=./migrations/030_whatsapp_template_delivery_audit.sql
+wrangler d1 execute edenmish --remote --file=./migrations/031_first_delivery_promotion.sql
 ```
 
 > Run only migrations that have not already been applied. Several `ALTER TABLE`

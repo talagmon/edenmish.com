@@ -13,6 +13,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
 <link rel="icon" href="/assets/favicon.ico"/>
 <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"/>
+<link rel="stylesheet" href="/assets/site-nav.css" data-eden-site-nav-styles/>
 <style>
   :root {
     color-scheme: dark;
@@ -43,7 +44,7 @@
     width: min(calc(100% - 2rem), 1120px);
     min-height: 100dvh;
     margin-inline: auto;
-    padding: 1.25rem 0 2rem;
+    padding: 6.5rem 0 2rem;
     display: flex;
     flex-direction: column;
   }
@@ -167,9 +168,8 @@
 </style>
 </head>
 <body>
+<header data-eden-site-nav></header>
 <div class="shell">
-  <a class="brand" href="https://edenmish.com/" aria-label="EdenMish — דף הבית">EdenMish</a>
-
   <main class="error-result">
     <figure class="art">
       <img src="./assets/edenmish-payment-retry-bike.webp" width="1672" height="941" alt="אופנוע משלוחים ממתין ליד מסלול מואר שמוכן להמשך"/>
@@ -199,5 +199,6 @@
     });
   })();
 </script>
+<script src="/assets/mobile-nav.js" defer></script>
 </body>
 </html>

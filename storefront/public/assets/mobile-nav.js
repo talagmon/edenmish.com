@@ -1,10 +1,28 @@
-// Keeps the public navigation identical on every page and builds its mobile menu.
+// Canonical public navigation: the homepage bar is rendered identically everywhere.
 (function () {
-  var headerEl = document.querySelector('body > header.fixed') || document.querySelector('body > nav.fixed');
+  var currentScript = document.currentScript;
+  var assetBase = currentScript && currentScript.src
+    ? new URL('.', currentScript.src).href
+    : new URL('/assets/', window.location.href).href;
+
+  if (!document.querySelector('link[data-eden-site-nav-styles]')) {
+    var navStyles = document.createElement('link');
+    navStyles.rel = 'stylesheet';
+    navStyles.href = new URL('site-nav.css', assetBase).href;
+    navStyles.dataset.edenSiteNavStyles = '';
+    document.head.appendChild(navStyles);
+  }
+  if (!document.querySelector('link[href*="Material+Symbols+Outlined"]')) {
+    var iconStyles = document.createElement('link');
+    iconStyles.rel = 'stylesheet';
+    iconStyles.href = 'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap';
+    document.head.appendChild(iconStyles);
+  }
+
+  var headerEl = document.querySelector('[data-eden-site-nav]')
+    || document.querySelector('body > header.fixed')
+    || document.querySelector('body > nav.fixed');
   if (!headerEl) return;
-  var bar = headerEl.querySelector('div, nav');
-  var desk = bar && bar.querySelector('[class*="md:flex"]');
-  if (!desk) return;
 
   var navItems = [
     { key: 'home', label: 'בית', href: '/' },
@@ -25,89 +43,85 @@
   }
 
   var currentKey = activeKey(window.location.pathname);
+  var storefrontOrigin = (headerEl.dataset.storefrontOrigin || '').replace(/\/+$/, '');
 
-  function buildLink(item, mobile) {
+  function storefrontUrl(path) {
+    return storefrontOrigin ? storefrontOrigin + path : path;
+  }
+
+  function buildLink(item) {
     var link = document.createElement('a');
-    link.className = mobile ? 'site-nav-link eden-mobile-nav__link' : 'site-nav-link';
-    link.href = item.href;
+    link.className = 'eden-site-link';
+    link.href = storefrontUrl(item.href);
     link.textContent = item.label;
     link.dataset.navKey = item.key;
     if (item.key === currentKey) {
-      link.classList.add('site-nav-link--active');
+      link.classList.add('eden-site-link--active');
       link.setAttribute('aria-current', 'page');
     }
     return link;
   }
 
-  desk.classList.add('site-nav');
-  desk.setAttribute('aria-label', 'ניווט ראשי');
-  desk.replaceChildren.apply(desk, navItems.map(function (item) { return buildLink(item, false); }));
-  bar.classList.add('eden-nav-bar');
+  var bar = document.createElement('div');
+  bar.className = 'eden-site-nav';
 
-  var brand = bar.querySelector('a[href="/"]');
-  var cta = Array.prototype.find.call(bar.children, function (child) {
-    return child.tagName === 'A' && child !== brand && !desk.contains(child);
-  });
-  if (cta) {
-    cta.className = 'site-nav-cta';
-    cta.href = '/booking.html';
-    cta.textContent = 'שלחו עכשיו';
-  }
+  var brand = document.createElement('a');
+  brand.className = 'eden-site-brand';
+  brand.href = storefrontUrl('/');
+  brand.textContent = 'EdenMish';
+  brand.setAttribute('aria-label', 'EdenMish — דף הבית');
+
+  var desk = document.createElement('nav');
+  desk.className = 'eden-site-links';
+  desk.setAttribute('aria-label', 'ניווט ראשי');
+  navItems.forEach(function (item) { desk.appendChild(buildLink(item)); });
+
+  var cta = document.createElement('a');
+  cta.className = 'eden-site-cta';
+  cta.href = storefrontUrl('/booking.html');
+  cta.textContent = 'שלחו עכשיו';
 
   var burger = document.createElement('button');
   burger.type = 'button';
-  burger.className = 'eden-nav-toggle';
-  burger.setAttribute('aria-label', 'תפריט');
+  burger.className = 'eden-site-toggle';
+  burger.setAttribute('aria-label', 'פתיחת תפריט');
   burger.setAttribute('aria-expanded', 'false');
   burger.setAttribute('aria-controls', 'eden-mobile-nav');
   burger.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">menu</span>';
-  if (cta) bar.insertBefore(burger, cta); else bar.appendChild(burger);
 
+  bar.appendChild(brand);
+  bar.appendChild(desk);
+  bar.appendChild(burger);
+  bar.appendChild(cta);
+  headerEl.className = 'eden-site-header';
+  headerEl.replaceChildren(bar);
+
+  var oldPanel = document.getElementById('eden-mobile-nav');
+  if (oldPanel) oldPanel.remove();
   var panel = document.createElement('nav');
   panel.id = 'eden-mobile-nav';
-  panel.className = 'eden-mobile-nav';
+  panel.className = 'eden-site-mobile-nav';
   panel.setAttribute('aria-label', 'ניווט ראשי במובייל');
   panel.hidden = true;
-  navItems.forEach(function (item) { panel.appendChild(buildLink(item, true)); });
+  navItems.forEach(function (item) { panel.appendChild(buildLink(item)); });
   headerEl.parentNode.insertBefore(panel, headerEl.nextSibling);
 
-  var compactNav = window.matchMedia('(max-width: 1023px)');
-
   function setMenu(open) {
-    if (!compactNav.matches) open = false;
     panel.hidden = !open;
     burger.setAttribute('aria-expanded', open ? 'true' : 'false');
+    burger.setAttribute('aria-label', open ? 'סגירת תפריט' : 'פתיחת תפריט');
     burger.querySelector('.material-symbols-outlined').textContent = open ? 'close' : 'menu';
   }
 
-  function syncNavigation() {
-    var compact = compactNav.matches;
-
-    // Inline display values are intentional. They keep the two navigation
-    // modes mutually exclusive even when a browser restores stale CSS from
-    // cache while loading the current navigation script.
-    desk.style.display = compact ? 'none' : 'flex';
-    burger.style.display = compact ? 'grid' : 'none';
-    if (cta) cta.style.display = compact ? 'none' : 'inline-flex';
-    if (!compact) setMenu(false);
-  }
-
-  syncNavigation();
-  if (typeof compactNav.addEventListener === 'function') {
-    compactNav.addEventListener('change', syncNavigation);
-  } else {
-    compactNav.addListener(syncNavigation);
-  }
-
-  burger.addEventListener('click', function (e) {
-    e.preventDefault();
+  burger.addEventListener('click', function (event) {
+    event.preventDefault();
     setMenu(panel.hidden);
   });
-  panel.addEventListener('click', function (e) {
-    if (e.target.closest('a')) setMenu(false);
+  panel.addEventListener('click', function (event) {
+    if (event.target.closest('a')) setMenu(false);
   });
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && !panel.hidden) {
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && !panel.hidden) {
       setMenu(false);
       burger.focus();
     }

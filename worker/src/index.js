@@ -52,7 +52,20 @@ import { businessAccountHtml } from './business-page.js';
 import { corsFor, maskEmail, publicOrderSummary, clientIp, anonKey } from './security.js';
 import { notifyEmail } from './notify.js';
 import { normalizeIlPhone, scheduleError, validIsraeliId } from './validate.js';
-import { validateCoupon, recordRedemption, recordBusinessRedemption, releaseBusinessRedemption, listCoupons, createCoupon, updateCoupon, deleteCoupon } from './coupons.js';
+import {
+  validateCoupon,
+  findAutomaticCoupon,
+  reserveFirstDeliveryClaim,
+  attachFirstDeliveryClaim,
+  releaseFirstDeliveryClaim,
+  recordRedemption,
+  recordBusinessRedemption,
+  releaseBusinessRedemption,
+  listCoupons,
+  createCoupon,
+  updateCoupon,
+  deleteCoupon,
+} from './coupons.js';
 import { getStatusMeta, getNextStatuses, isTerminalStatus } from './status.js';
 import { shopifyWebhookRegistrar } from './shopify-webhooks.js';
 import { handleDriverApi } from './driver-api.js';
@@ -318,11 +331,28 @@ const COUPON_MESSAGES = {
   usage_limit_reached: 'הקופון מוצה',
   already_used: 'הקופון כבר מומש',
   not_applicable: 'הקופון אינו תקף לרכישה זו',
+  identity_required: 'יש להשלים מספר טלפון ודוא״ל כדי לבדוק את הזכאות',
+  not_new_customer: 'הטבת המשלוח הראשון אינה זמינה לפרטים האלה',
+  promotion_unavailable: 'לא ניתן להחיל את ההטבה כרגע. נסו שוב בעוד מספר דקות',
 };
 const couponMessage = (reason) => COUPON_MESSAGES[reason] || COUPON_MESSAGES.not_found;
 // Stable customer identifier for once-per-customer coupon enforcement.
 // Phone (E.164-normalized) preferred — it's required on orders; email is the fallback.
 const couponCustomerKey = (b) => normalizeIlPhone(b && b.phone) || (b && b.email ? String(b.email).trim().toLowerCase() : null);
+const couponIdentity = (b, businessSession = null) => {
+  const businessAccountId = businessSession ? Number(businessSession.account_id) : null;
+  const phoneKey = normalizeIlPhone(b && b.phone);
+  const emailKey = businessSession && businessSession.email
+    ? String(businessSession.email).trim().toLowerCase()
+    : (b && b.email ? String(b.email).trim().toLowerCase() : null);
+  return {
+    customerKey: businessAccountId ? businessCouponCustomerKey(businessAccountId) : (phoneKey || emailKey),
+    phoneKey,
+    emailKey,
+    businessAccountId: businessAccountId || null,
+    customerType: businessAccountId ? 'business' : 'private',
+  };
+};
 
 // One pricing boundary for quotes, coupon validation, and order creation. Every
 // caller reads the current D1 rules and executes the same pricing engine.
@@ -561,10 +591,42 @@ export default {
         }
       } catch (rlErr) { console.error('rate_limit_error', rlErr && rlErr.message ? rlErr.message : String(rlErr)); }
       let b; try { b = await readJson(req); } catch (e) { return json({ error: e.message }, e.status || 400, cors); }
-      const pr = await authoritativeQuote(env, b);
-      const v = await validateCoupon(env.DB, b.coupon_code, pr.price, couponCustomerKey(b));
+      const businessSession = b.use_wallet ? await getBusinessSession(req, env) : null;
+      let pr = await authoritativeQuote(env, b);
+      if (businessSession && businessSession.plan_id) pr = applyBusinessPlanPricing(pr, businessSession.plan_id);
+      const v = await validateCoupon(env.DB, b.coupon_code, pr.price, couponIdentity(b, businessSession));
       if (!v.valid) return json({ valid: false, reason: v.reason, message: couponMessage(v.reason) }, 200, cors);
       return json({ valid: true, code: v.code, subtotal_price: v.subtotal, discount_amount: v.discountAmount, price: v.price, title: v.title }, 200, cors);
+    }
+
+    // Automatic promotion preview. This endpoint never reserves eligibility;
+    // POST /api/orders recomputes the price, rechecks the identity, and performs
+    // the atomic claim before any order or wallet mutation.
+    if (path === '/api/coupons/auto-apply' && req.method === 'POST') {
+      try {
+        const k = await anonKey(env, clientIp(req));
+        const rl = await incrRateLimit(env.DB, 'cpna:' + k, 60 * 1000);
+        if (rl.count > 20) return json({ applied: false }, 429, { ...cors, 'Retry-After': '60' });
+      } catch (rlErr) { console.error('rate_limit_error', rlErr && rlErr.message ? rlErr.message : String(rlErr)); }
+      let b; try { b = await readJson(req); } catch (e) { return json({ error: e.message }, e.status || 400, cors); }
+      const businessSession = b.use_wallet ? await getBusinessSession(req, env) : null;
+      if (b.use_wallet && !businessSession) return json({ applied: false }, 200, cors);
+      let pr = await authoritativeQuote(env, b);
+      if (businessSession) {
+        if (!businessSession.plan_id) return json({ applied: false }, 200, cors);
+        pr = applyBusinessPlanPricing(pr, businessSession.plan_id);
+      }
+      const promotion = await findAutomaticCoupon(env.DB, pr.price, couponIdentity(b, businessSession));
+      if (!promotion.valid) return json({ applied: false }, 200, cors);
+      return json({
+        applied: true,
+        valid: true,
+        automatic: true,
+        subtotal_price: promotion.subtotal,
+        discount_amount: promotion.discountAmount,
+        price: promotion.price,
+        title: promotion.title,
+      }, 200, cors);
     }
 
     // ---- Authoritative public quote ----
@@ -689,6 +751,32 @@ export default {
         phone_delivery_link_opt_in_at: phoneDeliveryLinkOptIn ? Date.now() : null,
       };
 
+      const walletIdempotencyKey = businessSession
+        ? (req.headers.get('Idempotency-Key') || b.idempotency_key)
+        : null;
+      if (businessSession && !walletIdempotencyKey) {
+        return json({ error: 'idempotency_key_required' }, 400, cors);
+      }
+      if (businessSession) {
+        const existingOrder = await env.DB.prepare(
+          `SELECT o.* FROM wallet_reservations wr
+           JOIN orders o ON o.id = wr.order_id
+           WHERE wr.account_id = ? AND wr.idempotency_key = ?
+           LIMIT 1`
+        ).bind(businessSession.account_id, walletIdempotencyKey).first();
+        if (existingOrder) {
+          return json({
+            order_id: existingOrder.id,
+            token: existingOrder.token,
+            tracking_url: trackingUrl(env, existingOrder.token),
+            status: existingOrder.status,
+            price: existingOrder.price,
+            wallet: true,
+            idempotent: true,
+          }, 200, cors);
+        }
+      }
+
       if (!['eco', 'standard', 'flash'].includes(b.service)) return json({ error: 'invalid service' }, 400, cors);
       if (!['small', 'medium'].includes(b.size)) return json({ error: 'invalid size' }, 400, cors);
       const dateMatch = String(b.when_date || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -724,9 +812,51 @@ export default {
       let coupon = null;
       if (b.coupon_code && businessSession) return json({ error: 'coupon_not_available_with_wallet' }, 400, cors);
       if (b.coupon_code) {
-        const v = await validateCoupon(env.DB, b.coupon_code, pr.price, couponCustomerKey(b));
+        const v = await validateCoupon(env.DB, b.coupon_code, pr.price, couponIdentity(b, businessSession));
         if (!v.valid) return json({ valid: false, error: 'invalid_coupon', reason: v.reason, message: couponMessage(v.reason) }, 400, cors);
         coupon = v;
+      } else {
+        const automatic = await findAutomaticCoupon(
+          env.DB,
+          pr.price,
+          couponIdentity(b, businessSession),
+          { idempotencyKey: walletIdempotencyKey }
+        );
+        if (automatic.valid) coupon = automatic;
+      }
+      if (!b.coupon_code && b.promotion_expected === true && !coupon) {
+        return json({
+          valid: false,
+          error: 'invalid_coupon',
+          reason: 'not_new_customer',
+          message: couponMessage('not_new_customer'),
+        }, 409, cors);
+      }
+
+      let promotionClaim = null;
+      let promotionClaimCreated = false;
+      if (coupon && coupon.eligibilityRule === 'first_delivery') {
+        try {
+          const claimResult = await reserveFirstDeliveryClaim(env.DB, {
+            coupon,
+            identity: couponIdentity(b, businessSession),
+            idempotencyKey: walletIdempotencyKey,
+          });
+          if (!claimResult.reserved) {
+            const reason = claimResult.reason || 'not_new_customer';
+            return json({ valid: false, error: 'invalid_coupon', reason, message: couponMessage(reason) }, 409, cors);
+          }
+          promotionClaim = claimResult.claim;
+          promotionClaimCreated = !claimResult.unchanged;
+        } catch (error) {
+          console.error('promotion_claim_failed', error && error.message || String(error));
+          return json({
+            valid: false,
+            error: 'invalid_coupon',
+            reason: 'promotion_unavailable',
+            message: couponMessage('promotion_unavailable'),
+          }, 503, cors);
+        }
       }
       // `price` on the order row is always the amount the customer pays; when a coupon
       // applied, subtotal_price/discount_* record how we got there (migration 008).
@@ -741,10 +871,20 @@ export default {
       let walletReservation = null;
       let walletReservationCreated = false;
       if (businessSession) {
-        const idempotencyKey = req.headers.get('Idempotency-Key') || b.idempotency_key;
-        if (!idempotencyKey) return json({ error: 'idempotency_key_required' }, 400, cors);
-        const reservationResult = await reserveWalletCredit(env.DB, businessSession.account_id, Math.round(finalPrice * 100), idempotencyKey);
+        let reservationResult;
+        try {
+          reservationResult = await reserveWalletCredit(
+            env.DB,
+            businessSession.account_id,
+            Math.round(finalPrice * 100),
+            walletIdempotencyKey
+          );
+        } catch (error) {
+          if (promotionClaimCreated) await releaseFirstDeliveryClaim(env.DB, promotionClaim && promotionClaim.id).catch(() => {});
+          throw error;
+        }
         if (!reservationResult.reserved) {
+          if (promotionClaimCreated) await releaseFirstDeliveryClaim(env.DB, promotionClaim && promotionClaim.id).catch(() => {});
           return json({
             error: 'insufficient_credit',
             available: Number(reservationResult.available_agorot || 0) / 100,
@@ -755,7 +895,10 @@ export default {
         walletReservationCreated = !reservationResult.unchanged;
         if (walletReservation && walletReservation.order_id) {
           const existingOrder = await getOrderById(env.DB, walletReservation.order_id);
-          if (existingOrder) return json({ order_id: existingOrder.id, token: existingOrder.token, tracking_url: trackingUrl(env, existingOrder.token), status: existingOrder.status, price: existingOrder.price, wallet: true, idempotent: true }, 200, cors);
+          if (existingOrder) {
+            if (promotionClaim) await attachFirstDeliveryClaim(env.DB, promotionClaim.id, existingOrder.id).catch(() => {});
+            return json({ order_id: existingOrder.id, token: existingOrder.token, tracking_url: trackingUrl(env, existingOrder.token), status: existingOrder.status, price: existingOrder.price, wallet: true, idempotent: true }, 200, cors);
+          }
         }
       }
 
@@ -794,6 +937,7 @@ export default {
           }
           if (existingOrder) {
             await linkWalletReservationToOrder(env.DB, walletReservation.id, existingOrder.id);
+            if (promotionClaim) await attachFirstDeliveryClaim(env.DB, promotionClaim.id, existingOrder.id).catch(() => {});
             return json({
               order_id: existingOrder.id,
               token: existingOrder.token,
@@ -810,6 +954,9 @@ export default {
             await releaseWalletReservation(env.DB, walletReservation.id).catch(() => {});
           }
         }
+        if (promotionClaimCreated && (!businessSession || walletReservationCreated)) {
+          await releaseFirstDeliveryClaim(env.DB, promotionClaim && promotionClaim.id).catch(() => {});
+        }
         throw error;
       }
       const token = created.token;
@@ -817,6 +964,15 @@ export default {
       if (walletReservation) {
         await linkWalletReservationToOrder(env.DB, walletReservation.id, created.id);
         await env.DB.prepare(`UPDATE orders SET email = ?, email_verified = 1, payment_mode = 'wallet' WHERE id = ?`).bind(b.email, created.id).run();
+      }
+      if (promotionClaim) {
+        try {
+          await attachFirstDeliveryClaim(env.DB, promotionClaim.id, created.id);
+        } catch (error) {
+          // The claim itself already blocks a second use. Keep the accepted order
+          // and log only a sanitized operational signal.
+          console.error('promotion_claim_attach_failed');
+        }
       }
       // Redemption row = what usage limits count. For limited coupons the insert is an
       // atomic guard (see recordRedemption) that closes the validate→insert TOCTOU race:
@@ -828,7 +984,17 @@ export default {
       if (coupon) {
         let redemption = { recorded: true };
         try {
-          redemption = await recordRedemption(env.DB, { orderId: created.id, code: coupon.code, customerKey: couponCustomerKey(b), priceBefore: coupon.subtotal, discountAmount: coupon.discountAmount, priceAfter: coupon.price, usageLimit: coupon.usageLimit, oncePerCustomer: coupon.appliesOncePerCustomer });
+          redemption = await recordRedemption(env.DB, {
+            orderId: created.id,
+            code: coupon.code,
+            customerKey: couponIdentity(b, businessSession).customerKey,
+            priceBefore: coupon.subtotal,
+            discountAmount: coupon.discountAmount,
+            priceAfter: coupon.price,
+            usageLimit: coupon.usageLimit,
+            oncePerCustomer: coupon.appliesOncePerCustomer,
+            promotionClaimId: promotionClaim && promotionClaim.id,
+          });
         } catch (e) { console.error('coupon_redemption_error', e && e.message ? e.message : String(e)); }
         if (!redemption.recorded) {
           await env.DB.prepare('UPDATE orders SET price = subtotal_price, subtotal_price = NULL, discount_code = NULL, discount_amount = 0, discount_title = NULL WHERE id = ?')
@@ -1653,6 +1819,9 @@ export default {
         return json({ ok: true, coupon: c });
       } catch (err) {
         if (err.message === 'coupon_exists') return json({ error: 'code already exists' }, 409);
+        if (/^(invalid|first_delivery|automatic coupons)/.test(String(err && err.message || ''))) {
+          return json({ error: err.message }, 400);
+        }
         throw err;
       }
     }
@@ -1661,7 +1830,15 @@ export default {
       const code = String(path.split('/')[4]).trim().toUpperCase();
       if (!code) return json({ error: 'bad code' }, 400);
       let b; try { b = await req.json(); } catch { b = {}; }
-      const c = await updateCoupon(env.DB, code, b);
+      let c;
+      try {
+        c = await updateCoupon(env.DB, code, b);
+      } catch (err) {
+        if (/^(invalid|first_delivery|automatic coupons)/.test(String(err && err.message || ''))) {
+          return json({ error: err.message }, 400);
+        }
+        throw err;
+      }
       if (!c) return json({ error: 'not found' }, 404);
       return json({ ok: true, coupon: c });
     }

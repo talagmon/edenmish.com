@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="/assets/styles.css?v=0.30.1-293658-43a4044"/>
+<link rel="stylesheet" href="/assets/site-nav.css" data-eden-site-nav-styles/>
 <script src="/assets/analytics.js" defer></script>
 <style>
 gmp-place-autocomplete.eden-places{display:block;width:100%;color-scheme:dark}
@@ -411,6 +412,7 @@ details[open] .details-arrow{transform:rotate(180deg)}
                   <div class="price-line text-secondary"><span id="coupon-title">קופון</span><span dir="ltr" id="coupon-discount">-₪0</span></div>
                   <div class="price-line"><span>מחיר אחרי הנחה</span><strong>₪<span id="coupon-final">—</span></strong></div>
                   <button type="button" id="coupon-remove" class="text-label-sm text-error flex items-center gap-1 mx-auto mt-1"><span class="material-symbols-outlined text-[16px]" aria-hidden="true">close</span>הסרת קופון</button>
+                  <p id="coupon-promo-note" hidden class="text-label-sm text-on-surface-variant text-center pt-1">10% הנחה על המשלוח הראשון ללקוח חדש, בהזמנה שתיווצר עד 31.08.2026 בשעה 23:59:59 לפי שעון ישראל. <a href="/terms.html#first-delivery-promotion" class="text-primary underline">לתנאי ההטבה</a></p>
                 </div>
                 <div id="coupon-cleared" hidden class="mt-2 text-label-sm text-alert-amber text-center"></div>
               </div>
@@ -494,6 +496,7 @@ async function initBusinessMode(){
     const banner=document.getElementById("business-wallet-banner");if(banner)banner.classList.remove("hidden");
     const accountLink=document.getElementById("business-account-link");if(accountLink)accountLink.href=API+"/business";
     const coupon=document.getElementById("coupon-section");if(coupon)coupon.hidden=true;
+    const couponToggle=document.getElementById("coupon-toggle");if(couponToggle)couponToggle.hidden=true;
     const planNames={trial:"חבילת ניסיון",wallet:"ארנק עסקי",silver:"כסף",gold:"זהב",platinum:"פלטינום"};
     const planName=planNames[businessAccount.account.plan_id]||"ללא מסלול";
     const copy=document.getElementById("business-wallet-copy");if(copy)copy.textContent="מסלול "+planName+" · יתרה זמינה ₪"+Number(businessAccount.wallet.available||0).toLocaleString("he-IL");
@@ -588,6 +591,7 @@ function renderAuthoritativeQuote(quote){
   setEstimateText("price-val", quote.price);
   setPriceNote("", false);
   if(couponState.data && couponState.data.valid) setEstimateText("price-val", couponState.data.price);
+  scheduleAutomaticCoupon();
 }
 async function performAuthoritativeQuote(fields,fingerprint,sequence){
   try{
@@ -771,14 +775,20 @@ const couponDiscount = document.getElementById("coupon-discount");
 const couponFinal = document.getElementById("coupon-final");
 const couponRemove = document.getElementById("coupon-remove");
 const couponCleared = document.getElementById("coupon-cleared");
+const couponPromoNote = document.getElementById("coupon-promo-note");
 
-const couponState = { code: null, data: null };
+const couponState = { code: null, data: null, source: null };
 let lastCouponFingerprint = "";
+let automaticCouponTimer = null;
+let automaticCouponSequence = 0;
+let automaticCouponFingerprint = "";
+let automaticCouponSuppressed = false;
 
 function getCouponPricingFields() {
   const service = (document.querySelector('input[name="service"]:checked') || {}).value || "standard";
   const size = (document.querySelector('input[name="size"]:checked') || {}).value || "small";
   const phone = (document.getElementById("f-phone") || {}).value || "";
+  const email = (document.getElementById("f-email") || {}).value || "";
   const hour = service === "flash" ? new Date().getHours() : (sched.window ? parseInt(sched.window.split(":")[0], 10) : -1);
   const payload = {
     service,
@@ -790,6 +800,8 @@ function getCouponPricingFields() {
   };
   if (geo.distanceKm != null) payload.distance_km = geo.distanceKm;
   if (phone) payload.phone = phone;
+  if (email) payload.email = email;
+  if (BUSINESS_MODE) payload.use_wallet = true;
   return payload;
 }
 
@@ -808,7 +820,8 @@ function showCouponCleared(msg) {
 
 function renderCouponUI() {
   const hasCoupon = couponState.data && couponState.data.valid;
-  if (couponToggle) couponToggle.hidden = hasCoupon;
+  if (couponSection) couponSection.hidden = BUSINESS_MODE ? !(hasCoupon && couponState.source === "automatic") : false;
+  if (couponToggle) couponToggle.hidden = BUSINESS_MODE || hasCoupon;
   if (couponExpand) {
     const isOpen = couponExpand.dataset.open === "1";
     couponExpand.hidden = hasCoupon || !isOpen;
@@ -821,6 +834,13 @@ function renderCouponUI() {
     if (couponTitle) couponTitle.textContent = d.title || ("קופון " + d.code);
     if (couponDiscount) couponDiscount.textContent = "−₪" + d.discount_amount;
     if (couponFinal) couponFinal.textContent = d.price;
+    if (couponPromoNote) couponPromoNote.hidden = couponState.source !== "automatic";
+    if (couponRemove) {
+      couponRemove.hidden = BUSINESS_MODE && couponState.source === "automatic";
+      couponRemove.lastChild.textContent = couponState.source === "automatic" ? "שימוש בקופון אחר" : "הסרת קופון";
+    }
+  } else {
+    if (couponPromoNote) couponPromoNote.hidden = true;
   }
 }
 
@@ -840,6 +860,8 @@ async function validateCoupon(code) {
     if (!data.valid) { showCouponError(data.message || "קוד הקופון אינו תקף."); return; }
     couponState.code = code;
     couponState.data = data;
+    couponState.source = "manual";
+    automaticCouponSuppressed = true;
     lastCouponFingerprint = couponFingerprint();
     if (couponInput) couponInput.value = "";
     if (couponExpand) { couponExpand.dataset.open = ""; couponExpand.hidden = true; }
@@ -853,14 +875,65 @@ async function validateCoupon(code) {
 }
 
 function removeCoupon() {
+  const wasAutomatic = couponState.source === "automatic";
   couponState.code = null;
   couponState.data = null;
+  couponState.source = null;
+  if (wasAutomatic) automaticCouponSuppressed = true;
   lastCouponFingerprint = "";
   if (couponExpand) { couponExpand.dataset.open = ""; couponExpand.hidden = true; }
   if (couponToggle) couponToggle.hidden = false;
   hideCouponError();
   renderCouponUI();
   computeEstimate();
+}
+
+function automaticFingerprint() {
+  const fields = getCouponPricingFields();
+  return [
+    couponFingerprint(),
+    String(fields.phone || "").replace(/\D/g, ""),
+    String(fields.email || "").trim().toLowerCase(),
+    BUSINESS_MODE ? "business" : "private"
+  ].join("|");
+}
+
+async function checkAutomaticCoupon() {
+  if (couponState.source === "manual" || automaticCouponSuppressed) return;
+  const fields = getCouponPricingFields();
+  if (!quoteState.data || !quoteState.data.available || !fields.phone || !EMAIL_RE.test(String(fields.email || "").trim())) return;
+  const fingerprint = automaticFingerprint();
+  const sequence = ++automaticCouponSequence;
+  automaticCouponFingerprint = fingerprint;
+  try {
+    const res = await fetch(API + "/api/coupons/auto-apply", {
+      method: "POST",
+      credentials: BUSINESS_MODE ? "include" : "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fields)
+    });
+    const data = await res.json();
+    if (sequence !== automaticCouponSequence || fingerprint !== automaticFingerprint()) return;
+    if (res.ok && data.applied) {
+      couponState.code = null;
+      couponState.data = data;
+      couponState.source = "automatic";
+      lastCouponFingerprint = couponFingerprint();
+    } else if (couponState.source === "automatic") {
+      couponState.code = null;
+      couponState.data = null;
+      couponState.source = null;
+    }
+    renderCouponUI();
+    if (couponState.data && couponState.data.valid) setEstimateText("price-val", couponState.data.price);
+    if (typeof syncGuidedView === "function") syncGuidedView();
+  } catch {}
+}
+
+function scheduleAutomaticCoupon() {
+  if (couponState.source === "manual" || automaticCouponSuppressed) return;
+  if (automaticCouponTimer) clearTimeout(automaticCouponTimer);
+  automaticCouponTimer = setTimeout(checkAutomaticCoupon, 250);
 }
 
 if (couponToggle) {
@@ -880,18 +953,41 @@ if (couponApply) {
 if (couponRemove) {
   couponRemove.addEventListener("click", removeCoupon);
 }
+["f-phone","f-email"].forEach((id) => {
+  const input = document.getElementById(id);
+  if (!input) return;
+  input.addEventListener("input", () => {
+    automaticCouponSuppressed = false;
+    automaticCouponSequence++;
+    automaticCouponFingerprint = "";
+    if (couponState.data) {
+      couponState.code = null;
+      couponState.data = null;
+      couponState.source = null;
+      lastCouponFingerprint = "";
+      showCouponCleared("ההטבה נבדקת מחדש לאחר שינוי פרטי הקשר.");
+      renderCouponUI();
+    }
+    scheduleAutomaticCoupon();
+  });
+});
 
 // Hook into computeEstimate to show coupon price and auto-clear on change
 const _origComputeEstimate = computeEstimate;
 computeEstimate = function() {
   _origComputeEstimate();
-  if (couponState.code) {
+  if (couponState.source === "manual" && couponState.code) {
     const fp = couponFingerprint();
     if (fp !== lastCouponFingerprint) {
       showCouponCleared("הקופון הוסר כי פרטי המשלוח השתנו.");
       removeCoupon();
       return;
     }
+  } else if (couponState.source === "automatic" && couponFingerprint() !== lastCouponFingerprint) {
+    couponState.data = null;
+    couponState.source = null;
+    lastCouponFingerprint = "";
+    renderCouponUI();
   }
   if (couponState.data && couponState.data.valid) {
     const el = document.getElementById("price-val");
@@ -1478,7 +1574,8 @@ form.addEventListener("submit", async (e) => {
   if (geo.pickupLat != null) { payload.pickup_lat = geo.pickupLat; payload.pickup_lng = geo.pickupLng; }
   if (geo.dropoffLat != null) { payload.dropoff_lat = geo.dropoffLat; payload.dropoff_lng = geo.dropoffLng; }
   if (geo.distanceKm != null) payload.distance_km = geo.distanceKm;
-  if (couponState.code) payload.coupon_code = couponState.code;
+  if (couponState.source === "manual" && couponState.code) payload.coupon_code = couponState.code;
+  if (couponState.source === "automatic") payload.promotion_expected = true;
   if (BUSINESS_MODE) {
     payload.use_wallet = true;
     walletIdempotencyKey = walletIdempotencyKey || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())+Math.random());
@@ -1504,6 +1601,8 @@ form.addEventListener("submit", async (e) => {
       if (data && data.error === "flash_unavailable_z3") return showError("שירות מהיר אינו זמין באזור 3. בחרו שירות רגיל או חסכוני.");
       if (data && data.error === "plan_service_unavailable") return showError("השירות או האזור אינם כלולים במסלול העסקי הנוכחי.");
       if (data && data.error === "plan_required") return showError("יש לבחור ולטעון מסלול עסקי לפני יצירת משלוח.");
+      if (data && data.reason === "not_new_customer") return showError("הזכאות להטבת המשלוח הראשון השתנתה. לא חויבתם — בדקו את הפרטים ונסו שוב.");
+      if (data && data.reason === "promotion_unavailable") return showError(data.message || "לא ניתן להחיל את ההטבה כרגע. לא חויבתם — נסו שוב בעוד מספר דקות.");
       if (data && data.error === "business_login_required") { location.assign(API+"/business"); return; }
       if (data && data.error === "insufficient_credit") return showError("אין מספיק יתרה. חסרים ₪"+Number(data.shortfall||0).toLocaleString("he-IL")+" — טענו יתרה בחשבון העסקי ונסו שוב.");
       if (data && ["closed_saturday","outside_hours"].includes(data.error)) return showError("המועד שנבחר אינו זמין. בחרו מועד אחר.");
