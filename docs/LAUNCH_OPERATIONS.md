@@ -8,10 +8,10 @@ replace the external account records or qualified legal advice.
 
 | Area | Repository state | Human completion evidence |
 |---|---|---|
-| WhatsApp | Customer links and consent-gated notification plumbing exist. Automated Cloud API sends remain disabled until code prerequisite #218, legal gate #216, account setup, and the end-to-end test in `WHATSAPP_OPERATIONS.md` are complete. | Verified Business account/number, reviewed app configuration, approved templates, controlled test evidence |
+| WhatsApp | Privacy-safe approved-template classes, separate operations routing, durable retries, and signed receipt audit are implemented. Automated sends remain disabled until migration 030, account/template setup, and the controlled test in `WHATSAPP_OPERATIONS.md` are complete. | Verified Business account/number, reviewed app configuration, approved templates, controlled test evidence |
 | GA4/GTM | The storefront has an explicit-consent loader and a non-PII event allowlist. An empty `GTM_CONTAINER_ID` disables measurement. Activation remains blocked by code prerequisite #219 and legal gate #216. | Account/container ownership, published configuration, consent/network test evidence |
 | Meta Pixel | Supported only through the same consent-gated GTM boundary. It remains on hold until an authorized EdenMish Business Portfolio and Pixel/Dataset exist. | Authorized administrator, reviewed processing purpose, verified non-PII test evidence |
-| Legal | Customer policies are published, but the planned Israeli attorney review cannot be completed in the repository. | Reviewer, date, reviewed versions, decisions, and separately tracked required changes |
+| Legal | The owner confirmed the legal/privacy add-ons approved on 2026-07-24. Privileged advice, reviewer identity, and archived records remain outside the public repository. | Dated retained review record and approved policy versions outside GitHub |
 
 ## Scoped follow-ups
 

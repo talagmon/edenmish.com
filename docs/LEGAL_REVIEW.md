@@ -53,3 +53,8 @@ Do not paste legal advice into GitHub. If the reviewer identifies required work,
 #216 and the umbrella issue remain open. They can be checked only after every
 required change is deployed, dated copies are archived, and the reviewer confirms
 the final published versions.
+
+Owner confirmation: on 2026-07-24, the owner confirmed that all applicable
+legal/privacy add-ons were approved. Reviewer identity, privileged advice,
+engagement records, and archived policy copies are retained outside this public
+repository.

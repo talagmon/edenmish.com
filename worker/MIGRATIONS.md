@@ -775,6 +775,59 @@ WHERE type = 'index' AND name = 'idx_orders_wallet_reservation_unique';
 
 ---
 
+### 030_whatsapp_template_delivery_audit.sql
+
+**Purpose:** Adds durable paid-order WhatsApp jobs, sanitized provider lifecycle
+status, and a unique provider-reference index for idempotent delivery receipts.
+It expands the existing outbox transition constraint without losing queued,
+processing, sent, or dead jobs.
+
+**Preflight (must return zero rows):**
+```sql
+SELECT provider_ref, COUNT(*) AS notification_count
+FROM notifications
+WHERE provider_ref IS NOT NULL
+GROUP BY provider_ref
+HAVING COUNT(*) > 1;
+```
+
+If this returns rows, stop and reconcile the duplicate provider references. Do
+not guess which notification record is authoritative.
+
+**Command:**
+```bash
+wrangler d1 execute edenmish --remote \
+  --file=./migrations/030_whatsapp_template_delivery_audit.sql
+```
+
+**Verification queries:**
+```sql
+SELECT name FROM pragma_table_info('notifications')
+WHERE name IN ('provider_status','provider_updated_at')
+ORDER BY name;
+
+SELECT name, sql FROM sqlite_master
+WHERE type='index' AND name='idx_notifications_provider_ref';
+
+SELECT name FROM pragma_table_info('delivery_notification_outbox')
+WHERE name IN ('provider_ref','provider_status','provider_updated_at')
+ORDER BY name;
+
+SELECT name, sql FROM sqlite_master
+WHERE type='index'
+  AND name='idx_delivery_notification_outbox_provider_ref';
+
+SELECT sql FROM sqlite_master
+WHERE type='table' AND name='delivery_notification_outbox'
+  AND sql LIKE '%payment_received%';
+```
+
+Expected: two notification columns, three outbox provider-audit columns, both
+unique partial provider-reference indexes, and an outbox table constraint that
+permits `payment_received`.
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -806,6 +859,7 @@ WHERE type = 'index' AND name = 'idx_orders_wallet_reservation_unique';
 - [ ] Run `027_retained_failure_notifications.sql` after 019 and before enabling retained-package customer emails.
 - [ ] Run `028_redelivery_charges.sql` after 026 and before enabling corrected-address redelivery payments.
 - [ ] Run `029_wallet_reservation_ownership.sql` after the duplicate-reference preflight and before deploying the Worker.
+- [ ] Run `030_whatsapp_template_delivery_audit.sql` after its duplicate-provider-reference preflight and before deploying WhatsApp hardening.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).
