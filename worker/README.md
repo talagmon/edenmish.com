@@ -225,8 +225,9 @@ wrangler secret put SHOPIFY_WEBHOOK_SECRET
 wrangler secret put SENDGRID_API_KEY
 ```
 
-**Optional WhatsApp Cloud API** (leave unset until the account, template/message
-window, consent, and controlled test in `../docs/WHATSAPP_OPERATIONS.md` are ready):
+**Optional WhatsApp Cloud API** (leave unset until code prerequisite #218, legal
+gate #216, account/template setup, and the controlled tests in
+`../docs/WHATSAPP_OPERATIONS.md` are complete):
 
 ```bash
 wrangler secret put WHATSAPP_PHONE_ID

@@ -43,9 +43,8 @@ authentication and OTP flows fail closed when `SESSION_SECRET` is missing.
 > when it is unset; set it before accepting orders or enabling the ops dashboard.
 >
 > WhatsApp automation is optional and fail-safe when either Cloud API secret is
-> absent. Before enabling it, follow `WHATSAPP_OPERATIONS.md`; the current adapter
-> sends free-form text, so proactive service messages may require a scoped
-> approved-template implementation.
+> absent. Do not set them until the code prerequisite in issue #218 and the legal
+> activation gate in issue #216 are complete. Follow `WHATSAPP_OPERATIONS.md`.
 
 ## Worker non-secret vars (`worker/wrangler.toml [vars]`)
 
@@ -105,7 +104,9 @@ must not be embedded in the storefront repository.
 | `GTM_CONTAINER_ID` | Google Tag Manager web-container ID (`GTM-…`) |
 
 Follow `ANALYTICS_OPERATIONS.md` for the event/data contract, account-owner steps,
-consent verification matrix, and emergency disable procedure.
+consent verification matrix, and emergency disable procedure. Keep this variable
+unset until the code prerequisite in issue #219 and the legal activation gate in
+issue #216 are complete.
 
 The canonical booking page uses `PlaceAutocompleteElement`, `gmp-select`, and
 `Place.fetchFields()` for addresses, plus the Maps JavaScript Routes library's

@@ -49,6 +49,7 @@ Record only:
 - outcome: approved, approved with changes, or further review required;
 - links to separately scoped GitHub issues for public implementation work.
 
-Do not paste legal advice into GitHub. The umbrella issue can be checked only after
-approved changes are published, dated copies are archived, and the reviewer confirms
-the final versions or explicitly identifies remaining work.
+Do not paste legal advice into GitHub. If the reviewer identifies required work,
+#216 and the umbrella issue remain open. They can be checked only after every
+required change is deployed, dated copies are archived, and the reviewer confirms
+the final published versions.

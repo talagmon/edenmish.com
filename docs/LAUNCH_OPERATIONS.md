@@ -8,8 +8,8 @@ replace the external account records or qualified legal advice.
 
 | Area | Repository state | Human completion evidence |
 |---|---|---|
-| WhatsApp | Customer links and consent-gated notification plumbing exist. Automated Cloud API sends remain disabled until the account, templates, credentials, and end-to-end test in `WHATSAPP_OPERATIONS.md` are complete. | Verified Business account/number, reviewed app configuration, approved templates, controlled test evidence |
-| GA4/GTM | The storefront has an explicit-consent loader and a non-PII event allowlist. An empty `GTM_CONTAINER_ID` disables measurement. | Account/container ownership, published configuration, consent/network test evidence |
+| WhatsApp | Customer links and consent-gated notification plumbing exist. Automated Cloud API sends remain disabled until code prerequisite #218, legal gate #216, account setup, and the end-to-end test in `WHATSAPP_OPERATIONS.md` are complete. | Verified Business account/number, reviewed app configuration, approved templates, controlled test evidence |
+| GA4/GTM | The storefront has an explicit-consent loader and a non-PII event allowlist. An empty `GTM_CONTAINER_ID` disables measurement. Activation remains blocked by code prerequisite #219 and legal gate #216. | Account/container ownership, published configuration, consent/network test evidence |
 | Meta Pixel | Supported only through the same consent-gated GTM boundary. It remains on hold until an authorized EdenMish Business Portfolio and Pixel/Dataset exist. | Authorized administrator, reviewed processing purpose, verified non-PII test evidence |
 | Legal | Customer policies are published, but the planned Israeli attorney review cannot be completed in the repository. | Reviewer, date, reviewed versions, decisions, and separately tracked required changes |
 
@@ -23,6 +23,10 @@ replace the external account records or qualified legal advice.
   Meta Pixel activation after authorized account setup.
 - [#216](https://github.com/talagmon/edenmish.com/issues/216):
   final Israeli legal and operational launch review.
+- [#218](https://github.com/talagmon/edenmish.com/issues/218):
+  WhatsApp privacy, approved-template, recipient, and reliability hardening.
+- [#219](https://github.com/talagmon/edenmish.com/issues/219):
+  authoritative paid conversion and sensitive-URL analytics protections.
 
 The umbrella issue stays open until the evidence from each applicable follow-up
 is linked back to it. A code merge, secret name, or screenshot of an account page
