@@ -258,6 +258,23 @@ jobs:
           else
             echo "WhatsApp template audit migration 030 is already applied."
           fi
+      - name: Apply staging first-delivery promotion migration when needed
+        working-directory: worker
+        run: |
+          readiness_json="$(npx wrangler d1 execute edenmish-staging --remote --yes --json \
+            --config wrangler.staging.generated.toml \
+            --command "SELECT (SELECT COUNT(*) FROM pragma_table_info('coupons') WHERE name IN ('auto_apply','eligibility_rule')) + (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='first_delivery_promotion_claims') + (SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name IN ('idx_coupon_redemptions_promotion_claim','idx_first_delivery_claim_phone','idx_first_delivery_claim_email','idx_first_delivery_claim_business','idx_first_delivery_claim_business_idempotency')) + (SELECT COUNT(*) FROM coupons WHERE code='FIRST10-2026') AS ready")"
+          ready="$(printf '%s' "$readiness_json" | jq -r '.[0].results[0].ready // 0')"
+          if [ "$ready" = "0" ]; then
+            npx wrangler d1 execute edenmish-staging --remote --yes \
+              --config wrangler.staging.generated.toml \
+              --file=./migrations/031_first_delivery_promotion.sql
+          elif [ "$ready" != "9" ]; then
+            echo "::error::First-delivery promotion migration is only partially applied ($ready/9 schema items)."
+            exit 1
+          else
+            echo "First-delivery promotion migration 031 is already applied."
+          fi
       - name: Verify remote driver schema readiness
         working-directory: worker
         run: node scripts/validate-driver-schema.mjs --database edenmish-staging --config wrangler.staging.generated.toml

@@ -125,6 +125,28 @@ const orderBody = {
   when_hour: 10,
 };
 
+async function fundBusinessWallet(DB, env) {
+  const cookie = await createBusinessSession(env);
+  const account = DB.sqlite.prepare('SELECT id FROM business_accounts LIMIT 1').get();
+  const now = Date.now();
+  DB.sqlite.prepare(
+    `UPDATE business_accounts
+     SET company_name = 'Wallet Test', plan_id = 'gold', updated_at = ?
+     WHERE id = ?`
+  ).run(now, account.id);
+  DB.sqlite.prepare(
+    `UPDATE business_wallets
+     SET available_agorot = 100000, reserved_agorot = 0, updated_at = ?
+     WHERE account_id = ?`
+  ).run(now, account.id);
+  DB.sqlite.prepare(
+    `INSERT INTO wallet_credit_lots
+     (account_id, topup_id, original_agorot, remaining_agorot, expires_at, created_at)
+     VALUES (?, 'wallet-test-credit', 100000, 100000, ?, ?)`
+  ).run(account.id, now + 30 * 24 * 60 * 60 * 1000, now);
+  return { cookie, account, now };
+}
+
 const openDatabases = [];
 afterEach(() => {
   while (openDatabases.length) openDatabases.pop().close();
@@ -173,11 +195,12 @@ describe('wallet reservation ownership', () => {
     assert.equal(responses.filter(({ idempotent }) => idempotent === true).length, 1);
 
     const orders = DB.sqlite.prepare(
-      `SELECT id, wallet_reservation_id, payment_status, payment_method
+      `SELECT id, wallet_reservation_id, payment_status, payment_method,
+              price, subtotal_price, discount_code, discount_amount
        FROM orders WHERE business_account_id = ?`
     ).all(account.id);
     const reservations = DB.sqlite.prepare(
-      `SELECT id, order_id, status FROM wallet_reservations WHERE account_id = ?`
+      `SELECT id, order_id, status, amount_agorot FROM wallet_reservations WHERE account_id = ?`
     ).all(account.id);
     const wallet = DB.sqlite.prepare(
       'SELECT available_agorot, reserved_agorot FROM business_wallets WHERE account_id = ?'
@@ -186,6 +209,10 @@ describe('wallet reservation ownership', () => {
       `SELECT COUNT(*) AS count FROM wallet_entries
        WHERE account_id = ? AND entry_type = 'reserve'`
     ).get(account.id);
+    const promotionClaims = DB.sqlite.prepare(
+      `SELECT coupon_code, business_account_id, order_id, status
+       FROM first_delivery_promotion_claims WHERE business_account_id = ?`
+    ).all(account.id);
 
     assert.equal(orders.length, 1);
     assert.equal(reservations.length, 1);
@@ -193,11 +220,88 @@ describe('wallet reservation ownership', () => {
     assert.equal(reservations[0].order_id, orders[0].id);
     assert.equal(orders[0].payment_status, 'wallet_reserved');
     assert.equal(orders[0].payment_method, 'wallet');
+    assert.equal(orders[0].subtotal_price, 45);
+    assert.equal(orders[0].discount_code, 'FIRST10-2026');
+    assert.equal(orders[0].discount_amount, 5);
+    assert.equal(orders[0].price, 40);
     assert.equal(reservations[0].status, 'reserved');
+    assert.equal(reservations[0].amount_agorot, 4000);
     assert.equal(reserveEntries.count, 1);
+    assert.deepEqual(promotionClaims.map((row) => ({ ...row })), [{
+      coupon_code: 'FIRST10-2026',
+      business_account_id: account.id,
+      order_id: orders[0].id,
+      status: 'redeemed',
+    }]);
     assert.ok(wallet.available_agorot < 100000);
     assert.ok(wallet.reserved_agorot > 0);
     assert.equal(wallet.available_agorot + wallet.reserved_agorot, 100000);
+  });
+
+  test('a business account with a wallet-paid delivery stays full price and receives no claim', async () => {
+    const DB = d1Database();
+    openDatabases.push(DB.sqlite);
+    const env = {
+      DB,
+      SESSION_SECRET: 'wallet-test-session-secret',
+      TEST_MODE: '1',
+    };
+    const { cookie, account } = await fundBusinessWallet(DB, env);
+    DB.sqlite.prepare(
+      `INSERT INTO orders
+        (token, status, phone, email, payment_status, business_account_id, created_at)
+       VALUES ('prior-business-wallet', 'delivered', '+972500000000',
+               'other@example.com', 'wallet_paid', ?, 1)`
+    ).run(account.id);
+
+    const response = await worker.fetch(
+      post('/api/orders', orderBody, {
+        Cookie: cookie,
+        'Idempotency-Key': 'returning-business-order',
+      }),
+      env,
+    );
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.price, 45);
+    const created = DB.sqlite.prepare(
+      `SELECT price, subtotal_price, discount_code, discount_amount
+       FROM orders WHERE id = ?`
+    ).get(body.order_id);
+    assert.deepEqual({ ...created }, {
+      price: 45,
+      subtotal_price: null,
+      discount_code: null,
+      discount_amount: 0,
+    });
+    assert.equal(
+      DB.sqlite.prepare(
+        'SELECT COUNT(*) AS count FROM first_delivery_promotion_claims WHERE business_account_id = ?'
+      ).get(account.id).count,
+      0,
+    );
+  });
+
+  test('manual delivery coupons remain unavailable with a wallet', async () => {
+    const DB = d1Database();
+    openDatabases.push(DB.sqlite);
+    const env = {
+      DB,
+      SESSION_SECRET: 'wallet-test-session-secret',
+      TEST_MODE: '1',
+    };
+    const { cookie } = await fundBusinessWallet(DB, env);
+    const response = await worker.fetch(
+      post('/api/orders', { ...orderBody, coupon_code: 'FIRST10-2026' }, {
+        Cookie: cookie,
+        'Idempotency-Key': 'manual-wallet-coupon',
+      }),
+      env,
+    );
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: 'coupon_not_available_with_wallet' });
+    assert.equal(DB.sqlite.prepare('SELECT COUNT(*) AS count FROM wallet_reservations').get().count, 0);
+    assert.equal(DB.sqlite.prepare('SELECT COUNT(*) AS count FROM first_delivery_promotion_claims').get().count, 0);
   });
 
   test('migration creates a partial unique index for non-null reservation references', () => {

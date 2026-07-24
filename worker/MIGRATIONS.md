@@ -828,6 +828,52 @@ permits `payment_received`.
 
 ---
 
+### 031_first_delivery_promotion.sql
+
+**Purpose:** Adds ops-managed automatic first-delivery coupon fields and an
+atomic eligibility-claim table. Claims are keyed by normalized phone, normalized
+email, and (when present) the authenticated business account. The migration also
+creates the 10% launch offer ending at epoch ms `1788209999999`, which is
+31 August 2026 at 23:59:59.999 in Israel.
+
+**Command:**
+```bash
+wrangler d1 execute edenmish --remote \
+  --file=./migrations/031_first_delivery_promotion.sql
+```
+
+**Verification queries:**
+```sql
+SELECT name FROM pragma_table_info('coupons')
+WHERE name IN ('auto_apply','eligibility_rule')
+ORDER BY name;
+
+SELECT name FROM sqlite_master
+WHERE type='table' AND name='first_delivery_promotion_claims';
+
+SELECT name FROM sqlite_master
+WHERE type='index' AND name IN (
+  'idx_coupon_redemptions_promotion_claim',
+  'idx_first_delivery_claim_phone',
+  'idx_first_delivery_claim_email',
+  'idx_first_delivery_claim_business',
+  'idx_first_delivery_claim_business_idempotency'
+)
+ORDER BY name;
+
+SELECT code, value_type, value, auto_apply, eligibility_rule, scope,
+       applies_once_per_customer, ends_at
+FROM coupons
+WHERE code='FIRST10-2026';
+```
+
+Expected: both coupon columns, the claim table, all five unique claim/redemption
+indexes, and one active delivery coupon with `value=10`, `auto_apply=1`,
+`eligibility_rule='first_delivery'`, `applies_once_per_customer=1`, and
+`ends_at=1788209999999`.
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -860,6 +906,7 @@ permits `payment_received`.
 - [ ] Run `028_redelivery_charges.sql` after 026 and before enabling corrected-address redelivery payments.
 - [ ] Run `029_wallet_reservation_ownership.sql` after the duplicate-reference preflight and before deploying the Worker.
 - [ ] Run `030_whatsapp_template_delivery_audit.sql` after its duplicate-provider-reference preflight and before deploying WhatsApp hardening.
+- [ ] Run `031_first_delivery_promotion.sql` after merge and before deploying the first-delivery promotion.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).
