@@ -718,7 +718,7 @@ describe('Frontend: Booking form', () => {
     assert.ok(!html.includes('הנני מסכים/ה לקבל עדכונים'), 'transaction acceptance must not be bundled with communications consent');
     assertContains(
       html,
-      'פרטי כרטיס האשראי אינם נשמרים במערכות EdenMish. התשלום מועבר להשלמה אצל ספק תשלום חיצוני.',
+      'פרטי כרטיס האשראי אינם נשמרים במערכות EdenMish. התשלום המאובטח מתבצע באמצעות ספק תשלום חיצוני.',
       'accurate hosted-payment disclosure',
     );
   });
