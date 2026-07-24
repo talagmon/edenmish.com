@@ -66,8 +66,8 @@ import {
 import { applyBusinessPlanPricing, businessCouponCustomerKey, businessSessionCookie, cancelWalletTopup, captureWalletReservation, cleanupBusinessSecurity, clearBusinessSessionCookie, createWalletTopup, creditWalletTopup, getBusinessSession, getBusinessSnapshot, getWalletTopup, hydrateBusinessProfileFromPayment, linkWalletReservationToOrder, markWalletTopupCheckout, publicBusinessPlans, releaseWalletReservation, requestBusinessLogin, reserveWalletCredit, revokeBusinessSession, shouldHydrateBusinessProfile, updateBusinessProfile, verifyBusinessLogin } from './business.js';
 import { runDeliveryCompletionSideEffects } from './delivery-completion.js';
 import {
-  enqueueOpsPaymentWhatsAppJob,
   persistOpsDeliveryCompletion,
+  persistPaidOrderAndOpsWhatsAppJob,
   processDeliveryNotificationOutbox,
 } from './delivery-notification-outbox.js';
 import {
@@ -198,23 +198,17 @@ async function confirmPaidOrder(env, order, opts = {}) {
 
   const customerEmail = order.email || opts.customerEmail || null;
   const orderFields = { ...(opts.orderFields || {}), payment_status: 'paid' };
-  await setOrderStatus(env.DB, order.id, 'paid', orderFields);
-  await recordPayment(env.DB, order.id, {
-    amount: Math.round(paidAmount * 100),
-    status: 'paid',
-    payplus_id: opts.paymentRef == null ? null : String(opts.paymentRef),
-    paid_at: paidAt,
+  const transition = await persistPaidOrderAndOpsWhatsAppJob(env.DB, order.id, {
+    amountAgorot: Math.round(paidAmount * 100),
+    paymentRef: opts.paymentRef == null ? null : String(opts.paymentRef),
+    shopifyOrderId: opts.orderFields?.shopify_order_id ?? null,
+    now: paidAt,
   });
-  try {
-    await enqueueOpsPaymentWhatsAppJob(env.DB, order.id, { now: paidAt });
-  } catch (error) {
-    // Payment remains authoritative if an optional notification dependency is
-    // unavailable. Operators can reconcile this explicit, non-PII log without
-    // risking a replay that alerts on historical paid orders.
-    console.error('ops_payment_whatsapp_outbox_enqueue_failed', {
-      order: order.id,
-      message: error?.message || String(error),
-    });
+  if (!transition.transitioned) {
+    return {
+      order: (await getOrderById(env.DB, order.id)) || order,
+      unchanged: true,
+    };
   }
 
   const paidOrder = { ...order, ...orderFields, status: 'paid', email: customerEmail };

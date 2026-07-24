@@ -48,6 +48,7 @@ class ReceiptDb {
       provider_updated_at: null,
       last_error: null,
     } : null;
+    this.notificationReadOverride = null;
     this.updates = 0;
   }
 
@@ -70,7 +71,7 @@ class ReceiptDb {
         }
         if (!normalized.startsWith('SELECT id, status, provider_status')) return null;
         return db.notification.provider_ref === this.args[0]
-          ? { ...db.notification }
+          ? { ...(db.notificationReadOverride || db.notification) }
           : null;
       },
       async run() {
@@ -83,7 +84,13 @@ class ReceiptDb {
             _updatedAt,
             id,
             maximumCurrentTimestamp,
+            incomingRank,
+            incomingStatus,
           ] = this.args;
+          const ranks = {
+            accepted: 0, sent: 1, delivered: 2, read: 3, failed: 4,
+          };
+          const currentRank = ranks[db.outbox?.provider_status] ?? -1;
           if (
             !db.outbox
             || db.outbox.id !== id
@@ -91,6 +98,8 @@ class ReceiptDb {
               db.outbox.provider_updated_at != null
               && db.outbox.provider_updated_at > maximumCurrentTimestamp
             )
+            || currentRank > incomingRank
+            || (incomingStatus === 'failed' && currentRank >= 2)
           ) return { meta: { changes: 0 } };
           Object.assign(db.outbox, {
             state,
@@ -112,13 +121,21 @@ class ReceiptDb {
           _updatedAt,
           id,
           maximumCurrentTimestamp,
+          incomingRank,
+          incomingStatus,
         ] = this.args;
+        const ranks = {
+          accepted: 0, sent: 1, delivered: 2, read: 3, failed: 4,
+        };
+        const currentRank = ranks[db.notification.provider_status] ?? -1;
         if (
           db.notification.id !== id
           || (
             db.notification.provider_updated_at != null
             && db.notification.provider_updated_at > maximumCurrentTimestamp
           )
+          || currentRank > incomingRank
+          || (incomingStatus === 'failed' && currentRank >= 2)
         ) return { meta: { changes: 0 } };
         Object.assign(db.notification, {
           status,
@@ -223,6 +240,24 @@ describe('WhatsApp provider boundary', () => {
       matched: true,
       updated: false,
     }, 'a late contradictory failure must not regress a delivered message');
+
+    const concurrent = new ReceiptDb();
+    concurrent.notification.provider_status = 'delivered';
+    concurrent.notification.provider_updated_at = 2_000;
+    concurrent.notificationReadOverride = {
+      ...concurrent.notification,
+      provider_status: 'accepted',
+      provider_updated_at: 1_000,
+    };
+    assert.deepEqual(await applyWhatsAppDeliveryReceipt(concurrent, {
+      ...receipts[0],
+      providerStatus: 'sent',
+      providerUpdatedAt: 2_000,
+    }), {
+      matched: true,
+      updated: false,
+    }, 'the SQL rank guard must reject an equal-timestamp stale write');
+    assert.equal(concurrent.notification.provider_status, 'delivered');
   });
 
   test('signed receipt endpoint is idempotent and rejects unsigned payloads', async () => {

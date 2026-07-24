@@ -52,7 +52,9 @@ authentication and OTP flows fail closed when `SESSION_SECRET` is missing.
 > WhatsApp automation is optional and fail-safe. Shared credentials cannot
 > activate either message class without that class's separate template/language
 > configuration; operations also requires its distinct recipient. Follow
-> `WHATSAPP_OPERATIONS.md` before adding any production value.
+> `WHATSAPP_OPERATIONS.md` before adding any production value, and keep the
+> values unset until issue #216 records the retained legal-approval and
+> final-published-version activation evidence as complete.
 
 ## Worker non-secret vars (`worker/wrangler.toml [vars]`)
 

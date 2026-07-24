@@ -32,6 +32,13 @@ const PROVIDER_STATUS_RANK = Object.freeze({
   read: 3,
   failed: 4,
 });
+const PROVIDER_STATUS_SQL_RANK = `(CASE provider_status
+  WHEN 'accepted' THEN 0
+  WHEN 'sent' THEN 1
+  WHEN 'delivered' THEN 2
+  WHEN 'read' THEN 3
+  WHEN 'failed' THEN 4
+  ELSE -1 END)`;
 const TEMPLATE_NAME = /^[a-z0-9_]{1,512}$/;
 const LANGUAGE_CODE = /^[a-z]{2,3}(?:_[A-Z]{2})?$/;
 const PHONE_NUMBER = /^\d{8,15}$/;
@@ -66,6 +73,25 @@ export function resolveWhatsAppMessage(env, messageClass, customerRecipient = nu
   const recipient = digits(rawRecipient);
   if (!PHONE_NUMBER.test(recipient)) {
     return { ok: false, skipped: true, permanent: true, error: 'whatsapp_recipient_unconfigured' };
+  }
+  if (definition.recipient === 'operations') {
+    const publicRecipient = digits(env.WHATSAPP_NUMBER);
+    if (!PHONE_NUMBER.test(publicRecipient)) {
+      return {
+        ok: false,
+        skipped: true,
+        permanent: true,
+        error: 'whatsapp_public_number_unconfigured',
+      };
+    }
+    if (recipient === publicRecipient) {
+      return {
+        ok: false,
+        skipped: true,
+        permanent: true,
+        error: 'whatsapp_ops_recipient_not_distinct',
+      };
+    }
   }
   return {
     ok: true,
@@ -244,7 +270,9 @@ export async function applyWhatsAppDeliveryReceipt(DB, receipt) {
             last_error = ?, updated_at = ?
         WHERE id = ? AND (
           provider_updated_at IS NULL OR provider_updated_at <= ?
-        )`).bind(
+        )
+          AND ${PROVIDER_STATUS_SQL_RANK} <= ?
+          AND NOT (? = 'failed' AND ${PROVIDER_STATUS_SQL_RANK} >= 2)`).bind(
         state,
         receipt.providerStatus,
         receipt.providerUpdatedAt,
@@ -252,6 +280,8 @@ export async function applyWhatsAppDeliveryReceipt(DB, receipt) {
         Date.now(),
         current.id,
         receipt.providerUpdatedAt,
+        incomingRank,
+        receipt.providerStatus,
       ).run();
     } else {
       const status = receipt.providerStatus === 'failed' ? 'failed' : current.status;
@@ -260,7 +290,9 @@ export async function applyWhatsAppDeliveryReceipt(DB, receipt) {
             error = ?, updated_at = ?
         WHERE id = ? AND (
           provider_updated_at IS NULL OR provider_updated_at <= ?
-        )`).bind(
+        )
+          AND ${PROVIDER_STATUS_SQL_RANK} <= ?
+          AND NOT (? = 'failed' AND ${PROVIDER_STATUS_SQL_RANK} >= 2)`).bind(
         status,
         receipt.providerStatus,
         receipt.providerUpdatedAt,
@@ -268,6 +300,8 @@ export async function applyWhatsAppDeliveryReceipt(DB, receipt) {
         Date.now(),
         current.id,
         receipt.providerUpdatedAt,
+        incomingRank,
+        receipt.providerStatus,
       ).run();
     }
     updated = updated || !!result?.meta?.changes;

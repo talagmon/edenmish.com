@@ -376,6 +376,7 @@ describe('delivery notification outbox', () => {
         DB,
         WHATSAPP_TOKEN: 'test-token',
         WHATSAPP_PHONE_ID: 'test-phone-id',
+        WHATSAPP_NUMBER: '972500000000',
         WHATSAPP_OPS_RECIPIENT: '972500000001',
         WHATSAPP_OPS_PAYMENT_TEMPLATE: 'eden_ops_payment_received',
         WHATSAPP_OPS_TEMPLATE_LANGUAGE: 'he',
@@ -401,6 +402,7 @@ describe('delivery notification outbox', () => {
     const env = {
       WHATSAPP_TOKEN: 'token',
       WHATSAPP_PHONE_ID: 'phone-id',
+      WHATSAPP_NUMBER: '972500000000',
       WHATSAPP_OPS_RECIPIENT: '972500000001',
       WHATSAPP_OPS_PAYMENT_TEMPLATE: 'eden_ops_payment_received',
       WHATSAPP_OPS_TEMPLATE_LANGUAGE: 'he',
@@ -504,10 +506,27 @@ describe('delivery notification outbox', () => {
         WHATSAPP_CUSTOMER_TEMPLATE_LANGUAGE: 'he',
       }, { now: 1_000 });
 
+      const reusedPublicNumber = new OutboxDb();
+      await enqueueOpsPaymentWhatsAppJob(reusedPublicNumber, order.id, { now: 1_000 });
+      await processDeliveryNotificationOutbox({
+        DB: reusedPublicNumber,
+        WHATSAPP_TOKEN: 'token',
+        WHATSAPP_PHONE_ID: 'phone-id',
+        WHATSAPP_NUMBER: '972500000001',
+        WHATSAPP_OPS_RECIPIENT: '972500000001',
+        WHATSAPP_OPS_PAYMENT_TEMPLATE: 'eden_ops_payment_received',
+        WHATSAPP_OPS_TEMPLATE_LANGUAGE: 'he',
+      }, { now: 1_000 });
+
       assert.equal(networkCalls, 0);
       assert.equal(noCredentials.jobs[0].state, 'dead');
       assert.equal(onlyOps.jobs[0].state, 'dead');
       assert.equal(onlyCustomer.jobs[0].state, 'dead');
+      assert.equal(reusedPublicNumber.jobs[0].state, 'dead');
+      assert.equal(
+        reusedPublicNumber.jobs[0].last_error,
+        'whatsapp_ops_recipient_not_distinct',
+      );
     } finally {
       globalThis.fetch = originalFetch;
     }

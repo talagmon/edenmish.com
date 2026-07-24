@@ -4,6 +4,9 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+import {
+  persistPaidOrderAndOpsWhatsAppJob,
+} from '../src/delivery-notification-outbox.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const migration005 = readFileSync(
@@ -22,6 +25,77 @@ const migration030 = readFileSync(
   resolve(here, '../migrations/030_whatsapp_template_delivery_audit.sql'),
   'utf8',
 );
+
+class SqliteD1 {
+  constructor(database, failAfter = null) {
+    this.database = database;
+    this.failAfter = failAfter;
+  }
+
+  prepare(sql) {
+    const statement = this.database.prepare(sql);
+    return {
+      args: [],
+      bind(...args) { this.args = args; return this; },
+      run() {
+        const result = statement.run(...this.args);
+        return { meta: { changes: Number(result.changes) } };
+      },
+    };
+  }
+
+  async batch(statements) {
+    this.database.exec('BEGIN');
+    try {
+      const results = [];
+      for (let index = 0; index < statements.length; index += 1) {
+        if (index === this.failAfter) throw new Error('simulated_batch_failure');
+        results.push(await statements[index].run());
+      }
+      this.database.exec('COMMIT');
+      return results;
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+}
+
+function paymentDatabase() {
+  const db = new DatabaseSync(':memory:');
+  db.exec(`
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE orders (
+      id INTEGER PRIMARY KEY,
+      status TEXT,
+      payment_status TEXT,
+      shopify_order_id TEXT
+    );
+    CREATE TABLE payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      amount INTEGER,
+      currency TEXT,
+      payplus_id TEXT,
+      status TEXT,
+      url TEXT,
+      created_at INTEGER NOT NULL,
+      paid_at INTEGER
+    );
+    CREATE TABLE status_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      at INTEGER NOT NULL,
+      note TEXT
+    );
+  `);
+  db.exec(migration005);
+  db.exec(migration019);
+  db.exec(migration027);
+  db.exec(migration030);
+  return db;
+}
 
 test('migration 030 preserves jobs and adds sanitized WhatsApp audit readiness', () => {
   const db = new DatabaseSync(':memory:');
@@ -104,6 +178,70 @@ test('migration 030 preserves jobs and adds sanitized WhatsApp audit readiness',
       'whatsapp', 'ops_payment_received', 'sent', 'wamid.existing', 2, 2
     );
   `), /UNIQUE constraint failed/);
+});
+
+test('paid status, payment, history, and operations outbox commit atomically', async () => {
+  const db = paymentDatabase();
+  db.exec(`INSERT INTO orders (id, status, payment_status)
+    VALUES (9001, 'payment_sent', 'link_sent')`);
+  const D1 = new SqliteD1(db);
+
+  assert.deepEqual(
+    await persistPaidOrderAndOpsWhatsAppJob(D1, 9001, {
+      amountAgorot: 5000,
+      paymentRef: 'shopify-1',
+      shopifyOrderId: 'shopify-1',
+      now: 1_000,
+    }),
+    { eventId: 'payment-received-9001', transitioned: true },
+  );
+  assert.deepEqual(
+    { ...db.prepare(`SELECT status, payment_status, shopify_order_id
+      FROM orders WHERE id = 9001`).get() },
+    {
+      status: 'paid',
+      payment_status: 'paid',
+      shopify_order_id: 'shopify-1',
+    },
+  );
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM payments').get().count, 1);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM status_history').get().count, 1);
+  assert.equal(
+    db.prepare('SELECT COUNT(*) AS count FROM delivery_notification_outbox').get().count,
+    1,
+  );
+  assert.deepEqual(
+    await persistPaidOrderAndOpsWhatsAppJob(D1, 9001, {
+      amountAgorot: 5000,
+      paymentRef: 'shopify-1',
+      shopifyOrderId: 'shopify-1',
+      now: 2_000,
+    }),
+    { eventId: 'payment-received-9001', transitioned: false },
+  );
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM payments').get().count, 1);
+
+  const failedDb = paymentDatabase();
+  failedDb.exec(`INSERT INTO orders (id, status, payment_status)
+    VALUES (9002, 'payment_sent', 'link_sent')`);
+  await assert.rejects(
+    persistPaidOrderAndOpsWhatsAppJob(new SqliteD1(failedDb, 2), 9002, {
+      amountAgorot: 5000,
+      now: 3_000,
+    }),
+    /simulated_batch_failure/,
+  );
+  assert.deepEqual(
+    { ...failedDb.prepare(`SELECT status, payment_status
+      FROM orders WHERE id = 9002`).get() },
+    { status: 'payment_sent', payment_status: 'link_sent' },
+  );
+  assert.equal(
+    failedDb.prepare('SELECT COUNT(*) AS count FROM delivery_notification_outbox').get().count,
+    0,
+  );
+  assert.equal(failedDb.prepare('SELECT COUNT(*) AS count FROM payments').get().count, 0);
+  assert.equal(failedDb.prepare('SELECT COUNT(*) AS count FROM status_history').get().count, 0);
 });
 
 test('deployment workflows require migration 030 before WhatsApp activation', () => {

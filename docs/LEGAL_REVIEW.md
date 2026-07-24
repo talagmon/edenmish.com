@@ -54,7 +54,10 @@ Do not paste legal advice into GitHub. If the reviewer identifies required work,
 required change is deployed, dated copies are archived, and the reviewer confirms
 the final published versions.
 
-Owner confirmation: on 2026-07-24, the owner confirmed that all applicable
-legal/privacy add-ons were approved. Reviewer identity, privileged advice,
-engagement records, and archived policy copies are retained outside this public
-repository.
+Owner confirmation: on 2026-07-24, the owner confirmed that the legal/privacy
+add-ons for the current non-analytics launch scope, including the
+WhatsApp-specific design, were approved. This confirmation does not activate or
+approve deferred GA4/Meta work and does not close #216 until its retained-record
+and final-published-version criteria are recorded complete. Reviewer identity,
+privileged advice, engagement records, and archived policy copies are retained
+outside this public repository.
