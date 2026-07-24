@@ -384,6 +384,9 @@ describe('Frontend: SEO foundations', () => {
     for (const deliveryState of ['התקבלה', 'אושר', 'לאיסוף', 'למסירה', 'נמסר']) {
       assertContains(html, deliveryState, `${deliveryState} live-delivery state`);
     }
+    assertContains(html, '<strong>09:30</strong>', 'morning delivery example time');
+    assert.ok(!html.includes('<strong>23:18</strong>'), 'late-night example time is retired');
+    assertContains(html, 'class="home-footer-brand', 'brighter footer brand hook');
     assertContains(html, 'src="/assets/edenmish-home-hero-neon.webp"', 'motorcycle courier hero artwork with neon route trail');
     assert.ok(existsSync(join(PUB, 'assets', 'edenmish-home-hero-neon.webp')), 'neon motorcycle hero artwork not found');
     assertContains(html, 'src="/assets/edenmish-city-orbit.webp"', 'service-area orbital map artwork');
@@ -418,6 +421,8 @@ describe('Frontend: SEO foundations', () => {
     assertContains(styles, '.home-slogan-signature {', 'slogan signature styling');
     assertContains(styles, '.home-slogan-band {', 'process slogan styling');
     assertContains(styles, '.home-benefit-number {', 'numeric benefit marker styling');
+    assertContains(styles, '.home-footer-brand {', 'brighter footer brand styling');
+    assertContains(styles, 'color: #f8fafc;', 'white footer brand color');
     assertContains(styles, '@media (min-width: 768px) and (max-width: 1023px)', 'tablet navigation breakpoint');
     assertContains(styles, '.home-nav > nav {\n      gap: 18px;', 'tablet navigation spacing');
     assertContains(styles, 'backdrop-filter: blur(24px) saturate(150%);', 'layered glass navigation');
