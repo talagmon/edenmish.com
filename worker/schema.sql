@@ -137,11 +137,15 @@ CREATE TABLE IF NOT EXISTS notifications (
   subject TEXT,
   status TEXT NOT NULL,             -- 'pending' | 'sent' | 'failed' | 'skipped'
   provider_ref TEXT,                -- provider message id (null until sendEmail exposes one)
+  provider_status TEXT,             -- sanitized provider lifecycle status only
+  provider_updated_at INTEGER,
   error TEXT,                       -- short, sanitized error string
   created_at INTEGER NOT NULL,
   updated_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_status ON notifications(status, id DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_provider_ref
+  ON notifications(provider_ref) WHERE provider_ref IS NOT NULL;
 
 -- Durable completion marker + retryable customer-notification outbox. The unique
 -- logical job prevents event replay/concurrency from creating duplicate work.
@@ -155,7 +159,9 @@ CREATE TABLE IF NOT EXISTS delivery_completion_transitions (
 CREATE TABLE IF NOT EXISTS delivery_notification_outbox (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   order_id INTEGER NOT NULL,
-  transition TEXT NOT NULL CHECK(transition IN ('delivered','delivery_failed_retained')),
+  transition TEXT NOT NULL CHECK(transition IN (
+    'delivered','delivery_failed_retained','payment_received'
+  )),
   event_id TEXT NOT NULL,
   channel TEXT NOT NULL CHECK(channel IN ('email', 'whatsapp')),
   template TEXT NOT NULL,
@@ -168,11 +174,16 @@ CREATE TABLE IF NOT EXISTS delivery_notification_outbox (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   sent_at INTEGER,
+  provider_ref TEXT,
+  provider_status TEXT,
+  provider_updated_at INTEGER,
   UNIQUE(order_id, transition, channel, template),
   FOREIGN KEY (order_id) REFERENCES orders(id)
 );
 CREATE INDEX IF NOT EXISTS idx_delivery_notification_outbox_due
   ON delivery_notification_outbox(state, next_attempt_at, lease_expires_at, id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_delivery_notification_outbox_provider_ref
+  ON delivery_notification_outbox(provider_ref) WHERE provider_ref IS NOT NULL;
 
 -- Online cancellation notices. The full identity number is deliberately not
 -- persisted; only its last four digits are retained for request correlation.

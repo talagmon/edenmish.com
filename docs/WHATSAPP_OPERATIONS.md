@@ -7,24 +7,29 @@ WhatsApp text is in Hebrew; operator instructions and evidence remain in English
 ## Current safety state
 
 - `WHATSAPP_NUMBER` is public routing configuration for customer links and the
-  operations recipient.
-- `WHATSAPP_TOKEN` and `WHATSAPP_PHONE_ID` are secrets. When either is absent,
-  the Worker records an audit attempt as skipped and sends nothing.
+  booking CTA only. It is never an automated operations recipient.
+- `WHATSAPP_OPS_RECIPIENT` is a separate secret internal recipient.
+- `WHATSAPP_TOKEN` and `WHATSAPP_PHONE_ID` are shared transport secrets. When
+  either is absent, the Worker records an audit attempt as skipped and sends
+  nothing.
 - Customer delivery-proof links may use WhatsApp only when the order has the
-  separate persisted phone-channel opt-in. Email remains the primary channel.
-- The current Cloud API adapter sends free-form `text` messages. Proactive
-  business-initiated messages outside the customer-service window generally need
-  approved templates.
-- The current paid-order alert uses the public `WHATSAPP_NUMBER` as its operations
-  recipient and includes customer/order details whenever both global Cloud API
-  secrets exist. That path is not gated by the customer's phone-channel opt-in and
-  is not safe to activate under the current privacy boundary.
+  separate persisted phone-channel opt-in. The provider template contains no
+  proof URL or tracking token; email/tracking remains the private detail channel.
+- Proactive messages use approved `template` transport only. Both supported
+  templates have zero dynamic components.
+- Paid-order alerts are unique durable jobs. The provider receives only the
+  separate operations number and generic approved template—no name, address,
+  order ID, tracking token, price, URL, or free text.
+- Delivery receipts require a valid Meta app-secret signature and update only a
+  sanitized provider reference, lifecycle status, provider timestamp, and numeric
+  error code. Duplicate/stale receipts are no-ops.
+- Meta necessarily receives the destination phone number to route a message. That
+  transport address is covered by the approved service-message boundary, is never
+  a template component, and is not retained in EdenMish's WhatsApp audit rows.
 
-Production credentials must remain unset until the code-owned privacy, template,
-recipient-separation, and delivery-reliability work in
-[#218](https://github.com/talagmon/edenmish.com/issues/218) is complete and the
-legal activation gate in
-[#216](https://github.com/talagmon/edenmish.com/issues/216) is satisfied.
+The owner confirmed the applicable legal/privacy add-ons as approved on
+2026-07-24. Production credentials must still remain unset until the account,
+recipient, templates, webhook, and controlled-test setup below are complete.
 
 ## Business account checklist
 
@@ -70,18 +75,46 @@ Recommended labels:
 
 ## Cloud API credential setup
 
-This is a blocked activation step, not a setup step to run now. Only after #218
-and the relevant #216 review are complete:
+Complete migration 030 and approve both zero-component templates before adding
+these values:
 
 ```bash
 cd worker
 wrangler secret put WHATSAPP_PHONE_ID
 wrangler secret put WHATSAPP_TOKEN
+wrangler secret put WHATSAPP_APP_SECRET
+wrangler secret put WHATSAPP_WEBHOOK_VERIFY_TOKEN
+wrangler secret put WHATSAPP_OPS_RECIPIENT
+wrangler secret put WHATSAPP_OPS_PAYMENT_TEMPLATE
+wrangler secret put WHATSAPP_OPS_TEMPLATE_LANGUAGE
+wrangler secret put WHATSAPP_CUSTOMER_DELIVERED_TEMPLATE
+wrangler secret put WHATSAPP_CUSTOMER_TEMPLATE_LANGUAGE
 ```
 
 Never pass the values on the command line, paste them into an issue, or store them
 in `wrangler.toml`. Confirm secret names with `wrangler secret list`; that command
 must not reveal values.
+
+### Required template contracts
+
+| Secret name | Suggested approved template | Components | Required content boundary |
+|---|---|---:|---|
+| `WHATSAPP_OPS_PAYMENT_TEMPLATE` | `eden_ops_payment_received` | 0 | Generic notice that a paid delivery needs review in the authenticated ops dashboard |
+| `WHATSAPP_CUSTOMER_DELIVERED_TEMPLATE` | `eden_delivery_complete` | 0 | Generic delivery-complete notice directing the customer to the previously supplied email/tracking channel |
+
+Do not add body/header/button variables to either template without a new privacy
+review and matching bounded-component code/tests.
+
+Register `https://find.edenmish.com/webhooks/whatsapp` for delivery-status
+webhooks. The GET challenge uses `WHATSAPP_WEBHOOK_VERIFY_TOKEN`; POST receipts
+must carry Meta's valid `X-Hub-Signature-256`.
+
+The Worker pins Graph API `v25.0`. It was checked against Meta's official Graph
+endpoint on 2026-07-24; `v25.0` was recognized and `v26.0` was not. The Worker
+owner must re-check the
+[Graph API changelog](https://developers.facebook.com/docs/graph-api/changelog/)
+quarterly and before Meta's published version-expiry date, then update the pin
+and provider-contract tests in one PR.
 
 ## Controlled verification
 
@@ -90,12 +123,16 @@ record for activation testing.
 
 | Case | Expected result |
 |---|---|
-| Either Cloud API secret absent | Notification audit records `skipped`; no network delivery |
-| Delivery-proof opt-in false | Email job only; no WhatsApp proof-link job |
-| Delivery-proof opt-in true | One email job and one WhatsApp job |
-| Approved service/template send | The approved template arrives at a controlled customer test number and audit status becomes sent |
+| Either shared Cloud API secret absent | Notification audit records `skipped`; no network delivery |
+| Only operations class configured | Customer class remains disabled |
+| Only customer class configured | Operations class remains disabled |
+| Delivery-proof opt-in false | Email job only; no customer WhatsApp template job |
+| Delivery-proof opt-in true | One email job and one zero-component customer-template job |
+| Approved service/template send | The approved template arrives at a controlled test number; audit records a sanitized provider reference/status |
 | Invalid/revoked credential | No customer retry storm; audit shows a sanitized failure |
-| Paid-order operations alert (after #218) | Eden receives one PII-minimized alert at the separate verified operations recipient |
+| Duplicate paid event | Exactly one operations outbox job and provider send |
+| Paid-order operations alert | Eden receives one zero-component alert at the separate verified operations recipient |
+| Duplicate/stale receipt | No duplicate or backward audit transition |
 
 Record the date, environment, order fixture ID, notification audit result, and a
 redacted provider message ID. Do not record message bodies, phone numbers, tokens,

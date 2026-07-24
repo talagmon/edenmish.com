@@ -50,7 +50,7 @@ import { createCharge, createWalletCharge, verifyShopifyWebhook, parseShopifyOrd
 import { trackingHtml, opsHtml } from './pages.js';
 import { businessAccountHtml } from './business-page.js';
 import { corsFor, maskEmail, publicOrderSummary, clientIp, anonKey } from './security.js';
-import { notifyEmail, notifyWhatsApp } from './notify.js';
+import { notifyEmail } from './notify.js';
 import { normalizeIlPhone, scheduleError, validIsraeliId } from './validate.js';
 import { validateCoupon, recordRedemption, recordBusinessRedemption, releaseBusinessRedemption, listCoupons, createCoupon, updateCoupon, deleteCoupon } from './coupons.js';
 import { getStatusMeta, getNextStatuses, isTerminalStatus } from './status.js';
@@ -66,9 +66,16 @@ import {
 import { applyBusinessPlanPricing, businessCouponCustomerKey, businessSessionCookie, cancelWalletTopup, captureWalletReservation, cleanupBusinessSecurity, clearBusinessSessionCookie, createWalletTopup, creditWalletTopup, getBusinessSession, getBusinessSnapshot, getWalletTopup, hydrateBusinessProfileFromPayment, linkWalletReservationToOrder, markWalletTopupCheckout, publicBusinessPlans, releaseWalletReservation, requestBusinessLogin, reserveWalletCredit, revokeBusinessSession, shouldHydrateBusinessProfile, updateBusinessProfile, verifyBusinessLogin } from './business.js';
 import { runDeliveryCompletionSideEffects } from './delivery-completion.js';
 import {
+  enqueueOpsPaymentWhatsAppJob,
   persistOpsDeliveryCompletion,
   processDeliveryNotificationOutbox,
 } from './delivery-notification-outbox.js';
+import {
+  applyWhatsAppDeliveryReceipt,
+  extractWhatsAppDeliveryReceipts,
+  verifyWhatsAppWebhookChallenge,
+  verifyWhatsAppWebhookSignature,
+} from './whatsapp.js';
 
 const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra } });
 const html = (s) => new Response(s, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -198,6 +205,17 @@ async function confirmPaidOrder(env, order, opts = {}) {
     payplus_id: opts.paymentRef == null ? null : String(opts.paymentRef),
     paid_at: paidAt,
   });
+  try {
+    await enqueueOpsPaymentWhatsAppJob(env.DB, order.id, { now: paidAt });
+  } catch (error) {
+    // Payment remains authoritative if an optional notification dependency is
+    // unavailable. Operators can reconcile this explicit, non-PII log without
+    // risking a replay that alerts on historical paid orders.
+    console.error('ops_payment_whatsapp_outbox_enqueue_failed', {
+      order: order.id,
+      message: error?.message || String(error),
+    });
+  }
 
   const paidOrder = { ...order, ...orderFields, status: 'paid', email: customerEmail };
   if (customerEmail && env.SENDGRID_API_KEY) {
@@ -219,13 +237,6 @@ async function confirmPaidOrder(env, order, opts = {}) {
     subject: `תשלום התקבל #${order.id} — ₪${order.price}`,
     html: `${escHtml(order.name)} · ${escHtml(order.pickup)} → ${escHtml(order.dropoff)}<br>המתינו לאישור ויציאה לדרך ב- ops.edenmish.com`,
   });
-  await notifyWhatsApp(env, env.DB, {
-    orderId: order.id,
-    template: 'ops_payment_received',
-    recipient: env.WHATSAPP_NUMBER,
-    body: `תשלום התקבל #${order.id} — ₪${order.price}\n${order.name || ''} · ${order.pickup || ''} → ${order.dropoff || ''}\nצפייה ואישור: ${storefrontUrl(env, '/dash.html')}`,
-  });
-
   return { order: (await getOrderById(env.DB, order.id)) || paidOrder, unchanged: false };
 }
 
@@ -1667,6 +1678,51 @@ export default {
       const c = await deleteCoupon(env.DB, code);
       if (!c) return json({ error: 'not found' }, 404);
       return json({ ok: true, coupon: c });
+    }
+
+    // ---- WhatsApp Cloud API verification and delivery receipts ----
+    if (path === '/webhooks/whatsapp' && req.method === 'GET') {
+      const challenge = verifyWhatsAppWebhookChallenge(env, url);
+      if (challenge == null) return new Response('Forbidden', { status: 403 });
+      return new Response(challenge, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Cache-Control': 'no-store',
+        },
+      });
+    }
+    if (path === '/webhooks/whatsapp' && req.method === 'POST') {
+      if (!env.WHATSAPP_APP_SECRET) {
+        return json({ error: 'webhook_unconfigured' }, 503);
+      }
+      const declared = Number(req.headers.get('content-length'));
+      if (Number.isFinite(declared) && declared > 256 * 1024) {
+        return json({ error: 'payload_too_large' }, 413);
+      }
+      const rawBody = await req.text();
+      if (new TextEncoder().encode(rawBody).byteLength > 256 * 1024) {
+        return json({ error: 'payload_too_large' }, 413);
+      }
+      const signature = req.headers.get('X-Hub-Signature-256');
+      if (!(await verifyWhatsAppWebhookSignature(
+        env.WHATSAPP_APP_SECRET,
+        rawBody,
+        signature,
+      ))) return json({ error: 'invalid signature' }, 401);
+      let payload;
+      try { payload = JSON.parse(rawBody); } catch {
+        return json({ error: 'bad json' }, 400);
+      }
+      const receipts = extractWhatsAppDeliveryReceipts(payload);
+      let matched = 0;
+      let updated = 0;
+      for (const receipt of receipts) {
+        const result = await applyWhatsAppDeliveryReceipt(env.DB, receipt);
+        if (result.matched) matched += 1;
+        if (result.updated) updated += 1;
+      }
+      return json({ received: true, matched, updated });
     }
 
     // ---- Shopify webhooks (PayPlus remains behind Shopify) ----

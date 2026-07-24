@@ -267,9 +267,20 @@ export async function createNotificationAttempt(DB, data) {
   return r ? r.id : null;
 }
 
-export async function markNotificationSent(DB, id, providerRef) {
-  await DB.prepare('UPDATE notifications SET status = ?, provider_ref = ?, updated_at = ? WHERE id = ?')
-    .bind('sent', providerRef ?? null, Date.now(), id).run();
+export async function markNotificationSent(DB, id, providerRef, providerStatus = null) {
+  const now = Date.now();
+  await DB.prepare(`UPDATE notifications
+    SET status = ?, provider_ref = ?, provider_status = ?,
+        provider_updated_at = ?, updated_at = ?
+    WHERE id = ?`)
+    .bind(
+      'sent',
+      providerRef ?? null,
+      providerStatus ?? null,
+      null,
+      now,
+      id,
+    ).run();
 }
 
 export async function markNotificationFailed(DB, id, error) {
@@ -288,7 +299,9 @@ export async function listRecentNotificationFailures(DB, limit = 5) {
 }
 
 export async function listNotificationsForOrder(DB, orderId) {
-  return DB.prepare('SELECT id, channel, template, recipient, subject, status, provider_ref, error, created_at FROM notifications WHERE order_id = ? ORDER BY id ASC')
+  return DB.prepare(`SELECT id, channel, template, recipient, subject, status,
+      provider_ref, provider_status, provider_updated_at, error, created_at
+    FROM notifications WHERE order_id = ? ORDER BY id ASC`)
     .bind(orderId).all();
 }
 

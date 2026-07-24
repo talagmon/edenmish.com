@@ -22,7 +22,15 @@ import { createDraftOrder, hashOtp, makeSession } from '../src/integrations.js';
 // (validateCoupon) under-report 0 — as if a concurrent order landed between the
 // check and the insert — while the conditional INSERT guard sees the real rows.
 function apiDb({ coupon = null, raceRedemptions = false, orderRow = null } = {}) {
-  const state = { rateLimits: new Map(), coupons: new Map(), orders: [], redemptions: [], runs: [], nextOrderId: 1 };
+  const state = {
+    rateLimits: new Map(),
+    coupons: new Map(),
+    orders: [],
+    redemptions: [],
+    runs: [],
+    outboxKeys: new Set(),
+    nextOrderId: 1,
+  };
   if (coupon) state.coupons.set(coupon.code, { ...coupon });
   return {
     state,
@@ -67,6 +75,13 @@ function apiDb({ coupon = null, raceRedemptions = false, orderRow = null } = {})
           return { results: [] };
         },
         async run() {
+          if (/INSERT OR IGNORE INTO delivery_notification_outbox/.test(sql)) {
+            const key = `${this.args[0]}:payment_received:whatsapp:${this.args[2]}`;
+            if (state.outboxKeys.has(key)) return { meta: { changes: 0 } };
+            state.outboxKeys.add(key);
+            state.runs.push({ sql, args: this.args });
+            return { meta: { changes: 1 } };
+          }
           if (/UPDATE orders\s+SET status = 'delivered'/.test(sql) && orderRow) {
             orderRow.status = 'delivered';
             orderRow.delivered_at = this.args[0];
@@ -761,7 +776,10 @@ describe('manual paid confirmation', () => {
     const attempts = db.state.runs.filter(c => /INSERT INTO notifications/.test(c.sql));
     assert.ok(attempts.some(c => c.args[1] === 'email' && c.args[2] === 'customer_payment_confirmation'));
     assert.ok(attempts.some(c => c.args[1] === 'email' && c.args[2] === 'ops_payment_received'));
-    assert.ok(attempts.some(c => c.args[1] === 'whatsapp' && c.args[2] === 'ops_payment_received'));
+    assert.ok(db.state.runs.some(c => (
+      /INSERT OR IGNORE INTO delivery_notification_outbox/.test(c.sql)
+      && c.args[2] === 'ops_payment_received'
+    )));
 
     const customerEmail = sentEmails.find(message => message.subject === 'התשלום התקבל ✓ — קוד אימות וקישור למעקב');
     assert.ok(customerEmail, 'customer payment confirmation should be sent');
@@ -771,11 +789,23 @@ describe('manual paid confirmation', () => {
     assert.match(customerHtml, /color-scheme:light/);
     assert.doesNotMatch(customerHtml, /#0b1326|#dae2fd|#dfb7ff/);
 
-    const runCount = db.state.runs.length;
+    const paymentCount = payments.length;
+    const notificationCount = attempts.length;
+    const outboxCount = db.state.outboxKeys.size;
     res = await worker.fetch(await opsPost('/api/ops/orders/12/status', { status: 'paid' }), env);
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), { ok: true, unchanged: true });
-    assert.equal(db.state.runs.length, runCount, 'retry must not add payments, OTPs, or notifications');
+    assert.equal(
+      db.state.runs.filter(c => /INSERT INTO payments/.test(c.sql)).length,
+      paymentCount,
+      'retry must not add a payment',
+    );
+    assert.equal(
+      db.state.runs.filter(c => /INSERT INTO notifications/.test(c.sql)).length,
+      notificationCount,
+      'retry must not add notification attempts',
+    );
+    assert.equal(db.state.outboxKeys.size, outboxCount, 'retry must not duplicate the ops job');
   });
 });
 
