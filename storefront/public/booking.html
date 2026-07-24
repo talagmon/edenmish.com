@@ -14,6 +14,194 @@
 <script src="/assets/analytics.js" defer></script>
 <style>
 gmp-place-autocomplete.eden-places{display:block;width:100%;color-scheme:dark}
+:root{
+  --order-edge:rgba(196,213,255,.28);
+  --order-edge-strong:rgba(145,211,200,.72);
+  --order-glass:linear-gradient(145deg,rgba(22,27,58,.82),rgba(10,15,38,.66));
+  --order-glass-soft:linear-gradient(145deg,rgba(31,35,72,.7),rgba(16,20,48,.58));
+  --order-purple:#a875ff;
+  --order-purple-soft:#dfb7ff;
+  --order-mint:#91d3c8;
+  --order-gutter:clamp(16px,4vw,28px);
+  --order-radius:24px;
+}
+body{
+  background:
+    radial-gradient(circle at 12% 8%,rgba(91,42,134,.3),transparent 34rem),
+    radial-gradient(circle at 90% 74%,rgba(45,226,208,.1),transparent 30rem),
+    linear-gradient(180deg,#090d24,#0b1029 48%,#090d24);
+  background-attachment:fixed;
+}
+.order-main{padding:88px var(--order-gutter) 148px}
+.order-shell{width:min(100%,960px);margin-inline:auto}
+.order-hero{padding:26px 4px 22px;text-align:right}
+.order-kicker{width:max-content;display:flex;align-items:center;gap:8px;color:var(--order-mint);font-weight:700;font-size:.85rem;letter-spacing:.02em;padding:8px 13px;border:1px solid rgba(145,211,200,.32);border-radius:999px;background:rgba(62,151,136,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.order-title{font-size:clamp(1.75rem,5vw,2.75rem);line-height:1.15;font-weight:800;color:#f5f2ff;margin:.45rem 0}
+.order-title span{background:linear-gradient(90deg,#dfb7ff 8%,#8066e8 88%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 12px 30px rgba(91,42,134,.26))}
+.order-subtitle{color:#b9bfd5;font-size:clamp(.98rem,2.4vw,1.08rem);max-width:42rem;margin:0}
+.order-slogan{display:flex;align-items:center;gap:7px;margin-top:12px;color:#dfb7ff;font-weight:700}
+.order-slogan .material-symbols-outlined{color:var(--order-mint)}
+.order-stack{display:grid;gap:16px;width:100%}
+.order-layer{
+  width:100%;
+  border:1px solid rgba(209,218,255,.14);
+  border-radius:var(--order-radius);
+  background:linear-gradient(145deg,rgba(27,36,70,.66),rgba(12,18,45,.54));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 26px 80px rgba(0,0,0,.22);
+  backdrop-filter:blur(26px) saturate(135%);
+  -webkit-backdrop-filter:blur(26px) saturate(135%);
+}
+.order-layer--mint{border-color:rgba(209,218,255,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 24px 60px rgba(0,0,0,.3)}
+.order-progress{padding:16px 18px}
+.progress-meta{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#b9bfd5;font-size:.82rem;margin-bottom:13px}
+.progress-meta strong{color:#f0ecff;font-weight:700}
+.step-rail{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));align-items:center;direction:rtl;gap:4px}
+.step-dot{position:relative;min-width:0;display:flex;align-items:center;justify-content:center;background:none;border:0;padding:0;color:#747b95;cursor:default}
+.step-dot::before{content:"";position:absolute;inset-inline-start:50%;width:calc(100% + 4px);height:1px;background:rgba(149,157,188,.25);z-index:0}
+.step-dot:last-child::before{display:none}
+.step-dot span{position:relative;z-index:1;width:30px;height:30px;display:grid;place-items:center;border-radius:50%;border:1px solid rgba(151,159,190,.34);background:#11162e;font-size:.8rem;font-weight:700}
+.step-dot.is-active span{border-color:var(--order-purple-soft);background:linear-gradient(145deg,#7c45cf,#a875ff);color:white;box-shadow:0 0 20px rgba(168,117,255,.48)}
+.step-dot.is-complete{color:#061519;cursor:pointer}
+.step-dot.is-complete span{border-color:var(--order-mint);background:var(--order-mint)}
+.step-dot.is-complete::before{background:linear-gradient(90deg,var(--order-mint),rgba(145,211,200,.45))}
+.step-dot:focus-visible span{outline:2px solid white;outline-offset:3px}
+.business-order-banner{padding:18px 20px}
+.booking-step{padding:clamp(20px,4vw,34px);min-height:350px;overflow:hidden;scroll-margin-top:84px}
+.booking-step[hidden]{display:none!important}
+.booking-step.is-entering{animation:orderStepIn .28s cubic-bezier(.2,.7,.2,1)}
+@keyframes orderStepIn{from{opacity:0;transform:translateX(-16px)}to{opacity:1;transform:none}}
+.step-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:22px}
+.step-heading-copy{display:flex;align-items:flex-start;gap:12px}
+.step-icon{width:42px;height:42px;display:grid;place-items:center;flex:0 0 auto;border-radius:14px;border:1px solid rgba(223,183,255,.34);background:linear-gradient(145deg,rgba(131,72,205,.34),rgba(71,49,126,.14));color:#dfb7ff;box-shadow:inset 0 1px 0 rgba(255,255,255,.1)}
+.step-heading h2{font-size:clamp(1.28rem,3vw,1.65rem);font-weight:750;color:#f5f2ff;margin:0}
+.step-heading p{color:#aeb5cc;margin:.3rem 0 0;font-size:.9rem;line-height:1.55}
+.step-number{color:#7f879f;font-size:.76rem;white-space:nowrap;padding-top:4px}
+.choice-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.choice-card{display:block;height:100%;cursor:pointer}
+.choice-card input{position:absolute;opacity:0;pointer-events:none}
+.choice-surface{
+  display:flex;align-items:center;justify-content:space-between;gap:15px;height:100%;min-height:132px;padding:20px;
+  border:1px solid rgba(209,218,255,.17);border-radius:20px;background:rgba(17,23,53,.5);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 16px 38px rgba(9,8,29,.18);transition:border-color .2s,background .2s,transform .2s,box-shadow .2s
+}
+.choice-card:hover .choice-surface{border-color:rgba(223,183,255,.55);transform:translateY(-1px)}
+.choice-card input:focus-visible + .choice-surface{outline:2px solid white;outline-offset:3px}
+.choice-card input:checked + .choice-surface{border-color:rgba(223,183,255,.5);background:linear-gradient(115deg,rgba(128,73,184,.42),rgba(91,42,134,.2)),rgba(30,27,72,.3);box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 16px 38px rgba(9,8,29,.24),0 0 28px rgba(139,92,246,.12)}
+.choice-card input:disabled + .choice-surface{opacity:.38;cursor:not-allowed}
+.choice-copy h3{font-weight:750;color:#f5f2ff;margin:0 0 4px;font-size:1.06rem}
+.choice-copy p{color:#aeb5cc;margin:0;font-size:.85rem;line-height:1.45}
+.choice-copy .choice-price{display:block;color:var(--order-mint);font-weight:700;margin-top:7px}
+.choice-icon{width:46px;height:46px;display:grid;place-items:center;border-radius:15px;background:rgba(11,16,39,.5);color:#cbc6e8;border:1px solid rgba(187,193,222,.2);flex:0 0 auto}
+.choice-card input:checked + .choice-surface .choice-icon{color:var(--order-mint);border-color:rgba(145,211,200,.48);box-shadow:0 0 18px rgba(145,211,200,.14)}
+.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.field-grid .full{grid-column:1/-1}
+.order-field{display:flex;flex-direction:column;gap:7px}
+.order-field label{color:#c4c9db;font-size:.85rem;font-weight:650}
+.order-input,.order-field input,.order-field textarea{
+  width:100%;min-height:52px;border:1px solid rgba(163,173,210,.3);border-radius:16px!important;
+  background:rgba(7,12,31,.55)!important;color:#f7f5ff!important;padding:13px 15px!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.045);transition:border-color .2s,box-shadow .2s
+}
+.order-field textarea{min-height:106px;resize:vertical}
+.order-input:focus,.order-field input:focus,.order-field textarea:focus{outline:0;border-color:var(--order-mint);box-shadow:0 0 0 3px rgba(145,211,200,.12),0 0 18px rgba(145,211,200,.08)}
+.order-field input::placeholder,.order-field textarea::placeholder{color:#6f7790}
+.access-details,.price-details,.legal-details{
+  width:100%;margin-top:16px;border:1px solid rgba(160,169,205,.2);border-radius:18px;background:rgba(10,15,37,.4);overflow:hidden
+}
+.access-details summary,.price-details summary,.legal-details summary{list-style:none;min-height:54px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 16px;cursor:pointer;color:#d8dcf0;font-weight:650}
+.access-details summary::-webkit-details-marker,.price-details summary::-webkit-details-marker,.legal-details summary::-webkit-details-marker{display:none}
+.details-arrow{transition:transform .2s;color:#9fa8c3}
+details[open] .details-arrow{transform:rotate(180deg)}
+.details-content{border-top:1px solid rgba(160,169,205,.16);padding:16px}
+.route-result{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;margin-top:16px;overflow:hidden;border:1px solid rgba(145,211,200,.32);border-radius:18px;background:rgba(145,211,200,.17)}
+.route-result>div{min-height:76px;background:rgba(8,13,32,.86);display:flex;align-items:center;justify-content:center;gap:9px;padding:12px;text-align:center;color:#c8cede}
+.route-result .material-symbols-outlined{color:var(--order-mint)}
+.service-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}
+.service-grid .choice-surface{min-height:174px;flex-direction:column-reverse;text-align:center;justify-content:center}
+.schedule-shell{display:grid;gap:16px}
+#sched-dates,#sched-windows{gap:10px!important}
+#sched-dates button,#sched-windows button{min-height:46px;border-radius:14px!important}
+.date-picker-row{display:grid;grid-template-columns:minmax(0,1fr) 52px;gap:10px;align-items:stretch}
+.date-picker-button{min-height:52px;border:1px solid rgba(209,218,255,.17);border-radius:16px;background:rgba(17,23,53,.5);color:#dfb7ff;display:grid;place-items:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.06);transition:border-color .2s,background .2s,transform .2s}
+.date-picker-button:hover{border-color:rgba(223,183,255,.5);background:rgba(91,42,134,.18)}
+.date-picker-button:active{transform:scale(.96)}
+.schedule-flash-card{border:1px solid rgba(145,211,200,.34);border-radius:18px;background:rgba(145,211,200,.08);padding:18px}
+.summary-strip{padding:16px 18px}
+.summary-strip[hidden]{display:none!important}
+.summary-strip-header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.summary-strip h2{font-size:.82rem;color:#8f98b3;font-weight:700;margin:0}
+.summary-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:11px}
+.summary-chip{display:flex;align-items:center;gap:6px;max-width:100%;padding:7px 10px;border:1px solid rgba(145,211,200,.23);border-radius:999px;background:rgba(145,211,200,.06);color:#cbd2e3;font-size:.75rem}
+.summary-chip .material-symbols-outlined{font-size:16px;color:var(--order-mint)}
+.summary-edit{border:0;background:none;color:#dfb7ff;font-size:.78rem;text-decoration:underline;cursor:pointer}
+.price-breakdown{display:grid;gap:9px;color:#b7bfd4;font-size:.86rem}
+.price-line{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.price-total{margin-top:4px;padding-top:12px;border-top:1px solid rgba(162,172,204,.2);font-weight:750;color:#f4f0ff}
+.price-total strong{font-size:1.45rem;color:var(--order-mint)}
+.coupon-glass{margin-top:18px;padding-top:16px;border-top:1px solid rgba(162,172,204,.18)}
+#coupon-toggle{text-align:right}
+.privacy-grid{display:grid;gap:12px;margin-top:18px}
+.check-row{display:flex;align-items:flex-start;gap:12px;cursor:pointer;color:#c2c8d9;font-size:.86rem;line-height:1.6}
+.check-row input{width:20px;height:20px;margin-top:2px;accent-color:#8f5be0;flex:0 0 auto}
+.form-error{width:100%;border:1px solid rgba(248,113,113,.48);border-radius:16px;background:rgba(127,29,29,.24);color:#fecaca;padding:14px 16px;text-align:right}
+.action-dock{
+  position:fixed;z-index:45;left:50%;right:auto;transform:translateX(-50%);bottom:max(12px,env(safe-area-inset-bottom));
+  width:min(calc(100% - (2 * var(--order-gutter))),960px);padding:10px;border:1px solid rgba(223,183,255,.28);border-radius:23px;
+  background:linear-gradient(115deg,rgba(88,60,132,.46),rgba(25,31,68,.3)),rgba(12,17,44,.84);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(145,211,200,.05),0 18px 50px rgba(0,0,0,.36),0 0 32px rgba(139,92,246,.08);
+  backdrop-filter:blur(24px) saturate(150%);-webkit-backdrop-filter:blur(24px) saturate(150%)
+}
+.action-dock-inner{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px;align-items:stretch}
+.action-dock-inner:has(.back-action[hidden]){grid-template-columns:minmax(0,1fr) auto}
+.primary-action{
+  min-height:60px;border:1px solid rgba(223,183,255,.5);border-radius:17px;padding:0 22px;
+  display:flex;align-items:center;justify-content:center;gap:10px;background:linear-gradient(115deg,rgba(128,73,184,.52),rgba(91,42,134,.24)),rgba(30,27,72,.3);
+  color:white;font-weight:750;font-size:1rem;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 -1px 0 rgba(223,183,255,.08),0 16px 38px rgba(9,8,29,.34),0 0 28px rgba(139,92,246,.14);
+  backdrop-filter:blur(18px) saturate(150%);-webkit-backdrop-filter:blur(18px) saturate(150%);
+  transition:transform .28s cubic-bezier(.2,.8,.2,1),filter .18s,box-shadow .28s
+}
+.primary-action[hidden]{display:none!important}
+.primary-action:hover{filter:brightness(1.08)}
+.primary-action:active{transform:scale(.985)}
+.primary-action:disabled{opacity:.5;cursor:not-allowed}
+.primary-action .material-symbols-outlined{direction:ltr;unicode-bidi:isolate;transform:none}
+.dock-price{min-width:158px;border:1px solid rgba(209,218,255,.17);border-radius:17px;background:rgba(17,23,53,.5);display:flex;align-items:center;justify-content:center;gap:12px;padding:9px 16px;box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+.dock-price-icon{color:#c9c5e4}
+.dock-price-copy{min-width:0}
+.dock-price-copy span{display:block;color:#8f98b3;font-size:.7rem}
+.dock-price-copy strong{display:block;color:#f5f2ff;font-size:1rem;white-space:nowrap}
+.dock-price-copy small{display:block;color:#91d3c8;font-size:.67rem;white-space:nowrap}
+.back-action{min-height:44px;border:1px solid rgba(209,218,255,.17);border-radius:15px;background:rgba(17,23,53,.5);color:#d7dbea;padding:0 8px;display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer;box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+.back-action[hidden]{display:none!important}
+.security-note{display:flex;align-items:flex-start;gap:8px;color:#8f98b3;font-size:.76rem;line-height:1.5;margin-top:13px}
+.security-note .material-symbols-outlined{font-size:18px;color:var(--order-mint)}
+.mobile-only{display:none}
+@media(max-width:700px){
+  .order-main{padding-top:78px;padding-bottom:178px}
+  .order-hero{padding-top:22px}
+  .order-progress{padding:14px}
+  .progress-meta{margin-bottom:10px}
+  .step-dot span{width:27px;height:27px;font-size:.72rem}
+  .booking-step{padding:20px 16px;min-height:390px;border-radius:22px}
+  .choice-grid,.field-grid,.service-grid{grid-template-columns:1fr}
+  .choice-surface{min-height:104px;padding:16px}
+  .service-grid .choice-surface{min-height:130px;flex-direction:row}
+  .route-result{grid-template-columns:1fr}
+  .route-result>div{min-height:54px;justify-content:flex-start;text-align:right}
+  .action-dock{left:50%;right:auto;bottom:max(8px,env(safe-area-inset-bottom));border-radius:20px}
+  .action-dock-inner{grid-template-columns:42px minmax(0,1fr) 108px}
+  .action-dock-inner:has(.back-action[hidden]){grid-template-columns:minmax(0,1fr) 108px}
+  .primary-action{min-height:58px;padding:0 12px;font-size:.92rem}
+  .dock-price{min-width:0;padding:8px;gap:6px}
+  .dock-price-icon{display:none}
+  .dock-price-copy strong{font-size:.88rem}
+  .dock-price-copy small{font-size:.61rem}
+  .mobile-only{display:inline}
+}
+@media(prefers-reduced-motion:reduce){
+  .booking-step.is-entering{animation:none}
+  *,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important}
+}
 </style>
 <script src="/assets/scheduling.js"></script>
 <link rel="icon" href="/assets/favicon.ico"/>
@@ -38,362 +226,228 @@ gmp-place-autocomplete.eden-places{display:block;width:100%;color-scheme:dark}
 <a href="/booking.html" class="bg-primary-container text-on-primary-container px-6 py-2 rounded-lg font-label-bold active:scale-95 transition-transform hover:opacity-90">שלחו עכשיו</a>
 </div>
 </header>
-<main class="pt-24 pb-stack-lg px-gutter-mobile md:px-gutter-desktop max-w-container-max mx-auto">
-<section id="business-wallet-banner" class="hidden glass-panel rounded-xl p-stack-md mb-stack-lg border border-secondary/40" aria-live="polite">
-  <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-    <div><p class="font-headline-md text-secondary mb-1">הזמנה מהחשבון העסקי</p><p id="business-wallet-copy" class="text-on-surface-variant mb-0">טוען את היתרה והמסלול…</p><p id="business-wallet-estimate" class="text-label-sm text-on-surface-variant opacity-80 mt-1 mb-0"></p></div>
-    <a id="business-account-link" class="text-primary font-label-bold underline" href="#">לחשבון העסקי</a>
+<main class="order-main">
+<div class="order-shell">
+  <div class="order-hero">
+    <p class="order-kicker"><span class="material-symbols-outlined" aria-hidden="true">route</span>הזמנה חכמה, שלב אחר שלב</p>
+    <h1 class="order-title">לאן שולחים <span>היום?</span></h1>
+    <p class="order-subtitle">רק מה שרלוונטי עכשיו. המחיר המדויק נבנה מגודל החבילה, המסלול, רמת השירות והמועד.</p>
+    <p class="order-slogan"><span class="material-symbols-outlined" aria-hidden="true">bolt</span>הזמנת משלוח? זה כבר בדרך.</p>
   </div>
-</section>
-<div class="grid grid-cols-1 lg:grid-cols-12 gap-stack-lg">
-<!-- Left: Order summary (estimator) -->
-<aside class="lg:col-span-4 order-2 lg:order-1">
-<div class="glass-panel rounded-xl p-stack-md sticky top-24">
-<h3 class="font-headline-md text-primary mb-stack-md">סיכום הזמנה</h3>
-<div class="space-y-stack-sm border-b border-glass-border pb-stack-md mb-stack-md">
-<div class="flex justify-between items-center text-on-surface-variant">
-<span class="font-label-bold">מרחק</span>
-<span class="font-body-md" id="dist-val">-</span>
-</div>
-<div class="flex justify-between items-center text-on-surface-variant">
-<span class="font-label-bold">אזור</span>
-<span class="font-body-md" id="est-zone">-</span>
-</div>
-<div class="flex justify-between items-center text-on-surface-variant">
-<span class="font-label-bold">מחיר בסיס</span>
-<span class="font-body-md" id="est-base">-</span>
-</div>
-<div class="flex justify-between items-center text-on-surface-variant" id="est-size-row" hidden>
-<span class="font-label-bold">חבילה בינונית</span>
-<span class="font-body-md">+₪15</span>
-</div>
-<div class="flex justify-between items-center text-on-surface-variant" id="est-surch-row" hidden>
-<span class="font-label-bold" id="est-surch-label">תוספת</span>
-<span class="font-body-md" id="est-surch">-</span>
-</div>
-</div>
-<div class="flex justify-between items-end mb-stack-lg">
-<div>
-<p class="text-on-surface-variant font-label-sm">מחיר סופי</p>
-<p class="text-headline-lg text-secondary font-display-lg" aria-live="polite">₪<span id="price-val">-</span></p>
-</div>
-<span class="material-symbols-outlined text-secondary text-4xl">payments</span>
-</div>
-<div id="price-note" class="text-center mb-stack-md"><p class="text-label-sm text-on-surface-variant opacity-70">המחיר המוצג הוא הערכה התחלתית — המחיר המדויק יתעדכן לאחר בחירת כתובות האיסוף והיעד</p></div>
-<!-- Coupon UI -->
-<div id="coupon-section" class="mt-stack-md pt-stack-sm border-t border-glass-border">
-  <button type="button" id="coupon-toggle" class="text-label-bold text-primary hover:text-secondary transition-colors w-full text-center">
-    יש לך קוד קופון?
-  </button>
-  <div id="coupon-expand" hidden class="mt-stack-sm">
-    <div class="flex gap-2">
-      <input id="coupon-input" type="text" dir="ltr" class="flex-1 bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-center transition-all uppercase" placeholder="הזן קוד קופון" autocomplete="off" />
-      <button type="button" id="coupon-apply" class="bg-tertiary text-on-tertiary px-4 py-2 rounded-lg font-label-bold active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-not-allowed">החל</button>
-    </div>
-    <div id="coupon-error" class="hidden mt-2 text-label-sm text-error text-center"></div>
-  </div>
-  <div id="coupon-active" hidden class="mt-stack-sm space-y-1">
-    <div class="flex justify-between items-center text-on-surface-variant">
-      <span class="font-label-bold">מחיר לפני הנחה</span>
-      <span class="font-body-md line-through" id="coupon-original">-</span>
-    </div>
-    <div class="flex justify-between items-center text-secondary">
-      <span class="font-label-bold flex items-center gap-1">
-        <span class="material-symbols-outlined text-[16px]">local_offer</span>
-        <span id="coupon-title">קופון</span>
-      </span>
-      <span class="font-body-md" dir="ltr" id="coupon-discount">-₪0</span>
-    </div>
-    <div class="flex justify-between items-end pt-1">
-      <span class="text-on-surface-variant font-label-sm">מחיר סופי</span>
-      <span class="text-headline-md text-secondary font-display-lg">₪<span id="coupon-final">-</span></span>
-    </div>
-    <button type="button" id="coupon-remove" class="text-label-sm text-error hover:text-error/80 transition-colors flex items-center gap-1 mx-auto mt-1">
-      <span class="material-symbols-outlined text-[16px]">close</span>
-      הסרת קופון
-    </button>
-  </div>
-  <div id="coupon-cleared" hidden class="mt-2 text-label-sm text-alert-amber text-center"></div>
-</div>
-<!-- /Coupon UI -->
-<div class="bg-surface-container-high rounded-lg p-stack-sm">
-<p class="text-label-sm text-on-surface-variant text-center">
-* המחיר הסופי מחושב בשרת לפי אזור, רמת שירות, גודל, שעת איסוף ושבת.
-</p>
-</div>
-</div>
-</aside>
-<!-- Right: Form -->
-<div class="lg:col-span-8 order-1 lg:order-2">
- <div class="mb-stack-lg">
-<h1 class="font-headline-lg text-on-surface mb-2">הזמנת משלוח חדש</h1>
-<p class="text-on-surface-variant font-body-md">אנא מלאו את פרטי המשלוח כדי לקבל הצעת מחיר מדויקת ולהזמין שליח.</p>
-<p class="brand-slogan brand-slogan--compact">
-<span class="material-symbols-outlined" aria-hidden="true">bolt</span>
-הזמנת משלוח? זה כבר בדרך.
-</p>
-</div>
-<!-- Pricing Chart (CRO: transparency + confidence) -->
-<section class="glass-panel rounded-xl p-stack-md mb-stack-lg">
-<div class="flex items-center gap-stack-sm mb-stack-md">
-<span class="w-8 h-8 rounded-full bg-surface-container-high text-on-surface flex items-center justify-center font-label-bold"><span class="material-symbols-outlined text-lg">payments</span></span>
-<h2 id="price-table-title" class="font-headline-md text-on-surface">טבלת מחירים</h2>
-</div>
-<div class="overflow-x-auto -mx-2 px-2">
-<table class="w-full text-center border-collapse" style="min-width:400px">
-<thead>
-<tr>
-<th class="p-2 text-label-sm text-on-surface-variant font-label-bold"></th>
-<th class="p-2 text-label-bold rounded-t-lg" style="background:rgba(145,211,200,.08)"><span class="text-secondary block">חסכוני</span><span class="text-label-sm text-on-surface-variant">עד סוף יום</span></th>
-<th class="p-2 text-label-bold rounded-t-lg" style="background:rgba(223,183,255,.08)"><span class="text-primary block">רגיל</span><span class="text-label-sm text-on-surface-variant">4 שעות</span></th>
-<th class="p-2 text-label-bold rounded-t-lg" style="background:rgba(239,68,68,.06)"><span class="text-error block">מהיר</span><span class="text-label-sm text-on-surface-variant">90 דקות</span></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td class="p-2 text-right">
-<span class="font-label-bold text-on-surface block">אזור 1</span>
-<span class="text-label-sm text-on-surface-variant">תל אביב · רמת גן · גבעתיים · בני ברק</span>
-</td>
-<td data-rate-key="1:eco" class="p-2 font-headline-md text-secondary" style="background:rgba(145,211,200,.04)">₪35</td>
-<td data-rate-key="1:standard" class="p-2 font-headline-md text-primary" style="background:rgba(223,183,255,.04)">₪50</td>
-<td data-rate-key="1:flash" class="p-2 font-headline-md text-error" style="background:rgba(239,68,68,.03)">₪85</td>
-</tr>
-<tr>
-<td class="p-2 text-right">
-<span class="font-label-bold text-on-surface block">אזור 2</span>
-<span class="text-label-sm text-on-surface-variant">הרצליה · חולון · בת ים · אור יהודה</span>
-</td>
-<td data-rate-key="2:eco" class="p-2 font-headline-md text-secondary" style="background:rgba(145,211,200,.04)">₪55</td>
-<td data-rate-key="2:standard" class="p-2 font-headline-md text-primary" style="background:rgba(223,183,255,.04)">₪70</td>
-<td data-rate-key="2:flash" class="p-2 font-headline-md text-error" style="background:rgba(239,68,68,.03)">₪110</td>
-</tr>
-<tr>
-<td class="p-2 text-right">
-<span class="font-label-bold text-on-surface block">אזור 3</span>
-<span class="text-label-sm text-on-surface-variant">ראשון · כפר סבא · פתח תקווה · הוד השרון</span>
-</td>
-<td data-rate-key="3:eco" class="p-2 font-headline-md text-secondary" style="background:rgba(145,211,200,.04)">₪75</td>
-<td data-rate-key="3:standard" class="p-2 font-headline-md text-primary" style="background:rgba(223,183,255,.04)">₪115</td>
-<td data-rate-key="3:flash" class="p-2 font-headline-md text-on-surface-variant">—</td>
-</tr>
-</tbody>
-</table>
-</div>
-<div class="flex flex-wrap gap-x-4 gap-y-1 mt-3 px-2">
-<span class="text-label-sm text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-alert-amber">info</span> חבילה בינונית +₪15</span>
-<span class="text-label-sm text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-alert-amber">info</span> ערב (19-22) +₪30</span>
-<span class="text-label-sm text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-alert-amber">info</span> סופ״ש ×1.5</span>
-</div>
-<p class="text-label-sm text-on-surface-variant mt-2 px-2 opacity-70">המחירים סופיים · עוסק פטור (211568928) · שירות מהיר זמין באזורים 1-2 בלבד</p>
-</section>
-<form id="booking-form" class="space-y-stack-lg" novalidate>
-<!-- Step 1: Package type (required by API) -->
-<section class="glass-panel rounded-xl p-stack-md">
-<div class="flex items-center gap-stack-sm mb-stack-md">
-<span class="w-8 h-8 rounded-full bg-secondary text-on-secondary flex items-center justify-center font-label-bold">1</span>
-<h2 class="font-headline-md text-on-surface">גודל החבילה</h2>
-</div>
-<div class="grid grid-cols-1 md:grid-cols-2 gap-stack-md">
-<label class="cursor-pointer group">
-<input class="hidden peer" type="radio" name="size" value="small" checked/>
-<div class="flex flex-col items-center justify-center p-stack-md bg-surface-container-low border-2 border-outline-variant rounded-xl group-hover:border-primary peer-checked:border-primary peer-checked:bg-primary/10 transition-all text-center h-full">
-<span class="material-symbols-outlined text-4xl mb-2 text-on-surface-variant peer-checked:text-primary">description</span>
-<h4 class="font-label-bold text-on-surface">קטן</h4>
-<p class="text-label-sm text-on-surface-variant">מעטפה / מסמך / פריט קטן</p>
-</div>
-</label>
-<label class="cursor-pointer group">
-<input class="hidden peer" type="radio" name="size" value="medium"/>
-<div class="flex flex-col items-center justify-center p-stack-md bg-surface-container-low border-2 border-outline-variant rounded-xl group-hover:border-primary peer-checked:border-primary peer-checked:bg-primary/10 transition-all text-center h-full">
-<span class="material-symbols-outlined text-4xl mb-2 text-on-surface-variant peer-checked:text-primary">inbox</span>
-<h4 class="font-label-bold text-on-surface">בינוני <span class="text-secondary">+₪15</span></h4>
-<p class="text-label-sm text-on-surface-variant">קופסת נעליים / עד 5 ק״ג</p>
-</div>
-</label>
-</div>
-</section>
-<!-- Step 2: Contact Details -->
-<section class="glass-panel rounded-xl p-stack-md relative overflow-hidden">
-<div class="absolute right-0 top-0 w-1 h-full bg-secondary"></div>
-<div class="flex items-center gap-stack-sm mb-stack-md">
-<span class="w-8 h-8 rounded-full bg-secondary text-on-secondary flex items-center justify-center font-label-bold">2</span>
-<h2 class="font-headline-md text-on-surface">פרטי קשר למשלוח</h2>
-</div>
-<div class="grid grid-cols-1 md:grid-cols-2 gap-stack-md">
-<div class="flex flex-col gap-1">
-<label for="f-name" class="text-label-bold text-on-surface-variant mr-1">שם מלא</label>
-<input id="f-name" name="name" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 transition-all" placeholder="ישראל ישראלי" type="text" required/>
-</div>
-<div class="flex flex-col gap-1">
-<label for="f-phone" class="text-label-bold text-on-surface-variant mr-1">מספר טלפון</label>
-<input id="f-phone" name="phone" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-left transition-all" dir="ltr" placeholder="050-0000000" type="tel" required/>
-</div>
-<div class="flex flex-col gap-1 md:col-span-2">
-<label for="f-email" class="text-label-bold text-on-surface-variant mr-1">אימייל (לקבלה וקישור מעקב)</label>
-<input id="f-email" name="email" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-left transition-all" dir="ltr" placeholder="email@example.com" type="email" required autocomplete="email"/>
-  <div id="email-status" class="text-label-sm min-h-[1.15rem] flex items-center gap-1 mr-1"></div>
-  <div id="email-suggest" hidden class="mt-2 rounded-lg border border-secondary/40 bg-secondary-container/20 p-3">
-    <div class="flex items-start justify-between gap-2">
-      <div class="flex items-start gap-2">
-        <span class="material-symbols-outlined text-secondary text-xl mt-0.5">spellcheck</span>
-        <p id="email-suggest-text" class="text-label-sm text-on-surface leading-relaxed"></p>
+
+  <div class="order-stack">
+    <section class="order-layer order-progress" aria-label="התקדמות בהזמנה">
+      <div class="progress-meta"><strong id="progress-label">גודל החבילה</strong><span id="progress-count">שלב 1 מתוך 7</span></div>
+      <div id="booking-stepper" class="step-rail">
+        <button class="step-dot is-active" type="button" data-step-target="1" aria-label="שלב 1, גודל החבילה" aria-current="step"><span>1</span></button>
+        <button class="step-dot" type="button" data-step-target="2" aria-label="שלב 2, פרטי קשר"><span>2</span></button>
+        <button class="step-dot" type="button" data-step-target="3" aria-label="שלב 3, נקודת איסוף"><span>3</span></button>
+        <button class="step-dot" type="button" data-step-target="4" aria-label="שלב 4, נקודת מסירה"><span>4</span></button>
+        <button class="step-dot" type="button" data-step-target="5" aria-label="שלב 5, רמת שירות"><span>5</span></button>
+        <button class="step-dot" type="button" data-step-target="6" aria-label="שלב 6, מועד איסוף"><span>6</span></button>
+        <button class="step-dot" type="button" data-step-target="7" aria-label="שלב 7, סיכום ואישור"><span>7</span></button>
       </div>
-      <button type="button" id="email-suggest-x" class="text-on-surface-variant hover:text-on-surface text-xl leading-none" aria-label="סגור">×</button>
-    </div>
-    <div class="flex flex-wrap gap-2 mt-2">
-      <button type="button" id="email-suggest-accept" class="bg-secondary text-on-secondary px-3 py-2 rounded-lg font-label-bold text-label-sm">כן, תקן בבקשה</button>
-      <button type="button" id="email-suggest-keep" class="border border-outline-variant text-on-surface px-3 py-2 rounded-lg text-label-sm">השאר כפי שהקלדתי</button>
-    </div>
+    </section>
+
+    <section id="business-wallet-banner" class="hidden order-layer order-layer--mint business-order-banner" aria-live="polite">
+      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+        <div><p class="font-headline-md text-secondary mb-1">הזמנה מהחשבון העסקי</p><p id="business-wallet-copy" class="text-on-surface-variant mb-0">טוען את היתרה והמסלול…</p><p id="business-wallet-estimate" class="text-label-sm text-on-surface-variant opacity-80 mt-1 mb-0"></p></div>
+        <a id="business-account-link" class="text-primary font-label-bold underline" href="#">לחשבון העסקי</a>
+      </div>
+    </section>
+
+    <section id="flow-summary" class="order-layer summary-strip" hidden aria-label="הפרטים שבחרתם">
+      <div class="summary-strip-header"><h2>הפרטים שבחרתם</h2><button id="summary-edit" class="summary-edit" type="button">עריכה</button></div>
+      <div id="summary-chips" class="summary-chips" aria-live="polite"></div>
+    </section>
+
+    <form id="booking-form" novalidate>
+      <div class="order-stack">
+        <section class="booking-step order-layer order-layer--mint is-entering" data-step="1" role="group" aria-labelledby="step-1-title">
+          <div class="step-heading">
+            <div class="step-heading-copy"><span class="step-icon material-symbols-outlined" aria-hidden="true">inventory_2</span><div><h2 id="step-1-title">מה גודל החבילה?</h2><p>בחרו את האפשרות הקרובה ביותר. הגודל משפיע ישירות על המחיר.</p></div></div>
+            <span class="step-number" dir="ltr">01 / 07</span>
+          </div>
+          <div class="choice-grid">
+            <label class="choice-card">
+              <input type="radio" name="size" value="small" checked/>
+              <span class="choice-surface"><span class="choice-copy"><h3>קטן</h3><p>מעטפה, מסמך או פריט קטן</p><span class="choice-price">ללא תוספת</span></span><span class="choice-icon material-symbols-outlined" aria-hidden="true">draft</span></span>
+            </label>
+            <label class="choice-card">
+              <input type="radio" name="size" value="medium"/>
+              <span class="choice-surface"><span class="choice-copy"><h3>בינוני</h3><p>עד גודל קופסת נעליים ועד 5 ק״ג</p><span class="choice-price">+₪15</span></span><span class="choice-icon material-symbols-outlined" aria-hidden="true">package_2</span></span>
+            </label>
+          </div>
+          <details class="price-details">
+            <summary><span class="flex items-center gap-2"><span class="material-symbols-outlined text-secondary" aria-hidden="true">payments</span>מה עוד משפיע על המחיר?</span><span class="details-arrow material-symbols-outlined" aria-hidden="true">expand_more</span></summary>
+            <div class="details-content">
+              <h3 id="price-table-title" class="font-headline-md text-on-surface mb-3">טבלת מחירים</h3>
+              <div class="overflow-x-auto">
+                <table class="w-full text-center border-collapse" style="min-width:560px">
+                  <thead><tr><th class="p-2"></th><th class="p-2 text-secondary">חסכוני<br><small>עד סוף יום</small></th><th class="p-2 text-primary">רגיל<br><small>4 שעות</small></th><th class="p-2 text-error">מהיר<br><small>90 דקות</small></th></tr></thead>
+                  <tbody>
+                    <tr><td class="p-2 text-right"><strong>אזור 1</strong><br><small>תל אביב · רמת גן · גבעתיים · בני ברק</small></td><td data-rate-key="1:eco" class="p-2 text-secondary">₪35</td><td data-rate-key="1:standard" class="p-2 text-primary">₪50</td><td data-rate-key="1:flash" class="p-2 text-error">₪85</td></tr>
+                    <tr><td class="p-2 text-right"><strong>אזור 2</strong><br><small>הרצליה · חולון · בת ים · אור יהודה</small></td><td data-rate-key="2:eco" class="p-2 text-secondary">₪55</td><td data-rate-key="2:standard" class="p-2 text-primary">₪70</td><td data-rate-key="2:flash" class="p-2 text-error">₪110</td></tr>
+                    <tr><td class="p-2 text-right"><strong>אזור 3</strong><br><small>ראשון · כפר סבא · פתח תקווה · הוד השרון</small></td><td data-rate-key="3:eco" class="p-2 text-secondary">₪75</td><td data-rate-key="3:standard" class="p-2 text-primary">₪115</td><td data-rate-key="3:flash" class="p-2">—</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="text-label-sm text-on-surface-variant mt-3">חבילה בינונית +₪15 · ערב (19:00–22:00) +₪30 · סופ״ש ×1.5 · שירות מהיר זמין באזורים 1–2 בלבד.</p>
+            </div>
+          </details>
+        </section>
+
+        <section class="booking-step order-layer" data-step="2" role="group" aria-labelledby="step-2-title" hidden>
+          <div class="step-heading">
+            <div class="step-heading-copy"><span class="step-icon material-symbols-outlined" aria-hidden="true">person</span><div><h2 id="step-2-title">למי שולחים עדכונים?</h2><p>נשתמש בפרטים האלה לקבלה, לקישור המעקב ולעדכונים תפעוליים.</p></div></div>
+            <span class="step-number" dir="ltr">02 / 07</span>
+          </div>
+          <div class="field-grid">
+            <div class="order-field"><label for="f-name">שם מלא</label><input id="f-name" name="name" placeholder="ישראל ישראלי" type="text" required autocomplete="name"/></div>
+            <div class="order-field"><label for="f-phone">מספר טלפון</label><input id="f-phone" name="phone" dir="ltr" placeholder="050-0000000" type="tel" required autocomplete="tel"/></div>
+            <div class="order-field full"><label for="f-email">אימייל לקבלה ולקישור מעקב</label><input id="f-email" name="email" dir="ltr" placeholder="email@example.com" type="email" required autocomplete="email"/>
+              <div id="email-status" class="text-label-sm min-h-[1.15rem] flex items-center gap-1"></div>
+              <div id="email-suggest" hidden class="mt-2 rounded-xl border border-secondary/40 bg-secondary-container/20 p-3">
+                <div class="flex items-start justify-between gap-2"><div class="flex items-start gap-2"><span class="material-symbols-outlined text-secondary text-xl mt-0.5" aria-hidden="true">spellcheck</span><p id="email-suggest-text" class="text-label-sm text-on-surface leading-relaxed"></p></div><button type="button" id="email-suggest-x" class="text-on-surface-variant hover:text-on-surface text-xl leading-none" aria-label="סגור">×</button></div>
+                <div class="flex flex-wrap gap-2 mt-2"><button type="button" id="email-suggest-accept" class="bg-secondary text-on-secondary px-3 py-2 rounded-lg font-label-bold text-label-sm">כן, תקן בבקשה</button><button type="button" id="email-suggest-keep" class="border border-outline-variant text-on-surface px-3 py-2 rounded-lg text-label-sm">השאר כפי שהקלדתי</button></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="booking-step order-layer" data-step="3" role="group" aria-labelledby="step-3-title" hidden>
+          <div class="step-heading">
+            <div class="step-heading-copy"><span class="step-icon material-symbols-outlined" aria-hidden="true">trip_origin</span><div><h2 id="step-3-title">מאיפה אוספים?</h2><p>בחרו כתובת מדויקת. את פרטי הגישה אפשר להוסיף רק אם צריך.</p></div></div>
+            <span class="step-number" dir="ltr">03 / 07</span>
+          </div>
+          <div class="order-field"><label for="f-pickup-addr">כתובת איסוף</label><div id="f-pickup-places" hidden></div><input id="f-pickup-addr" name="pickup_address" placeholder="רחוב, מספר בית, עיר" type="text" required autocomplete="street-address"/></div>
+          <details class="access-details">
+            <summary><span class="flex items-center gap-2"><span class="material-symbols-outlined text-secondary" aria-hidden="true">door_open</span>הוספת פרטי גישה ואיש קשר <small class="text-on-surface-variant">(אופציונלי)</small></span><span class="details-arrow material-symbols-outlined" aria-hidden="true">expand_more</span></summary>
+            <div class="details-content field-grid">
+              <div class="order-field"><label for="f-pickup-floor">קומה</label><input id="f-pickup-floor" name="pickup_floor" placeholder="4" type="text"/></div>
+              <div class="order-field"><label for="f-pickup-apt">דירה</label><input id="f-pickup-apt" name="pickup_apt" placeholder="12" type="text"/></div>
+              <div class="order-field full"><label for="f-pickup-contact">איש קשר בנקודת האיסוף, אם שונה</label><input id="f-pickup-contact" name="pickup_contact" placeholder="שם ומספר טלפון" type="text"/></div>
+            </div>
+          </details>
+        </section>
+
+        <section class="booking-step order-layer" data-step="4" role="group" aria-labelledby="step-4-title" hidden>
+          <div class="step-heading">
+            <div class="step-heading-copy"><span class="step-icon material-symbols-outlined" aria-hidden="true">location_on</span><div><h2 id="step-4-title">לאן מוסרים?</h2><p>אחרי בחירת היעד נבדוק את המרחק ואת אזור השירות.</p></div></div>
+            <span class="step-number" dir="ltr">04 / 07</span>
+          </div>
+          <div class="order-field"><label for="f-dropoff-addr">כתובת יעד</label><div id="f-dropoff-places" hidden></div><input id="f-dropoff-addr" name="dropoff_address" placeholder="רחוב, מספר בית, עיר" type="text" required autocomplete="street-address"/></div>
+          <details class="access-details">
+            <summary><span class="flex items-center gap-2"><span class="material-symbols-outlined text-secondary" aria-hidden="true">door_open</span>הוספת פרטי גישה ואיש קשר <small class="text-on-surface-variant">(אופציונלי)</small></span><span class="details-arrow material-symbols-outlined" aria-hidden="true">expand_more</span></summary>
+            <div class="details-content field-grid">
+              <div class="order-field"><label for="f-dropoff-floor">קומה</label><input id="f-dropoff-floor" name="dropoff_floor" placeholder="קרקע" type="text"/></div>
+              <div class="order-field"><label for="f-dropoff-apt">דירה</label><input id="f-dropoff-apt" name="dropoff_apt" placeholder="1" type="text"/></div>
+              <div class="order-field full"><label for="f-dropoff-contact">איש קשר בנקודת היעד</label><input id="f-dropoff-contact" name="dropoff_contact" placeholder="שם ומספר טלפון" type="text"/></div>
+            </div>
+          </details>
+          <div class="route-result" aria-live="polite">
+            <div><span class="material-symbols-outlined" aria-hidden="true">verified</span><span>המסלול ייבדק אוטומטית</span></div>
+            <div><span class="material-symbols-outlined" aria-hidden="true">route</span><span id="dist-val">מרחק: —</span></div>
+            <div><span class="material-symbols-outlined" aria-hidden="true">map</span><span id="est-zone">אזור: —</span></div>
+          </div>
+        </section>
+
+        <section class="booking-step order-layer" data-step="5" role="group" aria-labelledby="step-5-title" hidden>
+          <div class="step-heading">
+            <div class="step-heading-copy"><span class="step-icon material-symbols-outlined" aria-hidden="true">speed</span><div><h2 id="step-5-title">איזה שירות מתאים?</h2><p>המחיר מבוסס על המסלול והגודל שבחרתם. במסלול עסקי יוצגו רק השירותים הזמינים.</p></div></div>
+            <span class="step-number" dir="ltr">05 / 07</span>
+          </div>
+          <div class="service-grid">
+            <label class="choice-card"><input class="sr-only peer" name="service" type="radio" value="eco"/><span class="choice-surface"><span class="choice-copy"><h3>חסכוני</h3><p>מסירה עד סוף היום · איסוף עד 13:00</p><p>הזמנה לאותו היום עד 09:00 כולל</p><span data-service-rate="eco" class="choice-price">החל מ־₪35</span></span><span class="choice-icon material-symbols-outlined" aria-hidden="true">schedule</span></span></label>
+            <label class="choice-card"><input checked class="sr-only peer" name="service" type="radio" value="standard"/><span class="choice-surface"><span class="choice-copy"><h3>רגיל</h3><p>מסירה תוך 4 שעות</p><span data-service-rate="standard" class="choice-price">החל מ־₪50</span></span><span class="choice-icon material-symbols-outlined" aria-hidden="true">two_wheeler</span></span></label>
+            <label class="choice-card"><input class="sr-only peer" name="service" type="radio" value="flash"/><span class="choice-surface"><span class="choice-copy"><h3>מהיר</h3><p>90 דקות, נקודה לנקודה</p><span data-service-rate="flash" class="choice-price">החל מ־₪85</span></span><span class="choice-icon material-symbols-outlined" aria-hidden="true">bolt</span></span></label>
+          </div>
+        </section>
+
+        <section class="booking-step order-layer" data-step="6" role="group" aria-labelledby="step-6-title" hidden>
+          <div class="step-heading">
+            <div class="step-heading-copy"><span class="step-icon material-symbols-outlined" aria-hidden="true">calendar_month</span><div><h2 id="step-6-title">מתי לאסוף?</h2><p>נציג רק חלונות זמן שמתאימים לשירות ולשעות הפעילות.</p></div></div>
+            <span class="step-number" dir="ltr">06 / 07</span>
+          </div>
+          <div class="schedule-shell">
+            <p class="text-label-sm text-on-surface-variant">א׳–ה׳ 09:00–20:00 · ו׳ 08:00–13:00 · שבת סגור</p>
+            <div id="sched-dates" class="flex flex-wrap"></div>
+            <div id="sched-custom-wrap" class="order-field">
+              <label for="sched-custom-date">תאריך אחר</label>
+              <div class="date-picker-row">
+                <input id="sched-custom-date" type="date" lang="he-IL" dir="ltr" aria-describedby="sched-hint"/>
+                <button id="sched-custom-open" class="date-picker-button" type="button" aria-label="פתיחת לוח שנה"><span class="material-symbols-outlined" aria-hidden="true">calendar_month</span></button>
+              </div>
+            </div>
+            <div id="sched-windows" class="grid grid-cols-2 md:grid-cols-3"></div>
+            <div id="sched-flash" class="schedule-flash-card" hidden></div>
+            <p id="sched-hint" class="text-label-sm text-on-surface-variant min-h-[1em]"></p>
+          </div>
+        </section>
+
+        <section class="booking-step order-layer" data-step="7" role="group" aria-labelledby="step-7-title" hidden>
+          <div class="step-heading">
+            <div class="step-heading-copy"><span class="step-icon material-symbols-outlined" aria-hidden="true">fact_check</span><div><h2 id="step-7-title">בדיקה אחרונה ואישור</h2><p>המחיר הסופי מוצג כאן. אפשר להוסיף הוראה לשליח לפני שמאשרים.</p></div></div>
+            <span class="step-number" dir="ltr">07 / 07</span>
+          </div>
+          <div class="order-field"><label for="order-notes">הוראות מיוחדות לשליח <small class="text-on-surface-variant">(אופציונלי)</small></label><textarea id="order-notes" name="notes" rows="3" placeholder="לדוגמה: קומה 3 ללא מעלית · להתקשר לפני הגעה · פריט שביר"></textarea></div>
+
+          <div class="price-details" role="region" aria-labelledby="final-price-title">
+            <div class="details-content" style="border-top:0">
+              <h3 id="final-price-title" class="font-headline-md text-on-surface mb-3">פירוט מחיר</h3>
+              <div class="price-breakdown">
+                <div class="price-line"><span>מחיר בסיס</span><span id="est-base">—</span></div>
+                <div class="price-line" id="est-size-row" hidden><span>חבילה בינונית</span><span>+₪15</span></div>
+                <div class="price-line" id="est-surch-row" hidden><span id="est-surch-label">תוספת</span><span id="est-surch">—</span></div>
+                <div class="price-line price-total"><span>מחיר סופי</span><strong>₪<span id="price-val">—</span></strong></div>
+              </div>
+              <div id="price-note" class="text-label-sm text-on-surface-variant mt-3" aria-live="polite"><p>המחיר המדויק יתעדכן לאחר השלמת הכתובות והמועד.</p></div>
+
+              <div id="coupon-section" class="coupon-glass">
+                <button type="button" id="coupon-toggle" class="text-label-bold text-primary hover:text-secondary transition-colors w-full text-right">יש לך קוד קופון?</button>
+                <div id="coupon-expand" hidden class="mt-stack-sm"><div class="flex flex-row-reverse gap-2"><input id="coupon-input" type="text" dir="ltr" class="order-input flex-1 text-center uppercase" placeholder="הזן קוד קופון" autocomplete="off"/><button type="button" id="coupon-apply" class="bg-tertiary text-on-tertiary px-4 py-2 rounded-xl font-label-bold disabled:opacity-60">החל</button></div><div id="coupon-error" class="hidden mt-2 text-label-sm text-error text-center"></div></div>
+                <div id="coupon-active" hidden class="mt-stack-sm space-y-1">
+                  <div class="price-line"><span>מחיר לפני הנחה</span><span class="line-through" id="coupon-original">—</span></div>
+                  <div class="price-line text-secondary"><span id="coupon-title">קופון</span><span dir="ltr" id="coupon-discount">-₪0</span></div>
+                  <div class="price-line"><span>מחיר אחרי הנחה</span><strong>₪<span id="coupon-final">—</span></strong></div>
+                  <button type="button" id="coupon-remove" class="text-label-sm text-error flex items-center gap-1 mx-auto mt-1"><span class="material-symbols-outlined text-[16px]" aria-hidden="true">close</span>הסרת קופון</button>
+                </div>
+                <div id="coupon-cleared" hidden class="mt-2 text-label-sm text-alert-amber text-center"></div>
+              </div>
+            </div>
+          </div>
+
+          <details class="legal-details">
+            <summary><span class="flex items-center gap-2"><span class="material-symbols-outlined text-secondary" aria-hidden="true">privacy_tip</span>פרטיות ואיסוף מידע</span><span class="details-arrow material-symbols-outlined" aria-hidden="true">expand_more</span></summary>
+            <div class="details-content text-label-sm text-on-surface-variant leading-relaxed">
+              <strong class="text-on-surface">הודעה בדבר איסוף מידע:</strong>
+              המידע נמסר לעדן אריאלי (EdenMish), קריניצי 111, רמת גן. אין חובה חוקית למסור אותו, אך השדות המסומנים נדרשים ליצירת ההזמנה, לתמחור, לביצוע המשלוח, לתשלום, לעדכוני שירות, לאבטחה ולטיפול בפניות; ללא המידע לא נוכל לספק את השירות. המידע עשוי להימסר לשליח ולספקי תשתית, מפות, תשלום ותקשורת, בארץ ומחוץ לישראל, רק לצורך השירות ובהתאם ל<a href="/privacy.html" class="text-primary underline">מדיניות הפרטיות</a>. ניתן לבקש לעיין במידע ולתקנו באמצעות <a href="mailto:eden@edenmish.com" class="text-primary underline">eden@edenmish.com</a>.
+            </div>
+          </details>
+          <div class="privacy-grid">
+            <label class="check-row"><input type="checkbox" id="agree-terms" required/><span>קראתי ואני מאשר/ת את <a href="/terms.html" class="text-primary underline">תקנון השירות</a>, <a href="/privacy.html" class="text-primary underline">מדיניות הפרטיות</a> ו<a href="/refund.html" class="text-primary underline">מדיניות הביטול</a>.</span></label>
+            <p class="text-label-sm text-on-surface-variant leading-relaxed">עדכונים תפעוליים, כולל אישור והוכחת מסירה, יישלחו לכתובת הדוא״ל שמסרתם. קישור ב‑WhatsApp או ב‑SMS יישלח רק לאחר הסכמה נפרדת. הסכמה זו אינה כוללת דיוור שיווקי.</p>
+            <label class="check-row"><input type="checkbox" id="phone-pod-opt-in"/><span>אני מסכים/ה לקבל גם קישור להוכחת המסירה ב‑WhatsApp. הבחירה אופציונלית ואינה כוללת דיוור שיווקי.</span></label>
+          </div>
+          <p class="security-note"><span class="material-symbols-outlined" aria-hidden="true">lock</span><span>פרטי כרטיס האשראי אינם נשמרים במערכות EdenMish. התשלום המאובטח מתבצע באמצעות ספק תשלום חיצוני.</span></p>
+        </section>
+
+        <div id="form-error" class="hidden form-error" role="alert"></div>
+      </div>
+
+      <div class="action-dock" aria-label="פעולות הזמנה">
+        <div class="action-dock-inner">
+          <button id="flow-back" class="back-action" type="button" hidden aria-label="חזרה לשלב הקודם"><span class="material-symbols-outlined" aria-hidden="true">chevron_right</span></button>
+          <button id="flow-next" class="primary-action" type="button"><span id="flow-next-label">המשך לפרטי קשר</span><span class="material-symbols-outlined" dir="ltr" aria-hidden="true">arrow_back</span></button>
+          <button id="submit-btn" class="primary-action" type="submit" hidden><span id="submit-btn-label">אישור והזמנת שליח</span><span class="material-symbols-outlined" dir="ltr" aria-hidden="true">arrow_back</span></button>
+          <div class="dock-price" aria-live="polite">
+            <span class="dock-price-icon material-symbols-outlined" aria-hidden="true">sell</span>
+            <div class="dock-price-copy"><span id="dock-price-label">מחיר</span><strong id="dock-price-value">יחושב בהמשך</strong><small id="dock-price-note">לפי המסלול והשירות</small></div>
+          </div>
+        </div>
+      </div>
+    </form>
   </div>
-</div>
-</div>
-</section>
-<!-- Step 3: Pickup Address -->
-<section class="glass-panel rounded-xl p-stack-md">
-<div class="flex items-center gap-stack-sm mb-stack-md">
-<span class="w-8 h-8 rounded-full bg-surface-container-high text-on-surface flex items-center justify-center font-label-bold">3</span>
-<h2 class="font-headline-md text-on-surface">נקודת איסוף</h2>
-</div>
-<div class="grid grid-cols-1 md:grid-cols-12 gap-stack-md">
-<div class="flex flex-col gap-1 md:col-span-8">
-<label for="f-pickup-addr" class="text-label-bold text-on-surface-variant mr-1">כתובת איסוף</label>
-<div id="f-pickup-places" hidden></div>
-<input id="f-pickup-addr" name="pickup_address" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 transition-all" placeholder="רחוב, מספר בית, עיר" type="text" required/>
-</div>
-<div class="flex flex-col gap-1 md:col-span-2">
-<label for="f-pickup-floor" class="text-label-bold text-on-surface-variant mr-1">קומה</label>
-<input id="f-pickup-floor" name="pickup_floor" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 transition-all" placeholder="4" type="text"/>
-</div>
-<div class="flex flex-col gap-1 md:col-span-2">
-<label for="f-pickup-apt" class="text-label-bold text-on-surface-variant mr-1">דירה</label>
-<input id="f-pickup-apt" name="pickup_apt" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 transition-all" placeholder="12" type="text"/>
-</div>
-<div class="flex flex-col gap-1 md:col-span-12">
-<label for="f-pickup-contact" class="text-label-bold text-on-surface-variant mr-1">איש קשר בנקודת האיסוף (אם שונה)</label>
-<input id="f-pickup-contact" name="pickup_contact" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 transition-all" placeholder="שם ומספר טלפון" type="text"/>
-</div>
-</div>
-</section>
-<!-- Step 4: Drop-off Address -->
-<section class="glass-panel rounded-xl p-stack-md">
-<div class="flex items-center gap-stack-sm mb-stack-md">
-<span class="w-8 h-8 rounded-full bg-surface-container-high text-on-surface flex items-center justify-center font-label-bold">4</span>
-<h2 class="font-headline-md text-on-surface">נקודת מסירה</h2>
-</div>
-<div class="grid grid-cols-1 md:grid-cols-12 gap-stack-md">
-<div class="flex flex-col gap-1 md:col-span-8">
-<label for="f-dropoff-addr" class="text-label-bold text-on-surface-variant mr-1">כתובת יעד</label>
-<div id="f-dropoff-places" hidden></div>
-<input id="f-dropoff-addr" name="dropoff_address" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 transition-all" placeholder="רחוב, מספר בית, עיר" type="text" required/>
-</div>
-<div class="flex flex-col gap-1 md:col-span-2">
-<label for="f-dropoff-floor" class="text-label-bold text-on-surface-variant mr-1">קומה</label>
-<input id="f-dropoff-floor" name="dropoff_floor" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 transition-all" placeholder="קרקע" type="text"/>
-</div>
-<div class="flex flex-col gap-1 md:col-span-2">
-<label for="f-dropoff-apt" class="text-label-bold text-on-surface-variant mr-1">דירה</label>
-<input id="f-dropoff-apt" name="dropoff_apt" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 transition-all" placeholder="1" type="text"/>
-</div>
-<div class="flex flex-col gap-1 md:col-span-12">
-<label for="f-dropoff-contact" class="text-label-bold text-on-surface-variant mr-1">איש קשר בנקודת היעד</label>
-<input id="f-dropoff-contact" name="dropoff_contact" class="bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 transition-all" placeholder="שם ומספר טלפון" type="text"/>
-</div>
-</div>
-</section>
-<!-- Step 5: Delivery Priority -->
-<section class="glass-panel rounded-xl p-stack-md">
-<div class="flex items-center gap-stack-sm mb-stack-md">
-<span class="w-8 h-8 rounded-full bg-surface-container-high text-on-surface flex items-center justify-center font-label-bold">5</span>
-<h2 class="font-headline-md text-on-surface">רמת שירות</h2>
-</div>
-<div class="grid grid-cols-1 md:grid-cols-3 gap-stack-md">
-<label class="cursor-pointer group rounded-xl focus-within:ring-2 focus-within:ring-primary/50">
-<input class="sr-only peer" name="service" type="radio" value="eco"/>
-<div class="flex flex-col items-center justify-center p-stack-md bg-surface-container-low border-2 border-outline-variant rounded-xl group-hover:border-primary peer-checked:border-secondary peer-checked:bg-secondary-container/20 transition-all text-center h-full">
-<span class="material-symbols-outlined text-4xl mb-2 text-on-surface-variant peer-checked:text-secondary">schedule</span>
-<h4 class="font-label-bold text-on-surface">חסכוני</h4>
-<p class="text-label-sm text-on-surface-variant">מסירה עד סוף היום</p>
-<p class="text-label-sm text-on-surface-variant opacity-60">איסוף בשעות הבוקר בלבד (עד 13:00)</p>
-<p class="text-label-sm text-secondary mt-1">הזמנה לאותו היום עד 09:00 כולל</p>
-<p data-service-rate="eco" class="text-primary font-label-bold mt-2">החל מ₪35</p>
-</div>
-</label>
-<label class="cursor-pointer group rounded-xl focus-within:ring-2 focus-within:ring-primary/50">
-<input checked class="sr-only peer" name="service" type="radio" value="standard"/>
-<div class="flex flex-col items-center justify-center p-stack-md bg-surface-container-low border-2 border-outline-variant rounded-xl group-hover:border-primary peer-checked:border-secondary peer-checked:bg-secondary-container/20 transition-all text-center h-full">
-<span class="material-symbols-outlined text-4xl mb-2 text-on-surface-variant peer-checked:text-secondary">two_wheeler</span>
-<h4 class="font-label-bold text-on-surface">רגיל</h4>
-<p class="text-label-sm text-on-surface-variant">מסירה תוך 4 שעות</p>
-<p data-service-rate="standard" class="text-primary font-label-bold mt-2">החל מ₪50</p>
-</div>
-</label>
-<label class="cursor-pointer group rounded-xl focus-within:ring-2 focus-within:ring-primary/50">
-<input class="sr-only peer" name="service" type="radio" value="flash"/>
-<div class="flex flex-col items-center justify-center p-stack-md bg-surface-container-low border-2 border-outline-variant rounded-xl group-hover:border-primary peer-checked:border-secondary peer-checked:bg-secondary-container/20 transition-all text-center h-full">
-<span class="material-symbols-outlined text-4xl mb-2 text-on-surface-variant peer-checked:text-secondary">bolt</span>
-<h4 class="font-label-bold text-on-surface">מהיר</h4>
-<p class="text-label-sm text-on-surface-variant">90 דקות, נקודה לנקודה</p>
-<p data-service-rate="flash" class="text-secondary font-label-bold mt-2">החל מ₪85</p>
-</div>
-</label>
-</div>
-</section>
-<!-- Step 6: Pickup schedule (business hours) -->
-<section class="glass-panel rounded-xl p-stack-md">
-<div class="flex items-center gap-stack-sm mb-stack-md">
-<span class="w-8 h-8 rounded-full bg-secondary text-on-secondary flex items-center justify-center font-label-bold">6</span>
-<h2 class="font-headline-md text-on-surface">מועד איסוף</h2>
-</div>
-<p class="text-label-sm text-on-surface-variant mb-3">שעות פעילות: א׳-ה׳ 09:00-20:00 · ו׳ 08:00-13:00 · שבת סגור. חלונות הזמן מותאמים לשעות הפעילות.</p>
-<div id="sched-dates" class="flex flex-wrap gap-2 mb-3"></div>
-<label id="sched-custom-wrap" class="flex items-center gap-2 text-label-sm text-on-surface-variant mb-3">
-<span>תאריך אחר:</span>
-<input id="sched-custom-date" type="date" class="bg-surface-container-low border border-outline-variant rounded-lg px-3 py-2 text-on-surface"/>
-</label>
-<div id="sched-windows" class="grid grid-cols-2 md:grid-cols-3 gap-2"></div>
-<div id="sched-flash" hidden></div>
-<p id="sched-hint" class="text-label-sm text-on-surface-variant mt-2 min-h-[1em]"></p>
-</section>
-<!-- Step 7: Special instructions for the driver -->
-<section class="glass-panel rounded-xl p-stack-md">
-<div class="flex items-center gap-stack-sm mb-stack-md">
-<span class="w-8 h-8 rounded-full bg-surface-container-high text-on-surface flex items-center justify-center font-label-bold">7</span>
-<h2 class="font-headline-md text-on-surface">הוראות מיוחדות לשליח</h2>
-</div>
-<textarea name="notes" rows="3" class="w-full bg-surface-container-low border-b-2 border-outline-variant rounded-t-lg p-3 text-on-surface text-right transition-all" placeholder="לדוגמה: קומה 3 ללא מעלית · להשאיר בדלת · להתקשר לפני הגעה · פריט שביר"></textarea>
-</section>
-<!-- Step 8: Terms + privacy notice -->
-<section class="glass-panel rounded-xl p-stack-md">
-<div class="mb-4 rounded-lg border border-outline-variant bg-surface-container-low p-3 text-label-sm text-on-surface-variant leading-relaxed">
-<strong class="text-on-surface">הודעה בדבר איסוף מידע:</strong>
-המידע נמסר לעדן אריאלי (EdenMish), קריניצי 111, רמת גן. אין חובה חוקית למסור אותו, אך השדות המסומנים נדרשים ליצירת ההזמנה, לתמחור, לביצוע המשלוח, לתשלום, לעדכוני שירות, לאבטחה ולטיפול בפניות; ללא המידע לא נוכל לספק את השירות. המידע עשוי להימסר לשליח ולספקי תשתית, מפות, תשלום ותקשורת, בארץ ומחוץ לישראל, רק לצורך השירות ובהתאם ל<a href="/privacy.html" class="text-primary underline">מדיניות הפרטיות</a>. ניתן לבקש לעיין במידע ולתקנו באמצעות <a href="mailto:eden@edenmish.com" class="text-primary underline">eden@edenmish.com</a>.
-</div>
-<label class="flex items-start gap-3 cursor-pointer">
-<input type="checkbox" id="agree-terms" required class="mt-1 w-5 h-5 accent-[#8B5CF6] cursor-pointer"/>
-<span class="text-label-sm text-on-surface-variant leading-relaxed">
-קראתי ואני מאשר/ת את <a href="/terms.html" class="text-primary underline">תקנון השירות</a>, <a href="/privacy.html" class="text-primary underline">מדיניות הפרטיות</a> ו<a href="/refund.html" class="text-primary underline">מדיניות הביטול</a>.
-</span>
-</label>
-<p class="mt-3 text-label-sm text-on-surface-variant">עדכונים תפעוליים, כולל אישור והוכחת מסירה, יישלחו לכתובת הדוא״ל שמסרתם באמצעות SendGrid. קישור לטלפון, ל‑WhatsApp או ב‑SMS יישלח רק לאחר הסכמה נפרדת. לא יישלח דיוור שיווקי מכוח אישור זה.</p>
-<label class="mt-3 flex items-start gap-3 cursor-pointer">
-<input type="checkbox" id="phone-pod-opt-in" class="mt-1 w-5 h-5 accent-[#8B5CF6] cursor-pointer"/>
-<span class="text-label-sm text-on-surface-variant leading-relaxed">אני מסכים/ה לקבל גם קישור להוכחת המסירה ב‑WhatsApp למספר הטלפון שמסרתי. הבחירה אופציונלית ואינה כוללת דיוור שיווקי.</span>
-</label>
-</section>
-<!-- Error + Submit -->
-<div id="form-error" class="hidden bg-error-container/30 border border-error/40 text-error rounded-lg p-stack-sm text-label-bold text-center"></div>
-<div class="flex flex-col md:flex-row justify-between items-center gap-stack-md pt-stack-sm">
-<div class="flex items-center gap-2 text-on-surface-variant">
-<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">lock</span>
-<span class="text-label-sm">התשלום מתבצע בסביבה המאובטחת של Shopify ו‑PayPlus. EdenMish אינה שומרת פרטי כרטיס אשראי.</span>
-</div>
-<button id="submit-btn" type="submit" class="w-full md:w-auto bg-tertiary text-on-tertiary px-12 py-4 rounded-xl font-headline-md hover:bg-tertiary-container hover:text-on-tertiary-container transition-all shadow-[0_0_20px_rgba(210,187,255,0.3)] active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed">
-אישור והזמנת שליח
-</button>
-</div>
-</form>
-</div>
 </div>
 </main>
 <!-- Footer -->
@@ -466,6 +520,7 @@ async function initBusinessMode(){
     const name=document.getElementById("f-name");if(name&&!name.value)name.value=businessAccount.user.name||businessAccount.account.company_name||"";
     const phone=document.getElementById("f-phone");if(phone&&!phone.value)phone.value=businessAccount.user.phone||"";
     computeEstimate();
+    if(typeof syncGuidedView==="function")syncGuidedView();
     return true;
   }catch(e){if(BUSINESS_REQUESTED)location.assign(API+"/business");return false}
 }
@@ -501,10 +556,11 @@ function renderFallbackEstimate(fields, unavailable){
   setEstimateText("est-base", "₪"+base);
   const sizeRow = document.getElementById("est-size-row");
   if(sizeRow){
+    sizeRow.hidden=fields.size!=="medium";
     sizeRow.classList.toggle("hidden", fields.size!=="medium");
     const amount=sizeRow.querySelector("span:last-child");if(amount)amount.textContent="+₪"+FALLBACK_MEDIUM;
   }
-  const surchRow = document.getElementById("est-surch-row"); if(surchRow) surchRow.classList.add("hidden");
+  const surchRow = document.getElementById("est-surch-row"); if(surchRow){surchRow.hidden=true;surchRow.classList.add("hidden");}
   setEstimateText("price-val", total);
   setPriceNote(unavailable ? "לא הצלחנו לעדכן מחיר מדויק כרגע. המחיר המוצג הוא הערכת מינימום בלבד; המחיר הסופי יחושב בשרת לפני יצירת ההזמנה." : "המחיר המוצג הוא הערכה התחלתית — המחיר המדויק יתעדכן לאחר בחירת כתובות האיסוף והיעד", true);
   if(couponState.data&&couponState.data.valid)setEstimateText("price-val",couponState.data.price);
@@ -514,21 +570,21 @@ function renderAuthoritativeQuote(quote){
     const reason = (quote.reasons||[])[0];
     setEstimateText("est-zone", quote.zone ? ("אזור "+quote.zone) : "מחוץ לאזור השירות");
     setEstimateText("est-base", "-"); setEstimateText("price-val", "-");
-    const sizeRow=document.getElementById("est-size-row"); if(sizeRow) sizeRow.classList.add("hidden");
-    const surchRow=document.getElementById("est-surch-row"); if(surchRow) surchRow.classList.add("hidden");
+    const sizeRow=document.getElementById("est-size-row"); if(sizeRow){sizeRow.hidden=true;sizeRow.classList.add("hidden");}
+    const surchRow=document.getElementById("est-surch-row"); if(surchRow){surchRow.hidden=true;surchRow.classList.add("hidden");}
     setPriceNote(quoteUnavailableMessage(reason), true);
     return;
   }
   const b = quote.breakdown || {};
   setEstimateText("est-zone", "אזור "+quote.zone);
   setEstimateText("est-base", "₪"+quote.base);
-  const sizeRow=document.getElementById("est-size-row"); if(sizeRow) sizeRow.classList.toggle("hidden", !b.medium_surcharge);
+  const sizeRow=document.getElementById("est-size-row"); if(sizeRow){sizeRow.hidden=!b.medium_surcharge;sizeRow.classList.toggle("hidden", !b.medium_surcharge);}
   if(sizeRow && b.medium_surcharge){ const amount=sizeRow.querySelector("span:last-child"); if(amount) amount.textContent="+₪"+b.medium_surcharge; }
   const labels=[]; let surcharge=0;
   if(b.evening_surcharge){labels.push("ערב +₪"+b.evening_surcharge);surcharge+=b.evening_surcharge;}
   if(b.weekend_multiplier>1){labels.push("שבת ×"+b.weekend_multiplier+" (+₪"+b.weekend_surcharge+")");surcharge+=b.weekend_surcharge;}
   const surchRow=document.getElementById("est-surch-row");
-  if(surchRow){surchRow.classList.toggle("hidden",!labels.length);if(labels.length){setEstimateText("est-surch-label",labels.join(" · "));setEstimateText("est-surch","₪"+surcharge);}}
+  if(surchRow){surchRow.hidden=!labels.length;surchRow.classList.toggle("hidden",!labels.length);if(labels.length){setEstimateText("est-surch-label",labels.join(" · "));setEstimateText("est-surch","₪"+surcharge);}}
   setEstimateText("price-val", quote.price);
   setPriceNote("", false);
   if(couponState.data && couponState.data.valid) setEstimateText("price-val", couponState.data.price);
@@ -886,6 +942,8 @@ function renderDateChips(){
     b.className = "px-3 py-2 rounded-lg border text-label-bold transition-all " +
       (c.closed ? "border-outline-variant text-on-surface-variant opacity-40 line-through"
                 : "border-outline-variant text-on-surface hover:border-primary");
+    b.disabled=c.closed;
+    b.setAttribute("aria-pressed","false");
     if (!c.closed) b.addEventListener("click", () => selectDate(idx));
     root.appendChild(b);
   });
@@ -893,13 +951,15 @@ function renderDateChips(){
 function selectDate(idx){
   const c = sched._chips[idx]; if (!c) return;
   sched.dateType = c.dateType; sched.day = c.day; sched.date = c.date; sched.window = "";
+  if(customDateEl)customDateEl.value=isoDate(c.date);
   const root = document.getElementById("sched-dates");
   Array.from(root.children).forEach((b, i) => {
     b.style.borderColor = i === idx ? "#8B5CF6" : ""; b.style.background = i === idx ? "rgba(139,92,246,.12)" : "";
+    b.setAttribute("aria-pressed",String(i===idx));
   });
   renderWindows();
 }
-function styleWinBtn(b, sel){ if(!b) return; b.style.borderColor = sel ? "#8B5CF6" : ""; b.style.background = sel ? "rgba(139,92,246,.12)" : ""; }
+function styleWinBtn(b, sel){ if(!b) return; b.style.borderColor = sel ? "#8B5CF6" : ""; b.style.background = sel ? "rgba(139,92,246,.12)" : ""; b.setAttribute("aria-pressed",String(sel)); }
 function renderWindows(){
   const wg = document.getElementById("sched-windows"); const hint = document.getElementById("sched-hint");
   if (!sched.dateType) { if (wg) wg.innerHTML = ""; if (hint) hint.textContent = ""; return; }
@@ -973,16 +1033,37 @@ function renderSchedule(){
   else { if (flashEl) flashEl.innerHTML = ""; renderWindows(); }
 }
 const customDateEl = document.getElementById("sched-custom-date");
+const customDateOpen = document.getElementById("sched-custom-open");
+function openCustomDatePicker(){
+  if(!customDateEl)return;
+  try{
+    if(typeof customDateEl.showPicker==="function"){customDateEl.showPicker();return;}
+  }catch(e){}
+  customDateEl.focus();
+  customDateEl.click();
+}
 if (customDateEl) {
   customDateEl.min = new Date().toISOString().slice(0, 10);
+  customDateEl.addEventListener("click",()=>{
+    try{if(typeof customDateEl.showPicker==="function")customDateEl.showPicker();}catch(e){}
+  });
   customDateEl.addEventListener("change", () => {
     const dv = customDateEl.value; if (!dv) return;
     const d = new Date(dv + "T00:00:00"); sched.day = d.getDay(); sched.date = d;
     const today = new Date(); today.setHours(0, 0, 0, 0);
     sched.dateType = d.getTime() === today.getTime() ? "today" : "future"; sched.window = "";
+    const dateRoot=document.getElementById("sched-dates");
+    if(dateRoot)Array.from(dateRoot.children).forEach((button,index)=>{
+      const chip=sched._chips&&sched._chips[index];
+      const selected=!!(chip&&isoDate(chip.date)===dv);
+      button.style.borderColor=selected?"#8B5CF6":"";
+      button.style.background=selected?"rgba(139,92,246,.12)":"";
+      button.setAttribute("aria-pressed",String(selected));
+    });
     renderWindows();
   });
 }
+if(customDateOpen)customDateOpen.addEventListener("click",openCustomDatePicker);
 renderDateChips();
 document.querySelectorAll('input[name="service"]').forEach(input => {
   input.addEventListener("change", e => { sched.service = e.target.value; renderSchedule(); computeEstimate(); });
@@ -1120,7 +1201,9 @@ if (emailSuggestBox) {
 const form = document.getElementById("booking-form");
 const errBox = document.getElementById("form-error");
 const submitBtn = document.getElementById("submit-btn");
+const submitBtnLabel = document.getElementById("submit-btn-label");
 const ilPhone = /^(?:\+972|972|0)(?:[23489]|5[0-9]|77)-?\d{3,4}-?\d{3,4}$/;
+function setSubmitButtonLabel(label){if(submitBtnLabel)submitBtnLabel.textContent=label;}
 
 function showError(msg) {
   errBox.textContent = msg;
@@ -1128,6 +1211,178 @@ function showError(msg) {
   errBox.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 function clearError() { errBox.classList.add("hidden"); errBox.textContent = ""; }
+
+// ---- Guided order flow: preserve the canonical payload and reveal only the
+// fields required for the current decision. The Worker remains authoritative
+// for pricing, zones, business plans and order creation.
+const FLOW_STEPS = [
+  {title:"גודל החבילה",next:"המשך לפרטי קשר"},
+  {title:"פרטי קשר",next:"המשך לנקודת האיסוף"},
+  {title:"נקודת איסוף",next:"המשך לנקודת המסירה"},
+  {title:"נקודת מסירה",next:"המשך לבחירת שירות"},
+  {title:"רמת שירות",next:"המשך לבחירת מועד"},
+  {title:"מועד איסוף",next:"המשך לפרטים ואישור"},
+  {title:"סיכום ואישור",next:""}
+];
+const flowNext=document.getElementById("flow-next");
+const flowBack=document.getElementById("flow-back");
+const flowNextLabel=document.getElementById("flow-next-label");
+const flowSummary=document.getElementById("flow-summary");
+const summaryChips=document.getElementById("summary-chips");
+const summaryEdit=document.getElementById("summary-edit");
+const dockPriceLabel=document.getElementById("dock-price-label");
+const dockPriceValue=document.getElementById("dock-price-value");
+const dockPriceNote=document.getElementById("dock-price-note");
+let currentStep=1;
+let furthestStep=1;
+
+function focusFlowField(field,message){
+  showError(message);
+  if(field){
+    const visibleField=field.hidden&&field.previousElementSibling?field.previousElementSibling:field;
+    requestAnimationFrame(()=>{if(visibleField&&typeof visibleField.focus==="function")visibleField.focus();});
+  }
+  return false;
+}
+function validateFlowStep(step){
+  const name=document.getElementById("f-name");
+  const phone=document.getElementById("f-phone");
+  const email=document.getElementById("f-email");
+  const pickup=document.getElementById("f-pickup-addr");
+  const dropoff=document.getElementById("f-dropoff-addr");
+  const service=document.querySelector('input[name="service"]:checked');
+  if(step===1&&!document.querySelector('input[name="size"]:checked'))return focusFlowField(document.querySelector('input[name="size"]'),"נא לבחור גודל חבילה.");
+  if(step===2){
+    if(!name.value.trim())return focusFlowField(name,"נא למלא שם מלא.");
+    if(!ilPhone.test(phone.value.trim().replace(/\s/g,"")))return focusFlowField(phone,"נא למלא מספר טלפון ישראלי תקין.");
+    const emailValue=email.value.trim();
+    if(!EMAIL_RE.test(emailValue))return focusFlowField(email,"נא למלא כתובת אימייל תקינה.");
+    const parts=splitDomain(emailValue);
+    const fixed=parts?suggestEmailDomain(parts.domain):null;
+    if(fixed&&fixed!==parts.domain&&(!emailState.resolved||emailState.value!==emailValue)){
+      emailState.value=emailValue;emailState.suggested=parts.local+"@"+fixed;emailState.resolved=false;
+      showEmailSuggestion(emailState.suggested);
+      return focusFlowField(email,"נראה שיש שגיאת כתיב בכתובת האימייל. אנא אשרו או דחו את ההצעה.");
+    }
+  }
+  if(step===3&&!pickup.value.trim())return focusFlowField(pickup,"נא למלא כתובת איסוף.");
+  if(step===4&&!dropoff.value.trim())return focusFlowField(dropoff,"נא למלא כתובת יעד.");
+  if(step===5&&(!service||service.disabled))return focusFlowField(document.querySelector('input[name="service"]:not(:disabled)'),"נא לבחור רמת שירות זמינה.");
+  if(step===6){
+    if(service&&service.value==="flash"){
+      if(!flashAvailableNow())return focusFlowField(document.querySelector('input[name="service"][value="standard"]'),"שירות מהיר זמין לשיגור מיידי בשעות הפעילות בלבד. חזרו ובחרו שירות אחר.");
+    }else if(!sched.window){
+      return focusFlowField(document.getElementById("sched-dates"),"נא לבחור תאריך וחלון זמן לאיסוף.");
+    }
+  }
+  return true;
+}
+function createSummaryChip(icon,label,step){
+  const button=document.createElement("button");
+  button.type="button";button.className="summary-chip";button.dataset.summaryStep=String(step);
+  const iconEl=document.createElement("span");iconEl.className="material-symbols-outlined";iconEl.setAttribute("aria-hidden","true");iconEl.textContent=icon;
+  const copy=document.createElement("span");copy.textContent=label;
+  button.append(iconEl,copy);
+  button.setAttribute("aria-label","עריכת "+label);
+  return button;
+}
+function scheduleSummary(){
+  if(sched.service==="flash")return "מיידי · עכשיו";
+  if(!sched.date||!sched.window)return "טרם נבחר מועד";
+  return sched.window+" · "+pad2(sched.date.getDate())+"/"+pad2(sched.date.getMonth()+1);
+}
+function updateFlowSummary(){
+  if(!summaryChips)return;
+  summaryChips.replaceChildren();
+  const size=(document.querySelector('input[name="size"]:checked')||{}).value;
+  const service=(document.querySelector('input[name="service"]:checked')||{}).value;
+  const serviceNames={eco:"חסכוני",standard:"רגיל",flash:"מהיר"};
+  const entries=[
+    [1,"inventory_2",size==="medium"?"חבילה בינונית":"חבילה קטנה"],
+    [2,"person",(document.getElementById("f-name").value||"פרטי קשר").trim()],
+    [3,"trip_origin",(document.getElementById("f-pickup-addr").value||"כתובת איסוף").trim()],
+    [4,"location_on",(document.getElementById("f-dropoff-addr").value||"כתובת יעד").trim()],
+    [5,"speed",serviceNames[service]||"רמת שירות"],
+    [6,"calendar_month",scheduleSummary()]
+  ];
+  entries.filter(([step])=>step<furthestStep).forEach(([step,icon,label])=>summaryChips.appendChild(createSummaryChip(icon,label,step)));
+  flowSummary.hidden=furthestStep===1;
+}
+function updateDockPrice(){
+  const raw=(document.getElementById("price-val")||{}).textContent||"—";
+  const hasPrice=raw.trim()&&raw.trim()!=="-"&&raw.trim()!=="—";
+  const exact=!!(quoteState.data&&quoteState.data.available);
+  if(currentStep<=3){
+    dockPriceLabel.textContent="מחיר";
+    dockPriceValue.textContent="יחושב בהמשך";
+    dockPriceNote.textContent="לפי המסלול והשירות";
+  }else if(currentStep===4){
+    dockPriceLabel.textContent="מחיר";
+    dockPriceValue.textContent="נשאר לבחור שירות";
+    dockPriceNote.textContent="המסלול כבר בפנים";
+  }else{
+    dockPriceLabel.textContent=exact?"מחיר סופי":"מחיר משוער";
+    dockPriceValue.textContent=hasPrice?(exact?"₪"+raw.trim():"החל מ־₪"+raw.trim()):"בודקים מחיר…";
+    dockPriceNote.textContent=BUSINESS_MODE?"מהארנק העסקי":(exact?"לתשלום מאובטח":"יעודכן לפי המועד");
+  }
+}
+function syncGuidedView(){
+  updateFlowSummary();
+  updateDockPrice();
+}
+function showFlowStep(step,options={}){
+  const next=Math.max(1,Math.min(7,Number(step)||1));
+  currentStep=next;
+  furthestStep=Math.max(furthestStep,currentStep);
+  document.querySelectorAll(".booking-step").forEach(section=>{
+    const active=Number(section.dataset.step)===currentStep;
+    section.hidden=!active;
+    section.classList.remove("is-entering");
+    if(active)requestAnimationFrame(()=>section.classList.add("is-entering"));
+  });
+  document.getElementById("progress-label").textContent=FLOW_STEPS[currentStep-1].title;
+  document.getElementById("progress-count").textContent="שלב "+currentStep+" מתוך 7";
+  document.querySelectorAll("[data-step-target]").forEach(button=>{
+    const target=Number(button.dataset.stepTarget);
+    const active=target===currentStep;
+    button.classList.toggle("is-active",active);
+    button.classList.toggle("is-complete",target<furthestStep&&!active);
+    button.disabled=target>furthestStep;
+    if(active)button.setAttribute("aria-current","step");else button.removeAttribute("aria-current");
+    const marker=button.querySelector("span");
+    marker.textContent=target<furthestStep&&!active?"✓":String(target);
+  });
+  flowBack.hidden=currentStep===1;
+  flowNext.hidden=currentStep===7;
+  submitBtn.hidden=currentStep!==7;
+  if(flowNextLabel)flowNextLabel.textContent=FLOW_STEPS[currentStep-1].next;
+  clearError();
+  syncGuidedView();
+  if(options.scroll!==false){
+    const active=document.querySelector('.booking-step[data-step="'+currentStep+'"]');
+    if(active)active.scrollIntoView({behavior:"smooth",block:"start"});
+  }
+}
+if(flowNext)flowNext.addEventListener("click",()=>{
+  if(!validateFlowStep(currentStep))return;
+  showFlowStep(currentStep+1);
+});
+if(flowBack)flowBack.addEventListener("click",()=>showFlowStep(currentStep-1));
+document.querySelectorAll("[data-step-target]").forEach(button=>button.addEventListener("click",()=>{
+  const target=Number(button.dataset.stepTarget);
+  if(target<=furthestStep)showFlowStep(target);
+}));
+if(summaryChips)summaryChips.addEventListener("click",event=>{
+  const target=event.target.closest("[data-summary-step]");
+  if(target)showFlowStep(Number(target.dataset.summaryStep));
+});
+if(summaryEdit)summaryEdit.addEventListener("click",()=>showFlowStep(Math.max(1,currentStep-1)));
+form.addEventListener("input",syncGuidedView);
+form.addEventListener("change",syncGuidedView);
+const priceObserver=new MutationObserver(syncGuidedView);
+["price-val","price-note","est-zone"].forEach(id=>{const el=document.getElementById(id);if(el)priceObserver.observe(el,{childList:true,subtree:true,characterData:true,attributes:true});});
+showFlowStep(1,{scroll:false});
+// ---- /Guided order flow ----
 
 function combineAddr(address, floor, apt, contact) {
   const parts = [address];
@@ -1186,11 +1441,11 @@ form.addEventListener("submit", async (e) => {
   const activeQuoteFields=getCouponPricingFields();
   let activeQuote=quoteState.fingerprint===quoteFingerprint(activeQuoteFields)?quoteState.data:null;
   if(BUSINESS_MODE&&!activeQuote){
-    const checkingLabel=submitBtn.textContent;
-    submitBtn.disabled=true;submitBtn.textContent="בודק מחיר במסלול…";
+    const checkingLabel=submitBtnLabel?submitBtnLabel.textContent:"אישור והזמנת שליח";
+    submitBtn.disabled=true;setSubmitButtonLabel("בודק מחיר במסלול…");
     const quoteDecision=await window.EdenBusinessBooking.prepareAuthoritativeQuote({businessMode:BUSINESS_MODE,quote:activeQuote,quoteFingerprint:quoteState.fingerprint,expectedFingerprint:quoteFingerprint(activeQuoteFields),fetchQuote:()=>requestAuthoritativeQuoteNow(activeQuoteFields)});
     activeQuote=quoteDecision.quote;
-    submitBtn.disabled=false;submitBtn.textContent=checkingLabel;
+    submitBtn.disabled=false;setSubmitButtonLabel(checkingLabel);
     if(!activeQuote)return showError("לא הצלחנו לאמת כרגע את מחיר המסלול העסקי. לא נוכתה יתרה — נסו שוב בעוד רגע.");
     if(!activeQuote.available)return showError(quoteUnavailableMessage((activeQuote.reasons||[])[0]));
     if(!quoteDecision.canSubmit){
@@ -1230,8 +1485,8 @@ form.addEventListener("submit", async (e) => {
   }
 
   submitBtn.disabled = true;
-  const original = submitBtn.textContent;
-  submitBtn.textContent = "שולח הזמנה…";
+  const original = submitBtnLabel?submitBtnLabel.textContent:"אישור והזמנת שליח";
+  setSubmitButtonLabel("שולח הזמנה…");
   try {
     const res = await fetch(API + "/api/orders", {
       method: "POST",
@@ -1304,7 +1559,7 @@ form.addEventListener("submit", async (e) => {
     showError("בעיית תקשורת. בדקו את החיבור לרשת ונסו שוב.");
   } finally {
     submitBtn.disabled = false;
-    submitBtn.textContent = original;
+    setSubmitButtonLabel(original);
   }
 });
 businessModeReady=initBusinessMode();

@@ -645,6 +645,21 @@ describe('Frontend: Stylesheet + fonts', () => {
 describe('Frontend: Booking form', () => {
   const html = readPage('booking.html');
 
+  test('Uses a seven-stage progressive RTL order flow without removing the canonical fields', () => {
+    assertContains(html, 'id="booking-stepper"', 'guided order stepper');
+    assert.equal((html.match(/class="booking-step order-layer/g) || []).length, 7, 'exactly seven guided stages should render');
+    assertContains(html, 'data-step="1"', 'package-size stage');
+    assertContains(html, 'data-step="7"', 'review stage');
+    assertContains(html, 'שלב 1 מתוך 7', 'RTL progress status');
+    assertContains(html, 'id="flow-next"', 'step continuation action');
+    assertContains(html, 'id="flow-back"', 'step back action');
+    assertContains(html, 'validateFlowStep', 'per-stage validation');
+    assertContains(html, 'showFlowStep(currentStep+1)', 'progressive reveal');
+    assertContains(html, 'width:min(calc(100% - (2 * var(--order-gutter))),960px)', 'shared responsive action width');
+    assertContains(html, '.order-shell{width:min(100%,960px);margin-inline:auto}', 'shared centered content width');
+    assertContains(html, 'direction:rtl', 'RTL step rail');
+  });
+
   test('Has size selector (Small/Medium)', () => {
     assertContains(html, 'name="size"', 'size radio');
     assertContains(html, 'value="small"', 'small option');
@@ -695,13 +710,17 @@ describe('Frontend: Booking form', () => {
     assertContains(html, 'מדיניות פרטיות', 'privacy link');
     assertContains(html, 'אין חובה חוקית למסור', 'privacy collection notice');
     assertContains(html, 'כולל אישור והוכחת מסירה', 'transactional POD email disclosure');
-    assertContains(html, 'באמצעות SendGrid', 'transactional email processor disclosure');
+    assertContains(html, 'יישלחו לכתובת הדוא״ל שמסרתם', 'transactional email delivery disclosure');
     assertContains(html, 'יישלח רק לאחר הסכמה נפרדת', 'separate phone-channel consent');
     assertContains(html, 'id="phone-pod-opt-in"', 'optional WhatsApp POD-link consent');
     assertContains(html, 'phone_delivery_link_opt_in:', 'persisted phone-link consent payload');
-    assertContains(html, 'לא יישלח דיוור שיווקי מכוח אישור זה', 'no bundled marketing consent');
+    assertContains(html, 'הסכמה זו אינה כוללת דיוור שיווקי', 'no bundled marketing consent');
     assert.ok(!html.includes('הנני מסכים/ה לקבל עדכונים'), 'transaction acceptance must not be bundled with communications consent');
-    assertContains(html, 'EdenMish אינה שומרת פרטי כרטיס אשראי', 'accurate hosted-payment disclosure');
+    assertContains(
+      html,
+      'פרטי כרטיס האשראי אינם נשמרים במערכות EdenMish. התשלום המאובטח מתבצע באמצעות ספק תשלום חיצוני.',
+      'accurate hosted-payment disclosure',
+    );
   });
 
   test('Uses Places API (New) with a plain-input fallback', () => {
@@ -764,6 +783,10 @@ describe('Frontend: Booking form', () => {
     assertContains(html, 'schedHours', 'business hours function');
     assertContains(html, 'genWindows', 'window generation');
     assertContains(html, 'הזמנה לאותו היום עד 09:00 כולל', 'same-day Eco cutoff');
+    assertContains(html, 'id="sched-custom-open"', 'explicit calendar button');
+    assertContains(html, 'customDateEl.value=isoDate(c.date)', 'date-chip to editable-field synchronization');
+    assertContains(html, 'customDateEl.showPicker()', 'native calendar opening');
+    assertContains(html, 'lang="he-IL" dir="ltr"', 'Israeli date-field presentation');
   });
 
   test('Sends when_date + when_hour + notes in payload', () => {
@@ -780,8 +803,9 @@ describe('Frontend: Booking form', () => {
   });
 
   test('Has coupon UI in price summary', () => {
-    assertContains(html, 'id="coupon-toggle"', 'coupon toggle');
+    assertContains(html, 'id="coupon-toggle" class="text-label-bold text-primary hover:text-secondary transition-colors w-full text-right"', 'right-aligned coupon toggle');
     assertContains(html, 'יש לך קוד קופון?', 'coupon toggle text');
+    assertContains(html, 'class="flex flex-row-reverse gap-2"', 'coupon apply action on the right');
     assertContains(html, 'id="coupon-input"', 'coupon input');
     assertContains(html, 'id="coupon-apply"', 'coupon apply button');
     assertContains(html, 'החל', 'coupon apply text');
@@ -815,6 +839,13 @@ describe('Frontend: Booking form', () => {
     assertContains(html, 'window.location.assign(data.payment_url)', 'direct Shopify checkout redirect');
     assert.ok(!html.includes('payment_url: data.payment_url'), 'payment URL must not be copied into the success-page query');
     assertContains(html, 'if (data.test && data.token)', 'paid local test-mode exception');
+  });
+
+  test('Keeps the final-submit Material icon intact across loading states', () => {
+    assertContains(html, 'id="submit-btn-label"', 'submit label wrapper');
+    assertContains(html, 'setSubmitButtonLabel("בודק מחיר במסלול…")', 'business quote loading label');
+    assertContains(html, 'setSubmitButtonLabel("שולח הזמנה…")', 'order submission loading label');
+    assert.ok(!html.includes('submitBtn.textContent'), 'loading states must not replace the icon-bearing button contents');
   });
 });
 
