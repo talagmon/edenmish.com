@@ -17,6 +17,13 @@ When configured, Google consent defaults to denied. The container loads only aft
 the visitor explicitly grants measurement consent. Refusal must not affect booking,
 payment, tracking, cancellation, or WhatsApp links.
 
+The current consent dialog names both Google and Meta regardless of which provider
+is configured. Production activation must remain blocked until provider-specific
+copy and the sensitive-URL/paid-conversion work in
+[#219](https://github.com/talagmon/edenmish.com/issues/219) are complete and the
+legal activation gate in
+[#216](https://github.com/talagmon/edenmish.com/issues/216) is satisfied.
+
 ## Data contract
 
 The first-party event layer accepts only these events:
@@ -37,21 +44,27 @@ or stable customer identifiers.
 
 Issue #6 also asks for paid-order measurement. There is currently no authoritative
 `paid_order` browser event: the booking success page is not proof that Shopify
-payment settled. Add that conversion only in a separate runtime change driven by
-the verified paid webhook/server state; do not infer it from a redirect or URL
-parameter.
+payment settled. #219 owns that conversion and the protection against automatic
+page-location/referrer capture. Do not infer settlement from a redirect or URL
+parameter, and do not enable enhanced/automatic measurements that can transmit
+tracking or business-login tokens.
 
 ## GA4/GTM activation
 
-1. The account owner creates/selects the EdenMish GA4 property, web stream, and
-   production GTM web container.
-2. In GTM, configure GA4 using the existing consent state. Do not add a second
+1. Complete #219 and the applicable pre-activation review in #216.
+2. The account owner creates/selects the EdenMish GA4 property, web stream, and
+   production GTM web container without publishing it.
+3. Make the consent and privacy copy describe the providers actually enabled;
+   GA4-only activation must not claim Meta is active.
+4. In GTM, configure GA4 using the existing consent state. Do not add a second
    hardcoded consent banner or load tags outside the first-party boundary.
-3. Map only the `eden_*` events above. Mark conversions only after their business
+5. Map only the `eden_*` events above. Mark conversions only after their business
    definitions are reviewed.
-4. Set the public Cloudflare Pages production variable `GTM_CONTAINER_ID`.
+6. Disable automatic/enhanced collection of page location, referrer, query string,
+   and any other field not in the approved event contract.
+7. Set the public Cloudflare Pages production variable `GTM_CONTAINER_ID`.
    Keep staging empty or use a separate test container.
-5. Publish the container only after the test matrix below passes.
+8. Publish the container only after the test matrix below passes.
 
 Meta remains disabled until an authorized Business Portfolio and Pixel/Dataset
 exist. If resumed, load it through the same consent-gated container. Keep advanced
@@ -69,6 +82,8 @@ Run in a clean browser profile with network logging:
 | Measurement accepted | GTM loads once; consent state updates; allowlisted events may emit |
 | Preference revoked | Subsequent events stop; consent update is visible to the loaded container |
 | Event payload inspection | Only allowlisted keys and non-PII values are present |
+| Sensitive URL inspection | No tracking/business-login token, query string, fragment, full page location, or sensitive referrer is transmitted |
+| Provider-specific copy | The consent dialog and privacy notice name only the providers/purposes actually enabled |
 | Staging | No production container or dataset receives staging traffic |
 
 Use GA4 DebugView/Realtime and the browser network panel with controlled test data.

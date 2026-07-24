@@ -14,8 +14,17 @@ WhatsApp text is in Hebrew; operator instructions and evidence remain in English
   separate persisted phone-channel opt-in. Email remains the primary channel.
 - The current Cloud API adapter sends free-form `text` messages. Proactive
   business-initiated messages outside the customer-service window generally need
-  approved templates. Do not enable production credentials until #213 confirms
-  the allowed service window or a scoped code change adds approved-template sends.
+  approved templates.
+- The current paid-order alert uses the public `WHATSAPP_NUMBER` as its operations
+  recipient and includes customer/order details whenever both global Cloud API
+  secrets exist. That path is not gated by the customer's phone-channel opt-in and
+  is not safe to activate under the current privacy boundary.
+
+Production credentials must remain unset until the code-owned privacy, template,
+recipient-separation, and delivery-reliability work in
+[#218](https://github.com/talagmon/edenmish.com/issues/218) is complete and the
+legal activation gate in
+[#216](https://github.com/talagmon/edenmish.com/issues/216) is satisfied.
 
 ## Business account checklist
 
@@ -61,7 +70,8 @@ Recommended labels:
 
 ## Cloud API credential setup
 
-Only after the account/template decision above:
+This is a blocked activation step, not a setup step to run now. Only after #218
+and the relevant #216 review are complete:
 
 ```bash
 cd worker
@@ -83,9 +93,9 @@ record for activation testing.
 | Either Cloud API secret absent | Notification audit records `skipped`; no network delivery |
 | Delivery-proof opt-in false | Email job only; no WhatsApp proof-link job |
 | Delivery-proof opt-in true | One email job and one WhatsApp job |
-| Approved service/template send | Message arrives at the controlled test number and audit status becomes sent |
+| Approved service/template send | The approved template arrives at a controlled customer test number and audit status becomes sent |
 | Invalid/revoked credential | No customer retry storm; audit shows a sanitized failure |
-| Paid-order operations alert | Eden receives one alert at the verified production number |
+| Paid-order operations alert | Eden receives one PII-minimized alert at the separate verified operations recipient |
 
 Record the date, environment, order fixture ID, notification audit result, and a
 redacted provider message ID. Do not record message bodies, phone numbers, tokens,
