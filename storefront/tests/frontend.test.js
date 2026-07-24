@@ -408,7 +408,7 @@ describe('Frontend: SEO foundations', () => {
       'רואים הכול. סומכים על הכול.',
       'מהזמנה עד מסירה',
       'אתם בשליטה',
-      'הזמנה ראשונה בהנחה. שירות שיגרום לכם לחזור.',
+      'הזמנה ראשונה, 10% פחות. שירות שיגרום לכם לחזור.',
     ]) {
       assertContains(html, slogan, `${slogan} homepage slogan`);
     }
@@ -523,7 +523,7 @@ describe('Frontend: SEO foundations', () => {
     assert.ok(!homepage.includes('Sol'), 'homepage must not present the AI model as a public co-author');
     assert.ok(!about.includes('Sol'), 'about page must not present the AI model as a public co-author');
     assert.ok(!homepage.includes('הצטרפו למאות עסקים'), 'homepage must not claim hundreds of customers during launch');
-    assertContains(homepage, 'הצטרפו ללקוחות הראשונים של EdenMish', 'honest launch-stage CTA');
+    assertContains(homepage, '10% הנחה על המשלוח הראשון ללקוחות חדשים', 'specific launch-stage CTA');
   });
 });
 
@@ -1318,5 +1318,39 @@ describe('Frontend: Mobile nav', () => {
       assert.ok(existsSync(path), `${asset} not found`);
       assert.ok(readFileSync(path).byteLength > 80_000, `${asset} is unexpectedly small`);
     }
+  });
+});
+
+describe('Frontend: first-delivery launch promotion', () => {
+  test('homepage promise states the discount, eligibility, and inclusive Israel-time deadline', () => {
+    const html = readPage('index.html');
+    assertContains(html, 'הזמנה ראשונה, 10% פחות. שירות שיגרום לכם לחזור.', 'specific launch slogan');
+    assertContains(html, '31.08.2026 בשעה 23:59:59 לפי שעון ישראל', 'unambiguous customer deadline');
+    assertContains(html, 'href="/terms.html#first-delivery-promotion"', 'promotion terms link');
+  });
+
+  test('terms explicitly cover private and authenticated business eligibility', () => {
+    const html = readPage('terms.html');
+    assertContains(html, 'יום 31 באוגוסט 2026 כלול במלואו', 'inclusive end date');
+    assertContains(html, 'בחשבון עסקי מאומת נבדקת גם זהות החשבון העסקי', 'business account identity');
+    assertContains(html, 'לפני שמירת הסכום מהיתרה', 'discount before wallet reservation');
+    assertContains(html, 'החריג היחיד לכלל שלפיו לא ניתן להזין קופון ידני', 'automatic wallet exception');
+  });
+
+  test('booking previews automatic eligibility but leaves final enforcement to order creation', () => {
+    const html = readPage('booking.html');
+    assertContains(html, '/api/coupons/auto-apply', 'automatic eligibility preview');
+    assertContains(html, 'payload.promotion_expected = true', 'expected promotion guard');
+    assertContains(html, 'couponState.source === "manual"', 'manual coupon remains distinct');
+    assertContains(html, 'if (BUSINESS_MODE) payload.use_wallet = true', 'authenticated business preview');
+    assertContains(html, 'credentials: BUSINESS_MODE ? "include" : "same-origin"', 'business session credentials');
+  });
+
+  test('ops dashboard exposes safe automatic first-delivery controls', () => {
+    const html = readPage('dash.html');
+    assertContains(html, 'id="c-auto"', 'automatic-application toggle');
+    assertContains(html, 'id="c-first-delivery"', 'first-delivery eligibility toggle');
+    assertContains(html, "if(first.checked){scope.value='delivery';once.checked=true;", 'safe field combination');
+    assertContains(html, 'step="0.001"', 'millisecond-preserving promotion deadline');
   });
 });

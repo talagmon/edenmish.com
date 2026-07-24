@@ -216,6 +216,8 @@ CREATE TABLE IF NOT EXISTS coupons (
   applies_once_per_customer INTEGER DEFAULT 0,
   scope TEXT NOT NULL DEFAULT 'delivery' CHECK(scope IN ('delivery','business_plan')),
   business_plan_ids TEXT,              -- JSON array; NULL/[] = every business plan
+  auto_apply INTEGER NOT NULL DEFAULT 0 CHECK(auto_apply IN (0,1)),
+  eligibility_rule TEXT CHECK(eligibility_rule IS NULL OR eligibility_rule='first_delivery'),
   synced_at INTEGER,                   -- epoch ms of last Shopify sync
   raw_shopify_json TEXT                -- full Shopify payload for debugging/resync
 );
@@ -231,10 +233,51 @@ CREATE TABLE IF NOT EXISTS coupon_redemptions (
   discount_amount INTEGER,
   price_after INTEGER,                 -- floored at 0
   created_at INTEGER,                  -- epoch ms
+  promotion_claim_id INTEGER,
   FOREIGN KEY (order_id) REFERENCES orders(id)
 );
 CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_code ON coupon_redemptions(code);
 CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_customer ON coupon_redemptions(customer_key);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_coupon_redemptions_promotion_claim
+  ON coupon_redemptions(promotion_claim_id)
+  WHERE promotion_claim_id IS NOT NULL;
+
+-- Atomic eligibility reservation for automatic first-delivery promotions (031).
+CREATE TABLE IF NOT EXISTS first_delivery_promotion_claims (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  coupon_code TEXT NOT NULL,
+  customer_key TEXT NOT NULL,
+  phone_key TEXT,
+  email_key TEXT,
+  business_account_id INTEGER,
+  idempotency_key TEXT,
+  order_id INTEGER UNIQUE,
+  status TEXT NOT NULL DEFAULT 'reserved' CHECK(status IN ('reserved','redeemed')),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY (order_id) REFERENCES orders(id),
+  FOREIGN KEY (business_account_id) REFERENCES business_accounts(id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_first_delivery_claim_phone
+  ON first_delivery_promotion_claims(phone_key) WHERE phone_key IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_first_delivery_claim_email
+  ON first_delivery_promotion_claims(email_key) WHERE email_key IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_first_delivery_claim_business
+  ON first_delivery_promotion_claims(business_account_id) WHERE business_account_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_first_delivery_claim_business_idempotency
+  ON first_delivery_promotion_claims(business_account_id, idempotency_key)
+  WHERE business_account_id IS NOT NULL AND idempotency_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_orders_paid_phone ON orders(phone, payment_status);
+CREATE INDEX IF NOT EXISTS idx_orders_paid_email ON orders(email COLLATE NOCASE, payment_status);
+INSERT OR IGNORE INTO coupons (
+  code, title, value_type, value, status, starts_at, ends_at, usage_limit,
+  applies_once_per_customer, scope, business_plan_ids, auto_apply,
+  eligibility_rule, synced_at
+) VALUES (
+  'FIRST10-2026', '10% הנחה למשלוח ראשון', 'percentage', 10, 'active',
+  NULL, 1788209999999, NULL, 1, 'delivery', NULL, 1,
+  'first_delivery', CAST(strftime('%s', 'now') AS INTEGER) * 1000
+);
 
 -- Driver mobile API v1. The app receives scoped snapshots/events through the
 -- Worker and never connects to D1 directly.

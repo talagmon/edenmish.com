@@ -50,6 +50,8 @@ function d1Coupon(overrides = {}) {
     applies_once_per_customer: 0,
     scope: 'delivery',
     business_plan_ids: null,
+    auto_apply: 0,
+    eligibility_rule: null,
     synced_at: Date.now(),
     ...overrides,
   };
@@ -107,6 +109,7 @@ describe('validateCoupon', () => {
       valid: true, code: 'SAVE10', title: 'Save 10', valueType: 'percentage',
       value: 10, subtotal: 85, discountAmount: 9, price: 76,
       usageLimit: null, appliesOncePerCustomer: false,
+      autoApply: false, eligibilityRule: null,
     });
   });
 
@@ -239,8 +242,8 @@ function crudDb({ coupons = [], redemptions = [] } = {}) {
         },
         async run() {
           if (/INSERT INTO coupons/.test(sql)) {
-            const [code, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, scope, business_plan_ids, synced_at] = this.args;
-            store.set(code, { code, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, scope, business_plan_ids, synced_at });
+            const [code, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, scope, business_plan_ids, auto_apply, eligibility_rule, synced_at] = this.args;
+            store.set(code, { code, title, value_type, value, status, starts_at, ends_at, usage_limit, applies_once_per_customer, scope, business_plan_ids, auto_apply, eligibility_rule, synced_at });
           } else if (/UPDATE coupons SET/.test(sql)) {
             const cols = [...sql.split(' WHERE ')[0].matchAll(/(\w+) = \?/g)].map(m => m[1]);
             const row = store.get(this.args[this.args.length - 1]);
@@ -267,6 +270,8 @@ describe('createCoupon', () => {
     assert.equal(c.ends_at, null);
     assert.equal(c.usage_limit, null);
     assert.equal(c.applies_once_per_customer, 0);
+    assert.equal(c.auto_apply, 0);
+    assert.equal(c.eligibility_rule, null);
     assert.ok(c.synced_at >= before && c.synced_at <= Date.now());
     assert.ok(db.store.has('SAVE10'));
   });
@@ -319,6 +324,43 @@ describe('createCoupon', () => {
     assert.equal(r.valid, true);
     assert.equal(r.discountAmount, 15);
     assert.equal(r.price, 35);
+  });
+
+  test('enforces safe automatic first-delivery field combinations', async () => {
+    const db = crudDb();
+    await assert.rejects(
+      () => createCoupon(db, {
+        code: 'AUTO',
+        value_type: 'percentage',
+        value: 10,
+        auto_apply: true,
+      }),
+      /automatic coupons require first_delivery/,
+    );
+    await assert.rejects(
+      () => createCoupon(db, {
+        code: 'FIRST',
+        value_type: 'percentage',
+        value: 10,
+        eligibility_rule: 'first_delivery',
+        applies_once_per_customer: true,
+        scope: 'business_plan',
+        ends_at: 1788209999999,
+      }),
+      /requires delivery scope/,
+    );
+    const created = await createCoupon(db, {
+      code: 'FIRST10',
+      value_type: 'percentage',
+      value: 10,
+      auto_apply: true,
+      eligibility_rule: 'first_delivery',
+      applies_once_per_customer: true,
+      scope: 'delivery',
+      ends_at: 1788209999999,
+    });
+    assert.equal(created.auto_apply, 1);
+    assert.equal(created.eligibility_rule, 'first_delivery');
   });
 });
 

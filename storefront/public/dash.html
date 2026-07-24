@@ -946,11 +946,13 @@ function renderCoupons(){
   }
   function typeLabel(t){ return t==='percentage'?'אחוז %':'סכום קבוע ₪'; }
   function scopeLabel(s){ return s==='business_plan'?'מסלול עסקי':'משלוח בודד'; }
+  function applicationLabel(c){return c.auto_apply?'<span class="text-secondary font-label-bold">אוטומטית · משלוח ראשון</span>':'קוד ידני';}
   var rows = coupons.map(function(c){
     return '<tr class="border-b border-outline-variant/20">'+
       '<td class="p-2 font-mono text-label-sm text-primary" dir="ltr">'+esc(c.code)+'</td>'+
       '<td class="p-2 text-label-sm text-on-surface">'+esc(c.title||"—")+'</td>'+
       '<td class="p-2 text-label-sm text-on-surface">'+scopeLabel(c.scope)+'</td>'+
+      '<td class="p-2 text-label-sm text-on-surface-variant">'+applicationLabel(c)+'</td>'+
       '<td class="p-2 text-label-sm text-on-surface">'+typeLabel(c.value_type)+'</td>'+
       '<td class="p-2 text-label-sm text-on-surface font-bold">'+(c.value_type==='percentage'?c.value+'%':'₪'+c.value)+'</td>'+
       '<td class="p-2">'+statusBadge(c)+'</td>'+
@@ -969,9 +971,9 @@ function renderCoupons(){
   var table = '<div class="glass-card rounded-2xl p-stack-sm overflow-x-auto">'+
     '<table class="w-full text-right min-w-[680px]">'+
     '<thead class="bg-surface-container-low/60 text-on-surface-variant text-label-sm font-label-bold">'+
-      '<tr><th class="p-2">קוד</th><th class="p-2">כותרת</th><th class="p-2">חל על</th><th class="p-2">סוג</th><th class="p-2">ערך</th><th class="p-2">סטטוס</th><th class="p-2">מימוש</th><th class="p-2">התחלה</th><th class="p-2">סיום</th><th class="p-2">פעולות</th></tr>'+
+      '<tr><th class="p-2">קוד</th><th class="p-2">כותרת</th><th class="p-2">חל על</th><th class="p-2">החלה</th><th class="p-2">סוג</th><th class="p-2">ערך</th><th class="p-2">סטטוס</th><th class="p-2">מימוש</th><th class="p-2">התחלה</th><th class="p-2">סיום</th><th class="p-2">פעולות</th></tr>'+
     '</thead>'+
-    '<tbody>'+(rows||'<tr><td colspan="10" class="p-6 text-center text-on-surface-variant">אין קופונים</td></tr>')+'</tbody>'+
+    '<tbody>'+(rows||'<tr><td colspan="11" class="p-6 text-center text-on-surface-variant">אין קופונים</td></tr>')+'</tbody>'+
     '</table></div>';
 
   var hdr = viewTabsHtml();
@@ -1013,14 +1015,18 @@ function showCouponForm(code){
     '<div id="c-business-plans" class="glass-card rounded-xl p-3 '+(couponScope==='business_plan'?'':'hidden')+'"><div class="text-label-sm text-on-surface-variant mb-2">מסלולים תקפים · ללא בחירה = כל המסלולים</div><div class="grid grid-cols-2 gap-2">'+
       [['trial','ניסיון'],['wallet','ארנק'],['silver','כסף'],['gold','זהב'],['platinum','פלטינום']].map(function(p){return '<label class="flex items-center gap-2"><input type="checkbox" name="c-plan" value="'+p[0]+'" '+(planIds.includes(p[0])?'checked':'')+' class="accent-secondary"/><span class="text-label-sm">'+p[1]+'</span></label>';}).join('')+
     '</div></div>'+
+    '<div class="grid grid-cols-1 gap-2">'+
+      '<label class="flex items-start gap-2 glass-card rounded-xl p-3 cursor-pointer"><input id="c-auto" type="checkbox" '+(c&&c.auto_apply?'checked':'')+' onchange="syncPromotionCouponFields()" class="accent-secondary mt-1"/><span><b class="text-label-sm text-on-surface">החלה אוטומטית</b><small class="block text-on-surface-variant">השרת בודק זכאות ומחיל את ההטבה ללא צורך בהקלדת הקוד.</small></span></label>'+
+      '<label class="flex items-start gap-2 glass-card rounded-xl p-3 cursor-pointer"><input id="c-first-delivery" type="checkbox" '+(c&&c.eligibility_rule==='first_delivery'?'checked':'')+' onchange="syncPromotionCouponFields()" class="accent-secondary mt-1"/><span><b class="text-label-sm text-on-surface">ללקוחות ללא משלוח קודם</b><small class="block text-on-surface-variant">חל על משלוח בודד ללקוח פרטי או לחשבון עסקי מאומת, פעם אחת, לאחר בדיקת היסטוריית תשלום.</small></span></label>'+
+    '</div>'+
     '<div class="flex gap-3">'+
       '<label class="flex-1 flex items-center gap-2 glass-card rounded-xl p-3 cursor-pointer '+(c&&c.value_type==='percentage'?'ring-1 ring-secondary':'')+'"><input type="radio" name="c-type" value="percentage" '+(c&&c.value_type==='percentage'?'checked':'')+' class="accent-secondary"/><span class="text-label-sm text-on-surface">אחוז %</span></label>'+
       '<label class="flex-1 flex items-center gap-2 glass-card rounded-xl p-3 cursor-pointer '+(c&&c.value_type==='fixed_amount'?'ring-1 ring-secondary':'')+'"><input type="radio" name="c-type" value="fixed_amount" '+(c&&c.value_type==='fixed_amount'?'checked':'')+' class="accent-secondary"/><span class="text-label-sm text-on-surface">סכום קבוע ₪</span></label>'+
     '</div>'+
     '<div><label class="text-label-sm text-on-surface-variant block mb-1">ערך</label><input id="c-value" type="number" min="0" placeholder="10" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-right" value="'+(c?esc((c.value||0).toString()):'')+'"/></div>'+
     '<div class="grid grid-cols-2 gap-3">'+
-      '<div><label class="text-label-sm text-on-surface-variant block mb-1">התחלה (אופציונלי)</label><input id="c-starts" type="datetime-local" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-right" dir="ltr" value="'+(c&&c.starts_at?toDatetimeLocal(c.starts_at):'')+'"/></div>'+
-      '<div><label class="text-label-sm text-on-surface-variant block mb-1">סיום (אופציונלי)</label><input id="c-ends" type="datetime-local" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-right" dir="ltr" value="'+(c&&c.ends_at?toDatetimeLocal(c.ends_at):'')+'"/></div>'+
+      '<div><label class="text-label-sm text-on-surface-variant block mb-1">התחלה (אופציונלי)</label><input id="c-starts" type="datetime-local" step="0.001" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-right" dir="ltr" value="'+(c&&c.starts_at?toDatetimeLocal(c.starts_at):'')+'"/></div>'+
+      '<div><label class="text-label-sm text-on-surface-variant block mb-1">סיום (אופציונלי)</label><input id="c-ends" type="datetime-local" step="0.001" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-right" dir="ltr" value="'+(c&&c.ends_at?toDatetimeLocal(c.ends_at):'')+'"/></div>'+
     '</div>'+
     '<div class="grid grid-cols-2 gap-3">'+
       '<div><label class="text-label-sm text-on-surface-variant block mb-1">מגבלת שימוש (אופציונלי)</label><input id="c-limit" type="number" min="1" placeholder="ללא הגבלה" class="w-full bg-surface-container-low border-b-2 border-outline-variant text-on-surface rounded-t-lg p-3 text-right" value="'+(c&&c.usage_limit!=null?esc(c.usage_limit.toString()):'')+'"/></div>'+
@@ -1037,8 +1043,15 @@ function showCouponForm(code){
   var tmp = document.createElement("div"); tmp.innerHTML = html; document.body.appendChild(tmp.firstElementChild);
 }
 function cancelCouponForm(){ var m=document.querySelector('.coupon-form-overlay'); if(m)m.remove(); editingCouponCode=null; }
-function toggleBusinessPlanCouponFields(){var scope=document.getElementById('c-scope');var plans=document.getElementById('c-business-plans');if(scope&&plans)plans.classList.toggle('hidden',scope.value!=='business_plan');}
-function toDatetimeLocal(ts){ var d=new Date(ts); var pad=function(n){return n<10?'0'+n:n;}; return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes()); }
+function toggleBusinessPlanCouponFields(){var scope=document.getElementById('c-scope');var plans=document.getElementById('c-business-plans');if(scope&&plans)plans.classList.toggle('hidden',scope.value!=='business_plan');syncPromotionCouponFields();}
+function syncPromotionCouponFields(){
+  var auto=document.getElementById('c-auto'),first=document.getElementById('c-first-delivery'),scope=document.getElementById('c-scope'),once=document.getElementById('c-once');
+  if(!auto||!first||!scope||!once)return;
+  if(auto.checked)first.checked=true;
+  if(first.checked){scope.value='delivery';once.checked=true;var plans=document.getElementById('c-business-plans');if(plans)plans.classList.add('hidden');}
+  if(!first.checked)auto.checked=false;
+}
+function toDatetimeLocal(ts){ var d=new Date(ts); var pad=function(n){return n<10?'0'+n:n;}; var ms=String(d.getMilliseconds()).padStart(3,'0'); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds())+'.'+ms; }
 function submitCoupon(code){
   var btn = document.getElementById("c-submit"); if(btn) btn.disabled = true;
   var body = {
@@ -1049,7 +1062,9 @@ function submitCoupon(code){
     status: document.getElementById("c-status").value,
     applies_once_per_customer: !!document.getElementById("c-once").checked,
     scope: document.getElementById("c-scope").value,
-    business_plan_ids: Array.from(document.querySelectorAll('input[name="c-plan"]:checked')).map(function(input){return input.value;})
+    business_plan_ids: Array.from(document.querySelectorAll('input[name="c-plan"]:checked')).map(function(input){return input.value;}),
+    auto_apply: !!document.getElementById("c-auto").checked,
+    eligibility_rule: document.getElementById("c-first-delivery").checked ? "first_delivery" : null
   };
   var st = document.getElementById("c-starts").value;
   var en = document.getElementById("c-ends").value;
@@ -1060,6 +1075,7 @@ function submitCoupon(code){
   if(!body.code) return alert("הזן קוד קופון"), btn.disabled=false;
   if(!body.title) return alert("הזן כותרת"), btn.disabled=false;
   if(body.value<0) return alert("הזן ערך תקין"), btn.disabled=false;
+  if(body.eligibility_rule==="first_delivery"&&!en)return alert("להטבת משלוח ראשון חובה להגדיר מועד סיום"),btn.disabled=false;
   var url = code ? "/api/ops/coupons/"+code : "/api/ops/coupons";
   var method = code ? "PUT" : "POST";
   if(code) delete body.code;
