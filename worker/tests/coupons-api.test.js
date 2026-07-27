@@ -588,12 +588,12 @@ describe('ops coupon CRUD endpoints', () => {
   });
 });
 
-// ---- createDraftOrder: coupon orders inflate to subtotal + applied_discount ----
+// ---- createDraftOrder: checkout contact + coupon pricing payload ----
 // When a coupon was applied, the line item keeps the original subtotal and the
 // discount is attached as a Shopify applied_discount (fixed_amount) so the checkout
 // invoice shows the discount breakdown to the customer.
 
-describe('createDraftOrder coupon pricing', () => {
+describe('createDraftOrder Shopify payload', () => {
   const SHOPIFY_ENV = { SHOPIFY_SHOP: 'test.myshopify.com', SHOPIFY_ADMIN_TOKEN: 'shpat_test' };
 
   function captureDraftFetch() {
@@ -609,7 +609,16 @@ describe('createDraftOrder coupon pricing', () => {
   const baseOrder = {
     token: 'tok123', pickup: 'א', dropoff: 'ב',
     service: 'standard', size: 'small', phone: '+972541234567',
+    email: 'booking@example.com', email_verified: 0,
   };
+
+  test('includes the booking email before tracking OTP verification', async () => {
+    const captured = captureDraftFetch();
+    await createDraftOrder(SHOPIFY_ENV, baseOrder, 50);
+    const d = captured.body.variables.input;
+    assert.equal(d.email, 'booking@example.com');
+    assert.equal(d.phone, '+972541234567');
+  });
 
   test('coupon order: line item at subtotal, applied_discount for the difference', async () => {
     const captured = captureDraftFetch();
