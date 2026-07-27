@@ -118,7 +118,11 @@ export async function createDraftOrder(env, order, priceNis) {
   }
 
   if (order.phone) input.phone = order.phone;
-  if (order.email && order.email_verified) input.email = order.email;
+  // Shopify checkout needs the contact email collected during booking so a
+  // signed-in customer is matched to the same identity. EdenMish OTP
+  // verification protects tracking access; it must not strip the booking email
+  // from the Draft Order that the customer is about to pay.
+  if (order.email) input.email = order.email;
   if (order.name) input.customAttributes = [{ key: 'שם המזמין', value: String(order.name) }];
 
   return createShopifyDraftOrder(env, input);
