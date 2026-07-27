@@ -72,6 +72,23 @@ CREATE TABLE IF NOT EXISTS payments (
   FOREIGN KEY (order_id) REFERENCES orders(id)
 );
 
+-- Privacy-safe paid conversion bridge (migration 032). The raw random claim
+-- credential exists only in the customer's current browser session.
+CREATE TABLE IF NOT EXISTS analytics_conversion_claims (
+  claim_hash TEXT PRIMARY KEY
+    CHECK(length(claim_hash) = 64 AND claim_hash NOT GLOB '*[^0-9a-f]*'),
+  order_id INTEGER NOT NULL UNIQUE,
+  disposition TEXT
+    CHECK(disposition IS NULL OR disposition IN ('emitted', 'suppressed')),
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  settled_at INTEGER,
+  observed_at INTEGER,
+  FOREIGN KEY (order_id) REFERENCES orders(id)
+);
+CREATE INDEX IF NOT EXISTS idx_analytics_conversion_claim_expiry
+  ON analytics_conversion_claims(expires_at, observed_at);
+
 -- A second, purpose-specific Shopify Draft Order for a corrected-address
 -- redelivery. The original order payment remains immutable; this row owns the
 -- retry fee and its reconciliation lifecycle.

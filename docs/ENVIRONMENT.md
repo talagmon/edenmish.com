@@ -102,21 +102,24 @@ credentials into the staging Worker. See `CI_CD.md` for one-time setup.
 |---|---|---|
 | `MAPS_KEY` | Returned by the server-side `/maps-key` function for booking address autocomplete, route distance, and customer maps | Maps JavaScript API, **Places API (New)**, and **Routes API** |
 
-The optional Google Tag Manager container identifier is a public, non-secret
-Cloudflare Pages variable. Leave it unset to disable analytics completely; staging
-should remain unset or use a separate test container. The browser fetches this value
-from `/analytics-config`, but loads no GTM, Google Analytics, or Meta script until
-the visitor explicitly opts in. GA4 and Meta identifiers are configured in GTM and
-must not be embedded in the storefront repository.
+The analytics variables are public, non-secret Cloudflare Pages configuration.
+Leave all four unset to disable analytics completely; staging should remain
+disabled or use a separate reviewed test container. A valid container ID alone
+does not activate a provider. The browser loads GTM only when at least one explicit
+provider flag is enabled and the visitor grants that provider. GA4 and Meta
+identifiers are configured in GTM and must not be embedded in the storefront
+repository.
 
 | Variable | Purpose |
 |---|---|
 | `GTM_CONTAINER_ID` | Google Tag Manager web-container ID (`GTM-…`) |
+| `ANALYTICS_GOOGLE_ENABLED` | Exact `true` or `1` enables the Google Analytics consent choice; false/unset fails closed |
+| `ANALYTICS_META_ENABLED` | Exact `true` or `1` enables the Meta Pixel consent choice; keep unset until its separate owner review is complete |
+| `ANALYTICS_CONVERSION_ORIGIN` | Exact HTTPS storefront origin that Shopify returns to after payment (production: `https://edenmish.com`); unset or a different request origin disables paid-conversion claims |
 
 Follow `ANALYTICS_OPERATIONS.md` for the event/data contract, account-owner steps,
-consent verification matrix, and emergency disable procedure. Keep this variable
-unset until the code prerequisite in issue #219 and the legal activation gate in
-issue #216 are complete.
+consent verification matrix, and emergency disable procedure. Keep all analytics
+variables unset until the controlled browser/network acceptance matrix is complete.
 
 The canonical booking page uses `PlaceAutocompleteElement`, `gmp-select`, and
 `Place.fetchFields()` for addresses, plus the Maps JavaScript Routes library's
