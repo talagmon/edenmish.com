@@ -129,6 +129,7 @@ export async function persistPaidOrderAndOpsWhatsAppJob(DB, orderId, {
   amountAgorot,
   paymentRef = null,
   shopifyOrderId = null,
+  analyticsSettlement = false,
   eventId = `payment-received-${orderId}`,
   now = Date.now(),
 } = {}) {
@@ -189,7 +190,25 @@ export async function persistPaidOrderAndOpsWhatsAppJob(DB, orderId, {
         WHERE order_id = ? AND status = 'paid')`)
     .bind(orderId, now, orderId, OPS_PAYMENT_TEMPLATE, eventId, orderId);
 
-  const results = await DB.batch([claim, updateOrder, payment, history]);
+  const statements = [claim, updateOrder, payment, history];
+  if (analyticsSettlement) {
+    statements.push(DB.prepare(`UPDATE analytics_conversion_claims
+      SET settled_at = ?
+      WHERE order_id = ? AND settled_at IS NULL AND observed_at IS NULL
+        AND expires_at > ?
+        AND EXISTS (
+          SELECT 1 FROM orders
+          WHERE id = ? AND payment_status = 'paid'
+            AND shopify_order_id IS NOT NULL
+        )
+        AND EXISTS (
+          SELECT 1 FROM payments
+          WHERE order_id = ? AND status = 'paid'
+        )`)
+      .bind(now, orderId, now, orderId, orderId));
+  }
+
+  const results = await DB.batch(statements);
   return {
     eventId,
     transitioned: !!results[0]?.meta?.changes,

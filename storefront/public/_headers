@@ -2,6 +2,6 @@
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff
   X-Frame-Options: SAMEORIGIN
-  Referrer-Policy: strict-origin-when-cross-origin
+  Referrer-Policy: no-referrer
   Permissions-Policy: geolocation=(self), camera=()
   Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://maps.googleapis.com https://maps.gstatic.com https://www.googletagmanager.com https://connect.facebook.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' http://localhost:8787 http://127.0.0.1:8787 https://find.edenmish.com https://ops.edenmish.com https://find-staging.edenmish.com https://ops-staging.edenmish.com https://maps.googleapis.com https://places.googleapis.com https://routes.googleapis.com https://maps.gstatic.com https://www.google-analytics.com https://region1.google-analytics.com https://www.facebook.com https://connect.facebook.net; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'

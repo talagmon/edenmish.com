@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { runInNewContext } from 'node:vm';
+import { onRequestGet as analyticsConfigResponse } from '../functions/analytics-config.js';
 
 const PUB = join(process.cwd(), 'public');
 
@@ -60,42 +61,133 @@ function themePaymentExit(pathname, search = '') {
   return destination;
 }
 
-async function analyticsHarness(consent) {
+async function analyticsHarness({
+  consent = {
+    googleAnalytics: 'denied',
+    metaPixel: 'denied',
+  },
+  config = {
+    gtmContainerId: 'GTM-TEST123',
+    providers: { googleAnalytics: true, metaPixel: false },
+    paidConversionEnabled: true,
+  },
+  pathname = '/booking',
+  search = '',
+  hash = '',
+  referrer = '',
+  conversionCredential = '',
+  fetchHandler = null,
+  immediateTimers = true,
+} = {}) {
   const source = readFileSync(join(PUB, 'assets', 'analytics.js'), 'utf8');
   const appended = [];
+  const bodyNodes = [];
+  const listeners = {};
+  const storage = new Map([
+    ['edenmish_analytics_consent_v2', JSON.stringify(consent)],
+  ]);
+  const session = new Map();
+  if (conversionCredential) {
+    session.set('edenmish_paid_conversion_v1', conversionCredential);
+  }
+  const timers = [];
+  const fetchCalls = [];
+  let reloads = 0;
+  const storageApi = (values) => ({
+    getItem(key) { return values.has(key) ? values.get(key) : null; },
+    setItem(key, value) { values.set(key, String(value)); },
+    removeItem(key) { values.delete(key); },
+  });
   const window = {
-    localStorage: {
-      getItem() { return consent; },
-      setItem() {},
+    EDEN_API: { find: 'https://find.edenmish.com' },
+    localStorage: storageApi(storage),
+    sessionStorage: storageApi(session),
+    location: {
+      pathname,
+      search,
+      hash,
+      origin: 'https://edenmish.com',
+      href: `https://edenmish.com${pathname}${search}${hash}`,
+      reload() { reloads += 1; },
     },
-    location: { pathname: '/booking' },
+    crypto: {
+      getRandomValues(bytes) {
+        bytes.forEach((_, index) => { bytes[index] = index + 1; });
+        return bytes;
+      },
+    },
+    setTimeout(callback, delay) {
+      if (immediateTimers) callback();
+      else timers.push({ callback, delay });
+    },
+    addEventListener(type, handler) { listeners[type] = handler; },
   };
-  const document = {
-    head: { appendChild(node) { appended.push(node); return node; } },
-    body: { appendChild() {} },
+  const makeNode = (tag) => ({
+    tagName: tag.toUpperCase(),
+    async: false,
+    src: '',
+    dataset: {},
+    style: {},
+    hidden: false,
+    textContent: '',
+    setAttribute() {},
     addEventListener() {},
-    querySelectorAll() { return []; },
-    getElementById() { return null; },
-    createElement(tag) {
-      return {
-        tagName: tag.toUpperCase(),
-        async: false,
-        src: '',
-        setAttribute() {},
-        addEventListener() {},
-        remove() {},
-      };
+    focus() {},
+    remove() {
+      const bodyIndex = bodyNodes.indexOf(this);
+      if (bodyIndex >= 0) bodyNodes.splice(bodyIndex, 1);
+      const headIndex = appended.indexOf(this);
+      if (headIndex >= 0) appended.splice(headIndex, 1);
     },
+  });
+  const document = {
+    referrer,
+    activeElement: null,
+    cookie: '',
+    head: { appendChild(node) { appended.push(node); return node; } },
+    body: { appendChild(node) { bodyNodes.push(node); return node; } },
+    addEventListener() {},
+    removeEventListener() {},
+    querySelectorAll(selector) {
+      if (selector === '[data-analytics-settings]') {
+        return bodyNodes.filter(node => node.dataset.analyticsSettings);
+      }
+      if (selector === '[data-eden-analytics-script]') {
+        return appended.filter(node => node.dataset.edenAnalyticsScript);
+      }
+      return [];
+    },
+    getElementById(id) { return bodyNodes.find(node => node.id === id) || null; },
+    createElement: makeNode,
+  };
+  const fetch = async (input, init) => {
+    fetchCalls.push({ input, init });
+    if (input === '/analytics-config') {
+      return { ok: true, status: 200, json: async () => config };
+    }
+    if (fetchHandler) return fetchHandler(input, init);
+    return { ok: true, status: 204, json: async () => ({}) };
   };
   runInNewContext(source, {
     window,
     document,
-    fetch: async () => ({ ok: true, json: async () => ({ gtmContainerId: 'GTM-TEST123' }) }),
+    fetch,
     URL,
     Set,
+    Uint8Array,
   });
   await new Promise(resolve => setImmediate(resolve));
-  return { window, appended };
+  return {
+    window,
+    appended,
+    bodyNodes,
+    listeners,
+    storage,
+    session,
+    timers,
+    fetchCalls,
+    reloads: () => reloads,
+  };
 }
 
 function trackingOtpHarness(response = { verified: true }) {
@@ -538,8 +630,8 @@ describe('Frontend: consent-aware analytics', () => {
   const headers = readPage('_headers');
   const customerPages = [
     'index.html', 'about.html', 'accessibility.html', 'booking.html', 'cancel.html',
-    'delivered.html', 'error.html', 'privacy.html', 'refund.html', 'success.html',
-    'terms.html', 'track.html'
+    'business.html', 'delivered.html', 'error.html', 'privacy.html', 'refund.html',
+    'success.html', 'terms.html', 'thank-you.html', 'track.html'
   ];
 
   test('Loads the shared consent boundary on customer pages but not the ops dashboard', () => {
@@ -550,45 +642,196 @@ describe('Frontend: consent-aware analytics', () => {
   });
 
   test('Fails closed and loads vendor scripts only after an explicit opt-in', () => {
-    assertContains(analytics, 'edenmish_analytics_consent_v1', 'versioned consent storage');
+    assertContains(analytics, 'edenmish_analytics_consent_v2', 'provider-specific consent storage');
     assertContains(analytics, 'fetch("/analytics-config"', 'first-party analytics configuration');
-    assertContains(analytics, 'if (consent === "granted") initializeContainer()', 'stored opt-in gate');
-    assertContains(analytics, 'else if (consent === "unknown") renderBanner()', 'unknown-consent banner gate');
+    assertContains(analytics, 'configuredProviders().some(providerGranted)', 'stored opt-in gate');
+    assertContains(analytics, 'consent[provider] === "unknown"', 'unknown-consent dialog gate');
     assertContains(analytics, 'https://www.googletagmanager.com/gtm.js?id=', 'GTM loader');
     assert.ok(!analytics.includes('https://connect.facebook.net/en_US/fbevents.js'), 'vendors must be configured inside GTM');
-    assertContains(analytics, 'updateGoogleConsent("default", "denied")', 'Google consent default');
+    assertContains(analytics, 'updateGoogleConsent("default")', 'Google consent default');
     assertContains(analytics, 'analytics_storage: granted ? "granted" : "denied"', 'Google consent state');
     assertContains(analytics, 'event: "eden_consent_updated"', 'GTM consent update event');
     assertContains(analytics, 'רק חיוניות', 'Hebrew reject choice');
-    assertContains(analytics, 'אישור מדידה', 'Hebrew accept choice');
+    assertContains(analytics, 'שמירת בחירה', 'Hebrew preference save choice');
   });
 
   test('Queues namespaced GTM events only after stored opt-in', async () => {
-    const denied = await analyticsHarness('denied');
+    const denied = await analyticsHarness();
     assert.equal(denied.appended.length, 0, 'GTM must remain unloaded after rejection');
-    assert.ok(!denied.window.dataLayer.some(item => item?.event), 'rejected visits must queue no events');
+    assert.ok(!denied.window.dataLayer.some(item => item?.event === 'gtm.js'), 'rejected visits must not bootstrap GTM');
+    assert.ok(!denied.window.dataLayer.some(item => /^eden_(?:booking|payment|tracking|whatsapp|cancellation|paid)/.test(item?.event || '')), 'rejected visits must queue no business events');
 
-    const granted = await analyticsHarness('granted');
+    const granted = await analyticsHarness({
+      consent: { googleAnalytics: 'granted', metaPixel: 'denied' },
+    });
     assert.equal(granted.appended.length, 1, 'GTM must load exactly once after opt-in');
     assert.equal(granted.appended[0].src, 'https://www.googletagmanager.com/gtm.js?id=GTM-TEST123');
+    assert.equal(granted.appended[0].referrerPolicy, 'no-referrer');
     assert.ok(granted.window.dataLayer.some(item => item?.event === 'gtm.js'), 'GTM bootstrap event missing');
     assert.ok(granted.window.dataLayer.some(item => item?.event === 'eden_booking_started'), 'booking start event missing');
 
-    assert.equal(granted.window.edenAnalytics.track('whatsapp_clicked', { source: 'booking', email: 'blocked@example.com' }), true);
+    assert.equal(granted.window.edenAnalytics.track('whatsapp_clicked', { source: '/booking', email: 'blocked@example.com' }), true);
     const contact = granted.window.dataLayer.at(-1);
     assert.equal(contact.event, 'eden_whatsapp_clicked');
-    assert.equal(contact.eden_source, 'booking');
+    assert.equal(contact.eden_source, '/booking');
     assert.ok(!('eden_email' in contact), 'non-allowlisted fields must be discarded');
+  });
+
+  test('Fails closed on sensitive locations/referrers and supports immediate cross-tab withdrawal', async () => {
+    const sensitive = await analyticsHarness({
+      consent: { googleAnalytics: 'granted', metaPixel: 'denied' },
+      pathname: '/track.html',
+      search: '?t=TRACKING_SECRET',
+      referrer: 'https://edenmish.com/business?challenge=SECRET',
+    });
+    assert.equal(sensitive.appended.length, 0, 'sensitive document must not load GTM');
+    assert.equal(sensitive.window.edenAnalytics.track('tracking_opened', { source: '/track.html' }), false);
+    assert.ok(!JSON.stringify(sensitive.window.dataLayer).includes('TRACKING_SECRET'));
+    assert.ok(!JSON.stringify(sensitive.window.dataLayer).includes('SECRET'));
+
+    const granted = await analyticsHarness({
+      consent: { googleAnalytics: 'granted', metaPixel: 'denied' },
+    });
+    granted.storage.set('edenmish_analytics_consent_v2', JSON.stringify({
+      googleAnalytics: 'denied',
+      metaPixel: 'denied',
+    }));
+    granted.listeners.storage({ key: 'edenmish_analytics_consent_v2' });
+    assert.equal(granted.window.edenAnalytics.track('booking_submitted', {}), false);
+    assert.equal(granted.reloads(), 1, 'loaded vendor runtime must be terminated by same-URL reload');
   });
 
   test('Uses environment-provided public IDs and excludes personal/order identifiers', () => {
     assertContains(analyticsConfig, 'env.GTM_CONTAINER_ID', 'GTM Pages variable');
+    assertContains(analyticsConfig, 'env.ANALYTICS_GOOGLE_ENABLED', 'explicit Google provider gate');
+    assertContains(analyticsConfig, 'env.ANALYTICS_META_ENABLED', 'explicit Meta provider gate');
     assertContains(analyticsConfig, '/^GTM-[A-Z0-9]+$/', 'GTM identifier validation');
     assert.ok(!analyticsConfig.includes('GA4_MEASUREMENT_ID'), 'GA4 ID belongs in GTM');
     assert.ok(!analyticsConfig.includes('META_PIXEL_ID'), 'Meta ID belongs in GTM');
     for (const forbidden of ['order_id', 'tracking_token', 'email', 'phone', 'address']) {
       assert.ok(!analytics.includes(forbidden), `analytics boundary must not reference ${forbidden}`);
     }
+  });
+
+  test('Requires an explicit provider flag in addition to a valid GTM ID', async () => {
+    const disabled = await analyticsConfigResponse({
+      env: { GTM_CONTAINER_ID: 'GTM-TEST123' },
+      request: new Request('https://edenmish.com/analytics-config'),
+    });
+    assert.deepEqual(await disabled.json(), {
+      gtmContainerId: 'GTM-TEST123',
+      providers: { googleAnalytics: false, metaPixel: false },
+      paidConversionEnabled: false,
+    });
+
+    const googleOnly = await analyticsConfigResponse({
+      env: {
+        GTM_CONTAINER_ID: 'gtm-test123',
+        ANALYTICS_GOOGLE_ENABLED: 'true',
+        ANALYTICS_META_ENABLED: 'false',
+      },
+      request: new Request('https://edenmish.com/analytics-config'),
+    });
+    assert.deepEqual(await googleOnly.json(), {
+      gtmContainerId: 'GTM-TEST123',
+      providers: { googleAnalytics: true, metaPixel: false },
+      paidConversionEnabled: false,
+    });
+
+    const invalid = await analyticsConfigResponse({
+      env: {
+        GTM_CONTAINER_ID: 'G-INVALID',
+        ANALYTICS_GOOGLE_ENABLED: 'true',
+        ANALYTICS_META_ENABLED: 'true',
+      },
+      request: new Request('https://edenmish.com/analytics-config'),
+    });
+    assert.deepEqual(await invalid.json(), {
+      gtmContainerId: '',
+      providers: { googleAnalytics: false, metaPixel: false },
+      paidConversionEnabled: false,
+    });
+  });
+
+  test('Enables paid claims only on the exact configured Shopify return origin', async () => {
+    const env = {
+      GTM_CONTAINER_ID: 'GTM-TEST123',
+      ANALYTICS_GOOGLE_ENABLED: 'true',
+      ANALYTICS_CONVERSION_ORIGIN: 'https://edenmish.com',
+    };
+    const canonical = await analyticsConfigResponse({
+      env,
+      request: new Request('https://edenmish.com/analytics-config'),
+    });
+    assert.equal((await canonical.json()).paidConversionEnabled, true);
+
+    const preview = await analyticsConfigResponse({
+      env,
+      request: new Request('https://feature.edenmish-staging.pages.dev/analytics-config'),
+    });
+    assert.equal((await preview.json()).paidConversionEnabled, false);
+
+    const disabled = await analyticsHarness({
+      consent: { googleAnalytics: 'granted', metaPixel: 'denied' },
+      config: {
+        gtmContainerId: 'GTM-TEST123',
+        providers: { googleAnalytics: true, metaPixel: false },
+        paidConversionEnabled: false,
+      },
+    });
+    assert.equal(disabled.window.edenAnalytics.getConversionContext(), null);
+    assert.equal(disabled.session.has('edenmish_paid_conversion_v1'), false);
+
+    const enabled = await analyticsHarness({
+      consent: { googleAnalytics: 'granted', metaPixel: 'denied' },
+    });
+    assert.equal(
+      enabled.window.edenAnalytics.getConversionContext(),
+      '0102030405060708090a0b0c0d0e0f10',
+    );
+  });
+
+  test('Retries pending and transient paid-conversion observations with backoff', async () => {
+    let observations = 0;
+    const credential = '0123456789abcdef0123456789abcdef';
+    const analyticsState = await analyticsHarness({
+      consent: { googleAnalytics: 'granted', metaPixel: 'denied' },
+      pathname: '/thank-you.html',
+      conversionCredential: credential,
+      immediateTimers: false,
+      fetchHandler: async () => {
+        observations += 1;
+        if (observations === 1) throw new Error('temporary network failure');
+        if (observations === 2) {
+          return { ok: true, status: 202, json: async () => ({ status: 'pending' }) };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ event: 'paid_order', value: 50, currency: 'ILS' }),
+        };
+      },
+    });
+
+    assert.equal(observations, 1);
+    assert.equal(analyticsState.timers.length, 1);
+    assert.equal(analyticsState.timers[0].delay, 1000);
+    analyticsState.timers.shift().callback();
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(observations, 2);
+    assert.equal(analyticsState.timers.length, 1);
+    assert.equal(analyticsState.timers[0].delay, 2000);
+    analyticsState.timers.shift().callback();
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(observations, 3);
+    assert.ok(
+      analyticsState.window.dataLayer.some(item => item?.event === 'eden_paid_order'),
+      'verified paid event should be dispatched after a successful retry',
+    );
+    assert.equal(analyticsState.session.has('edenmish_paid_conversion_v1'), false);
+    assert.match(analytics, /CONVERSION_MAX_ATTEMPTS = 30/);
   });
 
   test('Instruments the agreed funnel events without treating payment start as purchase', () => {
@@ -603,7 +846,9 @@ describe('Frontend: consent-aware analytics', () => {
     assertContains(analytics, 'track("whatsapp_clicked"', 'WhatsApp click event');
     assertContains(analytics, 'clean.event = "eden_" + name', 'namespaced dataLayer event');
     assertContains(analytics, 'eden_page_path', 'namespaced dataLayer field');
-    assert.ok(!analytics.includes('"purchase"'), 'browser analytics must not infer paid orders');
+    assertContains(analytics, '"paid_order"', 'authoritative paid-order event');
+    assertContains(readPage('thank-you.html'), '<script src="/assets/api-origin.js" defer></script>', 'paid conversion API routing');
+    assert.ok(!analytics.includes('"purchase"'), 'browser analytics must use the reviewed event namespace');
   });
 
   test('Publishes disclosure, preference controls, and the required CSP allowlist', () => {
@@ -613,6 +858,7 @@ describe('Frontend: consent-aware analytics', () => {
     assertContains(headers, 'https://www.googletagmanager.com', 'Google script CSP');
     assertContains(headers, 'https://connect.facebook.net', 'Meta script CSP');
     assertContains(headers, 'https://www.google-analytics.com', 'Google collection CSP');
+    assertContains(headers, 'Referrer-Policy: no-referrer', 'sensitive same-origin referrer protection');
   });
 });
 
