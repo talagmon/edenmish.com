@@ -89,6 +89,11 @@ import {
   verifyWhatsAppWebhookChallenge,
   verifyWhatsAppWebhookSignature,
 } from './whatsapp.js';
+import {
+  cleanupAnalyticsClaims,
+  observeAnalyticsClaim,
+  registerAnalyticsClaim,
+} from './analytics-conversion.js';
 
 const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra } });
 const html = (s) => new Response(s, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -215,6 +220,7 @@ async function confirmPaidOrder(env, order, opts = {}) {
     amountAgorot: Math.round(paidAmount * 100),
     paymentRef: opts.paymentRef == null ? null : String(opts.paymentRef),
     shopifyOrderId: opts.orderFields?.shopify_order_id ?? null,
+    analyticsSettlement: opts.analyticsSettlement === true,
     now: paidAt,
   });
   if (!transition.transitioned) {
@@ -577,6 +583,47 @@ export default {
     }
 
     // ---- public API (CORS) ----
+    // Privacy-safe browser bridge for a paid-order analytics event. The credential
+    // is random, short-lived, sent only in the POST body, and stored only as a hash.
+    // A clean payment return may observe it once; no order/customer identifier is
+    // returned to the browser or analytics container.
+    if (path === '/api/analytics/paid-conversion' && req.method === 'POST') {
+      try {
+        const key = await anonKey(env, clientIp(req));
+        const limit = await incrRateLimit(env.DB, 'aconv:' + key, 60 * 1000);
+        if (limit.count > 40) {
+          return json(
+            { error: 'rate_limited' },
+            429,
+            { ...cors, 'Retry-After': '60' },
+          );
+        }
+      } catch (error) {
+        console.error(
+          'rate_limit_error',
+          error && error.message ? error.message : String(error),
+        );
+      }
+      let body;
+      try { body = await readJson(req, 1024); } catch (error) {
+        return json({ error: error.message }, error.status || 400, cors);
+      }
+      const result = await observeAnalyticsClaim(
+        env.DB,
+        body.credential,
+        body.eligible === true,
+      );
+      if (result.status === 'emitted') {
+        return json({
+          event: result.event,
+          value: result.value,
+          currency: result.currency,
+        }, 200, cors);
+      }
+      if (result.status === 'pending') return json({ status: 'pending' }, 202, cors);
+      return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store', ...cors } });
+    }
+
     // Coupon pre-check for the booking funnel: same pricing inputs as POST /api/orders
     // + coupon_code (+ phone/email for once-per-customer checks). The price is always
     // recomputed server-side — the client never sends a price. Rate-limited per
@@ -1007,6 +1054,22 @@ export default {
         }
       }
 
+      const testMode = (env.TEST_MODE === '1' || env.TEST_MODE === 'true')
+        && url.searchParams.get('test') === '1';
+      let analyticsClaimRegistered = false;
+      if (!businessSession && !isReview && !testMode && b.analytics_context) {
+        try {
+          analyticsClaimRegistered = await registerAnalyticsClaim(
+            env.DB,
+            created.id,
+            b.analytics_context,
+          );
+        } catch {
+          // Analytics is optional and must never block an accepted delivery order.
+          console.error('analytics_claim_registration_failed');
+        }
+      }
+
       // Set OTP hash to gate the tracking page, but DON'T email the code yet.
       // The code is regenerated and emailed AFTER payment is confirmed (webhook handler).
       if (b.email && !businessSession) {
@@ -1058,7 +1121,6 @@ export default {
       // the request, so it can never affect a real customer. TEST_MODE must NEVER be set
       // on the production Worker — keep it out of wrangler.toml [vars] and never
       // `wrangler secret put TEST_MODE` in prod.
-      const testMode = (env.TEST_MODE === '1' || env.TEST_MODE === 'true') && url.searchParams.get('test') === '1';
       if (testMode) {
         await setOrderStatus(env.DB, created.id, 'priced', { payment_status: 'paid' });
         try { await recordPayment(env.DB, created.id, { amount: (finalPrice || 0) * 100, status: 'paid', payplus_id: 'TEST', paid_at: Date.now() }); } catch (e) {}
@@ -1099,7 +1161,9 @@ export default {
         subtotal_price: coupon ? coupon.subtotal : undefined,
         discount_amount: coupon ? coupon.discountAmount : undefined,
         discount_code: coupon ? coupon.code : undefined,
-        review: isReview, reasons: pr.reasons
+        review: isReview,
+        reasons: pr.reasons,
+        analytics_claim: analyticsClaimRegistered,
       }, 200, cors);
     }
 
@@ -2115,6 +2179,7 @@ export default {
               customerEmail: parsed.email,
               paymentRef: parsed.shopifyOrderId,
               orderFields: { shopify_order_id: parsed.shopifyOrderId },
+              analyticsSettlement: true,
             });
           } else {
             // authorized but not yet captured (future Mesh/preauth mode)
@@ -2133,7 +2198,11 @@ export default {
     // close to its 24h boundary rather than up to a day late.
     const tasks = [processDeliveryNotificationOutbox(env), runHeldPackageAutoReturn(env.DB)];
     if (event.cron === '17 2 * * *') {
-      tasks.push(runRetentionCleanup(env.DB), cleanupBusinessSecurity(env.DB));
+      tasks.push(
+        runRetentionCleanup(env.DB),
+        cleanupBusinessSecurity(env.DB),
+        cleanupAnalyticsClaims(env.DB),
+      );
     }
     ctx.waitUntil(Promise.all(tasks).catch((error) => {
       console.error('scheduled_worker_failed', error && error.message ? error.message : String(error));

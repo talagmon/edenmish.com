@@ -275,6 +275,23 @@ jobs:
           else
             echo "First-delivery promotion migration 031 is already applied."
           fi
+      - name: Apply staging analytics conversion migration when needed
+        working-directory: worker
+        run: |
+          readiness_json="$(npx wrangler d1 execute edenmish-staging --remote --yes --json \
+            --config wrangler.staging.generated.toml \
+            --command "SELECT (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='analytics_conversion_claims') + (SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_analytics_conversion_claim_expiry') AS ready")"
+          ready="$(printf '%s' "$readiness_json" | jq -r '.[0].results[0].ready // 0')"
+          if [ "$ready" = "0" ]; then
+            npx wrangler d1 execute edenmish-staging --remote --yes \
+              --config wrangler.staging.generated.toml \
+              --file=./migrations/032_analytics_conversion_claims.sql
+          elif [ "$ready" != "2" ]; then
+            echo "::error::Analytics conversion migration is only partially applied ($ready/2 schema items)."
+            exit 1
+          else
+            echo "Analytics conversion migration 032 is already applied."
+          fi
       - name: Verify remote driver schema readiness
         working-directory: worker
         run: node scripts/validate-driver-schema.mjs --database edenmish-staging --config wrangler.staging.generated.toml

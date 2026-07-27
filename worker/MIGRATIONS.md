@@ -874,6 +874,48 @@ indexes, and one active delivery coupon with `value=10`, `auto_apply=1`,
 
 ---
 
+### 032_analytics_conversion_claims.sql
+
+**Purpose:** Adds a short-lived, one-time bridge between an explicitly consented
+browser session and the existing verified Shopify paid-order transition. Only a
+SHA-256 claim hash, order foreign key, lifecycle timestamps, and the
+`emitted`/`suppressed` disposition are stored. The table contains no raw browser
+credential, customer/contact/address data, tracking token, Shopify identifier, or
+analytics-provider identifier.
+
+The Worker code that settles these claims is intentionally migration-dependent.
+Run this migration after merge and **before deploying that Worker version**.
+
+**Production command:**
+```bash
+wrangler d1 execute edenmish --remote \
+  --file=./migrations/032_analytics_conversion_claims.sql
+```
+
+**Verification queries:**
+```sql
+SELECT name, type FROM sqlite_master
+WHERE name IN (
+  'analytics_conversion_claims',
+  'idx_analytics_conversion_claim_expiry'
+)
+ORDER BY type, name;
+
+SELECT name, type, "notnull", pk
+FROM pragma_table_info('analytics_conversion_claims')
+ORDER BY cid;
+```
+
+Expected: one table, one expiry index, and exactly these columns:
+`claim_hash`, `order_id`, `disposition`, `created_at`, `expires_at`,
+`settled_at`, and `observed_at`.
+
+Claims expire after seven days. The daily Worker cleanup deletes expired claims
+and observed claims after a maximum of 30 days. Core order/payment retention is
+unchanged.
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -907,6 +949,7 @@ indexes, and one active delivery coupon with `value=10`, `auto_apply=1`,
 - [ ] Run `029_wallet_reservation_ownership.sql` after the duplicate-reference preflight and before deploying the Worker.
 - [ ] Run `030_whatsapp_template_delivery_audit.sql` after its duplicate-provider-reference preflight and before deploying WhatsApp hardening.
 - [ ] Run `031_first_delivery_promotion.sql` after merge and before deploying the first-delivery promotion.
+- [ ] Run `032_analytics_conversion_claims.sql` after merge and before deploying the paid-conversion Worker.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).

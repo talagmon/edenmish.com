@@ -1576,6 +1576,10 @@ form.addEventListener("submit", async (e) => {
   if (geo.distanceKm != null) payload.distance_km = geo.distanceKm;
   if (couponState.source === "manual" && couponState.code) payload.coupon_code = couponState.code;
   if (couponState.source === "automatic") payload.promotion_expected = true;
+  if (window.edenAnalytics) {
+    const analyticsContext = window.edenAnalytics.getConversionContext();
+    if (analyticsContext) payload.analytics_context = analyticsContext;
+  }
   if (BUSINESS_MODE) {
     payload.use_wallet = true;
     walletIdempotencyKey = walletIdempotencyKey || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())+Math.random());
@@ -1621,6 +1625,9 @@ form.addEventListener("submit", async (e) => {
     // intentionally unavailable until the signed paid webhook confirms the payment.
     if (data.payment_url) {
       if (window.edenAnalytics) {
+        window.edenAnalytics.finalizeConversionContext(data.analytics_claim === true);
+      }
+      if (window.edenAnalytics) {
         window.edenAnalytics.track("payment_started", {
           service,
           size,
@@ -1632,6 +1639,7 @@ form.addEventListener("submit", async (e) => {
       return;
     }
     if (data.wallet && data.tracking_url) {
+      if (window.edenAnalytics) window.edenAnalytics.finalizeConversionContext(false);
       walletIdempotencyKey = null;
       window.location.assign(data.tracking_url);
       return;
@@ -1641,6 +1649,7 @@ form.addEventListener("submit", async (e) => {
       price: data.price != null ? String(data.price) : "",
       review: data.review ? "1" : "0"
     });
+    if (window.edenAnalytics) window.edenAnalytics.finalizeConversionContext(false);
     // Local, double-gated test mode is already paid and may exercise tracking directly.
     if (data.test && data.token) {
       q.set("test", "1");
