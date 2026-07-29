@@ -1,7 +1,13 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { businessAccountHtml, businessProfilePatch, createLatestBusinessSnapshotRefresher, selectRelevantBusinessTopup } from '../src/business-page.js';
+import {
+  businessAccountHtml,
+  businessBatchIdleStatus,
+  businessProfilePatch,
+  createLatestBusinessSnapshotRefresher,
+  selectRelevantBusinessTopup,
+} from '../src/business-page.js';
 
 const HOUR = 60 * 60 * 1000;
 const NOW = 2_000_000_000_000;
@@ -112,6 +118,28 @@ describe('business profile patching', () => {
     pending[0]({ account: { company_name: 'Old business' } });
     assert.equal(await beforeSave, false);
     assert.equal(rendered.account.company_name, 'Saved business');
+  });
+});
+
+describe('business batch idle status', () => {
+  test('reports no importable rows after the last valid row is removed', () => {
+    assert.deepEqual(businessBatchIdleStatus({
+      pendingCount: 0,
+      invalidCount: 3,
+    }), {
+      text: 'לא נמצאו שורות שניתן לייבא. תקנו את רשימת השגיאות והעלו שוב.',
+      error: true,
+    });
+  });
+
+  test('rebuilds the ready summary from the currently active rows', () => {
+    assert.deepEqual(businessBatchIdleStatus({
+      pendingCount: 1,
+      invalidCount: 3,
+    }), {
+      text: 'מוכנים לייבוא 1 שורות. 3 שורות מופיעות בנפרד לתיקון.',
+      error: false,
+    });
   });
 });
 
@@ -255,6 +283,8 @@ describe('business account dashboard', () => {
     assert.match(html, /מבצע אוטומטי עשוי להקטין את החיוב בפועל/);
     assert.match(html, /רכישת קרדיט נוסף/);
     assert.match(html, /data-batch-remove/);
+    assert.match(html, /businessBatchIdleStatus\(\{pickupErrors:pickup\.errors\|\|\[\]/);
+    assert.match(html, /if\(!batchState\.running&&!batchState\.completed\)/);
     assert.match(html, /result\.updated\?'updated'/);
     assert.match(html, /data-cancel-business-order/);
     assert.match(html, /id="cancel-order-dialog"[^>]*aria-labelledby="cancel-order-title"/);

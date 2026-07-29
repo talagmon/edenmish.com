@@ -38,6 +38,48 @@ export function selectRelevantBusinessTopup(topups, activeId = '', dismissedId =
   return null;
 }
 
+export function businessBatchIdleStatus({
+  pickupErrors = [],
+  correctionCount = 0,
+  shortfall = 0,
+  pendingCount = 0,
+  unchangedCount = 0,
+  invalidCount = 0,
+  smartPrefix = '',
+} = {}) {
+  if (pickupErrors.length) {
+    return { kind: 'pickup_error', error: true };
+  }
+  if (correctionCount > 0) {
+    return {
+      text: `${smartPrefix}נמצאו ${correctionCount} פירושים או תיקונים. בדקו ואשרו אותם לפני הייבוא.`,
+      error: false,
+    };
+  }
+  if (shortfall > 0) {
+    return {
+      text: `${smartPrefix}חסרים ₪${shortfall} בקרדיט. אפשר לרכוש קרדיט נוסף או להסיר שורות מהייבוא.`,
+      error: true,
+    };
+  }
+  if (pendingCount > 0) {
+    return {
+      text: `${smartPrefix}מוכנים לייבוא ${pendingCount} שורות. ${unchangedCount ? `עוד ${unchangedCount} מזהים כבר קיימים ולא יוכפלו. ` : ''}${invalidCount ? `${invalidCount} שורות מופיעות בנפרד לתיקון.` : 'בדקו את הסיכום ואשרו את הייבוא.'}`,
+      error: false,
+    };
+  }
+  if (unchangedCount > 0) {
+    return {
+      text: `${smartPrefix}כל המזהים התקינים כבר קיימים ללא שינוי. לא ייווצרו כפילויות.`,
+      error: false,
+    };
+  }
+  return {
+    text: `${smartPrefix}לא נמצאו שורות שניתן לייבא. תקנו את רשימת השגיאות והעלו שוב.`,
+    error: true,
+  };
+}
+
 export function businessProfilePatch(values, dirtyFields) {
   const dirty = new Set(dirtyFields || []);
   const patch = {};
@@ -261,6 +303,14 @@ function createLatestBusinessSnapshotRefresher(load,apply,onError){
     }
   };
 }
+function businessBatchIdleStatus({pickupErrors=[],correctionCount=0,shortfall=0,pendingCount=0,unchangedCount=0,invalidCount=0,smartPrefix=''}={}){
+  if(pickupErrors.length)return{kind:'pickup_error',error:true};
+  if(correctionCount>0)return{text:smartPrefix+'נמצאו '+correctionCount+' פירושים או תיקונים. בדקו ואשרו אותם לפני הייבוא.',error:false};
+  if(shortfall>0)return{text:smartPrefix+'חסרים ₪'+shortfall+' בקרדיט. אפשר לרכוש קרדיט נוסף או להסיר שורות מהייבוא.',error:true};
+  if(pendingCount>0)return{text:smartPrefix+'מוכנים לייבוא '+pendingCount+' שורות. '+(unchangedCount?'עוד '+unchangedCount+' מזהים כבר קיימים ולא יוכפלו. ':'')+(invalidCount?invalidCount+' שורות מופיעות בנפרד לתיקון.':'בדקו את הסיכום ואשרו את הייבוא.'),error:false};
+  if(unchangedCount>0)return{text:smartPrefix+'כל המזהים התקינים כבר קיימים ללא שינוי. לא ייווצרו כפילויות.',error:false};
+  return{text:smartPrefix+'לא נמצאו שורות שניתן לייבא. תקנו את רשימת השגיאות והעלו שוב.',error:true}
+}
 const STOREFRONT=${escapeScript(storefront)};
 const $=id=>document.getElementById(id);
 const esc=value=>String(value==null?'':value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -359,6 +409,14 @@ function renderBatch(){
   const canCreate=(pickup.errors||[]).length===0&&pending.length>0&&shortfall===0&&batchState.correctionsApproved;
   $('batch-create').classList.toggle('hidden',!canCreate);
   $('batch-create').disabled=batchState.running;
+  if(!batchState.running&&!batchState.completed){
+    const smart=batchState.importMode==='ai_assisted'?'המסייע החכם פיענח קובץ במבנה חופשי. ':batchState.importMode==='saved_mapping'?'המערכת זיהתה מיפוי עמודות שאישרתם בעבר. ':'';
+    const status=businessBatchIdleStatus({pickupErrors:pickup.errors||[],correctionCount:corrections.length&&!batchState.correctionsApproved?corrections.length:0,shortfall,pendingCount:pending.length,unchangedCount,invalidCount:exceptions.length,smartPrefix:smart});
+    const message=$('batch-message');
+    if(status.kind==='pickup_error')message.textContent='כתובת האיסוף דורשת תיקון: '+(pickup.errors||[]).map(batchErrorText).join(' · ');
+    else message.textContent=status.text;
+    message.classList.toggle('error',status.error)
+  }
   const processed=active.filter(row=>row.result||row.import_action==='unchanged').length;
   $('batch-progress-bar').style.width=(active.length?Math.round(processed/active.length*100):0)+'%';
   const complete=$('batch-complete');
