@@ -66,6 +66,46 @@ function multiSheet1904Workbook() {
   });
 }
 
+function sparseOptionalCellsWorkbook() {
+  const headers = [
+    'מזהה משלוח', 'שם', 'טלפון', 'רחוב', 'מספר בית', 'עיר',
+    'כניסה', 'קומה', 'דירה', 'תאריך', 'שעה', 'גודל',
+  ];
+  const serial = Math.round(
+    (Date.UTC(2026, 7, 3) - Date.UTC(1899, 11, 30)) / 86_400_000,
+  );
+  const columns = 'ABCDEFGHIJKL';
+  const headerCells = headers.map((value, index) => inlineCell(`${columns[index]}1`, value)).join('');
+  const rowCells = [
+    inlineCell('A2', 'ORD-SPARSE'),
+    inlineCell('B2', 'נועה'),
+    inlineCell('C2', '0501234567'),
+    inlineCell('D2', 'אבן גבירול'),
+    inlineCell('E2', '71'),
+    inlineCell('F2', 'תל אביב'),
+    '<c r="G2"/><c r="H2"/><c r="I2"/>',
+    `<c r="J2"><v>${serial}</v></c>`,
+    inlineCell('K2', '10:00'),
+    inlineCell('L2', 'בינוני'),
+  ].join('');
+  return zipSync({
+    'xl/workbook.xml': strToU8(
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+      + '<sheets><sheet name="משלוחים" sheetId="1" r:id="rId1"/></sheets></workbook>',
+    ),
+    'xl/_rels/workbook.xml.rels': strToU8(
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      + '<Relationship Id="rId1" Target="worksheets/sheet1.xml"/>'
+      + '</Relationships>',
+    ),
+    'xl/worksheets/sheet1.xml': strToU8(
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+      + `<row r="1">${headerCells}</row><row r="2">${rowCells}</row>`
+      + '</sheetData></worksheet>',
+    ),
+  });
+}
+
 describe('business batch file parser', () => {
   test('normalizes a structured pickup address with pickup-specific approval metadata', () => {
     assert.deepEqual(
@@ -242,6 +282,19 @@ describe('business batch file parser', () => {
     const [row] = parseBusinessBatchFile(encode(csv), { fileName: 'recipients.csv' });
     assert.equal(row.pickup_date, '2026-08-03');
     assert.deepEqual(row.corrections, []);
+    assert.deepEqual(row.errors, []);
+  });
+
+  test('preserves column positions after self-closing blank optional XLSX cells', () => {
+    const [row] = parseBusinessBatchFile(sparseOptionalCellsWorkbook(), {
+      fileName: 'sparse-optional-cells.xlsx',
+    });
+    assert.equal(row.delivery_entrance, '');
+    assert.equal(row.delivery_floor, '');
+    assert.equal(row.delivery_apartment, '');
+    assert.equal(row.pickup_date, '2026-08-03');
+    assert.equal(row.pickup_hour, 10);
+    assert.equal(row.package_size, 'medium');
     assert.deepEqual(row.errors, []);
   });
 
