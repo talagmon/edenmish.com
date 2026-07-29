@@ -247,6 +247,12 @@ describe('business account dashboard', () => {
     assert.match(html, /id="batch-new"/);
     assert.match(html, /id="batch-updates"/);
     assert.match(html, /id="batch-unchanged"/);
+    assert.match(html, /id="batch-total-label">שינוי מרבי בקרדיט/);
+    assert.match(html, /id="batch-balance-label">יתרה מינימלית לאחר הייבוא/);
+    assert.match(html, /batchState\.completed\?'שינוי בפועל בקרדיט':'שינוי מרבי בקרדיט'/);
+    assert.match(html, /batchState\.completed\?'יתרה נוכחית':'יתרה מינימלית לאחר הייבוא'/);
+    assert.match(html, /המחיר שנבדק הוא תקרת החיוב המאושרת/);
+    assert.match(html, /מבצע אוטומטי עשוי להקטין את החיוב בפועל/);
     assert.match(html, /רכישת קרדיט נוסף/);
     assert.match(html, /data-batch-remove/);
     assert.match(html, /result\.updated\?'updated'/);
