@@ -399,7 +399,8 @@ export async function getBusinessSnapshot(DB, session) {
   await expireWalletCredit(DB, session.account_id, now);
   const [wallet, orders, entries, topups, lots] = await Promise.all([
     DB.prepare('SELECT currency, available_agorot, reserved_agorot, updated_at FROM business_wallets WHERE account_id = ?').bind(session.account_id).first(),
-    DB.prepare(`SELECT id, token, status, pickup, dropoff, service, price, payment_status, created_at
+    DB.prepare(`SELECT id, token, status, pickup, dropoff, service, price,
+                       payment_status, business_external_id, created_at
                 FROM orders WHERE business_account_id = ? ORDER BY id DESC LIMIT 20`).bind(session.account_id).all(),
     DB.prepare(`SELECT entry_type, available_delta_agorot, reserved_delta_agorot, order_id, note, created_at
                 FROM wallet_entries WHERE account_id = ? ORDER BY id DESC LIMIT 30`).bind(session.account_id).all(),
@@ -757,6 +758,249 @@ export async function releaseWalletReservation(DB, reservationId, orderId = null
       WHERE id = ? AND status = 'reserved'`).bind(now, orderId, reservation.id),
   ]);
   return { released: Number(results && results[0] && results[0].meta && results[0].meta.changes || 0) === 1 };
+}
+
+const businessBatchOrderUpdateSql = `UPDATE orders SET
+  name = ?, phone = ?,
+  pickup = ?, pickup_city = ?,
+  dropoff = ?, dropoff_city = ?,
+  when_text = ?, when_date = ?, when_hour = ?,
+  service = ?, size = ?, package = ?, notes = ?,
+  price = ?, business_external_id = ?
+  WHERE id = ? AND business_account_id = ?
+    AND wallet_reservation_id = ?
+    AND status = 'paid' AND payment_status = 'wallet_reserved'
+    AND EXISTS (
+      SELECT 1 FROM wallet_reservations
+      WHERE id = orders.wallet_reservation_id
+        AND status = 'reserved' AND amount_agorot = ?
+    )`;
+
+function businessBatchOrderUpdateStatement(DB, orderId, accountId, reservationId, order, amountAgorot) {
+  return DB.prepare(businessBatchOrderUpdateSql).bind(
+    order.name,
+    order.phone,
+    order.pickup,
+    order.pickup_city,
+    order.dropoff,
+    order.dropoff_city,
+    order.when_text,
+    order.when_date,
+    order.when_hour,
+    order.service,
+    order.size,
+    order.package,
+    order.notes,
+    order.price,
+    order.business_external_id,
+    orderId,
+    accountId,
+    reservationId,
+    amountAgorot,
+  );
+}
+
+export async function updateReservedBusinessOrder(DB, {
+  accountId,
+  orderId,
+  reservationId,
+  amountAgorot,
+  adjustmentKey,
+  order,
+}) {
+  if (!Number.isSafeInteger(amountAgorot) || amountAgorot <= 0) {
+    throw new Error('invalid_wallet_amount');
+  }
+  const current = await DB.prepare(`SELECT o.id, o.status, o.payment_status,
+      r.status AS reservation_status, r.amount_agorot
+    FROM orders o
+    JOIN wallet_reservations r ON r.id = o.wallet_reservation_id
+    WHERE o.id = ? AND o.business_account_id = ? AND r.id = ?`)
+    .bind(orderId, accountId, reservationId).first();
+  if (!current) return { updated: false, error: 'existing_order_not_found' };
+  if (
+    current.status !== 'paid'
+    || current.payment_status !== 'wallet_reserved'
+    || current.reservation_status !== 'reserved'
+  ) {
+    return { updated: false, error: 'existing_order_locked' };
+  }
+
+  const oldAmount = Number(current.amount_agorot);
+  const delta = amountAgorot - oldAmount;
+  if (delta === 0) {
+    const result = await businessBatchOrderUpdateStatement(
+      DB,
+      orderId,
+      accountId,
+      reservationId,
+      order,
+      amountAgorot,
+    ).run();
+    return Number(result?.meta?.changes || 0) === 1
+      ? { updated: true, previous_amount_agorot: oldAmount, amount_agorot: amountAgorot }
+      : { updated: false, error: 'existing_order_locked' };
+  }
+
+  const adjustmentKeyBase = String(adjustmentKey || '').trim().slice(0, 80);
+  if (!adjustmentKeyBase) throw new Error('idempotency_key_required');
+  // Include the exact credit transition so an older signed import cannot reuse
+  // a ledger entry after another edit has changed the reservation amount.
+  const safeAdjustmentKey = `${adjustmentKeyBase}:${oldAmount}:${amountAgorot}`.slice(0, 120);
+  const now = Date.now();
+  const availableDelta = -delta;
+  const reservedDelta = delta;
+  const results = await DB.batch([
+    DB.prepare(`INSERT INTO wallet_entries
+      (account_id, entry_type, available_delta_agorot, reserved_delta_agorot,
+       reservation_id, order_id, idempotency_key, note, created_at)
+      SELECT r.account_id, 'adjustment', ?, ?, r.id, o.id, ?, ?, ?
+      FROM wallet_reservations r
+      JOIN orders o ON o.wallet_reservation_id = r.id
+      JOIN business_wallets w ON w.account_id = r.account_id
+      WHERE r.id = ? AND r.account_id = ? AND r.status = 'reserved'
+        AND r.amount_agorot = ?
+        AND o.id = ? AND o.status = 'paid' AND o.payment_status = 'wallet_reserved'
+        AND (? <= 0 OR w.available_agorot >= ?)
+        AND (? >= 0 OR w.reserved_agorot >= ?)
+      ON CONFLICT(idempotency_key) DO NOTHING`)
+      .bind(
+        availableDelta,
+        reservedDelta,
+        safeAdjustmentKey,
+        'Batch order credit adjustment',
+        now,
+        reservationId,
+        accountId,
+        oldAmount,
+        orderId,
+        delta,
+        Math.max(0, delta),
+        delta,
+        Math.max(0, -delta),
+      ),
+    DB.prepare(`UPDATE business_wallets
+      SET available_agorot = available_agorot + ?,
+          reserved_agorot = reserved_agorot + ?,
+          version = version + 1,
+          updated_at = ?
+      WHERE account_id = ?
+        AND EXISTS (
+          SELECT 1 FROM wallet_entries e
+          JOIN wallet_reservations r ON r.id = e.reservation_id
+          WHERE e.idempotency_key = ? AND r.id = ? AND r.status = 'reserved'
+            AND r.amount_agorot = ?
+        )`)
+      .bind(availableDelta, reservedDelta, now, accountId, safeAdjustmentKey, reservationId, oldAmount),
+    DB.prepare(`UPDATE wallet_reservations
+      SET amount_agorot = ?
+      WHERE id = ? AND account_id = ? AND status = 'reserved' AND amount_agorot = ?
+        AND EXISTS (SELECT 1 FROM wallet_entries WHERE idempotency_key = ?)`)
+      .bind(amountAgorot, reservationId, accountId, oldAmount, safeAdjustmentKey),
+    businessBatchOrderUpdateStatement(DB, orderId, accountId, reservationId, order, amountAgorot),
+  ]);
+
+  const orderUpdateApplied = Number(results?.[3]?.meta?.changes || 0) === 1;
+  const finalState = await DB.prepare(`SELECT o.status, o.payment_status,
+      r.status AS reservation_status, r.amount_agorot,
+      w.available_agorot
+    FROM orders o
+    JOIN wallet_reservations r ON r.id = o.wallet_reservation_id
+    JOIN business_wallets w ON w.account_id = o.business_account_id
+    WHERE o.id = ? AND o.business_account_id = ?`)
+    .bind(orderId, accountId).first();
+  if (
+    orderUpdateApplied
+    && finalState?.status === 'paid'
+    && finalState?.payment_status === 'wallet_reserved'
+    && finalState?.reservation_status === 'reserved'
+    && Number(finalState?.amount_agorot) === amountAgorot
+  ) {
+    return { updated: true, previous_amount_agorot: oldAmount, amount_agorot: amountAgorot };
+  }
+  if (delta > 0 && Number(finalState?.available_agorot || 0) < delta) {
+    return {
+      updated: false,
+      error: 'insufficient_credit',
+      available_agorot: Number(finalState?.available_agorot || 0),
+      shortfall_agorot: Math.max(0, delta - Number(finalState?.available_agorot || 0)),
+    };
+  }
+  return { updated: false, error: 'existing_order_locked' };
+}
+
+export async function cancelReservedBusinessOrder(DB, accountId, orderId) {
+  const current = await DB.prepare(`SELECT o.id, o.status, o.payment_status,
+      o.wallet_reservation_id, r.status AS reservation_status, r.amount_agorot
+    FROM orders o
+    JOIN wallet_reservations r ON r.id = o.wallet_reservation_id
+    WHERE o.id = ? AND o.business_account_id = ?`)
+    .bind(orderId, accountId).first();
+  if (!current) return { cancelled: false, error: 'order_not_found' };
+  if (
+    current.status !== 'paid'
+    || current.payment_status !== 'wallet_reserved'
+    || current.reservation_status !== 'reserved'
+  ) {
+    return { cancelled: false, error: 'existing_order_locked' };
+  }
+
+  const now = Date.now();
+  const releaseKey = `reservation:${current.wallet_reservation_id}:release`;
+  await DB.batch([
+    DB.prepare(`INSERT INTO wallet_entries
+      (account_id, entry_type, available_delta_agorot, reserved_delta_agorot,
+       reservation_id, order_id, idempotency_key, note, created_at)
+      SELECT r.account_id, 'release', r.amount_agorot, -r.amount_agorot,
+        r.id, o.id, ?, ?, ?
+      FROM wallet_reservations r
+      JOIN orders o ON o.wallet_reservation_id = r.id
+      WHERE r.id = ? AND r.account_id = ? AND r.status = 'reserved'
+        AND o.id = ? AND o.status = 'paid' AND o.payment_status = 'wallet_reserved'
+      ON CONFLICT(idempotency_key) DO NOTHING`)
+      .bind(releaseKey, 'Business cancelled before dispatch', now, current.wallet_reservation_id, accountId, orderId),
+    DB.prepare(`UPDATE business_wallets
+      SET available_agorot = available_agorot + ?,
+          reserved_agorot = reserved_agorot - ?,
+          version = version + 1,
+          updated_at = ?
+      WHERE account_id = ? AND reserved_agorot >= ?
+        AND EXISTS (
+          SELECT 1 FROM wallet_reservations r
+          JOIN wallet_entries e ON e.reservation_id = r.id
+          WHERE r.id = ? AND r.status = 'reserved' AND e.idempotency_key = ?
+        )`)
+      .bind(current.amount_agorot, current.amount_agorot, now, accountId, current.amount_agorot, current.wallet_reservation_id, releaseKey),
+    DB.prepare(`UPDATE wallet_reservations
+      SET status = 'released', released_at = ?, order_id = COALESCE(order_id, ?)
+      WHERE id = ? AND account_id = ? AND status = 'reserved'
+        AND EXISTS (SELECT 1 FROM wallet_entries WHERE idempotency_key = ?)`)
+      .bind(now, orderId, current.wallet_reservation_id, accountId, releaseKey),
+    DB.prepare(`UPDATE orders
+      SET status = 'cancelled', payment_status = 'wallet_released'
+      WHERE id = ? AND business_account_id = ?
+        AND status = 'paid' AND payment_status = 'wallet_reserved'
+        AND EXISTS (
+          SELECT 1 FROM wallet_reservations
+          WHERE id = orders.wallet_reservation_id AND status = 'released'
+        )`)
+      .bind(orderId, accountId),
+    DB.prepare(`INSERT INTO status_history (order_id, status, at, note)
+      SELECT id, 'cancelled', ?, ?
+      FROM orders
+      WHERE id = ? AND business_account_id = ? AND status = 'cancelled'
+        AND NOT EXISTS (
+          SELECT 1 FROM status_history
+          WHERE order_id = orders.id AND status = 'cancelled'
+        )`)
+      .bind(now, 'Cancelled by business before dispatch', orderId, accountId),
+  ]);
+  const finalOrder = await DB.prepare(
+    'SELECT status FROM orders WHERE id = ? AND business_account_id = ?'
+  ).bind(orderId, accountId).first();
+  return finalOrder?.status === 'cancelled'
+    ? { cancelled: true, released_agorot: Number(current.amount_agorot) }
+    : { cancelled: false, error: 'existing_order_locked' };
 }
 
 export async function cleanupBusinessSecurity(DB, now = Date.now()) {

@@ -49,6 +49,29 @@ import {
 import { createCharge, createWalletCharge, verifyShopifyWebhook, parseShopifyOrderWebhook, parseShopifyRefundWebhook } from './payment.js';
 import { trackingHtml, opsHtml } from './pages.js';
 import { businessAccountHtml } from './business-page.js';
+import {
+  MAX_BUSINESS_BATCH_BYTES,
+  normalizeBusinessAddressInput,
+  readBusinessBatchTable,
+} from './business-batch.js';
+import {
+  BUSINESS_BATCH_AI_MODEL,
+  normalizeBusinessBatchTable,
+} from './business-batch-ai.js';
+import {
+  deleteBusinessBatchMapping,
+  findBusinessBatchMappings,
+  listBusinessBatchMappings,
+  markBusinessBatchMappingUsed,
+  saveBusinessBatchMapping,
+} from './business-batch-mappings.js';
+import { validateBusinessBatchAddresses } from './business-address.js';
+import {
+  approveBusinessBatchToken,
+  businessBatchIdempotencyKey,
+  signBusinessBatchToken,
+  verifyBusinessBatchToken,
+} from './business-batch-approval.js';
 import { corsFor, maskEmail, publicOrderSummary, clientIp, anonKey } from './security.js';
 import { notifyEmail } from './notify.js';
 import { normalizeIlPhone, scheduleError, validIsraeliId } from './validate.js';
@@ -76,7 +99,7 @@ import {
   listDriverInvitations,
   revokeDriverInvitation,
 } from './driver-invitations.js';
-import { applyBusinessPlanPricing, businessCouponCustomerKey, businessSessionCookie, cancelWalletTopup, captureWalletReservation, cleanupBusinessSecurity, clearBusinessSessionCookie, createWalletTopup, creditWalletTopup, getBusinessSession, getBusinessSnapshot, getWalletTopup, hydrateBusinessProfileFromPayment, linkWalletReservationToOrder, markWalletTopupCheckout, publicBusinessPlans, releaseWalletReservation, requestBusinessLogin, reserveWalletCredit, revokeBusinessSession, shouldHydrateBusinessProfile, updateBusinessProfile, verifyBusinessLogin } from './business.js';
+import { applyBusinessPlanPricing, businessCouponCustomerKey, businessSessionCookie, cancelReservedBusinessOrder, cancelWalletTopup, captureWalletReservation, cleanupBusinessSecurity, clearBusinessSessionCookie, createWalletTopup, creditWalletTopup, getBusinessSession, getBusinessSnapshot, getWalletTopup, hydrateBusinessProfileFromPayment, linkWalletReservationToOrder, markWalletTopupCheckout, publicBusinessPlans, releaseWalletReservation, requestBusinessLogin, reserveWalletCredit, revokeBusinessSession, shouldHydrateBusinessProfile, updateBusinessProfile, updateReservedBusinessOrder, verifyBusinessLogin } from './business.js';
 import { runDeliveryCompletionSideEffects } from './delivery-completion.js';
 import {
   persistOpsDeliveryCompletion,
@@ -105,7 +128,75 @@ async function readJson(req, maxBytes = BODY_LIMIT) {
   if (new TextEncoder().encode(raw).byteLength > maxBytes) throw Object.assign(new Error('payload_too_large'), { status: 413 });
   try { return JSON.parse(raw); } catch { throw Object.assign(new Error('invalid_body'), { status: 400 }); }
 }
+async function readBytes(req, maxBytes) {
+  const declared = Number(req.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > maxBytes) throw Object.assign(new Error('payload_too_large'), { status: 413 });
+  const bytes = new Uint8Array(await req.arrayBuffer());
+  if (bytes.byteLength > maxBytes) throw Object.assign(new Error('payload_too_large'), { status: 413 });
+  return bytes;
+}
 const validCoordinate = (v, min, max) => typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max;
+function israelIsoDate(now = Date.now()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jerusalem',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(now));
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
+function decodedBatchHeader(req, name) {
+  const value = req.headers.get(name) || '';
+  try { return decodeURIComponent(value); } catch { throw new Error('invalid_batch_settings'); }
+}
+function batchRowTokenData(row, idempotencyKey) {
+  return {
+    row_number: row.row_number,
+    external_id: row.external_id,
+    idempotency_key: idempotencyKey,
+    recipient_name: row.recipient_name,
+    recipient_phone: row.recipient_phone,
+    delivery_address: row.delivery_address,
+    delivery_city: row.delivery_city,
+    pickup_date: row.pickup_date,
+    pickup_hour: row.pickup_hour,
+    package_size: row.package_size,
+    reference: row.reference,
+    contents: row.contents,
+    notes: row.notes,
+  };
+}
+function batchPickupTokenData(pickup, service, defaultContents, smartMapping = null) {
+  return {
+    address: pickup.address,
+    city: pickup.city,
+    service,
+    default_contents: defaultContents,
+    ...(smartMapping ? { smart_mapping: smartMapping } : {}),
+  };
+}
+function batchOrderMatchesTokenData(order, row, pickup) {
+  const expectedNotes = [
+    row.reference ? `לקוח/ספק: ${row.reference}` : '',
+    row.notes || '',
+  ].filter(Boolean).join(' · ');
+  const expectedPackage = row.contents || pickup.default_contents || 'חבילה קטנה';
+  return (
+    String(order.name || '') === String(row.recipient_name || '')
+    && String(order.phone || '') === String(row.recipient_phone || '')
+    && String(order.pickup || '') === String(pickup.address || '')
+    && String(order.pickup_city || '') === String(pickup.city || '')
+    && String(order.dropoff || '') === String(row.delivery_address || '')
+    && String(order.dropoff_city || '') === String(row.delivery_city || '')
+    && String(order.when_date || '') === String(row.pickup_date || '')
+    && Number(order.when_hour) === Number(row.pickup_hour)
+    && String(order.service || '') === String(pickup.service || '')
+    && String(order.size || '') === String(row.package_size || '')
+    && String(order.package || '') === expectedPackage
+    && String(order.notes || '') === expectedNotes
+  );
+}
 const trackingIsAvailable = (order) => order && (
   order.payment_status === 'paid' ||
   order.payment_status === 'paid_manual' ||
@@ -487,6 +578,31 @@ export default {
       return json({ ok: true, profile: await updateBusinessProfile(env.DB, session, b) });
     }
 
+    if (path === '/api/business/batch-mappings' && req.method === 'GET') {
+      const session = await getBusinessSession(req, env);
+      if (!session) return json({ error: 'unauthorized' }, 401);
+      return json({
+        mappings: await listBusinessBatchMappings(env.DB, session.account_id),
+      });
+    }
+
+    const businessBatchMappingMatch = path.match(/^\/api\/business\/batch-mappings\/(\d+)$/);
+    if (businessBatchMappingMatch && req.method === 'DELETE') {
+      const session = await getBusinessSession(req, env);
+      if (!session) return json({ error: 'unauthorized' }, 401);
+      const mappingId = Number(businessBatchMappingMatch[1]);
+      if (!Number.isSafeInteger(mappingId) || mappingId <= 0) {
+        return json({ error: 'invalid_batch_mapping_id' }, 400);
+      }
+      const deleted = await deleteBusinessBatchMapping(
+        env.DB,
+        session.account_id,
+        mappingId,
+      );
+      if (!deleted) return json({ error: 'batch_mapping_not_found' }, 404);
+      return json({ ok: true, id: mappingId });
+    }
+
     if (path === '/api/business/quote' && req.method === 'POST') {
       const session = await getBusinessSession(req, env);
       if (!session) return json({ error: 'unauthorized' }, 401);
@@ -497,6 +613,283 @@ export default {
       if (inputError) return json({ error: inputError }, 400);
       const quote = applyBusinessPlanPricing(await authoritativeQuote(env, b), session.plan_id);
       return json({ ...quote, currency: 'ILS', balance: Number(session.available_agorot || 0) / 100, balance_after: quote.available ? (Number(session.available_agorot || 0) / 100 - quote.price) : null });
+    }
+
+    if (path === '/api/business/batches/parse' && req.method === 'POST') {
+      const session = await getBusinessSession(req, env);
+      if (!session) return json({ error: 'unauthorized' }, 401);
+      try {
+        const limit = await incrRateLimit(env.DB, `bizbatch:${session.account_id}`, 10 * 60 * 1000);
+        if (limit.count > 10) return json({ error: 'rate_limited' }, 429, { 'Retry-After': '600' });
+      } catch (error) {
+        console.error('business_batch_rate_limit_error', error && error.message ? error.message : String(error));
+      }
+      try {
+        const bytes = await readBytes(req, MAX_BUSINESS_BATCH_BYTES);
+        const pickup = normalizeBusinessAddressInput({
+          street: decodedBatchHeader(req, 'X-Pickup-Street'),
+          house_number: decodedBatchHeader(req, 'X-Pickup-House-Number'),
+          city: decodedBatchHeader(req, 'X-Pickup-City'),
+          entrance: decodedBatchHeader(req, 'X-Pickup-Entrance'),
+          floor: decodedBatchHeader(req, 'X-Pickup-Floor'),
+          apartment: decodedBatchHeader(req, 'X-Pickup-Apartment'),
+        }, 'pickup');
+        const service = decodedBatchHeader(req, 'X-Batch-Service').trim().toLowerCase();
+        const defaultContents = decodedBatchHeader(req, 'X-Batch-Default-Contents').trim();
+        if (!['eco', 'standard', 'flash'].includes(service)) pickup.errors.push('invalid_service');
+        if (defaultContents.length > 120) pickup.errors.push('too_long_default_contents');
+        const batchParseOptions = {
+          fileName: req.headers.get('X-File-Name') || '',
+          contentType: req.headers.get('Content-Type') || '',
+          today: israelIsoDate(),
+        };
+        const table = readBusinessBatchTable(bytes, batchParseOptions);
+        const normalizedBatch = await normalizeBusinessBatchTable(env.AI, table, {
+          ...batchParseOptions,
+          model: env.BUSINESS_BATCH_AI_MODEL || BUSINESS_BATCH_AI_MODEL,
+          loadSavedMappings: async (signatures) => {
+            try {
+              return await findBusinessBatchMappings(env.DB, session.account_id, signatures);
+            } catch (error) {
+              console.error(
+                'business_batch_mapping_lookup_failed',
+                error && error.message ? error.message : String(error),
+              );
+              return new Map();
+            }
+          },
+        });
+        const parsedRows = normalizedBatch.rows;
+        const smartImport = normalizedBatch.smart_import;
+        if (normalizedBatch.import_mode === 'saved_mapping' && smartImport?.mapping_signature) {
+          await markBusinessBatchMappingUsed(
+            env.DB,
+            session.account_id,
+            smartImport.mapping_signature,
+          ).catch((error) => {
+            console.error(
+              'business_batch_mapping_usage_failed',
+              error && error.message ? error.message : String(error),
+            );
+          });
+        }
+        const pickupRow = {
+          row_number: 0,
+          delivery_street: pickup.street,
+          delivery_house_number: pickup.house_number,
+          delivery_city: pickup.city,
+          delivery_entrance: pickup.entrance,
+          delivery_floor: pickup.floor,
+          delivery_apartment: pickup.apartment,
+          delivery_address: pickup.address,
+          corrections: pickup.corrections.map((correction) => ({
+            ...correction,
+            field: correction.field.replace(/^pickup_/, 'delivery_'),
+            reason: correction.reason.replace(/^normalized_pickup_/, 'normalized_delivery_'),
+          })),
+          errors: pickup.errors.map((error) => error.replace(/_pickup_/, '_delivery_')),
+        };
+        const validated = await validateBusinessBatchAddresses([pickupRow, ...parsedRows], {
+          apiKey: env.GOOGLE_PLACES_SERVER_KEY,
+        });
+        const [validatedPickup, ...rows] = validated;
+        pickup.street = validatedPickup.delivery_street;
+        pickup.house_number = validatedPickup.delivery_house_number;
+        pickup.city = validatedPickup.delivery_city;
+        pickup.entrance = validatedPickup.delivery_entrance;
+        pickup.floor = validatedPickup.delivery_floor;
+        pickup.apartment = validatedPickup.delivery_apartment;
+        pickup.address = validatedPickup.delivery_address;
+        pickup.corrections = validatedPickup.corrections.map((correction) => ({
+          ...correction,
+          field: correction.field.replace(/^delivery_/, 'pickup_'),
+          reason: correction.reason.replace(/^normalized_delivery_/, 'normalized_pickup_'),
+        }));
+        pickup.errors = validatedPickup.errors.map((error) => error.replace(/_delivery_/, '_pickup_'));
+        if (smartImport?.mapping_source === 'workers_ai') {
+          const mappedFields = smartImport.mappings
+            .map((mapping) => `${mapping.source_header} → ${mapping.field_label_he}`)
+            .join(' · ');
+          pickup.corrections.push({
+            field: 'ai_file_mapping',
+            from: `קובץ חופשי · גיליון ${smartImport.sheet_index + 1} · שורת כותרות ${smartImport.header_row_number}`,
+            to: mappedFields,
+            reason: 'ai_file_mapping',
+            confidence: 'medium',
+            source: 'workers_ai',
+          });
+        }
+
+        await Promise.all(rows.map(async (row) => {
+          if (row.errors.length) return;
+          const idempotencyKey = await businessBatchIdempotencyKey(row.external_id);
+          row.idempotency_key = idempotencyKey;
+          row.batch_token = await signBusinessBatchToken(
+            env,
+            session.account_id,
+            'row',
+            batchRowTokenData(row, idempotencyKey),
+            { approved: row.corrections.length === 0 },
+          );
+        }));
+        const keyedRows = rows.filter((row) => row.idempotency_key);
+        if (keyedRows.length) {
+          const placeholders = keyedRows.map(() => '?').join(',');
+          const existing = await env.DB.prepare(
+            `SELECT o.*, wr.idempotency_key,
+              wr.status AS reservation_status,
+              wr.amount_agorot AS reserved_amount_agorot
+             FROM wallet_reservations wr
+             JOIN orders o ON o.id = wr.order_id
+             WHERE wr.account_id = ? AND wr.idempotency_key IN (${placeholders})`
+          ).bind(session.account_id, ...keyedRows.map((row) => row.idempotency_key)).all();
+          const byKey = new Map((existing.results || []).map((order) => [order.idempotency_key, order]));
+          for (const row of keyedRows) {
+            const order = byKey.get(row.idempotency_key);
+            if (!order) {
+              row.import_action = 'create';
+              continue;
+            }
+            const matches = batchOrderMatchesTokenData(
+              order,
+              batchRowTokenData(row, row.idempotency_key),
+              batchPickupTokenData(pickup, service, defaultContents),
+            );
+            const editable = (
+              order.status === 'paid'
+              && order.payment_status === 'wallet_reserved'
+              && order.reservation_status === 'reserved'
+            );
+            row.existing_order = {
+              id: order.id,
+              status: order.status,
+              price: Number(order.price || 0),
+              editable,
+            };
+            row.import_action = matches ? 'unchanged' : (editable ? 'update' : 'locked');
+            if (!matches && !editable) row.errors.push('existing_order_locked');
+          }
+        }
+        if (!pickup.errors.length) {
+          const smartMapping = smartImport?.mapping_source === 'workers_ai'
+            ? {
+                mapping_signature: smartImport.mapping_signature,
+                mappings: smartImport.mappings.map((mapping) => ({
+                  field: mapping.field,
+                  column_index: mapping.column_index,
+                  confidence: mapping.confidence,
+                })),
+              }
+            : null;
+          pickup.batch_token = await signBusinessBatchToken(
+            env,
+            session.account_id,
+            'pickup',
+            batchPickupTokenData(pickup, service, defaultContents, smartMapping),
+            { approved: pickup.corrections.length === 0 },
+          );
+        }
+        return json({
+          rows,
+          pickup,
+          row_count: rows.length,
+          valid_count: rows.filter((row) => row.errors.length === 0).length,
+          import_mode: normalizedBatch.import_mode,
+          ...(smartImport ? {
+            smart_import: {
+              model: smartImport.model,
+              mapping_source: smartImport.mapping_source,
+              row_normalization: smartImport.row_normalization,
+              sheet_index: smartImport.sheet_index,
+              header_row_number: smartImport.header_row_number,
+              mappings: smartImport.mappings,
+            },
+          } : {}),
+        });
+      } catch (error) {
+        const status = error?.message === 'payload_too_large'
+          ? 413
+          : ['smart_import_unavailable', 'smart_import_invalid'].includes(error?.message)
+            ? 503
+            : 400;
+        return json({
+          error: error && error.message ? error.message : 'invalid_batch',
+          ...(Array.isArray(error && error.missing) ? { missing: error.missing } : {}),
+        }, status);
+      }
+    }
+
+    if (path === '/api/business/batches/approve' && req.method === 'POST') {
+      const session = await getBusinessSession(req, env);
+      if (!session) return json({ error: 'unauthorized' }, 401);
+      let body;
+      try { body = await readJson(req, 256 * 1024); } catch (error) {
+        return json({ error: error.message }, error.status || 400);
+      }
+      const rowTokens = Array.isArray(body.row_tokens) ? body.row_tokens : [];
+      if (!rowTokens.length || rowTokens.length > 100 || !body.pickup_token) {
+        return json({ error: 'invalid_batch_approval' }, 400);
+      }
+      try {
+        const pickupPayload = await verifyBusinessBatchToken(
+          env,
+          session.account_id,
+          body.pickup_token,
+          { kind: 'pickup' },
+        );
+        const approvedRows = await Promise.all(rowTokens.map((token) => (
+          approveBusinessBatchToken(env, session.account_id, token, 'row')
+        )));
+        const approvedPickup = await approveBusinessBatchToken(
+          env,
+          session.account_id,
+          body.pickup_token,
+          'pickup',
+        );
+        let mappingSaved = false;
+        if (pickupPayload.data?.smart_mapping) {
+          try {
+            await saveBusinessBatchMapping(
+              env.DB,
+              session.account_id,
+              pickupPayload.data.smart_mapping,
+            );
+            mappingSaved = true;
+          } catch (error) {
+            console.error(
+              'business_batch_mapping_save_failed',
+              error && error.message ? error.message : String(error),
+            );
+          }
+        }
+        return json({
+          row_tokens: approvedRows,
+          pickup_token: approvedPickup,
+          mapping_saved: mappingSaved,
+        });
+      } catch (error) {
+        return json({ error: error.message || 'invalid_batch_approval' }, 400);
+      }
+    }
+
+    const businessOrderMatch = path.match(/^\/api\/business\/orders\/(\d+)$/);
+    if (businessOrderMatch && req.method === 'DELETE') {
+      const session = await getBusinessSession(req, env);
+      if (!session) return json({ error: 'unauthorized' }, 401);
+      const orderId = Number(businessOrderMatch[1]);
+      if (!Number.isSafeInteger(orderId) || orderId <= 0) {
+        return json({ error: 'invalid_order_id' }, 400);
+      }
+      const cancelled = await cancelReservedBusinessOrder(env.DB, session.account_id, orderId);
+      if (!cancelled.cancelled) {
+        const status = cancelled.error === 'order_not_found' ? 404 : 409;
+        return json({ error: cancelled.error }, status);
+      }
+      return json({
+        ok: true,
+        order_id: orderId,
+        released: Number(cancelled.released_agorot || 0) / 100,
+      });
     }
 
     if (path === '/api/business/topups' && req.method === 'POST') {
@@ -756,17 +1149,23 @@ export default {
     }
 
     if (path === '/api/orders' && req.method === 'POST') {
-      // Part E — IP-based abuse protection (best-effort; never blocks order creation).
+      // Business batches can legitimately create up to 100 delivery orders. A
+      // validated account session gets an account-scoped ceiling while public
+      // requests retain the much tighter anti-abuse limits.
+      const preAuthenticatedBusinessSession = await getBusinessSession(req, env);
       try {
-        const k = await anonKey(env, clientIp(req));
-        const r10 = await incrRateLimit(env.DB, 'ord:' + k, 10 * 60 * 1000);
-        if (r10.count > 5) { console.log('order_rate_limited', { window: '10m' }); return json({ error: 'rate_limited' }, 429, { ...cors, 'Retry-After': '600' }); }
-        const rd = await incrRateLimit(env.DB, 'ordd:' + k, 24 * 60 * 60 * 1000);
-        if (rd.count > 20) { console.log('order_rate_limited', { window: 'day' }); return json({ error: 'rate_limited' }, 429, { ...cors, 'Retry-After': '86400' }); }
+        const isBusiness = !!preAuthenticatedBusinessSession;
+        const k = isBusiness
+          ? `business:${preAuthenticatedBusinessSession.account_id}`
+          : await anonKey(env, clientIp(req));
+        const r10 = await incrRateLimit(env.DB, (isBusiness ? 'ordbiz:' : 'ord:') + k, 10 * 60 * 1000);
+        if (r10.count > (isBusiness ? 200 : 5)) { console.log('order_rate_limited', { window: '10m', business: isBusiness }); return json({ error: 'rate_limited' }, 429, { ...cors, 'Retry-After': '600' }); }
+        const rd = await incrRateLimit(env.DB, (isBusiness ? 'ordbizd:' : 'ordd:') + k, 24 * 60 * 60 * 1000);
+        if (rd.count > (isBusiness ? 500 : 20)) { console.log('order_rate_limited', { window: 'day', business: isBusiness }); return json({ error: 'rate_limited' }, 429, { ...cors, 'Retry-After': '86400' }); }
       } catch (rlErr) { console.error('rate_limit_error', rlErr && rlErr.message ? rlErr.message : String(rlErr)); }
 
       let b; try { b = await readJson(req); } catch (e) { return json({ error: e.message }, e.status || 400, cors); }
-      const businessSession = b.use_wallet ? await getBusinessSession(req, env) : null;
+      const businessSession = b.use_wallet ? preAuthenticatedBusinessSession : null;
       if (b.use_wallet && !businessSession) return json({ error: 'business_login_required' }, 401, cors);
       if (businessSession) {
         if (!businessSession.plan_id) return json({ error: 'plan_required' }, 409, cors);
@@ -798,26 +1197,71 @@ export default {
         phone_delivery_link_opt_in_at: phoneDeliveryLinkOptIn ? Date.now() : null,
       };
 
+      let batchRowApproval = null;
+      let batchPickupApproval = null;
+      if (b.batch_row_token || b.batch_pickup_token) {
+        if (!businessSession || !b.batch_row_token || !b.batch_pickup_token) {
+          return json({ error: 'invalid_batch_approval' }, 400, cors);
+        }
+        try {
+          [batchRowApproval, batchPickupApproval] = await Promise.all([
+            verifyBusinessBatchToken(
+              env,
+              businessSession.account_id,
+              b.batch_row_token,
+              { kind: 'row', requireApproved: true },
+            ),
+            verifyBusinessBatchToken(
+              env,
+              businessSession.account_id,
+              b.batch_pickup_token,
+              { kind: 'pickup', requireApproved: true },
+            ),
+          ]);
+        } catch (error) {
+          return json({ error: error.message || 'invalid_batch_approval' }, 400, cors);
+        }
+        if (!batchOrderMatchesTokenData(b, batchRowApproval.data, batchPickupApproval.data)) {
+          return json({ error: 'batch_payload_mismatch' }, 409, cors);
+        }
+      }
+
       const walletIdempotencyKey = businessSession
         ? (req.headers.get('Idempotency-Key') || b.idempotency_key)
         : null;
       if (businessSession && !walletIdempotencyKey) {
         return json({ error: 'idempotency_key_required' }, 400, cors);
       }
+      if (
+        batchRowApproval
+        && walletIdempotencyKey !== batchRowApproval.data.idempotency_key
+      ) {
+        return json({ error: 'batch_idempotency_mismatch' }, 409, cors);
+      }
+      let existingWalletOrder = null;
       if (businessSession) {
-        const existingOrder = await env.DB.prepare(
-          `SELECT o.* FROM wallet_reservations wr
+        existingWalletOrder = await env.DB.prepare(
+          `SELECT o.*, wr.status AS reservation_status,
+             wr.amount_agorot AS reserved_amount_agorot
+           FROM wallet_reservations wr
            JOIN orders o ON o.id = wr.order_id
            WHERE wr.account_id = ? AND wr.idempotency_key = ?
            LIMIT 1`
         ).bind(businessSession.account_id, walletIdempotencyKey).first();
-        if (existingOrder) {
+        const existingMatches = existingWalletOrder && batchRowApproval
+          ? batchOrderMatchesTokenData(
+            existingWalletOrder,
+            batchRowApproval.data,
+            batchPickupApproval.data,
+          )
+          : true;
+        if (existingWalletOrder && existingMatches) {
           return json({
-            order_id: existingOrder.id,
-            token: existingOrder.token,
-            tracking_url: trackingUrl(env, existingOrder.token),
-            status: existingOrder.status,
-            price: existingOrder.price,
+            order_id: existingWalletOrder.id,
+            token: existingWalletOrder.token,
+            tracking_url: trackingUrl(env, existingWalletOrder.token),
+            status: existingWalletOrder.status,
+            price: existingWalletOrder.price,
             wallet: true,
             idempotent: true,
           }, 200, cors);
@@ -908,12 +1352,73 @@ export default {
       // `price` on the order row is always the amount the customer pays; when a coupon
       // applied, subtotal_price/discount_* record how we got there (migration 008).
       const finalPrice = coupon ? coupon.price : pr.price;
+      // The reviewed batch quote is a customer-approved ceiling. Fail closed if
+      // the authoritative charge increased, but allow a newly applicable
+      // automatic discount to lower the actual wallet reservation.
+      const approvedBatchPrice = Number(b.expected_price);
+      if (
+        batchRowApproval
+        && b.expected_price != null
+        && (
+          !Number.isFinite(approvedBatchPrice)
+          || Number(finalPrice) > approvedBatchPrice
+        )
+      ) {
+        if (promotionClaimCreated) {
+          await releaseFirstDeliveryClaim(
+            env.DB,
+            promotionClaim && promotionClaim.id,
+          ).catch(() => {});
+        }
+        return json({
+          error: 'batch_quote_changed',
+          expected: approvedBatchPrice,
+          current: Number(finalPrice),
+        }, 409, cors);
+      }
       const discountFields = {
         subtotal_price: coupon ? coupon.subtotal : null,
         discount_code: coupon ? coupon.code : null,
         discount_amount: coupon ? coupon.discountAmount : 0,
         discount_title: coupon ? coupon.title : null,
       };
+
+      if (existingWalletOrder && batchRowApproval) {
+        const batchTokenSignature = String(b.batch_row_token).split('.').pop().slice(0, 32);
+        const update = await updateReservedBusinessOrder(env.DB, {
+          accountId: businessSession.account_id,
+          orderId: existingWalletOrder.id,
+          reservationId: existingWalletOrder.wallet_reservation_id,
+          amountAgorot: Math.round(finalPrice * 100),
+          adjustmentKey: `batch-update:${batchTokenSignature}`,
+          order: {
+            ...b,
+            price: finalPrice,
+            business_external_id: batchRowApproval.data.external_id,
+          },
+        });
+        if (!update.updated) {
+          if (update.error === 'insufficient_credit') {
+            return json({
+              error: 'insufficient_credit',
+              available: Number(update.available_agorot || 0) / 100,
+              shortfall: Number(update.shortfall_agorot || 0) / 100,
+            }, 402, cors);
+          }
+          return json({ error: update.error || 'existing_order_locked' }, 409, cors);
+        }
+        return json({
+          order_id: existingWalletOrder.id,
+          token: existingWalletOrder.token,
+          tracking_url: trackingUrl(env, existingWalletOrder.token),
+          status: 'paid',
+          price: finalPrice,
+          previous_price: Number(update.previous_amount_agorot || 0) / 100,
+          credit_delta: Number(update.amount_agorot - update.previous_amount_agorot) / 100,
+          wallet: true,
+          updated: true,
+        }, 200, cors);
+      }
 
       let walletReservation = null;
       let walletReservationCreated = false;
@@ -963,6 +1468,7 @@ export default {
           payment_status: businessSession ? 'wallet_reserved' : 'none',
           payment_mode: businessSession ? 'wallet' : 'immediate',
           business_account_id: businessSession ? businessSession.account_id : null,
+          business_external_id: batchRowApproval ? batchRowApproval.data.external_id : null,
           wallet_reservation_id: walletReservation ? walletReservation.id : null,
           payment_method: businessSession ? 'wallet' : null,
           email_verified: businessSession ? 1 : 0,

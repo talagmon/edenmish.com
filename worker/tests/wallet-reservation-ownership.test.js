@@ -4,6 +4,10 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 
 import worker from '../src/index.js';
+import {
+  businessBatchIdempotencyKey,
+  signBusinessBatchToken,
+} from '../src/business-batch-approval.js';
 
 const schema = readFileSync(new URL('../schema.sql', import.meta.url), 'utf8');
 const migration = readFileSync(
@@ -238,6 +242,152 @@ describe('wallet reservation ownership', () => {
     assert.equal(wallet.available_agorot + wallet.reserved_agorot, 100000);
   });
 
+  test('batch approval tokens bind the reviewed row and external id to the created order', async () => {
+    const DB = d1Database();
+    openDatabases.push(DB.sqlite);
+    const env = {
+      DB,
+      SESSION_SECRET: 'wallet-test-session-secret',
+      TEST_MODE: '1',
+    };
+    const { cookie, account } = await fundBusinessWallet(DB, env);
+    const idempotencyKey = await businessBatchIdempotencyKey('ORD-2026-1042');
+    const pickupData = {
+      address: 'דיזנגוף 1',
+      city: 'תל אביב',
+      service: 'standard',
+      default_contents: '',
+    };
+    const rowData = {
+      row_number: 5,
+      external_id: 'ORD-2026-1042',
+      idempotency_key: idempotencyKey,
+      recipient_name: 'נועה לוי',
+      recipient_phone: '+972541234567',
+      delivery_address: 'ביאליק 2',
+      delivery_city: 'רמת גן',
+      pickup_date: '2026-07-27',
+      pickup_hour: 10,
+      package_size: 'small',
+      reference: '',
+      contents: '',
+      notes: '',
+    };
+    const [rowToken, pickupToken] = await Promise.all([
+      signBusinessBatchToken(env, account.id, 'row', rowData, { approved: true }),
+      signBusinessBatchToken(env, account.id, 'pickup', pickupData, { approved: true }),
+    ]);
+    const body = {
+      use_wallet: true,
+      name: rowData.recipient_name,
+      phone: '054-123-4567',
+      pickup: pickupData.address,
+      pickup_city: pickupData.city,
+      dropoff: rowData.delivery_address,
+      dropoff_city: rowData.delivery_city,
+      service: pickupData.service,
+      size: rowData.package_size,
+      when_date: rowData.pickup_date,
+      when_hour: rowData.pickup_hour,
+      when_text: '2026-07-27 · 10:00',
+      package: 'חבילה קטנה',
+      notes: '',
+      expected_price: 45,
+      batch_row_token: rowToken,
+      batch_pickup_token: pickupToken,
+    };
+
+    let response = await worker.fetch(
+      post('/api/orders', { ...body, expected_price: 39 }, {
+        Cookie: cookie,
+        'Idempotency-Key': idempotencyKey,
+      }),
+      env,
+    );
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), {
+      error: 'batch_quote_changed',
+      expected: 39,
+      current: 40,
+    });
+
+    response = await worker.fetch(
+      post('/api/orders', body, {
+        Cookie: cookie,
+        'Idempotency-Key': idempotencyKey,
+      }),
+      env,
+    );
+    assert.equal(response.status, 200);
+    const created = await response.json();
+    assert.ok(created.order_id);
+    assert.equal(created.price, 40);
+
+    response = await worker.fetch(
+      post('/api/orders', { ...body, name: 'שם ששונה אחרי האישור' }, {
+        Cookie: cookie,
+        'Idempotency-Key': idempotencyKey,
+      }),
+      env,
+    );
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), { error: 'batch_payload_mismatch' });
+
+    const conflictingRow = { ...rowData, recipient_name: 'נמען אחר' };
+    const conflictingToken = await signBusinessBatchToken(
+      env,
+      account.id,
+      'row',
+      conflictingRow,
+      { approved: true },
+    );
+    response = await worker.fetch(
+      post('/api/orders', {
+        ...body,
+        name: conflictingRow.recipient_name,
+        batch_row_token: conflictingToken,
+      }, {
+        Cookie: cookie,
+        'Idempotency-Key': idempotencyKey,
+      }),
+      env,
+    );
+    assert.equal(response.status, 200);
+    const updated = await response.json();
+    assert.equal(updated.order_id, created.order_id);
+    assert.equal(updated.updated, true);
+    assert.equal(DB.sqlite.prepare('SELECT COUNT(*) AS count FROM orders').get().count, 1);
+    assert.deepEqual(
+      { ...DB.sqlite.prepare(
+        'SELECT name, business_external_id FROM orders WHERE id = ?'
+      ).get(created.order_id) },
+      { name: 'נמען אחר', business_external_id: 'ORD-2026-1042' },
+    );
+
+    DB.sqlite.prepare("UPDATE orders SET status = 'to_pickup' WHERE id = ?").run(created.order_id);
+    const lockedRow = { ...conflictingRow, recipient_name: 'שינוי מאוחר מדי' };
+    const lockedToken = await signBusinessBatchToken(
+      env,
+      account.id,
+      'row',
+      lockedRow,
+      { approved: true },
+    );
+    response = await worker.fetch(
+      post('/api/orders', {
+        ...body,
+        name: lockedRow.recipient_name,
+        batch_row_token: lockedToken,
+      }, {
+        Cookie: cookie,
+        'Idempotency-Key': idempotencyKey,
+      }),
+      env,
+    );
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), { error: 'existing_order_locked' });
+  });
+
   test('a business account with a wallet-paid delivery stays full price and receives no claim', async () => {
     const DB = d1Database();
     openDatabases.push(DB.sqlite);
@@ -280,6 +430,66 @@ describe('wallet reservation ownership', () => {
       ).get(account.id).count,
       0,
     );
+  });
+
+  test('business cancellation before dispatch releases reserved credit without deleting the order', async () => {
+    const DB = d1Database();
+    openDatabases.push(DB.sqlite);
+    const env = {
+      DB,
+      SESSION_SECRET: 'wallet-test-session-secret',
+      TEST_MODE: '1',
+    };
+    const { cookie, account } = await fundBusinessWallet(DB, env);
+    const createdResponse = await worker.fetch(
+      post('/api/orders', orderBody, {
+        Cookie: cookie,
+        'Idempotency-Key': 'cancel-before-dispatch',
+      }),
+      env,
+    );
+    assert.equal(createdResponse.status, 200);
+    const created = await createdResponse.json();
+    const before = DB.sqlite.prepare(
+      'SELECT available_agorot, reserved_agorot FROM business_wallets WHERE account_id = ?'
+    ).get(account.id);
+
+    const cancelledResponse = await worker.fetch(
+      new Request(`https://find.edenmish.com/api/business/orders/${created.order_id}`, {
+        method: 'DELETE',
+        headers: { Cookie: cookie },
+      }),
+      env,
+    );
+    assert.equal(cancelledResponse.status, 200);
+    const cancelled = await cancelledResponse.json();
+    assert.equal(cancelled.order_id, created.order_id);
+    assert.equal(cancelled.released, created.price);
+
+    const order = DB.sqlite.prepare(
+      'SELECT status, payment_status FROM orders WHERE id = ?'
+    ).get(created.order_id);
+    const after = DB.sqlite.prepare(
+      'SELECT available_agorot, reserved_agorot FROM business_wallets WHERE account_id = ?'
+    ).get(account.id);
+    assert.equal(order.status, 'cancelled');
+    assert.equal(order.payment_status, 'wallet_released');
+    assert.equal(after.available_agorot, before.available_agorot + Math.round(created.price * 100));
+    assert.equal(after.reserved_agorot, before.reserved_agorot - Math.round(created.price * 100));
+    assert.equal(
+      DB.sqlite.prepare('SELECT COUNT(*) AS count FROM orders WHERE id = ?').get(created.order_id).count,
+      1,
+    );
+
+    const repeated = await worker.fetch(
+      new Request(`https://find.edenmish.com/api/business/orders/${created.order_id}`, {
+        method: 'DELETE',
+        headers: { Cookie: cookie },
+      }),
+      env,
+    );
+    assert.equal(repeated.status, 409);
+    assert.deepEqual(await repeated.json(), { error: 'existing_order_locked' });
   });
 
   test('manual delivery coupons remain unavailable with a wallet', async () => {

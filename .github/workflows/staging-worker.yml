@@ -27,6 +27,7 @@ jobs:
       STAGING_OPS_PIN: ${{ secrets.STAGING_OPS_PIN }}
       STAGING_SESSION_SECRET: ${{ secrets.STAGING_SESSION_SECRET }}
       STAGING_DRIVER_ONE_TIME_CODE: ${{ secrets.STAGING_DRIVER_ONE_TIME_CODE }}
+      STAGING_GOOGLE_PLACES_SERVER_KEY: ${{ secrets.STAGING_GOOGLE_PLACES_SERVER_KEY }}
       STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON: ${{ secrets.STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON }}
     steps:
       - uses: actions/checkout@v7
@@ -41,6 +42,7 @@ jobs:
           test -n "$STAGING_OPS_PIN" || { echo "::error::Missing STAGING_OPS_PIN"; exit 1; }
           test -n "$STAGING_SESSION_SECRET" || { echo "::error::Missing STAGING_SESSION_SECRET"; exit 1; }
           test -n "$STAGING_DRIVER_ONE_TIME_CODE" || { echo "::error::Missing STAGING_DRIVER_ONE_TIME_CODE"; exit 1; }
+          test -n "$STAGING_GOOGLE_PLACES_SERVER_KEY" || { echo "::error::Missing STAGING_GOOGLE_PLACES_SERVER_KEY"; exit 1; }
           test -n "$STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON" || { echo "::error::Missing STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON"; exit 1; }
       - name: Install and test Worker
         working-directory: worker
@@ -292,6 +294,40 @@ jobs:
           else
             echo "Analytics conversion migration 032 is already applied."
           fi
+      - name: Apply staging business batch external ID migration when needed
+        working-directory: worker
+        run: |
+          readiness_json="$(npx wrangler d1 execute edenmish-staging --remote --yes --json \
+            --config wrangler.staging.generated.toml \
+            --command "SELECT (SELECT COUNT(*) FROM pragma_table_info('orders') WHERE name='business_external_id') + (SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_orders_business_external_id') AS ready")"
+          ready="$(printf '%s' "$readiness_json" | jq -r '.[0].results[0].ready // 0')"
+          if [ "$ready" = "0" ]; then
+            npx wrangler d1 execute edenmish-staging --remote --yes \
+              --config wrangler.staging.generated.toml \
+              --file=./migrations/033_business_batch_external_id.sql
+          elif [ "$ready" != "2" ]; then
+            echo "::error::Business batch external ID migration is only partially applied ($ready/2 schema items)."
+            exit 1
+          else
+            echo "Business batch external ID migration 033 is already applied."
+          fi
+      - name: Apply staging approved batch mappings migration when needed
+        working-directory: worker
+        run: |
+          readiness_json="$(npx wrangler d1 execute edenmish-staging --remote --yes --json \
+            --config wrangler.staging.generated.toml \
+            --command "SELECT (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='business_batch_mappings') + (SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_business_batch_mappings_account') AS ready")"
+          ready="$(printf '%s' "$readiness_json" | jq -r '.[0].results[0].ready // 0')"
+          if [ "$ready" = "0" ]; then
+            npx wrangler d1 execute edenmish-staging --remote --yes \
+              --config wrangler.staging.generated.toml \
+              --file=./migrations/034_business_batch_mappings.sql
+          elif [ "$ready" != "2" ]; then
+            echo "::error::Approved batch mappings migration is only partially applied ($ready/2 schema items)."
+            exit 1
+          else
+            echo "Approved batch mappings migration 034 is already applied."
+          fi
       - name: Verify remote driver schema readiness
         working-directory: worker
         run: node scripts/validate-driver-schema.mjs --database edenmish-staging --config wrangler.staging.generated.toml
@@ -300,11 +336,11 @@ jobs:
         run: |
           readiness_json="$(npx wrangler d1 execute edenmish-staging --remote --yes --json \
             --config wrangler.staging.generated.toml \
-            --command "SELECT (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('business_users','business_accounts','business_members','business_auth_challenges','business_sessions','business_wallets','wallet_topups','wallet_credit_lots','wallet_reservations','wallet_entries','business_plan_enrollments','business_coupon_redemptions')) AS tables, (SELECT COUNT(*) FROM pragma_table_info('orders') WHERE name IN ('business_account_id','wallet_reservation_id','payment_method')) AS columns, (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('business_accounts','wallet_topups','business_plan_enrollments') AND sql LIKE '%''trial''%' AND sql LIKE '%''wallet''%') AS plans, (SELECT COUNT(*) FROM pragma_table_info('coupons') WHERE name IN ('scope','business_plan_ids')) + (SELECT COUNT(*) FROM pragma_table_info('wallet_topups') WHERE name IN ('payment_amount_agorot','discount_code','discount_amount_agorot','discount_title')) AS coupon_columns, (SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_orders_wallet_reservation_unique') AS ownership_index")"
-          printf '%s' "$readiness_json" | jq -e '.[0].results[0] | .tables == 12 and .columns == 3 and .plans == 3 and .coupon_columns == 6 and .ownership_index == 1'
+            --command "SELECT (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('business_users','business_accounts','business_members','business_auth_challenges','business_sessions','business_wallets','wallet_topups','wallet_credit_lots','wallet_reservations','wallet_entries','business_plan_enrollments','business_coupon_redemptions','business_batch_mappings')) AS tables, (SELECT COUNT(*) FROM pragma_table_info('orders') WHERE name IN ('business_account_id','business_external_id','wallet_reservation_id','payment_method')) AS columns, (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('business_accounts','wallet_topups','business_plan_enrollments') AND sql LIKE '%''trial''%' AND sql LIKE '%''wallet''%') AS plans, (SELECT COUNT(*) FROM pragma_table_info('coupons') WHERE name IN ('scope','business_plan_ids')) + (SELECT COUNT(*) FROM pragma_table_info('wallet_topups') WHERE name IN ('payment_amount_agorot','discount_code','discount_amount_agorot','discount_title')) AS coupon_columns, (SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name IN ('idx_orders_wallet_reservation_unique','idx_orders_business_external_id')) AS ownership_indexes")"
+          printf '%s' "$readiness_json" | jq -e '.[0].results[0] | .tables == 13 and .columns == 4 and .plans == 3 and .coupon_columns == 6 and .ownership_indexes == 2'
       - name: Prepare staging secrets
         run: |
-          node --input-type=module -e 'import { writeFileSync } from "node:fs"; writeFileSync("/tmp/edenmish-staging-secrets.json", JSON.stringify({ OPS_PIN: process.env.STAGING_OPS_PIN, SESSION_SECRET: process.env.STAGING_SESSION_SECRET, DRIVER_ONE_TIME_CODE: process.env.STAGING_DRIVER_ONE_TIME_CODE, GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON: process.env.STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON }), { mode: 0o600 });'
+          node --input-type=module -e 'import { writeFileSync } from "node:fs"; writeFileSync("/tmp/edenmish-staging-secrets.json", JSON.stringify({ OPS_PIN: process.env.STAGING_OPS_PIN, SESSION_SECRET: process.env.STAGING_SESSION_SECRET, DRIVER_ONE_TIME_CODE: process.env.STAGING_DRIVER_ONE_TIME_CODE, GOOGLE_PLACES_SERVER_KEY: process.env.STAGING_GOOGLE_PLACES_SERVER_KEY, GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON: process.env.STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON }), { mode: 0o600 });'
       - name: Deploy staging Worker
         working-directory: worker
         run: npx wrangler deploy --config wrangler.staging.generated.toml --secrets-file /tmp/edenmish-staging-secrets.json

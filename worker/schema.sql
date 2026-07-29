@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS orders (
   discount_title TEXT,                  -- human title snapshot from Shopify
   email TEXT, email_verified INTEGER DEFAULT 0, otp_hash TEXT, otp_expires INTEGER,
   business_account_id INTEGER,
+  business_external_id TEXT,
   wallet_reservation_id TEXT,
   payment_method TEXT,
   -- Set when a failed delivery leaves the package with the driver, to the reported
@@ -510,6 +511,21 @@ CREATE TABLE IF NOT EXISTS business_sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_business_sessions_expiry ON business_sessions(expires_at);
 
+CREATE TABLE IF NOT EXISTS business_batch_mappings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id INTEGER NOT NULL,
+  header_signature TEXT NOT NULL CHECK(length(header_signature) = 64),
+  mapping_json TEXT NOT NULL CHECK(json_valid(mapping_json)),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  last_used_at INTEGER,
+  use_count INTEGER NOT NULL DEFAULT 0 CHECK(use_count >= 0),
+  UNIQUE(account_id, header_signature),
+  FOREIGN KEY (account_id) REFERENCES business_accounts(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_business_batch_mappings_account
+  ON business_batch_mappings(account_id, updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS business_wallets (
   account_id INTEGER PRIMARY KEY,
   currency TEXT NOT NULL DEFAULT 'ILS',
@@ -607,6 +623,9 @@ CREATE TABLE IF NOT EXISTS business_plan_enrollments (
 );
 
 CREATE INDEX IF NOT EXISTS idx_orders_business_account ON orders(business_account_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_business_external_id
+  ON orders(business_account_id, business_external_id)
+  WHERE business_account_id IS NOT NULL AND business_external_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_wallet_reservation_unique
   ON orders(wallet_reservation_id)
   WHERE wallet_reservation_id IS NOT NULL;

@@ -35,7 +35,9 @@ describe('staging Worker isolation', () => {
     assert.match(config, /find-staging\.edenmish\.com/);
     assert.match(config, /ops-staging\.edenmish\.com/);
     assert.match(config, /database_name = "edenmish-staging"/);
-    assert.match(config, /required = \["OPS_PIN", "SESSION_SECRET", "DRIVER_ONE_TIME_CODE", "GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON"\]/);
+    assert.match(config, /\[ai\]\s+binding = "AI"/);
+    assert.match(config, /BUSINESS_BATCH_AI_MODEL = "@cf\/meta\/llama-3\.1-8b-instruct-fast"/);
+    assert.match(config, /required = \["OPS_PIN", "SESSION_SECRET", "DRIVER_ONE_TIME_CODE", "GOOGLE_PLACES_SERVER_KEY", "GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON"\]/);
     assert.ok(!config.includes('f2f51b54-0170-4594-a41c-7a6037c902aa'), 'must not bind the production D1 database');
   });
 });

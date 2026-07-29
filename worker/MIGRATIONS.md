@@ -916,6 +916,74 @@ unchanged.
 
 ---
 
+### 033_business_batch_external_id.sql
+
+**Purpose:** Adds the customer-controlled business batch external ID to `orders`
+and enforces one order per external ID within each business account. Re-importing
+the same ID can therefore return the existing order or update it while its wallet
+credit is still reserved; it can never create a duplicate delivery.
+
+The Worker batch-import code is migration-dependent. Run this migration after
+merge and **before deploying that Worker version**.
+
+**Production command:**
+```bash
+wrangler d1 execute edenmish --remote \
+  --file=./migrations/033_business_batch_external_id.sql
+```
+
+**Verification queries:**
+```sql
+SELECT name, type FROM sqlite_master
+WHERE name = 'idx_orders_business_external_id';
+
+SELECT name, type, "notnull", pk
+FROM pragma_table_info('orders')
+WHERE name = 'business_external_id';
+```
+
+Expected: the `business_external_id` column and the partial unique index
+`idx_orders_business_external_id`. Existing orders remain `NULL` and are not
+changed or backfilled.
+
+---
+
+### 034_business_batch_mappings.sql
+
+**Purpose:** Stores account-scoped spreadsheet header mappings only after the
+business user explicitly approves the AI interpretation. The table retains a
+SHA-256 header signature and canonical field/column indexes; it does not retain
+raw headers, recipient values, addresses, or uploaded files.
+
+The saved-mapping runtime is migration-dependent. Run this migration after 033
+and **before deploying that Worker version**.
+
+**Production command:**
+```bash
+wrangler d1 execute edenmish --remote \
+  --file=./migrations/034_business_batch_mappings.sql
+```
+
+**Verification queries:**
+```sql
+SELECT name, type FROM sqlite_master
+WHERE name IN (
+  'business_batch_mappings',
+  'idx_business_batch_mappings_account'
+)
+ORDER BY type, name;
+
+SELECT name, type, "notnull", pk
+FROM pragma_table_info('business_batch_mappings')
+ORDER BY cid;
+```
+
+Expected: one table and one account/updated-time index. Existing accounts and
+orders are unchanged; the table starts empty and is populated only through the
+authenticated batch-approval endpoint.
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -950,6 +1018,8 @@ unchanged.
 - [ ] Run `030_whatsapp_template_delivery_audit.sql` after its duplicate-provider-reference preflight and before deploying WhatsApp hardening.
 - [ ] Run `031_first_delivery_promotion.sql` after merge and before deploying the first-delivery promotion.
 - [ ] Run `032_analytics_conversion_claims.sql` after merge and before deploying the paid-conversion Worker.
+- [ ] Run `033_business_batch_external_id.sql` after merge and before deploying business batch import.
+- [ ] Run `034_business_batch_mappings.sql` after 033 and before enabling approved mapping reuse.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).
@@ -966,7 +1036,7 @@ whether each table exists:
 ```sql
 SELECT name FROM sqlite_master
 WHERE type='table'
-AND name IN ('rate_limits', 'delivery_proofs', 'notifications', 'coupons', 'coupon_redemptions', 'business_accounts', 'business_wallets', 'wallet_entries', 'delivery_completion_transitions', 'delivery_notification_outbox')
+AND name IN ('rate_limits', 'delivery_proofs', 'notifications', 'coupons', 'coupon_redemptions', 'business_accounts', 'business_wallets', 'business_batch_mappings', 'wallet_entries', 'delivery_completion_transitions', 'delivery_notification_outbox')
 ORDER BY name;
 ```
 

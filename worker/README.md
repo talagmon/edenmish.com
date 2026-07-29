@@ -26,6 +26,7 @@ It is a **single Worker** that routes by hostname (`find.` vs `ops.`).
 |---|---|---|
 | `find.edenmish.com` | Customer-facing tracking page | `GET /t/:token` → `pages.js#trackingHtml` |
 | `find.edenmish.com` | Public order API | `GET/POST /api/quote`, `POST /api/orders`, `GET /api/orders/:token`, `/verify-otp`, `/resend-otp` |
+| `find.edenmish.com` | Business account API | `GET /business`, `/api/business/*`, including in-memory XLSX/CSV batch parsing and fail-closed smart mapping for unfamiliar layouts |
 | `ops.edenmish.com` | Ops/driver dashboard | `GET /` → `pages.js#opsHtml` |
 | `ops.edenmish.com` | Ops API (session-gated) | `/api/ops/login`, `/api/ops/orders`, `…/status`, `…/gps`, `…/approve` |
 | `ops.edenmish.com` | Driver mobile API (bearer-token scoped) | `/api/driver/v1/session`, `/session/refresh`, `/shifts/current`, `/shifts/:id/route`, `/execution-events:batch` |
@@ -53,6 +54,9 @@ Staging uses separate hosts and a separate D1 database:
 | `route-optimization.js` | Fail-closed Google Route Optimization adapter for one-driver mixed pickup/drop-off plans, including locked-stop and precedence validation. |
 | `notify.js` | Provider notification wrapper: best-effort per-attempt audit trail in D1 `notifications`; never throws. |
 | `delivery-notification-outbox.js` | Unique logical delivery-completion jobs, expiring leases, and bounded at-least-once retry processing. |
+| `business-batch.js` | Bounded XLSX/CSV recipient parser for authenticated business imports; validates the template without persisting uploaded files. |
+| `business-batch-ai.js` | Bounded Workers AI fallback that maps unfamiliar spreadsheet layouts into canonical fields; output remains subject to deterministic validation and customer approval. |
+| `business-batch-mappings.js` | Stores, lists and deletes account-scoped, explicitly approved header hashes and canonical column indexes; management responses expose metadata only, never recipient rows, raw headers or mapping JSON. |
 
 ## Local dev
 
@@ -94,9 +98,9 @@ Database name: `edenmish`. Binding: `DB`.
 ### Schema and migrations
 
 `schema.sql` is the **fresh-DB source of truth** — it defines every current table.
-The numbered migrations (`003`–`032`) add tables/columns that were introduced after the
+The numbered migrations (`003`–`034`) add tables/columns that were introduced after the
 initial schema. Tables are idempotent (`CREATE TABLE IF NOT EXISTS`); `ALTER TABLE …
-ADD COLUMN` migrations (`006`–`010`, `015`, `016`, and `024`–`026`) must run only on
+ADD COLUMN` migrations (`006`–`010`, `015`, `016`, `024`–`026`, and `033`) must run only on
 DBs that predate their columns.
 
 - **Fresh DB:** run `npm run db:init` (schema.sql only).
@@ -118,6 +122,13 @@ leases. Logical jobs are unique, while provider delivery remains at-least-once.
 Business-account tables are `business_users`, `business_accounts`, `business_members`,
 `business_auth_challenges`, `business_sessions`, `business_wallets`, `wallet_topups`,
 `wallet_credit_lots`, `wallet_reservations`, `wallet_entries`, `business_plan_enrollments`.
+Approved spreadsheet layouts are stored separately in `business_batch_mappings`
+as header hashes and canonical column-index JSON only. Authenticated businesses
+can review safe usage metadata and delete an account-owned layout from the batch
+import drawer; deletion does not touch orders, uploaded files or wallet records.
+For batch order creation, the reviewed row price is a ceiling: authoritative
+increases require a new review, while a lower automatic promotion is accepted
+and reflected in the actual wallet reservation.
 
 ## Secret checklist
 
@@ -133,6 +144,7 @@ See `../docs/ENVIRONMENT.md` for the full list and placeholders.
 | `DRIVER_ONE_TIME_CODE` | compatibility fallback for Apple App Review | used only when `DRIVER_REVIEW_CODE` is unset; keep while the current App Store review record references it |
 | `DRIVER_ADDITIONAL_ONE_TIME_CODES` | legacy emergency driver bootstrap logins | comma-separated 6–12 digit codes; each code remains single use; prefer expiring Ops invitations |
 | `MAPS_KEY` | tracking page live map (injected into HTML) | Google Maps JS key |
+| `GOOGLE_PLACES_SERVER_KEY` | authenticated business batch address validation | Server-only key restricted to Places API (New); never inject into HTML |
 | `SHOPIFY_ADMIN_TOKEN` | creating Draft Orders (`shpat_…`) | Worker-side charge |
 | `SHOPIFY_WEBHOOK_SECRET` | verifying Shopify payment/refund webhooks | webhook fails closed (401) if unset |
 | `SENDGRID_API_KEY` | all email notifications | currently SendGrid |
@@ -140,10 +152,16 @@ See `../docs/ENVIRONMENT.md` for the full list and placeholders.
 
 Non-secret vars live in `wrangler.toml [vars]`: `BRAND`, `BOOKING_URL`,
 `WHATSAPP_NUMBER`, `OPS_EMAIL`, `AUTO_DRIVER_DISPATCH`, `SHOPIFY_SHOP`,
-`SHOPIFY_API_VERSION`.
+`SHOPIFY_API_VERSION`, `BUSINESS_BATCH_AI_MODEL`.
 Route optimization additionally requires `ROUTE_OPTIMIZATION_PROVIDER=google`
 and `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID`; see
 `../docs/DRIVER_ROUTE_OPTIMIZATION.md`.
+
+Business smart import uses the `[ai]` binding as `env.AI`. Official template
+files bypass inference; only unfamiliar layouts invoke the configured
+JSON-schema-capable model. Workers AI availability is an account capability, not
+a Worker secret. If inference is unavailable or invalid, the import fails closed
+and the customer can use the official template.
 
 ## Webhook checklist
 
@@ -210,6 +228,8 @@ wrangler d1 execute edenmish --remote --file=./migrations/029_wallet_reservation
 wrangler d1 execute edenmish --remote --file=./migrations/030_whatsapp_template_delivery_audit.sql
 wrangler d1 execute edenmish --remote --file=./migrations/031_first_delivery_promotion.sql
 wrangler d1 execute edenmish --remote --file=./migrations/032_analytics_conversion_claims.sql
+wrangler d1 execute edenmish --remote --file=./migrations/033_business_batch_external_id.sql
+wrangler d1 execute edenmish --remote --file=./migrations/034_business_batch_mappings.sql
 ```
 
 > Run only migrations that have not already been applied. Several `ALTER TABLE`
@@ -225,6 +245,7 @@ wrangler secret put DRIVER_REVIEW_CODE
 # Compatibility fallback while an existing review record still uses this name:
 wrangler secret put DRIVER_ONE_TIME_CODE
 wrangler secret put MAPS_KEY
+wrangler secret put GOOGLE_PLACES_SERVER_KEY
 wrangler secret put SHOPIFY_ADMIN_TOKEN
 wrangler secret put SHOPIFY_WEBHOOK_SECRET
 wrangler secret put SENDGRID_API_KEY
