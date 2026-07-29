@@ -74,6 +74,11 @@ These are safe to keep in the repo (non-secret configuration):
 | `ROUTE_OPTIMIZATION_PROVIDER` | Optional explicit switch; set to `google` only after billing, quota, and credentials are approved |
 | `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID` | Google Cloud project ID/number with Route Optimization enabled; required only when the provider is `google` |
 | `BUSINESS_BATCH_AI_MODEL` | Workers AI model used only when the deterministic business-batch template parser cannot recognize a file; the configured model must support JSON-schema output |
+| `EMAIL_FROM_ADDRESS` | Verified SendGrid sender address. Production uses `no-reply@edenmish.com`; staging uses `no-reply-staging@edenmish.com` |
+| `EMAIL_FROM_NAME` | Human-readable sender name shown by email clients |
+| `EMAIL_SUBJECT_PREFIX` | Optional prefix added once to every outbound subject; staging uses `[STAGING]` |
+| `EMAIL_RECIPIENT_POLICY` | `open` for production or `allowlist` for isolated environments. Unknown values fail closed |
+| `EMAIL_RECIPIENT_ALLOWLIST` | Comma-separated exact recipient addresses allowed when the policy is `allowlist`; staging contains only its QA mailbox |
 
 > Optional future var: `PAYMENT_MODE` (`immediate` today, `preauth` for Mesh later).
 
@@ -106,9 +111,13 @@ The GitHub `staging` environment contains only:
 | `STAGING_DRIVER_ONE_TIME_CODE` | environment secret | Staging-only single-use driver bootstrap code |
 | `STAGING_GOOGLE_PLACES_SERVER_KEY` | environment secret | Dedicated staging Places API (New) server key; never reuse production credentials |
 | `STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON` | environment secret | Staging-only Google service-account JSON; never reuse production credentials |
+| `STAGING_SENDGRID_API_KEY` | environment secret | Dedicated custom-access SendGrid key with only Mail Send permission |
 
-Never copy production Shopify, payment, webhook, email, or customer-data
-credentials into the staging Worker. See `CI_CD.md` for one-time setup.
+Staging email is intentionally limited to `qa-staging@edenmish.com`, uses the
+`no-reply-staging@edenmish.com` sender and prefixes subjects with `[STAGING]`.
+The Worker rejects every other staging recipient before calling SendGrid. Never
+copy production Shopify, payment, webhook, email, or customer-data credentials
+into the staging Worker. See `CI_CD.md` for one-time setup.
 
 ---
 

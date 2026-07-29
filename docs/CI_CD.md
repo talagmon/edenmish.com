@@ -105,18 +105,22 @@ and gated by environment approval.
 - deploys `edenmish-ops-staging` to `find-staging.edenmish.com` and
   `ops-staging.edenmish.com` with staging-only auth secrets and the non-secret
   Workers AI binding used by unfamiliar business batch layouts;
+- injects a dedicated Mail Send-only SendGrid key; staging email is hard-limited
+  to `qa-staging@edenmish.com`, uses the staging sender identity, and prefixes
+  every subject with `[STAGING]`;
 - verifies `/health` and the credentialed CORS origin for
   `staging.edenmish.com`.
 
 It never binds the production `edenmish` D1 database and does not receive
-Shopify, payment, email, or webhook credentials.
+production Shopify, payment, email, or webhook credentials.
 
 **Environment:** `staging`.
 
 **Required configuration:** `STAGING_D1_DATABASE_ID` environment variable;
 `STAGING_OPS_PIN`, `STAGING_SESSION_SECRET`, `STAGING_DRIVER_ONE_TIME_CODE`,
 `STAGING_GOOGLE_PLACES_SERVER_KEY`, and
-`STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON`
+`STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON`, and
+`STAGING_SENDGRID_API_KEY`
 environment secrets; shared
 `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets.
 The `AI` binding and `BUSINESS_BATCH_AI_MODEL` are declared in
@@ -238,10 +242,15 @@ Add in **GitHub → Settings → Secrets and variables → Actions**:
 | `STAGING_DRIVER_ONE_TIME_CODE` | staging only | A 6–12 digit single-use driver bootstrap code; rotate after exchange |
 | `STAGING_GOOGLE_PLACES_SERVER_KEY` | staging only | Dedicated staging server key restricted to Places API (New); never expose it to browsers |
 | `STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON` | staging only | Dedicated staging OAuth credential for Google Route Optimization |
+| `STAGING_SENDGRID_API_KEY` | staging only | Dedicated SendGrid custom-access key with only Mail Send permission; never reuse the production key |
 
 Add `STAGING_D1_DATABASE_ID` as a variable on the GitHub `staging` environment.
 
 > Do not put real values in workflow files or docs. These are GitHub repository secrets only.
+> Create `qa-staging@edenmish.com` as a Cloudflare Email Routing alias to the
+> approved QA inbox before enabling the staging key. Confirm that
+> `no-reply-staging@edenmish.com` is covered by SendGrid domain authentication
+> (or verify it as a single sender) before the first OTP test.
 
 ---
 
