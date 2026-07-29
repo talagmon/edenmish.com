@@ -152,10 +152,18 @@ See `../docs/ENVIRONMENT.md` for the full list and placeholders.
 
 Non-secret vars live in `wrangler.toml [vars]`: `BRAND`, `BOOKING_URL`,
 `WHATSAPP_NUMBER`, `OPS_EMAIL`, `AUTO_DRIVER_DISPATCH`, `SHOPIFY_SHOP`,
-`SHOPIFY_API_VERSION`, `BUSINESS_BATCH_AI_MODEL`.
+`SHOPIFY_API_VERSION`, `BUSINESS_BATCH_AI_MODEL`, `EMAIL_FROM_ADDRESS`,
+`EMAIL_FROM_NAME`, `EMAIL_SUBJECT_PREFIX`, `EMAIL_RECIPIENT_POLICY`, and
+`EMAIL_RECIPIENT_ALLOWLIST`.
 Route optimization additionally requires `ROUTE_OPTIMIZATION_PROVIDER=google`
 and `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID`; see
 `../docs/DRIVER_ROUTE_OPTIMIZATION.md`.
+
+Production uses the open recipient policy and the verified
+`no-reply@edenmish.com` sender. Staging uses a separate Mail Send-only key,
+`no-reply-staging@edenmish.com`, an `[STAGING]` subject prefix, and an exact
+allowlist containing only `qa-staging@edenmish.com`. Allowlist mode fails closed
+when the list is empty, the policy is invalid, or the recipient does not match.
 
 Business smart import uses the `[ai]` binding as `env.AI`. Official template
 files bypass inference; only unfamiliar layouts invoke the configured

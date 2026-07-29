@@ -29,6 +29,7 @@ jobs:
       STAGING_DRIVER_ONE_TIME_CODE: ${{ secrets.STAGING_DRIVER_ONE_TIME_CODE }}
       STAGING_GOOGLE_PLACES_SERVER_KEY: ${{ secrets.STAGING_GOOGLE_PLACES_SERVER_KEY }}
       STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON: ${{ secrets.STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON }}
+      STAGING_SENDGRID_API_KEY: ${{ secrets.STAGING_SENDGRID_API_KEY }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -44,6 +45,7 @@ jobs:
           test -n "$STAGING_DRIVER_ONE_TIME_CODE" || { echo "::error::Missing STAGING_DRIVER_ONE_TIME_CODE"; exit 1; }
           test -n "$STAGING_GOOGLE_PLACES_SERVER_KEY" || { echo "::error::Missing STAGING_GOOGLE_PLACES_SERVER_KEY"; exit 1; }
           test -n "$STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON" || { echo "::error::Missing STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON"; exit 1; }
+          test -n "$STAGING_SENDGRID_API_KEY" || { echo "::error::Missing STAGING_SENDGRID_API_KEY"; exit 1; }
       - name: Install and test Worker
         working-directory: worker
         run: npm ci && npm test
@@ -340,7 +342,7 @@ jobs:
           printf '%s' "$readiness_json" | jq -e '.[0].results[0] | .tables == 13 and .columns == 4 and .plans == 3 and .coupon_columns == 6 and .ownership_indexes == 2'
       - name: Prepare staging secrets
         run: |
-          node --input-type=module -e 'import { writeFileSync } from "node:fs"; writeFileSync("/tmp/edenmish-staging-secrets.json", JSON.stringify({ OPS_PIN: process.env.STAGING_OPS_PIN, SESSION_SECRET: process.env.STAGING_SESSION_SECRET, DRIVER_ONE_TIME_CODE: process.env.STAGING_DRIVER_ONE_TIME_CODE, GOOGLE_PLACES_SERVER_KEY: process.env.STAGING_GOOGLE_PLACES_SERVER_KEY, GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON: process.env.STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON }), { mode: 0o600 });'
+          node --input-type=module -e 'import { writeFileSync } from "node:fs"; writeFileSync("/tmp/edenmish-staging-secrets.json", JSON.stringify({ OPS_PIN: process.env.STAGING_OPS_PIN, SESSION_SECRET: process.env.STAGING_SESSION_SECRET, DRIVER_ONE_TIME_CODE: process.env.STAGING_DRIVER_ONE_TIME_CODE, GOOGLE_PLACES_SERVER_KEY: process.env.STAGING_GOOGLE_PLACES_SERVER_KEY, GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON: process.env.STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON, SENDGRID_API_KEY: process.env.STAGING_SENDGRID_API_KEY }), { mode: 0o600 });'
       - name: Deploy staging Worker
         working-directory: worker
         run: npx wrangler deploy --config wrangler.staging.generated.toml --secrets-file /tmp/edenmish-staging-secrets.json
