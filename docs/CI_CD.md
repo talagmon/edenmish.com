@@ -103,7 +103,8 @@ and gated by environment approval.
   014–016 and stops before deployment when a required table, column, or index
   is missing;
 - deploys `edenmish-ops-staging` to `find-staging.edenmish.com` and
-  `ops-staging.edenmish.com` with staging-only auth secrets;
+  `ops-staging.edenmish.com` with staging-only auth secrets and the non-secret
+  Workers AI binding used by unfamiliar business batch layouts;
 - verifies `/health` and the credentialed CORS origin for
   `staging.edenmish.com`.
 
@@ -113,10 +114,14 @@ Shopify, payment, email, or webhook credentials.
 **Environment:** `staging`.
 
 **Required configuration:** `STAGING_D1_DATABASE_ID` environment variable;
-`STAGING_OPS_PIN`, `STAGING_SESSION_SECRET`, `STAGING_DRIVER_ONE_TIME_CODE`, and
+`STAGING_OPS_PIN`, `STAGING_SESSION_SECRET`, `STAGING_DRIVER_ONE_TIME_CODE`,
+`STAGING_GOOGLE_PLACES_SERVER_KEY`, and
 `STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON`
 environment secrets; shared
 `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets.
+The `AI` binding and `BUSINESS_BATCH_AI_MODEL` are declared in
+`worker/wrangler.staging.toml`; they require no GitHub secret, but Workers AI must
+be enabled for the Cloudflare account.
 
 ---
 
@@ -231,6 +236,7 @@ Add in **GitHub → Settings → Secrets and variables → Actions**:
 | `STAGING_OPS_PIN` | staging only | A staging-only PIN; never reuse the production PIN |
 | `STAGING_SESSION_SECRET` | staging only | A unique random staging session secret |
 | `STAGING_DRIVER_ONE_TIME_CODE` | staging only | A 6–12 digit single-use driver bootstrap code; rotate after exchange |
+| `STAGING_GOOGLE_PLACES_SERVER_KEY` | staging only | Dedicated staging server key restricted to Places API (New); never expose it to browsers |
 | `STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON` | staging only | Dedicated staging OAuth credential for Google Route Optimization |
 
 Add `STAGING_D1_DATABASE_ID` as a variable on the GitHub `staging` environment.
@@ -327,18 +333,28 @@ git push origin "v$(./scripts/current_version.sh)"
      wrangler d1 execute edenmish --remote --file=./migrations/029_wallet_reservation_ownership.sql
      # Run the provider-reference preflight from worker/MIGRATIONS.md first:
      wrangler d1 execute edenmish --remote --file=./migrations/030_whatsapp_template_delivery_audit.sql
+     wrangler d1 execute edenmish --remote --file=./migrations/031_first_delivery_promotion.sql
+     wrangler d1 execute edenmish --remote --file=./migrations/032_analytics_conversion_claims.sql
+     wrangler d1 execute edenmish --remote --file=./migrations/033_business_batch_external_id.sql
+     wrangler d1 execute edenmish --remote --file=./migrations/034_business_batch_mappings.sql
 3. Configure the production Worker bootstrap secret if it is not already present:
      cd worker
      wrangler secret put DRIVER_ONE_TIME_CODE
    Use a unique 6–12 digit one-time code and rotate it after a successful exchange.
-4. Go to GitHub → Actions → "Production deploy" → Run workflow
+4. Configure the server-only Places key used by business batch address validation:
+     wrangler secret put GOOGLE_PLACES_SERVER_KEY
+   Restrict this key to Places API (New). Do not reuse or expose the browser `MAPS_KEY`.
+5. Confirm Workers AI is available on the Cloudflare account. The non-secret
+   `AI` binding and `BUSINESS_BATCH_AI_MODEL` are already declared in
+   `worker/wrangler.toml`.
+6. Go to GitHub → Actions → "Production deploy" → Run workflow
      - confirm_migrations_ran = "I ran required migrations"
      - deploy_worker = true
      - deploy_theme = false (the driver API release does not require a theme push)
      - publish_theme = false (preview first)
-5. Confirm the workflow's Driver API smoke test returns the expected authenticated boundary.
-6. Exchange the one-time code in the production driver app and verify the active shift and mixed route.
-7. Rotate `DRIVER_ONE_TIME_CODE` before issuing another bootstrap login.
+7. Confirm the workflow's Driver API smoke test returns the expected authenticated boundary.
+8. Exchange the one-time code in the production driver app and verify the active shift and mixed route.
+9. Rotate `DRIVER_ONE_TIME_CODE` before issuing another bootstrap login.
 ```
 
 ---

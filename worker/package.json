@@ -16,6 +16,7 @@
     "wrangler": "^4.110.0"
   },
   "dependencies": {
+    "fflate": "^0.8.2",
     "qrcode-generator": "^1.4.4"
   }
 }
