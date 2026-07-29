@@ -100,11 +100,11 @@ function worksheetRows(xml, sharedStrings) {
   while ((rowMatch = rowPattern.exec(xml))) {
     const rowNumber = Number(rowMatch[1].match(/\br="(\d+)"/i)?.[1]);
     const row = [];
-    const cellPattern = /<(?:\w+:)?c\b([^>]*)>([\s\S]*?)<\/(?:\w+:)?c>/gi;
+    const cellPattern = /<(?:\w+:)?c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/(?:\w+:)?c>)/gi;
     let cellMatch;
     while ((cellMatch = cellPattern.exec(rowMatch[2]))) {
       const attrs = cellMatch[1];
-      const body = cellMatch[2];
+      const body = cellMatch[2] || '';
       const ref = attrs.match(/\br="([^"]+)"/i)?.[1] || '';
       const type = attrs.match(/\bt="([^"]+)"/i)?.[1] || '';
       const raw = body.match(/<(?:\w+:)?v\b[^>]*>([\s\S]*?)<\/(?:\w+:)?v>/i)?.[1];
