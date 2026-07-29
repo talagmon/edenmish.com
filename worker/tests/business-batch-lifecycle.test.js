@@ -112,8 +112,13 @@ function place(route, number, city = 'תל אביב') {
   };
 }
 
-function installPlacesMock() {
+function installPlacesMock(sentEmails = null) {
   globalThis.fetch = async (url, request = {}) => {
+    if (String(url) === 'https://api.sendgrid.com/v3/mail/send') {
+      assert.ok(sentEmails, 'unexpected SendGrid request');
+      sentEmails.push(JSON.parse(request.body));
+      return new Response(null, { status: 202 });
+    }
     assert.equal(String(url), 'https://places.googleapis.com/v1/places:searchText');
     const query = JSON.parse(request.body).textQuery;
     if (query.includes('דיזנגוף 1')) {
@@ -206,10 +211,13 @@ async function approveParsedRow(env, cookie, row, pickup) {
 
 test('authenticated CSV lifecycle validates, approves, creates, updates and cancels one order', async () => {
   const DB = d1Database();
+  const sentEmails = [];
   const env = {
     DB,
     SESSION_SECRET: 'batch-lifecycle-test-secret',
     GOOGLE_PLACES_SERVER_KEY: 'test-places-key',
+    SENDGRID_API_KEY: 'sendgrid-test-key',
+    OPS_EMAIL: 'ops@example.com',
     TEST_MODE: '1',
   };
   const cookie = await createBusinessSession(env);
@@ -236,7 +244,7 @@ test('authenticated CSV lifecycle validates, approves, creates, updates and canc
      VALUES ('prior-business-order', 'delivered', '+972500000001',
              'prior@example.com', 'wallet_paid', ?, ?)`
   ).run(account.id, now - 1);
-  installPlacesMock();
+  installPlacesMock(sentEmails);
   const deliveryDate = nextBusinessDate();
 
   let response = await worker.fetch(
@@ -273,6 +281,38 @@ test('authenticated CSV lifecycle validates, approves, creates, updates and canc
   assert.equal(response.status, 200);
   const created = await response.json();
   assert.equal(created.price, quote.price);
+  const orderNotifications = DB.sqlite.prepare(
+    `SELECT template, recipient, status
+     FROM notifications
+     WHERE order_id = ?
+     ORDER BY id`
+  ).all(created.order_id);
+  assert.deepEqual(orderNotifications.map(({ template }) => template), [
+    'customer_business_order_confirmation',
+    'ops_new_business_order',
+  ]);
+  assert.deepEqual(orderNotifications.map(({ recipient, status }) => ({ recipient, status })), [
+    { recipient: 'batch-lifecycle@example.com', status: 'sent' },
+    { recipient: 'ops@example.com', status: 'sent' },
+  ]);
+  assert.equal(sentEmails.length, 2);
+  const customerEmail = sentEmails.find((email) => (
+    email.personalizations[0].to[0].email === 'batch-lifecycle@example.com'
+  ));
+  assert.ok(customerEmail, 'business account should receive a tracking confirmation');
+  assert.equal(
+    customerEmail.subject,
+    `המשלוח העסקי נוצר ✓ — מעקב משלוח #${created.order_id}`,
+  );
+  assert.match(customerEmail.content[0].value, new RegExp(
+    `https://edenmish\\.com/track\\.html\\?t=${created.token}`
+  ));
+  assert.doesNotMatch(customerEmail.content[0].value, /קוד האימות/);
+  assert.equal(
+    sentEmails.filter((email) => email.personalizations[0].to[0].email === 'ops@example.com').length,
+    1,
+    'wallet orders should send exactly one correctly labeled operations email',
+  );
 
   response = await worker.fetch(
     jsonPost('/api/orders', orderBody(row, parsed.pickup, quote.price), headers),
@@ -280,6 +320,7 @@ test('authenticated CSV lifecycle validates, approves, creates, updates and canc
   );
   assert.equal(response.status, 200);
   assert.equal((await response.json()).idempotent, true);
+  assert.equal(sentEmails.length, 2, 'idempotent retries must not resend notifications');
   assert.equal(DB.sqlite.prepare(
     'SELECT COUNT(*) AS count FROM orders WHERE business_external_id = ?'
   ).get('ORD-LIFECYCLE').count, 1);
