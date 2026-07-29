@@ -327,7 +327,7 @@ const NEXTLBL={paid:'יציאה לאיסוף →',to_pickup:'נאסף ✓',picke
 const LIVE=['to_pickup','to_dropoff'];
 const NSTAT={pending:'ממתין',sent:'נשלח',failed:'נכשל',skipped:'דולג'};
 const NCHAN={email:'אימייל',whatsapp_future:'וואטסאפ',sms_future:'SMS',system:'מערכת'};
-const NTPL={ops_new_order:'הזמנה חדשה לעדן',customer_otp:'קוד אימות',customer_payment_confirmation:'אישור תשלום',ops_payment_received:'תשלום התקבל',customer_delivery_summary:'סיכום מסירה',customer_request_received:'אישור קבלת בקשה',customer_payment_link:'קישור תשלום ללקוח'};
+const NTPL={ops_new_order:'הזמנה חדשה לעדן',ops_new_business_order:'הזמנה עסקית חדשה לעדן',customer_otp:'קוד אימות',customer_payment_confirmation:'אישור תשלום',customer_business_order_confirmation:'אישור הזמנה עסקית',ops_payment_received:'תשלום התקבל',customer_delivery_summary:'סיכום מסירה',customer_request_received:'אישור קבלת בקשה',customer_payment_link:'קישור תשלום ללקוח'};
 let orders=[], activeId=null, watchId=null, gpsOrderId=null, gpsState='idle', doneOpen=false, notifOrderId=null, notifs=[], driverInvitations=[];
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function maskRecip(s){if(!s)return '';s=String(s);var at=s.indexOf('@');return at<1?s:(s[0]+'•••@'+s.slice(at+1));}
