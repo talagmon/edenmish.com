@@ -171,7 +171,8 @@ export function businessAccountHtml(storefrontBase = 'https://edenmish.com') {
         </details>
         <div id="batch-message" class="message" aria-live="polite"></div>
         <div id="batch-results" class="hidden">
-          <div class="batch-summary"><div><b id="batch-count">0</b><span>שורות בקובץ</span></div><div><b id="batch-new">0</b><span>משלוחים חדשים</span></div><div><b id="batch-updates">0</b><span>עדכונים</span></div><div><b id="batch-unchanged">0</b><span>ללא שינוי</span></div><div><b id="batch-total">₪0</b><span>שינוי בקרדיט</span></div><div><b id="batch-balance-after">₪0</b><span>יתרה לאחר הייבוא</span></div></div>
+          <div class="batch-summary"><div><b id="batch-count">0</b><span>שורות בקובץ</span></div><div><b id="batch-new">0</b><span>משלוחים חדשים</span></div><div><b id="batch-updates">0</b><span>עדכונים</span></div><div><b id="batch-unchanged">0</b><span>ללא שינוי</span></div><div><b id="batch-total">₪0</b><span id="batch-total-label">שינוי מרבי בקרדיט</span></div><div><b id="batch-balance-after">₪0</b><span id="batch-balance-label">יתרה מינימלית לאחר הייבוא</span></div></div>
+          <p class="batch-privacy">המחיר שנבדק הוא תקרת החיוב המאושרת. מבצע אוטומטי עשוי להקטין את החיוב בפועל; הסכום הסופי והיתרה המעודכנת יוצגו לאחר הייבוא.</p>
           <div id="batch-corrections" class="batch-corrections hidden"><div><b>נמצאו פירושים ותיקונים לאישור</b><p>המערכת מציגה בדיוק כיצד הקובץ פוענח ואילו ערכים תוקנו. משלוחים לא ייווצרו עד שתבדקו ותאשרו.</p></div><button id="batch-approve-corrections" class="ghost" type="button">אישור הפירושים והתיקונים</button><ul id="batch-correction-list"></ul><span id="batch-google-attribution" class="gmp-attribution hidden" translate="no">Google Maps</span><span id="batch-ai-attribution" class="gmp-attribution hidden" translate="no">Cloudflare Workers AI</span></div>
           <div id="batch-credit-action" class="batch-credit-action hidden"><p id="batch-credit-copy"></p><button id="batch-buy-credit" class="ghost" type="button">רכישת קרדיט נוסף</button></div>
           <div id="batch-complete" class="batch-complete hidden" aria-live="polite"></div>
@@ -319,7 +320,9 @@ function renderBatch(){
   $('batch-updates').textContent=updateCount;
   $('batch-unchanged').textContent=unchangedCount;
   $('batch-total').textContent=(plannedImpact>0?'-':plannedImpact<0?'+':'')+'₪'+money(Math.abs(plannedImpact));
+  $('batch-total-label').textContent=batchState.completed?'שינוי בפועל בקרדיט':'שינוי מרבי בקרדיט';
   $('batch-balance-after').textContent='₪'+money(balance-pendingImpact);
+  $('batch-balance-label').textContent=batchState.completed?'יתרה נוכחית':'יתרה מינימלית לאחר הייבוא';
   $('batch-balance-after').classList.toggle('error',shortfall>0);
   $('batch-rows').innerHTML=accepted.length?accepted.map((row,index)=>{
     const originalIndex=rows.indexOf(row),impact=batchCreditImpact(row);
