@@ -235,6 +235,7 @@ const discountLineHtml = (o) => (o && o.discount_code && Number(o.discount_amoun
   : '';
 const otpEmailHtml = (otp, url) => `<div dir="rtl" style="font-family:sans-serif;font-size:16px;line-height:1.6;background:#ffffff;color:#1f2937;color-scheme:light;forced-color-adjust:none;padding:24px">הקוד שלך לאימות הכתובת ב-EdenMish:<div style="font-size:34px;font-weight:800;letter-spacing:6px;color:#5B2A86">${otp}</div>הקוד תקף 10 דקות.${url ? '<div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb"><a href="' + url + '" style="display:inline-block;background:#5B2A86;color:#ffffff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:700">מעקב המשלוח שלך ←</a></div>' : ''}</div>`;
 const paymentConfirmedHtml = (env, o, url, otp) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px;margin:0 auto;background:#ffffff;color:#1f2937;color-scheme:light;forced-color-adjust:none;padding:32px 24px;border:1px solid #e5e7eb;border-radius:16px"><h1 style="color:#5B2A86;font-size:26px;margin:0 0 8px">התשלום התקבל ✓</h1><p style="color:#4b5563;margin:0 0 20px;font-size:15px">תודה שבחרתם ב-EdenMish! ההזמנה מאושרת.</p><div style="background:#f7f3fa;border:1px solid #e3d7eb;border-radius:12px;padding:16px;margin-bottom:16px"><div style="margin-bottom:10px"><span style="color:#4b5563;font-size:12px">מס׳ הזמנה </span><b style="color:#1f2937">#${o.id || ''}</b></div><div><span style="color:#4b5563;font-size:12px">מחיר </span><b style="color:#246b62;font-size:20px">₪${o.price || ''}</b>${discountLineHtml(o)}</div></div><div style="margin:18px 0;padding:16px;background:#f7f3fa;border:1px solid #d6c4e3;border-radius:10px;text-align:center"><p style="margin:0 0 6px;font-size:14px;color:#4b5563">קוד האימות למעקב המשלוח:</p><div style="font-size:32px;font-weight:800;letter-spacing:6px;color:#5B2A86">${otp || '—'}</div></div><div style="text-align:center"><a href="${url}" style="display:inline-block;background:#5B2A86;color:#ffffff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px">מעקב המשלוח שלי ←</a></div>${transactionDisclosureHtml(env, o)}${SUPPORT_LINE}</div>`;
+const businessOrderConfirmedHtml = (env, o, url) => `<div dir="rtl" style="font-family:sans-serif;line-height:1.7;max-width:480px;margin:0 auto;background:#ffffff;color:#1f2937;color-scheme:light;forced-color-adjust:none;padding:32px 24px;border:1px solid #e5e7eb;border-radius:16px"><h1 style="color:#5B2A86;font-size:26px;margin:0 0 8px">המשלוח העסקי נוצר ✓</h1><p style="color:#4b5563;margin:0 0 20px;font-size:15px">ההזמנה אושרה והסכום נשמר מהיתרה העסקית.</p><div style="background:#f7f3fa;border:1px solid #e3d7eb;border-radius:12px;padding:16px;margin-bottom:16px"><div style="margin-bottom:10px"><span style="color:#4b5563;font-size:12px">מס׳ הזמנה </span><b style="color:#1f2937">#${o.id || ''}</b></div><div><span style="color:#4b5563;font-size:12px">יתרה שמורה </span><b style="color:#246b62;font-size:20px">₪${o.price || ''}</b>${discountLineHtml(o)}</div></div><div style="text-align:center"><a href="${escHtml(url)}" style="display:inline-block;background:#5B2A86;color:#ffffff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px">מעקב המשלוח ←</a></div>${transactionDisclosureHtml(env, o)}${SUPPORT_LINE}</div>`;
 const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const serviceHebrew = (service) => ({ eco: 'חסכוני', standard: 'רגיל', flash: 'מהיר' }[service] || service || '—');
 const transactionDisclosureHtml = (env, o) => {
@@ -1583,10 +1584,14 @@ export default {
         await setEmailAndOtp(env.DB, created.id, b.email, await hashOtp(env, otp), Date.now() + 2 * 60 * 60 * 1000);
       }
 
-      // Notify Eden (optional)
-      try {
-        await notifyEmail(env, env.DB, { orderId: created.id, template: 'ops_new_order', recipient: env.OPS_EMAIL, subject: `הזמנה חדשה #${created.id}${isReview ? ' — לבדיקה' : ' — ממתינה לתשלום'}`, html: `${escHtml(b.name)} · ${escHtml(b.pickup)} → ${escHtml(b.dropoff)} · ₪${escHtml(finalPrice)}${coupon ? ` (קופון ${escHtml(coupon.code)} — הנחה ₪${escHtml(coupon.discountAmount)})` : ''}${isReview ? '<br>חריג: ' + escHtml(pr.reasons.join(',')) : ''}<br><a href="${escHtml(finalUrl)}">${escHtml(finalUrl)}</a>` });
-      } catch {}
+      // Public orders still need Eden's payment/review notice. Wallet-backed
+      // business orders are already accepted and get their own operations notice
+      // below, so they must not be mislabeled as "awaiting payment".
+      if (!businessSession) {
+        try {
+          await notifyEmail(env, env.DB, { orderId: created.id, template: 'ops_new_order', recipient: env.OPS_EMAIL, subject: `הזמנה חדשה #${created.id}${isReview ? ' — לבדיקה' : ' — ממתינה לתשלום'}`, html: `${escHtml(b.name)} · ${escHtml(b.pickup)} → ${escHtml(b.dropoff)} · ₪${escHtml(finalPrice)}${coupon ? ` (קופון ${escHtml(coupon.code)} — הנחה ₪${escHtml(coupon.discountAmount)})` : ''}${isReview ? '<br>חריג: ' + escHtml(pr.reasons.join(',')) : ''}<br><a href="${escHtml(finalUrl)}">${escHtml(finalUrl)}</a>` });
+        } catch {}
+      }
 
       // Review orders: tell the customer what happens next (Eden confirms the price,
       // then a payment link arrives by email). Without this they heard nothing at all
@@ -1596,6 +1601,19 @@ export default {
       }
 
       if (businessSession) {
+        try {
+          await notifyEmail(env, env.DB, {
+            orderId: created.id,
+            template: 'customer_business_order_confirmation',
+            recipient: b.email,
+            subject: `המשלוח העסקי נוצר ✓ — מעקב משלוח #${created.id}`,
+            html: businessOrderConfirmedHtml(
+              env,
+              { ...created, ...b, price: finalPrice, ...discountFields },
+              finalUrl,
+            ),
+          });
+        } catch {}
         try {
           await notifyEmail(env, env.DB, { orderId: created.id, template: 'ops_new_business_order', recipient: env.OPS_EMAIL, subject: `הזמנה עסקית חדשה #${created.id} — יתרה שמורה ₪${finalPrice}`, html: `${escHtml(b.name)} · ${escHtml(b.pickup)} → ${escHtml(b.dropoff)} · מסלול ${escHtml(businessSession.plan_id)} · יתרה שמורה ₪${escHtml(finalPrice)}<br><a href="${escHtml(finalUrl)}">${escHtml(finalUrl)}</a>` });
         } catch {}
