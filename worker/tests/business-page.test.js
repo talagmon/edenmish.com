@@ -257,7 +257,12 @@ describe('business account dashboard', () => {
     assert.match(html, /data-batch-remove/);
     assert.match(html, /result\.updated\?'updated'/);
     assert.match(html, /data-cancel-business-order/);
-    assert.match(html, /api\('\/api\/business\/orders\/'\+orderId,\{method:'DELETE'\}\)/);
+    assert.match(html, /id="cancel-order-dialog"[^>]*aria-labelledby="cancel-order-title"/);
+    assert.match(html, /id="cancel-order-confirm"[^>]*>ביטול ושחרור קרדיט/);
+    assert.match(html, /showModal\(\)/);
+    assert.match(html, /openCancelBusinessOrder\(Number\(button\.dataset\.cancelBusinessOrder\),button\)/);
+    assert.match(html, /api\('\/api\/business\/orders\/'\+pending\.orderId,\{method:'DELETE'\}\)/);
+    assert.doesNotMatch(html, /confirm\('לבטל את המשלוח/);
     assert.match(html, /לא ייווצרו כפילויות/);
   });
 
