@@ -16,13 +16,22 @@ BOOKING_URL = "https://staging.edenmish.com"
 STOREFRONT_BASE = "https://staging.edenmish.com"
 WHATSAPP_NUMBER = "972534058498"
 OPS_EMAIL = "eden@edenmish.com"
+EMAIL_FROM_ADDRESS = "no-reply-staging@edenmish.com"
+EMAIL_FROM_NAME = "EdenMish Staging"
+EMAIL_SUBJECT_PREFIX = "[STAGING]"
+EMAIL_RECIPIENT_POLICY = "allowlist"
+EMAIL_RECIPIENT_ALLOWLIST = "qa-staging@edenmish.com"
 AUTO_DRIVER_DISPATCH = "on"
 ROUTE_OPTIMIZATION_PROVIDER = "google"
 GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID = "gen-lang-client-0008834106"
+BUSINESS_BATCH_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast"
 ALLOWED_ORIGINS = "https://staging.edenmish.com,https://edenmish-staging.pages.dev,https://*.edenmish-staging.pages.dev,https://edenmish-v2.pages.dev,https://*.edenmish-v2.pages.dev"
 
+[ai]
+binding = "AI"
+
 [secrets]
-required = ["OPS_PIN", "SESSION_SECRET", "DRIVER_ONE_TIME_CODE", "GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON"]
+required = ["OPS_PIN", "SESSION_SECRET", "DRIVER_ONE_TIME_CODE", "GOOGLE_PLACES_SERVER_KEY", "GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON", "SENDGRID_API_KEY"]
 
 [[d1_databases]]
 binding = "DB"

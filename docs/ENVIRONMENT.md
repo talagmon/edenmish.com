@@ -31,6 +31,7 @@ authentication and OTP flows fail closed when `SESSION_SECRET` is missing.
 | `SESSION_SECRET` | Signs/hashes ops, driver and business sessions, magic links, OTPs, and rate-limit identifiers | `replace-me-long-random-string` |
 | `DRIVER_ONE_TIME_CODE` | Single-use bootstrap code exchanged by the driver app; rotate after each successful exchange | `replace-with-6-to-12-digits` |
 | `MAPS_KEY` | Google Maps JS key, injected into the tracking page HTML | `AIza…` (set as a secret; do **not** put in `wrangler.toml`) |
+| `GOOGLE_PLACES_SERVER_KEY` | Server-only Places API (New) key for authenticated business batch address validation | `AIza…` (restrict to Places API (New); never expose to browsers) |
 | `SHOPIFY_ADMIN_TOKEN` | Creates Shopify Draft Orders (custom app token) | `shpat_replaceme` |
 | `SHOPIFY_WEBHOOK_SECRET` | Verifies `orders/paid`, `orders/updated`, and `refunds/create` webhook HMACs | `replace-me-from-shopify-webhook-page` |
 | `SENDGRID_API_KEY` | All outbound email (customer OTP/confirmation + Eden alerts) | `SG.replaceme` |
@@ -72,8 +73,27 @@ These are safe to keep in the repo (non-secret configuration):
 | `AUTO_DRIVER_DISPATCH` | Set to `on` to reconcile the active driver's immutable route revisions from the canonical paid/in-progress order queue on each route poll |
 | `ROUTE_OPTIMIZATION_PROVIDER` | Optional explicit switch; set to `google` only after billing, quota, and credentials are approved |
 | `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID` | Google Cloud project ID/number with Route Optimization enabled; required only when the provider is `google` |
+| `BUSINESS_BATCH_AI_MODEL` | Workers AI model used only when the deterministic business-batch template parser cannot recognize a file; the configured model must support JSON-schema output |
+| `EMAIL_FROM_ADDRESS` | Verified SendGrid sender address. Production uses `no-reply@edenmish.com`; staging uses `no-reply-staging@edenmish.com` |
+| `EMAIL_FROM_NAME` | Human-readable sender name shown by email clients |
+| `EMAIL_SUBJECT_PREFIX` | Optional prefix added once to every outbound subject; staging uses `[STAGING]` |
+| `EMAIL_RECIPIENT_POLICY` | `open` for production or `allowlist` for isolated environments. Unknown values fail closed |
+| `EMAIL_RECIPIENT_ALLOWLIST` | Comma-separated exact recipient addresses allowed when the policy is `allowlist`; staging contains only its QA mailbox |
 
 > Optional future var: `PAYMENT_MODE` (`immediate` today, `preauth` for Mesh later).
+
+## Workers AI binding
+
+`worker/wrangler.toml` and `worker/wrangler.staging.toml` bind Workers AI as
+`env.AI`. This is Cloudflare account configuration, not a secret, and requires
+Workers AI to be available for the deployed account. The default
+`BUSINESS_BATCH_AI_MODEL` is `@cf/meta/llama-3.1-8b-instruct-fast`.
+
+The binding is invoked only as a fallback for an unfamiliar XLSX/CSV layout.
+Recognized official templates bypass it. The Worker sends bounded cell content
+for header mapping and row normalization, does not log or persist the uploaded
+file, rejects malformed or low-confidence output, and requires customer approval
+of AI-assisted interpretations before any orders can be created.
 
 ## Staging Worker isolation
 
@@ -89,10 +109,15 @@ The GitHub `staging` environment contains only:
 | `STAGING_OPS_PIN` | environment secret | Staging-only dashboard PIN |
 | `STAGING_SESSION_SECRET` | environment secret | Staging-only cookie/OTP signing key |
 | `STAGING_DRIVER_ONE_TIME_CODE` | environment secret | Staging-only single-use driver bootstrap code |
+| `STAGING_GOOGLE_PLACES_SERVER_KEY` | environment secret | Dedicated staging Places API (New) server key; never reuse production credentials |
 | `STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON` | environment secret | Staging-only Google service-account JSON; never reuse production credentials |
+| `STAGING_SENDGRID_API_KEY` | environment secret | Dedicated custom-access SendGrid key with only Mail Send permission |
 
-Never copy production Shopify, payment, webhook, email, or customer-data
-credentials into the staging Worker. See `CI_CD.md` for one-time setup.
+Staging email is intentionally limited to `qa-staging@edenmish.com`, uses the
+`no-reply-staging@edenmish.com` sender and prefixes subjects with `[STAGING]`.
+The Worker rejects every other staging recipient before calling SendGrid. Never
+copy production Shopify, payment, webhook, email, or customer-data credentials
+into the staging Worker. See `CI_CD.md` for one-time setup.
 
 ---
 

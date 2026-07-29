@@ -9,6 +9,7 @@ import {
   businessSessionCookie,
   BUSINESS_SESSION_TTL_MS,
   BUSINESS_PLANS,
+  cancelReservedBusinessOrder,
   cancelWalletTopup,
   createWalletTopup,
   creditWalletTopup,
@@ -20,6 +21,7 @@ import {
   publicBusinessPlans,
   reserveWalletCredit,
   shouldHydrateBusinessProfile,
+  updateReservedBusinessOrder,
   updateBusinessProfile,
 } from '../src/business.js';
 import { createWalletDraftOrder, parseShopifyOrderWebhook } from '../src/integrations.js';
@@ -85,6 +87,35 @@ function walletTestDB() {
       captured_at INTEGER,
       released_at INTEGER,
       UNIQUE(account_id, idempotency_key)
+    );
+    CREATE TABLE orders (
+      id INTEGER PRIMARY KEY,
+      status TEXT NOT NULL,
+      payment_status TEXT NOT NULL,
+      business_account_id INTEGER,
+      business_external_id TEXT,
+      wallet_reservation_id TEXT,
+      name TEXT,
+      phone TEXT,
+      pickup TEXT,
+      pickup_city TEXT,
+      dropoff TEXT,
+      dropoff_city TEXT,
+      when_text TEXT,
+      when_date TEXT,
+      when_hour INTEGER,
+      service TEXT,
+      size TEXT,
+      package TEXT,
+      notes TEXT,
+      price INTEGER
+    );
+    CREATE TABLE status_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      at INTEGER NOT NULL,
+      note TEXT
     );
   `);
   const wrap = (statement) => {
@@ -436,6 +467,193 @@ describe('business wallet credit expiry', () => {
     assert.equal(DB.sqlite.prepare('SELECT available_agorot FROM business_wallets WHERE account_id = 10').get().available_agorot, 4_000);
     assert.equal(DB.sqlite.prepare('SELECT remaining_agorot FROM wallet_credit_lots WHERE account_id = 10').get().remaining_agorot, 10_000);
     assert.equal(DB.sqlite.prepare('SELECT COUNT(*) AS count FROM wallet_entries').get().count, 0);
+  });
+});
+
+describe('business batch order credit adjustments', () => {
+  function reservedOrderDB() {
+    const DB = walletTestDB();
+    DB.sqlite.prepare('INSERT INTO business_wallets VALUES (?, ?, ?, ?, ?)').run(
+      12,
+      10_000,
+      5_000,
+      0,
+      1,
+    );
+    DB.sqlite.prepare(`INSERT INTO wallet_reservations
+      (id, account_id, order_id, idempotency_key, amount_agorot, status, created_at)
+      VALUES (?, ?, ?, ?, ?, 'reserved', ?)`)
+      .run('reservation-12', 12, 90, 'batch-external:key', 5_000, 1);
+    DB.sqlite.prepare(`INSERT INTO orders
+      (id, status, payment_status, business_account_id, business_external_id,
+       wallet_reservation_id, name, phone, pickup, pickup_city, dropoff,
+       dropoff_city, when_text, when_date, when_hour, service, size, package,
+       notes, price)
+      VALUES (?, 'paid', 'wallet_reserved', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+              ?, ?, ?, ?, ?)`)
+      .run(
+        90,
+        12,
+        'ORD-90',
+        'reservation-12',
+        'Old name',
+        '+972501111111',
+        'Pickup 1',
+        'תל אביב',
+        'Dropoff 1',
+        'רמת גן',
+        '2026-08-02 · 10:00',
+        '2026-08-02',
+        10,
+        'standard',
+        'small',
+        'Documents',
+        '',
+        50,
+      );
+    return DB;
+  }
+
+  const changedOrder = {
+    name: 'New name',
+    phone: '+972502222222',
+    pickup: 'Pickup 1',
+    pickup_city: 'תל אביב',
+    dropoff: 'Dropoff 2',
+    dropoff_city: 'גבעתיים',
+    when_text: '2026-08-03 · 11:00',
+    when_date: '2026-08-03',
+    when_hour: 11,
+    service: 'standard',
+    size: 'medium',
+    package: 'Documents',
+    notes: 'Call',
+    price: 65,
+    business_external_id: 'ORD-90',
+  };
+
+  test('updates one reserved order and adjusts only the credit difference', async () => {
+    const DB = reservedOrderDB();
+    const result = await updateReservedBusinessOrder(DB, {
+      accountId: 12,
+      orderId: 90,
+      reservationId: 'reservation-12',
+      amountAgorot: 6_500,
+      adjustmentKey: 'batch-adjust-90-1',
+      order: changedOrder,
+    });
+
+    assert.equal(result.updated, true);
+    assert.deepEqual(
+      { ...DB.sqlite.prepare(
+        'SELECT available_agorot, reserved_agorot FROM business_wallets WHERE account_id = 12'
+      ).get() },
+      { available_agorot: 8_500, reserved_agorot: 6_500 },
+    );
+    assert.deepEqual(
+      { ...DB.sqlite.prepare(
+        'SELECT amount_agorot, status FROM wallet_reservations WHERE id = ?'
+      ).get('reservation-12') },
+      { amount_agorot: 6_500, status: 'reserved' },
+    );
+    assert.deepEqual(
+      { ...DB.sqlite.prepare(
+        'SELECT name, dropoff, price, business_external_id FROM orders WHERE id = 90'
+      ).get() },
+      {
+        name: 'New name',
+        dropoff: 'Dropoff 2',
+        price: 65,
+        business_external_id: 'ORD-90',
+      },
+    );
+    assert.deepEqual(
+      { ...DB.sqlite.prepare(
+        'SELECT available_delta_agorot, reserved_delta_agorot FROM wallet_entries'
+      ).get() },
+      { available_delta_agorot: -1_500, reserved_delta_agorot: 1_500 },
+    );
+  });
+
+  test('does not change the order when an update needs more credit than is available', async () => {
+    const DB = reservedOrderDB();
+    const result = await updateReservedBusinessOrder(DB, {
+      accountId: 12,
+      orderId: 90,
+      reservationId: 'reservation-12',
+      amountAgorot: 20_000,
+      adjustmentKey: 'batch-adjust-90-insufficient',
+      order: { ...changedOrder, price: 200 },
+    });
+
+    assert.equal(result.updated, false);
+    assert.equal(result.error, 'insufficient_credit');
+    assert.equal(DB.sqlite.prepare('SELECT price FROM orders WHERE id = 90').get().price, 50);
+    assert.equal(
+      DB.sqlite.prepare(
+        'SELECT amount_agorot FROM wallet_reservations WHERE id = ?'
+      ).get('reservation-12').amount_agorot,
+      5_000,
+    );
+    assert.equal(DB.sqlite.prepare('SELECT COUNT(*) AS count FROM wallet_entries').get().count, 0);
+  });
+
+  test('records a new ledger transition when an older signed update is reused after another edit', async () => {
+    const DB = reservedOrderDB();
+    const adjustmentKey = 'same-signed-batch-token';
+    const first = await updateReservedBusinessOrder(DB, {
+      accountId: 12,
+      orderId: 90,
+      reservationId: 'reservation-12',
+      amountAgorot: 6_000,
+      adjustmentKey,
+      order: { ...changedOrder, price: 60 },
+    });
+    const second = await updateReservedBusinessOrder(DB, {
+      accountId: 12,
+      orderId: 90,
+      reservationId: 'reservation-12',
+      amountAgorot: 7_000,
+      adjustmentKey,
+      order: { ...changedOrder, name: 'Newest name', price: 70 },
+    });
+
+    assert.equal(first.updated, true);
+    assert.equal(second.updated, true);
+    assert.deepEqual(
+      { ...DB.sqlite.prepare(
+        'SELECT available_agorot, reserved_agorot FROM business_wallets WHERE account_id = 12'
+      ).get() },
+      { available_agorot: 8_000, reserved_agorot: 7_000 },
+    );
+    assert.equal(
+      DB.sqlite.prepare(
+        "SELECT COUNT(*) AS count FROM wallet_entries WHERE entry_type = 'adjustment'"
+      ).get().count,
+      2,
+    );
+    assert.equal(DB.sqlite.prepare('SELECT name FROM orders WHERE id = 90').get().name, 'Newest name');
+  });
+
+  test('cancels before dispatch and releases the held credit exactly once', async () => {
+    const DB = reservedOrderDB();
+    const first = await cancelReservedBusinessOrder(DB, 12, 90);
+    const second = await cancelReservedBusinessOrder(DB, 12, 90);
+
+    assert.deepEqual(first, { cancelled: true, released_agorot: 5_000 });
+    assert.deepEqual(second, { cancelled: false, error: 'existing_order_locked' });
+    assert.deepEqual(
+      { ...DB.sqlite.prepare(
+        'SELECT available_agorot, reserved_agorot FROM business_wallets WHERE account_id = 12'
+      ).get() },
+      { available_agorot: 15_000, reserved_agorot: 0 },
+    );
+    assert.deepEqual(
+      { ...DB.sqlite.prepare('SELECT status, payment_status FROM orders WHERE id = 90').get() },
+      { status: 'cancelled', payment_status: 'wallet_released' },
+    );
+    assert.equal(DB.sqlite.prepare('SELECT COUNT(*) AS count FROM wallet_entries').get().count, 1);
+    assert.equal(DB.sqlite.prepare('SELECT COUNT(*) AS count FROM status_history').get().count, 1);
   });
 });
 

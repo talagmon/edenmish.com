@@ -342,15 +342,46 @@ export function parseShopifyRefundWebhook(body) {
 }
 
 // ---- Email via SendGrid ----
+const DEFAULT_EMAIL_FROM_ADDRESS = 'no-reply@edenmish.com';
+const DEFAULT_EMAIL_FROM_NAME = 'EdenMish';
+
+const normalizeEmailAddress = (value) => String(value || '').trim().toLowerCase();
+
+export function emailRecipientAllowed(env, recipient) {
+  const policy = String(env && env.EMAIL_RECIPIENT_POLICY || 'open').trim().toLowerCase();
+  if (policy === 'open') return true;
+  if (policy !== 'allowlist') return false;
+
+  const recipientKey = normalizeEmailAddress(recipient);
+  const allowlist = String(env && env.EMAIL_RECIPIENT_ALLOWLIST || '')
+    .split(',')
+    .map(normalizeEmailAddress)
+    .filter(Boolean);
+  return Boolean(recipientKey && allowlist.includes(recipientKey));
+}
+
+export function emailSubjectForEnv(env, subject) {
+  const value = String(subject || '');
+  const prefix = String(env && env.EMAIL_SUBJECT_PREFIX || '').trim();
+  return prefix && !value.startsWith(prefix) ? `${prefix} ${value}` : value;
+}
+
 export async function sendEmail(env, { to, subject, html }) {
-  if (!env.SENDGRID_API_KEY || !to) return null;
+  if (!env || !env.SENDGRID_API_KEY || !to) return null;
+  if (!emailRecipientAllowed(env, to)) return false;
+
+  const fromEmail = String(env.EMAIL_FROM_ADDRESS || DEFAULT_EMAIL_FROM_ADDRESS).trim();
+  const fromName = String(env.EMAIL_FROM_NAME || DEFAULT_EMAIL_FROM_NAME).trim();
   const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.SENDGRID_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      personalizations: [{ to: [{ email: to }] }],
-      from: { email: 'no-reply@edenmish.com', name: 'EdenMish' },
-      subject,
+      personalizations: [{ to: [{ email: String(to).trim() }] }],
+      from: {
+        email: fromEmail || DEFAULT_EMAIL_FROM_ADDRESS,
+        name: fromName || DEFAULT_EMAIL_FROM_NAME,
+      },
+      subject: emailSubjectForEnv(env, subject),
       content: [{ type: 'text/html', value: html }]
     })
   }).catch(() => null);
