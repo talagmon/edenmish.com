@@ -2,7 +2,7 @@
 //   POST /api/coupons/validate  — happy path, invalid reasons, per-IP rate limit
 //   POST /api/orders            — coupon snapshot + redemption / 400 on invalid / unchanged without coupon
 //   GET/POST/PUT/DELETE /api/ops/coupons — ops CRUD (D1-only coupon management)
-//   createDraftOrder            — coupon orders use final price; no applied_discount
+//   createDraftOrder            — coupon orders use subtotal + appliedDiscount
 // Run with: npm test (node --test). No real D1/Shopify — both are mocked.
 
 import { test, describe, afterEach } from 'node:test';
@@ -209,7 +209,11 @@ async function shopifyWebhook(body, secret = 'webhook-secret', topic = 'orders/p
 const envFor = (db) => ({ DB: db, SESSION_SECRET: 'test-secret' });
 
 const realFetch = globalThis.fetch;
-afterEach(() => { globalThis.fetch = realFetch; });
+const realConsoleError = console.error;
+afterEach(() => {
+  globalThis.fetch = realFetch;
+  console.error = realConsoleError;
+});
 
 // createOrder bind positions (see db.js), including persisted schedule/service fields.
 const IDX = { price: 24, subtotal_price: 31, discount_code: 32, discount_amount: 33, discount_title: 34 };
@@ -618,6 +622,45 @@ describe('createDraftOrder Shopify payload', () => {
     const d = captured.body.variables.input;
     assert.equal(d.email, 'booking@example.com');
     assert.equal(d.phone, '+972541234567');
+  });
+
+  test('throws a sanitized Shopify failure without logging contact details', async () => {
+    const logged = [];
+    console.error = (...args) => logged.push(args);
+    globalThis.fetch = async () => ({
+      ok: true,
+      async json() {
+        return {
+          data: {
+            draftOrderCreate: {
+              draftOrder: null,
+              userErrors: [{
+                field: ['input', 'email'],
+                message: 'Customer customer@example.com and +972541234567 are invalid',
+              }],
+            },
+          },
+        };
+      },
+    });
+
+    await assert.rejects(
+      createDraftOrder(SHOPIFY_ENV, baseOrder, 50),
+      (error) => {
+        assert.equal(error.code, 'shopify_draft_order_failed');
+        assert.equal(error.details.kind, 'user_error');
+        assert.deepEqual(error.details.errors, [{
+          field: 'input.email',
+          message: 'Customer [email] and [number] are invalid',
+        }]);
+        return true;
+      },
+    );
+    const serialized = JSON.stringify(logged);
+    assert.ok(serialized.includes('[email]'));
+    assert.ok(serialized.includes('[number]'));
+    assert.ok(!serialized.includes('customer@example.com'));
+    assert.ok(!serialized.includes('+972541234567'));
   });
 
   test('coupon order: line item at subtotal, applied_discount for the difference', async () => {

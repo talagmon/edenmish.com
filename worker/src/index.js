@@ -81,6 +81,7 @@ import {
   reserveFirstDeliveryClaim,
   attachFirstDeliveryClaim,
   releaseFirstDeliveryClaim,
+  rollbackCouponedCheckoutFailure,
   recordRedemption,
   recordBusinessRedemption,
   releaseBusinessRedemption,
@@ -1564,18 +1565,6 @@ export default {
       const testMode = (env.TEST_MODE === '1' || env.TEST_MODE === 'true')
         && url.searchParams.get('test') === '1';
       let analyticsClaimRegistered = false;
-      if (!businessSession && !isReview && !testMode && b.analytics_context) {
-        try {
-          analyticsClaimRegistered = await registerAnalyticsClaim(
-            env.DB,
-            created.id,
-            b.analytics_context,
-          );
-        } catch {
-          // Analytics is optional and must never block an accepted delivery order.
-          console.error('analytics_claim_registration_failed');
-        }
-      }
 
       // Set OTP hash to gate the tracking page, but DON'T email the code yet.
       // The code is regenerated and emailed AFTER payment is confirmed (webhook handler).
@@ -1584,14 +1573,17 @@ export default {
         await setEmailAndOtp(env.DB, created.id, b.email, await hashOtp(env, otp), Date.now() + 2 * 60 * 60 * 1000);
       }
 
-      // Public orders still need Eden's payment/review notice. Wallet-backed
-      // business orders are already accepted and get their own operations notice
-      // below, so they must not be mislabeled as "awaiting payment".
-      if (!businessSession) {
+      // Exact-price orders notify Ops only after checkout creation succeeds. This
+      // prevents a failed discounted checkout from looking like a live payable
+      // order. Review orders still notify immediately because manual pricing is
+      // their intended next step.
+      const notifyOpsOfPublicOrder = async () => {
+        if (businessSession) return;
         try {
           await notifyEmail(env, env.DB, { orderId: created.id, template: 'ops_new_order', recipient: env.OPS_EMAIL, subject: `הזמנה חדשה #${created.id}${isReview ? ' — לבדיקה' : ' — ממתינה לתשלום'}`, html: `${escHtml(b.name)} · ${escHtml(b.pickup)} → ${escHtml(b.dropoff)} · ₪${escHtml(finalPrice)}${coupon ? ` (קופון ${escHtml(coupon.code)} — הנחה ₪${escHtml(coupon.discountAmount)})` : ''}${isReview ? '<br>חריג: ' + escHtml(pr.reasons.join(',')) : ''}<br><a href="${escHtml(finalUrl)}">${escHtml(finalUrl)}</a>` });
         } catch {}
-      }
+      };
+      if (isReview) await notifyOpsOfPublicOrder();
 
       // Review orders: tell the customer what happens next (Eden confirms the price,
       // then a payment link arrives by email). Without this they heard nothing at all
@@ -1637,8 +1629,10 @@ export default {
       //    Shopify orders/paid webhook reconciles it back to this order. Review/manual-quote
       //    orders skip this (Eden approves the price in ops first). If Shopify isn't
       //    configured (createCharge returns null) or it throws, paymentUrl stays null and
-      //    the customer sees a request-received page for manual coordination. Tracking is
-      //    never exposed until payment has been confirmed.
+      //    a full-price order falls back to manual coordination. A configured couponed
+      //    checkout fails closed: the unpaid order is cancelled, its usage/claim is
+      //    released, and the browser gets a retryable error. Tracking is never exposed
+      //    until payment has been confirmed.
       // TEST MODE (no charge): skip Shopify/PayPlus and auto-mark the order paid so
       // the full tracking + ops flow can be exercised end-to-end. Double-gated — needs
       // env.TEST_MODE=1 (set ONLY in local worker/.dev.vars, gitignored) AND ?test=1 on
@@ -1656,6 +1650,7 @@ export default {
             await notifyEmail(env, env.DB, { orderId: created.id, template: 'customer_payment_confirmation', recipient: b.email, subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב (בדיקה)', html: paymentConfirmedHtml(env, { ...created, ...b, email: b.email, price: finalPrice, ...discountFields }, finalUrl, otp) });
           } catch (e) {}
         }
+        await notifyOpsOfPublicOrder();
         return json({ token, tracking_url: finalUrl, payment_url: null, status: 'priced', price: finalPrice, review: false, reasons: [], test: true }, 200, cors);
       }
       let paymentUrl = null;
@@ -1674,8 +1669,51 @@ export default {
               payment_mode: charge.mode
             });
           }
-        } catch {}
+        } catch (error) {
+          const checkoutFailureKind = error && error.details && error.details.kind
+            ? String(error.details.kind)
+            : String(error && error.code || 'unexpected');
+          console.error('order_checkout_creation_failed', {
+            order: created.id,
+            discounted: !!coupon,
+            kind: checkoutFailureKind,
+          });
+        }
       }
+
+      const checkoutConfigured = !!(env.SHOPIFY_SHOP && env.SHOPIFY_ADMIN_TOKEN);
+      if (!isReview && !paymentUrl && coupon && checkoutConfigured) {
+        try {
+          const rollback = await rollbackCouponedCheckoutFailure(env.DB, {
+            orderId: created.id,
+            promotionClaimId: promotionClaim && promotionClaim.id,
+          });
+          if (!rollback.rolledBack) {
+            console.error('coupon_checkout_rollback_skipped', { order: created.id });
+          }
+        } catch {
+          console.error('coupon_checkout_rollback_failed', { order: created.id });
+        }
+        return json({
+          error: 'payment_checkout_unavailable',
+          retryable: true,
+          order_id: created.id,
+        }, 503, cors);
+      }
+
+      if (!isReview && b.analytics_context) {
+        try {
+          analyticsClaimRegistered = await registerAnalyticsClaim(
+            env.DB,
+            created.id,
+            b.analytics_context,
+          );
+        } catch {
+          // Analytics is optional and must never block an accepted delivery order.
+          console.error('analytics_claim_registration_failed');
+        }
+      }
+      if (!isReview) await notifyOpsOfPublicOrder();
 
       return json({
         order_id: created.id,
