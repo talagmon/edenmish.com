@@ -144,11 +144,14 @@ function routePayload({ shiftId, routeRevision, hasNewDelivery }) {
   return {
     aps: {
       alert: {
-        title: hasNewDelivery ? 'משלוח חדש נוסף למסלול' : 'המסלול עודכן',
-        body: 'פתחו את Eden Driver כדי לראות את המסלול המעודכן.',
+        title: hasNewDelivery ? 'משלוח חדש הוקצה לך' : 'המסלול עודכן',
+        body: hasNewDelivery
+          ? 'הפרטים מחכים באפליקציה'
+          : 'מומלץ לבדוק את סדר העצירות החדש',
       },
       sound: 'default',
       'thread-id': 'driver-route',
+      'interruption-level': 'active',
       'content-available': 1,
     },
     type,

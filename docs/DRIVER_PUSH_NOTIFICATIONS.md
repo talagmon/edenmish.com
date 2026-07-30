@@ -26,6 +26,10 @@ Notifications contain only `type`, `shift_id`, `route_revision`, and generic
 Hebrew alert text. They never contain customer names, phone numbers, addresses,
 notes, payment data, proof media, session tokens, or device tokens.
 
+The approved Hebrew copy and the channel decision for the broader proposed
+notification library live in [`DRIVER_NOTIFICATION_CATALOG.md`](DRIVER_NOTIFICATION_CATALOG.md).
+Only the two implemented route events are enabled as remote pushes.
+
 ## Driver API
 
 Both operations require the same bearer authorization, `X-Driver-Installation-Id`,

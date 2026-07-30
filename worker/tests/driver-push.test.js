@@ -173,8 +173,24 @@ describe('driver APNs notifications', () => {
     assert.equal(payload.type, 'driver_new_delivery');
     assert.equal(payload.shift_id, 'sh_123');
     assert.equal(payload.route_revision, 7);
+    assert.equal(payload.aps.alert.title, 'משלוח חדש הוקצה לך');
+    assert.equal(payload.aps.alert.body, 'הפרטים מחכים באפליקציה');
+    assert.equal(payload.aps['interruption-level'], 'active');
     assert.equal(payload.aps['content-available'], 1);
     assert.doesNotMatch(requests[0].init.body, /address|phone|customer|name/i);
+  });
+
+  test('uses the approved operational copy for a route-only update', () => {
+    const payload = driverPushTest.routePayload({
+      shiftId: 'sh_123',
+      routeRevision: 8,
+      hasNewDelivery: false,
+    });
+
+    assert.equal(payload.type, 'driver_route_updated');
+    assert.equal(payload.aps.alert.title, 'המסלול עודכן');
+    assert.equal(payload.aps.alert.body, 'מומלץ לבדוק את סדר העצירות החדש');
+    assert.equal(payload.aps['interruption-level'], 'active');
   });
 
   test('disables an APNs token after a permanent provider rejection', async () => {

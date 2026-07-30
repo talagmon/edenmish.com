@@ -59,6 +59,9 @@ Staging uses separate hosts and a separate D1 database:
 | `business-batch-ai.js` | Bounded Workers AI fallback that maps unfamiliar spreadsheet layouts into canonical fields; output remains subject to deterministic validation and customer approval. |
 | `business-batch-mappings.js` | Stores, lists and deletes account-scoped, explicitly approved header hashes and canonical column indexes; management responses expose metadata only, never recipient rows, raw headers or mapping JSON. |
 
+Driver notification copy, privacy rules, urgency, and remote-vs-in-app channel
+decisions are defined in `../docs/DRIVER_NOTIFICATION_CATALOG.md`.
+
 ## Local dev
 
 From `package.json`:
