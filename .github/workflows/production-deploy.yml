@@ -67,6 +67,7 @@ jobs:
             echo "  wrangler d1 execute edenmish --remote --file=./migrations/032_analytics_conversion_claims.sql"
             echo "  wrangler d1 execute edenmish --remote --file=./migrations/033_business_batch_external_id.sql"
             echo "  wrangler d1 execute edenmish --remote --file=./migrations/034_business_batch_mappings.sql"
+            echo "  wrangler d1 execute edenmish --remote --file=./migrations/037_driver_push_devices.sql"
             echo ""
             echo "See worker/MIGRATIONS.md for verification queries."
             exit 1
@@ -131,6 +132,12 @@ jobs:
             echo "::error::Production Worker secret GOOGLE_PLACES_SERVER_KEY is missing. Configure it before enabling business batch address validation."
             exit 1
           fi
+          for secret_name in APNS_TEAM_ID APNS_KEY_ID APNS_PRIVATE_KEY_P8; do
+            if ! grep -q "\"name\": \"$secret_name\"" <<< "$SECRET_LIST"; then
+              echo "::error::Production Worker secret $secret_name is missing. Configure APNs before deploying driver push notifications."
+              exit 1
+            fi
+          done
           npx wrangler deploy
           echo "✅ Worker deployed to find.edenmish.com + ops.edenmish.com"
 

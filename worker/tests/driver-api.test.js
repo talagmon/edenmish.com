@@ -244,6 +244,45 @@ describe('driver API v1', () => {
     });
   });
 
+  test('registers an APNs token for the authenticated installation', async () => {
+    const db = fakeDb({ first: authenticatedFirst });
+    const token = 'ab'.repeat(32);
+    const res = await handleDriverApi(request('/api/driver/v1/push-devices', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({
+        device_token: token,
+        environment: 'development',
+        app_bundle_id: 'com.edenmish.edendriver.nativebeta',
+      }),
+    }), { DB: db });
+
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { registered: true });
+    const insert = db.calls.find((call) => (
+      call.sql.startsWith('INSERT INTO driver_push_devices')
+    ));
+    assert.ok(insert);
+    assert.equal(insert.args[0], installationId);
+    assert.equal(insert.args[1], 'drv_eden');
+    assert.equal(insert.args[2], token);
+  });
+
+  test('removes the authenticated installation APNs registration on logout', async () => {
+    const db = fakeDb({ first: authenticatedFirst });
+    const res = await handleDriverApi(request('/api/driver/v1/push-devices', {
+      method: 'DELETE',
+      headers: { authorization: 'Bearer valid-token' },
+    }), { DB: db });
+
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { removed: true });
+    const removal = db.calls.find((call) => (
+      call.sql.startsWith('DELETE FROM driver_push_devices WHERE installation_id')
+    ));
+    assert.deepEqual(removal.args, [installationId, 'drv_eden']);
+  });
+
   test('returns a revisioned mixed pickup/drop-off task route', async () => {
     const db = fakeDb({
       first: (call) => {

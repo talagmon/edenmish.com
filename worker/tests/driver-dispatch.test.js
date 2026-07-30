@@ -5,6 +5,7 @@ import {
   buildDispatchTasks,
   orderTasksByDistance,
   syncDriverRoute,
+  syncDriverRouteAndNotify,
 } from '../src/driver-dispatch.js';
 
 function order(id, status, pickupLng, dropoffLng, extra = {}) {
@@ -269,6 +270,33 @@ describe('driver dispatch planning', () => {
     assert.equal(changed.route.revision, 2);
     assert.equal(db.routes.length, 2);
     assert.deepEqual(db.assignments.filter((row) => row.active).map((row) => row.order_id), [1, 2]);
+  });
+
+  test('attempts a best-effort push only when route reconciliation creates a revision', async () => {
+    const db = new DispatchDb([order(1, 'paid', 34.77, 34.78)]);
+    const env = { DB: db };
+
+    const first = await syncDriverRouteAndNotify(env, {
+      driverId: 'drv_eden',
+      shiftId: 'sh_1',
+      now: Date.parse('2026-07-19T17:00:00Z'),
+    });
+    const replay = await syncDriverRouteAndNotify(env, {
+      driverId: 'drv_eden',
+      shiftId: 'sh_1',
+      now: Date.parse('2026-07-19T17:01:00Z'),
+    });
+
+    assert.equal(first.changed, true);
+    assert.deepEqual(first.addedStopIds, ['stop_p1', 'stop_d1']);
+    assert.deepEqual(first.notification, {
+      configured: false,
+      attempted: 0,
+      sent: 0,
+      failed: 0,
+    });
+    assert.equal(replay.changed, false);
+    assert.equal('notification' in replay, false);
   });
 
   test('creates a new revision when routing inputs change', async () => {

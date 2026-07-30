@@ -6,7 +6,12 @@ import {
   setOrderStatus,
   upsertDeliveryProof,
 } from './db.js';
-import { syncDriverRoute } from './driver-dispatch.js';
+import { syncDriverRouteAndNotify } from './driver-dispatch.js';
+import {
+  registerDriverPushDevice,
+  unregisterDriverPushDevice,
+  validateDriverPushRegistration,
+} from './driver-push.js';
 import { runDeliveryCompletionSideEffects } from './delivery-completion.js';
 import {
   deliveryCompletionTransitionStatement,
@@ -249,6 +254,42 @@ async function currentShift(env, auth, meta) {
   return response({ shift_id: shift.id, state: shift.state, started_at: new Date(shift.started_at).toISOString(), ended_at: shift.ended_at ? new Date(shift.ended_at).toISOString() : null, location_expected: !!shift.location_expected }, 200, meta.requestId);
 }
 
+async function registerPushDevice(req, env, auth, meta) {
+  let body;
+  try {
+    body = await readJson(req);
+  } catch (error) {
+    return response(
+      { code: error.message, message: 'Invalid request.', request_id: meta.requestId },
+      error.status || 400,
+      meta.requestId,
+    );
+  }
+  if (!validateDriverPushRegistration(body, env)) {
+    return response({
+      code: 'invalid_push_device',
+      message: 'Push device registration is invalid.',
+      request_id: meta.requestId,
+    }, 400, meta.requestId);
+  }
+  await registerDriverPushDevice(env.DB, {
+    driverId: auth.driver_id,
+    installationId: meta.installationId,
+    deviceToken: body.device_token.toLowerCase(),
+    environment: body.environment,
+    appBundleId: body.app_bundle_id,
+  });
+  return response({ registered: true }, 200, meta.requestId);
+}
+
+async function unregisterPushDevice(env, auth, meta) {
+  const removed = await unregisterDriverPushDevice(env.DB, {
+    driverId: auth.driver_id,
+    installationId: meta.installationId,
+  });
+  return response({ removed }, 200, meta.requestId);
+}
+
 function onboardOrderIds(value) {
   if (!value) return [];
   try {
@@ -303,7 +344,10 @@ async function routeSnapshot(env, auth, meta, shiftId) {
   const shift = await env.DB.prepare('SELECT id FROM driver_shifts WHERE id = ? AND driver_id = ?').bind(shiftId, auth.driver_id).first();
   if (!shift) return response({ code: 'not_found', message: 'Route not found.', request_id: meta.requestId }, 404, meta.requestId);
   if (env.AUTO_DRIVER_DISPATCH === 'on') {
-    const dispatch = await syncDriverRoute(env, { driverId: auth.driver_id, shiftId });
+    const dispatch = await syncDriverRouteAndNotify(env, {
+      driverId: auth.driver_id,
+      shiftId,
+    });
     if (dispatch.empty) {
       return response({ code: 'route_not_found', message: 'No active route tasks.', request_id: meta.requestId }, 404, meta.requestId);
     }
@@ -686,7 +730,7 @@ async function processEvent(env, auth, meta, event, executionContext) {
     && transitioned
     && ['pickup_completed', 'delivery_completed', 'delivery_failed'].includes(event.event_type)) {
     try {
-      await syncDriverRoute(env, {
+      await syncDriverRouteAndNotify(env, {
         driverId: auth.driver_id,
         shiftId: event.shift_id,
         now,
@@ -850,6 +894,12 @@ export async function handleDriverApi(
   if (path === '/api/driver/v1/session/refresh' && req.method === 'POST') return refreshSession(req, env, meta);
   const auth = await authenticate(req, env, meta);
   if (!auth) return response({ code: 'unauthorized', message: 'Driver session is invalid.', request_id: meta.requestId }, 401, meta.requestId);
+  if (path === '/api/driver/v1/push-devices' && req.method === 'POST') {
+    return registerPushDevice(req, env, auth, meta);
+  }
+  if (path === '/api/driver/v1/push-devices' && req.method === 'DELETE') {
+    return unregisterPushDevice(env, auth, meta);
+  }
   if (path === '/api/driver/v1/shifts/current' && req.method === 'GET') return currentShift(env, auth, meta);
   const routeMatch = /^\/api\/driver\/v1\/shifts\/([^/]+)\/route$/.exec(path);
   if (routeMatch && req.method === 'GET') return routeSnapshot(env, auth, meta, decodeURIComponent(routeMatch[1]));

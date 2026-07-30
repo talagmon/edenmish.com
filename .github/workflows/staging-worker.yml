@@ -30,6 +30,9 @@ jobs:
       STAGING_GOOGLE_PLACES_SERVER_KEY: ${{ secrets.STAGING_GOOGLE_PLACES_SERVER_KEY }}
       STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON: ${{ secrets.STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON }}
       STAGING_SENDGRID_API_KEY: ${{ secrets.STAGING_SENDGRID_API_KEY }}
+      STAGING_APNS_TEAM_ID: ${{ secrets.STAGING_APNS_TEAM_ID }}
+      STAGING_APNS_KEY_ID: ${{ secrets.STAGING_APNS_KEY_ID }}
+      STAGING_APNS_PRIVATE_KEY_P8: ${{ secrets.STAGING_APNS_PRIVATE_KEY_P8 }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -46,6 +49,9 @@ jobs:
           test -n "$STAGING_GOOGLE_PLACES_SERVER_KEY" || { echo "::error::Missing STAGING_GOOGLE_PLACES_SERVER_KEY"; exit 1; }
           test -n "$STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON" || { echo "::error::Missing STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON"; exit 1; }
           test -n "$STAGING_SENDGRID_API_KEY" || { echo "::error::Missing STAGING_SENDGRID_API_KEY"; exit 1; }
+          test -n "$STAGING_APNS_TEAM_ID" || { echo "::error::Missing STAGING_APNS_TEAM_ID"; exit 1; }
+          test -n "$STAGING_APNS_KEY_ID" || { echo "::error::Missing STAGING_APNS_KEY_ID"; exit 1; }
+          test -n "$STAGING_APNS_PRIVATE_KEY_P8" || { echo "::error::Missing STAGING_APNS_PRIVATE_KEY_P8"; exit 1; }
       - name: Install and test Worker
         working-directory: worker
         run: npm ci && npm test
@@ -330,6 +336,23 @@ jobs:
           else
             echo "Approved batch mappings migration 034 is already applied."
           fi
+      - name: Apply staging driver push-device migration when needed
+        working-directory: worker
+        run: |
+          readiness_json="$(npx wrangler d1 execute edenmish-staging --remote --yes --json \
+            --config wrangler.staging.generated.toml \
+            --command "SELECT (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='driver_push_devices') + (SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_driver_push_devices_active') AS ready")"
+          ready="$(printf '%s' "$readiness_json" | jq -r '.[0].results[0].ready // 0')"
+          if [ "$ready" = "0" ]; then
+            npx wrangler d1 execute edenmish-staging --remote --yes \
+              --config wrangler.staging.generated.toml \
+              --file=./migrations/037_driver_push_devices.sql
+          elif [ "$ready" != "2" ]; then
+            echo "::error::Driver push-device migration is only partially applied ($ready/2 schema items)."
+            exit 1
+          else
+            echo "Driver push-device migration 037 is already applied."
+          fi
       - name: Verify remote driver schema readiness
         working-directory: worker
         run: node scripts/validate-driver-schema.mjs --database edenmish-staging --config wrangler.staging.generated.toml
@@ -342,7 +365,7 @@ jobs:
           printf '%s' "$readiness_json" | jq -e '.[0].results[0] | .tables == 13 and .columns == 4 and .plans == 3 and .coupon_columns == 6 and .ownership_indexes == 2'
       - name: Prepare staging secrets
         run: |
-          node --input-type=module -e 'import { writeFileSync } from "node:fs"; writeFileSync("/tmp/edenmish-staging-secrets.json", JSON.stringify({ OPS_PIN: process.env.STAGING_OPS_PIN, SESSION_SECRET: process.env.STAGING_SESSION_SECRET, DRIVER_ONE_TIME_CODE: process.env.STAGING_DRIVER_ONE_TIME_CODE, GOOGLE_PLACES_SERVER_KEY: process.env.STAGING_GOOGLE_PLACES_SERVER_KEY, GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON: process.env.STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON, SENDGRID_API_KEY: process.env.STAGING_SENDGRID_API_KEY }), { mode: 0o600 });'
+          node --input-type=module -e 'import { writeFileSync } from "node:fs"; writeFileSync("/tmp/edenmish-staging-secrets.json", JSON.stringify({ OPS_PIN: process.env.STAGING_OPS_PIN, SESSION_SECRET: process.env.STAGING_SESSION_SECRET, DRIVER_ONE_TIME_CODE: process.env.STAGING_DRIVER_ONE_TIME_CODE, GOOGLE_PLACES_SERVER_KEY: process.env.STAGING_GOOGLE_PLACES_SERVER_KEY, GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON: process.env.STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON, SENDGRID_API_KEY: process.env.STAGING_SENDGRID_API_KEY, APNS_TEAM_ID: process.env.STAGING_APNS_TEAM_ID, APNS_KEY_ID: process.env.STAGING_APNS_KEY_ID, APNS_PRIVATE_KEY_P8: process.env.STAGING_APNS_PRIVATE_KEY_P8 }), { mode: 0o600 });'
       - name: Deploy staging Worker
         working-directory: worker
         run: npx wrangler deploy --config wrangler.staging.generated.toml --secrets-file /tmp/edenmish-staging-secrets.json

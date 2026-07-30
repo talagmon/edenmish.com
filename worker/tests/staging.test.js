@@ -42,7 +42,8 @@ describe('staging Worker isolation', () => {
     assert.match(config, /EMAIL_SUBJECT_PREFIX = "\[STAGING\]"/);
     assert.match(config, /EMAIL_RECIPIENT_POLICY = "allowlist"/);
     assert.match(config, /EMAIL_RECIPIENT_ALLOWLIST = "qa-staging@edenmish\.com"/);
-    assert.match(config, /required = \["OPS_PIN", "SESSION_SECRET", "DRIVER_ONE_TIME_CODE", "GOOGLE_PLACES_SERVER_KEY", "GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON", "SENDGRID_API_KEY"\]/);
+    assert.match(config, /APNS_ALLOWED_TOPICS = "com\.edenmish\.edendriver\.nativebeta"/);
+    assert.match(config, /required = \["OPS_PIN", "SESSION_SECRET", "DRIVER_ONE_TIME_CODE", "GOOGLE_PLACES_SERVER_KEY", "GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON", "SENDGRID_API_KEY", "APNS_TEAM_ID", "APNS_KEY_ID", "APNS_PRIVATE_KEY_P8"\]/);
     assert.ok(!config.includes('f2f51b54-0170-4594-a41c-7a6037c902aa'), 'must not bind the production D1 database');
   });
 });
