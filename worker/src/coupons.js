@@ -503,6 +503,75 @@ export async function releaseFirstDeliveryClaim(db, claimId) {
   ).bind(claimId).run();
 }
 
+// A public couponed order is persisted before Shopify creates its checkout so
+// the Draft Order can carry the Worker tracking token. If Shopify rejects that
+// Draft Order, atomically retire the unpaid order and free both the redemption
+// and first-delivery claim. The customer can then retry without silently losing
+// a one-time benefit. The cancelled order keeps its coupon price snapshot as an
+// audit record; only authoritative usage rows are released.
+export async function rollbackCouponedCheckoutFailure(db, {
+  orderId,
+  promotionClaimId = null,
+  now = Date.now(),
+}) {
+  const statements = [
+    db.prepare(
+      `UPDATE orders
+       SET status = 'cancelled',
+           payment_status = 'checkout_failed',
+           review_reason = COALESCE(review_reason, 'checkout_creation_failed')
+       WHERE id = ?
+         AND status = 'priced'
+         AND LOWER(COALESCE(payment_status, 'none')) = 'none'`
+    ).bind(orderId),
+    db.prepare(
+      `DELETE FROM coupon_redemptions
+       WHERE order_id = ?
+         AND EXISTS (
+           SELECT 1 FROM orders
+           WHERE id = ? AND status = 'cancelled'
+             AND payment_status = 'checkout_failed'
+         )`
+    ).bind(orderId, orderId),
+  ];
+  if (promotionClaimId) {
+    statements.push(
+      db.prepare(
+        `DELETE FROM first_delivery_promotion_claims
+         WHERE id = ? AND order_id = ? AND status = 'redeemed'
+           AND EXISTS (
+             SELECT 1 FROM orders
+             WHERE id = ? AND status = 'cancelled'
+               AND payment_status = 'checkout_failed'
+           )`
+      ).bind(promotionClaimId, orderId, orderId)
+    );
+  }
+  statements.push(
+    db.prepare(
+      `INSERT INTO status_history (order_id, status, at, note)
+       SELECT ?, 'cancelled', ?, 'checkout_creation_failed'
+       WHERE EXISTS (
+         SELECT 1 FROM orders
+         WHERE id = ? AND status = 'cancelled'
+           AND payment_status = 'checkout_failed'
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM status_history
+         WHERE order_id = ? AND status = 'cancelled'
+           AND note = 'checkout_creation_failed'
+       )`
+    ).bind(orderId, Number(now), orderId, orderId)
+  );
+
+  const results = await db.batch(statements);
+  const updateResult = results && results[0];
+  const changes = updateResult && updateResult.meta
+    ? Number(updateResult.meta.changes)
+    : Number(updateResult && updateResult.changes);
+  return { rolledBack: changes === 1 };
+}
+
 // One row per successful redemption; usage limits count these rows.
 //
 // TOCTOU guard: validateCoupon's count check and this insert are separate D1

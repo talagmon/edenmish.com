@@ -1601,6 +1601,8 @@ describe('Frontend: first-delivery launch promotion', () => {
     assertContains(html, 'couponState.source === "manual"', 'manual coupon remains distinct');
     assertContains(html, 'if (BUSINESS_MODE) payload.use_wallet = true', 'authenticated business preview');
     assertContains(html, 'credentials: BUSINESS_MODE ? "include" : "same-origin"', 'business session credentials');
+    assertContains(html, 'data.error === "payment_checkout_unavailable"', 'retryable checkout failure handling');
+    assertContains(html, 'לא חויבתם וההטבה לא נוצלה', 'promotion-preserving retry message');
   });
 
   test('ops dashboard exposes safe automatic first-delivery controls', () => {
