@@ -2,6 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  cleanupDriverPushDevices,
   driverPushTest,
   registerDriverPushDevice,
   sendDriverRoutePush,
@@ -49,6 +50,7 @@ function configuredEnv(DB) {
 
 describe('driver APNs notifications', () => {
   test('creates a verifiable ES256 APNs provider token from the configured p8 key', async () => {
+    driverPushTest.resetProviderTokenCache();
     const keyPair = await crypto.subtle.generateKey(
       { name: 'ECDSA', namedCurve: 'P-256' },
       true,
@@ -56,7 +58,7 @@ describe('driver APNs notifications', () => {
     );
     const privateKey = Buffer.from(await crypto.subtle.exportKey('pkcs8', keyPair.privateKey));
     const wrapped = privateKey.toString('base64').match(/.{1,64}/g).join('\n');
-    const token = await driverPushTest.createProviderToken({
+    const env = {
       APNS_TEAM_ID: 'TEAMID1234',
       APNS_KEY_ID: 'KEYID12345',
       APNS_PRIVATE_KEY_P8: [
@@ -64,9 +66,17 @@ describe('driver APNs notifications', () => {
         wrapped,
         '-----END PRIVATE KEY-----',
       ].join('\n'),
-    }, 1_000_000);
+    };
+    const token = await driverPushTest.createProviderToken(env, 1_000_000);
+    const cachedToken = await driverPushTest.createProviderToken(env, 3_000_000);
+    const rotatedToken = await driverPushTest.createProviderToken(
+      env,
+      1_000_000 + (50 * 60 * 1000),
+    );
     const [headerPart, claimsPart, signaturePart] = token.split('.');
 
+    assert.equal(cachedToken, token);
+    assert.notEqual(rotatedToken, token);
     assert.deepEqual(JSON.parse(Buffer.from(headerPart, 'base64url')), {
       alg: 'ES256',
       kid: 'KEYID12345',
@@ -82,6 +92,7 @@ describe('driver APNs notifications', () => {
       Buffer.from(signaturePart, 'base64url'),
       new TextEncoder().encode(`${headerPart}.${claimsPart}`),
     ), true);
+    driverPushTest.resetProviderTokenCache();
   });
 
   test('validates opaque APNs tokens, environment and allowlisted topics', () => {
@@ -218,6 +229,170 @@ describe('driver APNs notifications', () => {
     assert.equal(update.args[0], 'Unregistered');
     assert.equal(update.args[1], 1);
     assert.equal(update.args[2], 3_000);
+  });
+
+  test('keeps a device enabled after a retryable provider or network failure', async () => {
+    for (const failure of [
+      {
+        expectedReason: 'apns_http_429',
+        fetchImpl: async () => new Response(null, { status: 429 }),
+      },
+      {
+        expectedReason: 'socket_unavailable',
+        fetchImpl: async () => {
+          throw new Error('socket_unavailable');
+        },
+      },
+    ]) {
+      const DB = fakeDb([{
+        installation_id: 'installation',
+        device_token: deviceToken,
+        environment: 'production',
+        app_bundle_id: 'com.edenmish.edendriver',
+      }]);
+      const result = await sendDriverRoutePush(configuredEnv(DB), {
+        driverId: 'drv_eden',
+        shiftId: 'sh_123',
+        routeRevision: 9,
+        now: 4_000,
+      }, {
+        tokenFactory: async () => 'provider.jwt',
+        fetchImpl: failure.fetchImpl,
+      });
+
+      assert.deepEqual(result, {
+        configured: true,
+        attempted: 1,
+        sent: 0,
+        failed: 1,
+      });
+      const update = DB.calls.find((call) => (
+        call.sql.startsWith('UPDATE driver_push_devices')
+      ));
+      assert.equal(update.args[0], failure.expectedReason);
+      assert.equal(update.args[1], 0);
+      assert.equal(update.args[2], null);
+    }
+  });
+
+  test('refreshes an expired provider token and retries the device once', async () => {
+    const DB = fakeDb([{
+      installation_id: 'installation',
+      device_token: deviceToken,
+      environment: 'production',
+      app_bundle_id: 'com.edenmish.edendriver',
+    }]);
+    const authorizationHeaders = [];
+    let tokenCount = 0;
+    let requestCount = 0;
+    const result = await sendDriverRoutePush(configuredEnv(DB), {
+      driverId: 'drv_eden',
+      shiftId: 'sh_123',
+      routeRevision: 10,
+      now: 5_000,
+    }, {
+      tokenFactory: async () => {
+        tokenCount += 1;
+        return `provider.jwt.${tokenCount}`;
+      },
+      fetchImpl: async (_url, init) => {
+        requestCount += 1;
+        authorizationHeaders.push(init.headers.authorization);
+        if (requestCount === 1) {
+          return new Response(
+            JSON.stringify({ reason: 'ExpiredProviderToken' }),
+            { status: 403, headers: { 'content-type': 'application/json' } },
+          );
+        }
+        return new Response(null, { status: 200 });
+      },
+    });
+
+    assert.deepEqual(result, {
+      configured: true,
+      attempted: 1,
+      sent: 1,
+      failed: 0,
+    });
+    assert.equal(tokenCount, 2);
+    assert.deepEqual(authorizationHeaders, [
+      'bearer provider.jwt.1',
+      'bearer provider.jwt.2',
+    ]);
+    const updates = DB.calls.filter((call) => (
+      call.sql.startsWith('UPDATE driver_push_devices')
+    ));
+    assert.equal(updates.length, 1);
+    assert.deepEqual(updates[0].args, [5_000, 5_000, 'installation', deviceToken]);
+  });
+
+  test('continues fan-out when one device is permanently rejected', async () => {
+    const secondDeviceToken = 'cd'.repeat(32);
+    const DB = fakeDb([
+      {
+        installation_id: 'installation-a',
+        device_token: deviceToken,
+        environment: 'production',
+        app_bundle_id: 'com.edenmish.edendriver',
+      },
+      {
+        installation_id: 'installation-b',
+        device_token: secondDeviceToken,
+        environment: 'production',
+        app_bundle_id: 'com.edenmish.edendriver',
+      },
+    ]);
+    const result = await sendDriverRoutePush(configuredEnv(DB), {
+      driverId: 'drv_eden',
+      shiftId: 'sh_123',
+      routeRevision: 11,
+      now: 6_000,
+    }, {
+      tokenFactory: async () => 'provider.jwt',
+      fetchImpl: async (url) => (
+        url.endsWith(deviceToken)
+          ? new Response(
+            JSON.stringify({ reason: 'BadDeviceToken' }),
+            { status: 400, headers: { 'content-type': 'application/json' } },
+          )
+          : new Response(null, { status: 200 })
+      ),
+    });
+
+    assert.deepEqual(result, {
+      configured: true,
+      attempted: 2,
+      sent: 1,
+      failed: 1,
+    });
+    const updates = DB.calls.filter((call) => (
+      call.sql.startsWith('UPDATE driver_push_devices')
+    ));
+    assert.equal(updates.length, 2);
+    assert.deepEqual(updates[0].args, [
+      'BadDeviceToken',
+      1,
+      6_000,
+      6_000,
+      'installation-a',
+      deviceToken,
+    ]);
+    assert.deepEqual(updates[1].args, [
+      6_000,
+      6_000,
+      'installation-b',
+      secondDeviceToken,
+    ]);
+  });
+
+  test('cleans up stale and long-disabled installations at the retention boundary', async () => {
+    const DB = fakeDb();
+    const ninetyDays = 90 * 24 * 60 * 60 * 1000;
+
+    await cleanupDriverPushDevices(DB, ninetyDays + 7_000);
+
+    assert.match(DB.calls[0].sql, /^DELETE FROM driver_push_devices/);
+    assert.deepEqual(DB.calls[0].args, [7_000, 7_000]);
   });
 
   test('fails open when APNs provider credentials are not configured', async () => {
