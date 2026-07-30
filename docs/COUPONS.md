@@ -15,8 +15,8 @@ lookup, sync, or cache: a code Eden creates is redeemable immediately.
   └────────────────────────────────┘     │  validateCoupon reads D1 directly    │
                                          │  → authoritative price               │
                                          │  `coupon_redemptions` = usage counts │
-                                         │  Draft Order uses final price       │
-                                         │  mirrors the final price             │
+                                         │  Draft Order shows subtotal          │
+                                         │  + authoritative fixed discount      │
                                          └──────────────────────────────────────┘
 ```
 
@@ -57,6 +57,15 @@ lookup, sync, or cache: a code Eden creates is redeemable immediately.
   authenticated business account serialize simultaneous claims. The business
   plan price is calculated first, the promotion is applied second, and only the
   discounted total is reserved from the wallet.
+- **Failed coupon checkout releases usage.** Public delivery orders must exist
+  before Shopify Draft Order creation so the payment shell can carry the Worker
+  tracking token. If a configured Shopify checkout rejects a couponed Draft
+  Order, the Worker atomically marks that unpaid order `cancelled` with
+  `payment_status = 'checkout_failed'`, deletes its `coupon_redemptions` row,
+  and releases its attached first-delivery claim. The browser receives a
+  retryable `503 payment_checkout_unavailable`; no analytics claim or new-order
+  ops notification is created for the failed checkout. The cancelled order
+  keeps its discount snapshot for audit.
 - **Ops re-price clears the coupon snapshot.** When Eden re-prices an order via
   the ops `/approve` endpoint, the manual price supersedes the coupon: the
   snapshot (`subtotal_price` / `discount_code` / `discount_amount` /
@@ -65,11 +74,11 @@ lookup, sync, or cache: a code Eden creates is redeemable immediately.
   claim is not restored automatically: the discounted order consumed the
   one-time eligibility, consistent with the customer-facing terms.
 - **Draft Order at checkout.** `createDraftOrder` (`worker/src/integrations.js`)
-  sets the line item directly to the final (post-discount) price. The Shopify REST
-  Admin API silently ignores `applied_discount` on Draft Order creation (it is a
-  read-only field on that endpoint), so we never inflate + attach a discount.
-  The discount breakdown is visible on the booking funnel, success page, tracking
-  page, emails, and ops dashboard — only Shopify checkout omits it.
+  uses the Shopify GraphQL Admin API. It sets the line item to the authoritative
+  subtotal and attaches the Worker-computed difference as an order-level fixed
+  `appliedDiscount`, so checkout displays the discount while the amount due
+  remains exactly `orders.price`. Shopify HTTP, GraphQL, and `userErrors`
+  failures are logged with contact details redacted.
 - **Money units** match `pricing.js`: integer whole shekels (ILS). Percentages
   are stored 0–100.
 

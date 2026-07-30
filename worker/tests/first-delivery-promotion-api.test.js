@@ -7,7 +7,9 @@ import worker from '../src/index.js';
 
 const schema = readFileSync(new URL('../schema.sql', import.meta.url), 'utf8');
 const openDatabases = [];
+const realFetch = globalThis.fetch;
 afterEach(() => {
+  globalThis.fetch = realFetch;
   while (openDatabases.length) openDatabases.pop().close();
 });
 
@@ -133,6 +135,140 @@ describe('automatic first-delivery promotion API', () => {
     const duplicate = await response.json();
     assert.equal(duplicate.reason, 'not_new_customer');
     assert.equal(DB.sqlite.prepare('SELECT COUNT(*) AS count FROM orders').get().count, 1);
+  });
+
+  test('releases the promotion and redemption when Shopify checkout fails, then discounts the retry', async () => {
+    const DB = d1Database();
+    openDatabases.push(DB.sqlite);
+    let draftAttempts = 0;
+    globalThis.fetch = async (requestUrl, options = {}) => {
+      if (String(requestUrl).endsWith('/webhooks.json')) {
+        return new Response(JSON.stringify({
+          webhooks: [
+            { topic: 'orders/paid', address: 'https://find.edenmish.com/webhooks/shopify' },
+            { topic: 'orders/updated', address: 'https://find.edenmish.com/webhooks/shopify' },
+            { topic: 'refunds/create', address: 'https://find.edenmish.com/webhooks/shopify' },
+          ],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      const request = JSON.parse(options.body || '{}');
+      assert.match(request.query || '', /draftOrderCreate/);
+      draftAttempts += 1;
+      if (draftAttempts === 1) {
+        return new Response(JSON.stringify({
+          data: {
+            draftOrderCreate: {
+              draftOrder: null,
+              userErrors: [{ field: ['input', 'email'], message: 'Email is invalid' }],
+            },
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({
+        data: {
+          draftOrderCreate: {
+            draftOrder: {
+              id: 'gid://shopify/DraftOrder/200',
+              legacyResourceId: '200',
+              invoiceUrl: 'https://test.myshopify.com/invoice/retry',
+            },
+            userErrors: [],
+          },
+        },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    const env = {
+      DB,
+      SESSION_SECRET: 'promotion-test-secret',
+      SHOPIFY_SHOP: 'test.myshopify.com',
+      SHOPIFY_ADMIN_TOKEN: 'shopify-test-token',
+      SHOPIFY_API_VERSION: '2026-04',
+      OPS_EMAIL: 'ops@example.com',
+    };
+
+    let response = await worker.fetch(
+      post('/api/orders', { ...orderBody, promotion_expected: true }),
+      env,
+    );
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), {
+      error: 'payment_checkout_unavailable',
+      retryable: true,
+      order_id: 1,
+    });
+    const failedOrder = DB.sqlite.prepare(
+      `SELECT status, payment_status, review_reason, price, subtotal_price,
+              discount_code, discount_amount
+       FROM orders WHERE id = 1`
+    ).get();
+    assert.deepEqual({ ...failedOrder }, {
+      status: 'cancelled',
+      payment_status: 'checkout_failed',
+      review_reason: 'checkout_creation_failed',
+      price: 45,
+      subtotal_price: 50,
+      discount_code: 'FIRST10-2026',
+      discount_amount: 5,
+    });
+    assert.equal(
+      DB.sqlite.prepare('SELECT COUNT(*) AS count FROM first_delivery_promotion_claims').get().count,
+      0,
+    );
+    assert.equal(
+      DB.sqlite.prepare('SELECT COUNT(*) AS count FROM coupon_redemptions').get().count,
+      0,
+    );
+    assert.equal(
+      DB.sqlite.prepare(
+        `SELECT COUNT(*) AS count FROM status_history
+         WHERE order_id = 1 AND status = 'cancelled'
+           AND note = 'checkout_creation_failed'`
+      ).get().count,
+      1,
+    );
+    assert.equal(
+      DB.sqlite.prepare(
+        `SELECT COUNT(*) AS count FROM notifications
+         WHERE order_id = 1 AND template = 'ops_new_order'`
+      ).get().count,
+      0,
+    );
+
+    response = await worker.fetch(
+      post('/api/orders', { ...orderBody, promotion_expected: true }),
+      env,
+    );
+    assert.equal(response.status, 200);
+    const retry = await response.json();
+    assert.equal(retry.order_id, 2);
+    assert.equal(retry.status, 'payment_sent');
+    assert.equal(retry.payment_url, 'https://test.myshopify.com/invoice/retry?locale=he');
+    assert.equal(retry.price, 45);
+    assert.equal(retry.discount_code, 'FIRST10-2026');
+    assert.equal(draftAttempts, 2);
+    assert.deepEqual(
+      {
+        ...DB.sqlite.prepare(
+          `SELECT order_id, status FROM first_delivery_promotion_claims`
+        ).get(),
+      },
+      { order_id: 2, status: 'redeemed' },
+    );
+    assert.deepEqual(
+      {
+        ...DB.sqlite.prepare(
+          `SELECT order_id, code, price_before, discount_amount, price_after
+           FROM coupon_redemptions`
+        ).get(),
+      },
+      {
+        order_id: 2,
+        code: 'FIRST10-2026',
+        price_before: 50,
+        discount_amount: 5,
+        price_after: 45,
+      },
+    );
   });
 
   test('prior paid phone or email blocks auto apply and manual-code bypass', async () => {

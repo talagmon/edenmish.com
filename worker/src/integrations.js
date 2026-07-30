@@ -31,23 +31,70 @@ const DRAFT_ORDER_CREATE = `mutation draftOrderCreate($input: DraftOrderInput!) 
   }
 }`;
 
-async function createShopifyDraftOrder(env, input) {
+function sanitizeShopifyFailureText(value) {
+  return String(value || '')
+    .replace(/[^\s@]+@[^\s@]+/g, '[email]')
+    .replace(/\+?\d[\d\s().-]{7,}\d/g, '[number]')
+    .slice(0, 240);
+}
+
+function shopifyDraftOrderFailure(kind, details = {}) {
+  const error = new Error('shopify_draft_order_failed');
+  error.code = 'shopify_draft_order_failed';
+  error.details = {
+    kind,
+    ...(details.httpStatus ? { httpStatus: Number(details.httpStatus) } : {}),
+    ...(details.errors && details.errors.length ? { errors: details.errors } : {}),
+  };
+  return error;
+}
+
+function sanitizedShopifyErrors(errors) {
+  return (Array.isArray(errors) ? errors : []).slice(0, 5).map((error) => ({
+    field: Array.isArray(error && error.field)
+      ? error.field.map((part) => String(part).slice(0, 80)).join('.')
+      : null,
+    message: sanitizeShopifyFailureText(error && error.message),
+  }));
+}
+
+async function createShopifyDraftOrder(env, input, options = {}) {
+  const fail = (kind, details = {}) => {
+    const error = shopifyDraftOrderFailure(kind, details);
+    console.error('shopify_draft_order_create_failed', error.details);
+    if (options.throwOnError) throw error;
+    return null;
+  };
   const apiVersion = env.SHOPIFY_API_VERSION || '2026-04';
   const url = `https://${env.SHOPIFY_SHOP}/admin/api/${apiVersion}/graphql.json`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'X-Shopify-Access-Token': env.SHOPIFY_ADMIN_TOKEN,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ query: DRAFT_ORDER_CREATE, variables: { input } }),
-  }).catch(() => null);
-  if (!res || !res.ok) return null;
-  const data = await res.json().catch(() => ({}));
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'X-Shopify-Access-Token': env.SHOPIFY_ADMIN_TOKEN,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query: DRAFT_ORDER_CREATE, variables: { input } }),
+    });
+  } catch {
+    return fail('network');
+  }
+  if (!res || !res.ok) return fail('http', { httpStatus: res && res.status });
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    return fail('invalid_json');
+  }
+  const graphErrors = sanitizedShopifyErrors(data && data.errors);
+  if (graphErrors.length) return fail('graphql', { errors: graphErrors });
   const payload = data && data.data && data.data.draftOrderCreate;
-  if (!payload || (payload.userErrors && payload.userErrors.length)) return null;
+  if (!payload) return fail('missing_payload');
+  const userErrors = sanitizedShopifyErrors(payload.userErrors);
+  if (userErrors.length) return fail('user_error', { errors: userErrors });
   const draft = payload.draftOrder;
-  if (!draft || !draft.invoiceUrl) return null;
+  if (!draft || !draft.invoiceUrl) return fail('missing_invoice_url');
   return {
     id: draft.legacyResourceId || draft.id,
     invoice_url: draft.invoiceUrl,
@@ -58,7 +105,7 @@ async function createShopifyDraftOrder(env, input) {
 // The customer pays on the returned invoice_url via Shopify checkout (PayPlus app).
 // `priceNis` is the FINAL amount. When a coupon was applied, the order carries
 // `subtotal_price` + `discount_code` + `discount_amount` — we inflate the line-item
-// to the original subtotal and attach an applied_discount so the Shopify checkout
+// to the original subtotal and attach an appliedDiscount so the Shopify checkout
 // shows the discount breakdown to the customer.
 // Requires: env.SHOPIFY_SHOP, env.SHOPIFY_ADMIN_TOKEN.
 export async function createDraftOrder(env, order, priceNis) {
@@ -125,7 +172,9 @@ export async function createDraftOrder(env, order, priceNis) {
   if (order.email) input.email = order.email;
   if (order.name) input.customAttributes = [{ key: 'שם המזמין', value: String(order.name) }];
 
-  return createShopifyDraftOrder(env, input);
+  // Public delivery checkout failures must reach the order handler so a
+  // reserved coupon/promotion can be released instead of being burned.
+  return createShopifyDraftOrder(env, input, { throwOnError: true });
 }
 
 // Corrected-address redelivery fee. This is deliberately a separate Draft Order

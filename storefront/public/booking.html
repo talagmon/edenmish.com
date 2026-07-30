@@ -1607,6 +1607,7 @@ form.addEventListener("submit", async (e) => {
       if (data && data.error === "plan_required") return showError("יש לבחור ולטעון מסלול עסקי לפני יצירת משלוח.");
       if (data && data.reason === "not_new_customer") return showError("הזכאות להטבת המשלוח הראשון השתנתה. לא חויבתם — בדקו את הפרטים ונסו שוב.");
       if (data && data.reason === "promotion_unavailable") return showError(data.message || "לא ניתן להחיל את ההטבה כרגע. לא חויבתם — נסו שוב בעוד מספר דקות.");
+      if (data && data.error === "payment_checkout_unavailable") return showError("לא הצלחנו לפתוח את התשלום. לא חויבתם וההטבה לא נוצלה — נסו שוב.");
       if (data && data.error === "business_login_required") { location.assign(API+"/business"); return; }
       if (data && data.error === "insufficient_credit") return showError("אין מספיק יתרה. חסרים ₪"+Number(data.shortfall||0).toLocaleString("he-IL")+" — טענו יתרה בחשבון העסקי ונסו שוב.");
       if (data && ["closed_saturday","outside_hours"].includes(data.error)) return showError("המועד שנבחר אינו זמין. בחרו מועד אחר.");
