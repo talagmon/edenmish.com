@@ -268,6 +268,67 @@ describe('driver API v1', () => {
     assert.equal(insert.args[2], token);
   });
 
+  test('rejects unauthenticated APNs registration before writing a device', async () => {
+    const db = fakeDb();
+    const res = await handleDriverApi(request('/api/driver/v1/push-devices', {
+      method: 'POST',
+      body: JSON.stringify({
+        device_token: 'ab'.repeat(32),
+        environment: 'development',
+        app_bundle_id: 'com.edenmish.edendriver.nativebeta',
+      }),
+    }), { DB: db });
+
+    assert.equal(res.status, 401);
+    assert.equal((await res.json()).code, 'unauthorized');
+    assert.equal(
+      db.calls.some((call) => call.sql.startsWith('INSERT INTO driver_push_devices')),
+      false,
+    );
+  });
+
+  test('rejects malformed or over-posted APNs registrations without writing', async () => {
+    const invalidBodies = [
+      {
+        device_token: 'not-an-apns-token',
+        environment: 'development',
+        app_bundle_id: 'com.edenmish.edendriver.nativebeta',
+      },
+      {
+        device_token: 'ab'.repeat(32),
+        environment: 'sandbox',
+        app_bundle_id: 'com.edenmish.edendriver.nativebeta',
+      },
+      {
+        device_token: 'ab'.repeat(32),
+        environment: 'production',
+        app_bundle_id: 'com.example.attacker',
+      },
+      {
+        device_token: 'ab'.repeat(32),
+        environment: 'production',
+        app_bundle_id: 'com.edenmish.edendriver',
+        unexpected: true,
+      },
+    ];
+
+    for (const body of invalidBodies) {
+      const db = fakeDb({ first: authenticatedFirst });
+      const res = await handleDriverApi(request('/api/driver/v1/push-devices', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify(body),
+      }), { DB: db });
+
+      assert.equal(res.status, 400);
+      assert.equal((await res.json()).code, 'invalid_push_device');
+      assert.equal(
+        db.calls.some((call) => call.sql.startsWith('INSERT INTO driver_push_devices')),
+        false,
+      );
+    }
+  });
+
   test('removes the authenticated installation APNs registration on logout', async () => {
     const db = fakeDb({ first: authenticatedFirst });
     const res = await handleDriverApi(request('/api/driver/v1/push-devices', {

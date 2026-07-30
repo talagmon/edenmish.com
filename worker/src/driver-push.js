@@ -9,6 +9,10 @@ const DEVICE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 
 let cachedProviderToken = null;
 
+function resetProviderTokenCache() {
+  cachedProviderToken = null;
+}
+
 function allowedTopics(env) {
   const configured = String(env.APNS_ALLOWED_TOPICS || '')
     .split(',')
@@ -193,6 +197,20 @@ async function recordDeliveryResult(DB, device, {
     ).run();
 }
 
+async function apnsFailureReason(response) {
+  if (response?.ok) return null;
+  try {
+    return (await response.json())?.reason || `apns_http_${response.status}`;
+  } catch {
+    return `apns_http_${response?.status || 'unknown'}`;
+  }
+}
+
+function isProviderTokenFailure(response, reason) {
+  return response?.status === 403
+    && ['ExpiredProviderToken', 'InvalidProviderToken'].includes(reason);
+}
+
 export async function sendDriverRoutePush(env, {
   driverId,
   shiftId,
@@ -217,24 +235,20 @@ export async function sendDriverRoutePush(env, {
     return { configured: true, attempted: 0, sent: 0, failed: 0 };
   }
 
-  const providerToken = await tokenFactory(env, now);
+  let providerToken = await tokenFactory(env, now);
   const payload = JSON.stringify(routePayload({
     shiftId,
     routeRevision,
     hasNewDelivery: addedStopIds.length > 0,
   }));
-  let sent = 0;
-  let failed = 0;
-  for (const device of devices) {
-    let response;
-    let reason = null;
+  async function deliver(device, token) {
     try {
-      response = await fetchImpl(
+      const response = await fetchImpl(
         `${apnsOrigin(device.environment)}/3/device/${device.device_token}`,
         {
           method: 'POST',
           headers: {
-            authorization: `bearer ${providerToken}`,
+            authorization: `bearer ${token}`,
             'apns-topic': device.app_bundle_id,
             'apns-push-type': 'alert',
             'apns-priority': '10',
@@ -245,15 +259,36 @@ export async function sendDriverRoutePush(env, {
           body: payload,
         },
       );
-      if (!response.ok) {
-        try {
-          reason = (await response.json())?.reason || `apns_http_${response.status}`;
-        } catch {
-          reason = `apns_http_${response.status}`;
-        }
-      }
+      return {
+        response,
+        reason: await apnsFailureReason(response),
+      };
     } catch (error) {
-      reason = error?.message || 'apns_network_error';
+      return {
+        response: null,
+        reason: error?.message || 'apns_network_error',
+      };
+    }
+  }
+
+  let sent = 0;
+  let failed = 0;
+  let providerTokenRefreshAttempted = false;
+  for (const device of devices) {
+    let { response, reason } = await deliver(device, providerToken);
+    if (
+      !providerTokenRefreshAttempted
+      && isProviderTokenFailure(response, reason)
+    ) {
+      providerTokenRefreshAttempted = true;
+      resetProviderTokenCache();
+      try {
+        providerToken = await tokenFactory(env, now);
+        ({ response, reason } = await deliver(device, providerToken));
+      } catch (error) {
+        response = null;
+        reason = error?.message || 'apns_provider_token_refresh_failed';
+      }
     }
 
     if (response?.ok) {
@@ -289,6 +324,7 @@ export const driverPushTest = {
   allowedTopics,
   apnsOrigin,
   createProviderToken,
+  resetProviderTokenCache,
   routePayload,
   validRegistration: validateDriverPushRegistration,
 };
