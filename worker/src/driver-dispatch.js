@@ -1,4 +1,5 @@
 import { createGoogleRouteOptimizer } from './route-optimization.js';
+import { sendDriverRoutePush } from './driver-push.js';
 
 const DRIVER_ID = 'drv_eden';
 const DRIVER_NAME = 'Eden';
@@ -449,6 +450,8 @@ export async function syncDriverRoute(env, {
     return {
       empty: true,
       route: null,
+      changed: false,
+      addedStopIds: [],
       readyOrderCount: orders.length,
       blockedOrderCount: blockedOrderIds.length,
       taskCount: 0,
@@ -458,6 +461,8 @@ export async function syncDriverRoute(env, {
     return {
       empty: false,
       route: latest,
+      changed: false,
+      addedStopIds: [],
       readyOrderCount: orders.length,
       blockedOrderCount: blockedOrderIds.length,
       taskCount: tasks.length,
@@ -508,10 +513,45 @@ export async function syncDriverRoute(env, {
   return {
     empty: false,
     route: { id: inserted.id, revision: inserted.revision },
+    changed: true,
+    addedStopIds: optimized.tasks
+      .filter((task) => !previousIds.has(task.stopId))
+      .map((task) => task.stopId),
     readyOrderCount: orders.length,
     blockedOrderCount: blockedOrderIds.length,
     taskCount: optimized.tasks.length,
   };
+}
+
+export async function syncDriverRouteAndNotify(env, options = {}) {
+  const result = await syncDriverRoute(env, options);
+  if (!result.changed || !result.route) return result;
+  try {
+    const notification = await sendDriverRoutePush(env, {
+      driverId: options.driverId || DRIVER_ID,
+      shiftId: options.shiftId,
+      routeRevision: result.route.revision,
+      addedStopIds: result.addedStopIds,
+      now: options.now,
+    });
+    return { ...result, notification };
+  } catch (error) {
+    console.error('driver_route_push_failed', {
+      driverId: options.driverId || DRIVER_ID,
+      shiftId: options.shiftId,
+      routeRevision: result.route.revision,
+      message: error?.message || String(error),
+    });
+    return {
+      ...result,
+      notification: {
+        configured: true,
+        attempted: 0,
+        sent: 0,
+        failed: 1,
+      },
+    };
+  }
 }
 
 export async function startDriverShift(env, { now = Date.now() } = {}) {
@@ -529,7 +569,11 @@ export async function startDriverShift(env, { now = Date.now() } = {}) {
       VALUES (?, ?, 'active', ?, NULL, 1)`).bind(id, DRIVER_ID, now).run();
     shift = await findActiveDriverShift(env.DB);
   }
-  const dispatch = await syncDriverRoute(env, { shiftId: shift.id, now });
+  const dispatch = await syncDriverRouteAndNotify(env, {
+    driverId: shift.driver_id,
+    shiftId: shift.id,
+    now,
+  });
   return { shift, dispatch, unchanged };
 }
 

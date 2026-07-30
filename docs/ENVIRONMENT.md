@@ -45,6 +45,9 @@ authentication and OTP flows fail closed when `SESSION_SECRET` is missing.
 | `WHATSAPP_CUSTOMER_DELIVERED_TEMPLATE` | Approved zero-component customer delivery template name | `eden_delivery_complete` |
 | `WHATSAPP_CUSTOMER_TEMPLATE_LANGUAGE` | Explicit language code for the customer template | `he` |
 | `GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON` | Server-side driver route optimization; use a dedicated environment-specific service account and never ship it to Flutter | `{"type":"service_account",…}` |
+| `APNS_TEAM_ID` | Apple Developer Team ID used to sign APNs provider tokens for driver route notifications | `replace-with-10-character-team-id` |
+| `APNS_KEY_ID` | ID of the APNs signing key created in Apple Developer Certificates, Identifiers & Profiles | `replace-with-10-character-key-id` |
+| `APNS_PRIVATE_KEY_P8` | Raw contents of the APNs signing key; store only as an encrypted Worker secret | `-----BEGIN PRIVATE KEY-----…` |
 | `MESH_API_KEY` | **Future** — Mesh/J5 preauth processor. Not used today. | (unset for now) |
 
 > `SESSION_SECRET` is mandatory. The Worker refuses to create sessions or OTP hashes
@@ -79,6 +82,7 @@ These are safe to keep in the repo (non-secret configuration):
 | `EMAIL_SUBJECT_PREFIX` | Optional prefix added once to every outbound subject; staging uses `[STAGING]` |
 | `EMAIL_RECIPIENT_POLICY` | `open` for production or `allowlist` for isolated environments. Unknown values fail closed |
 | `EMAIL_RECIPIENT_ALLOWLIST` | Comma-separated exact recipient addresses allowed when the policy is `allowlist`; staging contains only its QA mailbox |
+| `APNS_ALLOWED_TOPICS` | Comma-separated exact iOS bundle IDs accepted during device registration. Production allows `com.edenmish.edendriver` and `com.edenmish.edendriver.nativebeta`; staging allows native beta only |
 
 > Optional future var: `PAYMENT_MODE` (`immediate` today, `preauth` for Mesh later).
 
@@ -112,6 +116,9 @@ The GitHub `staging` environment contains only:
 | `STAGING_GOOGLE_PLACES_SERVER_KEY` | environment secret | Dedicated staging Places API (New) server key; never reuse production credentials |
 | `STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON` | environment secret | Staging-only Google service-account JSON; never reuse production credentials |
 | `STAGING_SENDGRID_API_KEY` | environment secret | Dedicated custom-access SendGrid key with only Mail Send permission |
+| `STAGING_APNS_TEAM_ID` | environment secret | Apple Developer Team ID for staging driver push |
+| `STAGING_APNS_KEY_ID` | environment secret | APNs signing key ID for staging driver push |
+| `STAGING_APNS_PRIVATE_KEY_P8` | environment secret | Raw APNs `.p8` key; the workflow injects it into the staging Worker only |
 
 Staging email is intentionally limited to `qa-staging@edenmish.com`, uses the
 `no-reply-staging@edenmish.com` sender and prefixes subjects with `[STAGING]`.
@@ -221,7 +228,7 @@ it** (per `../AGENTS.md` §2), then move it to a secret/setting.
 | Public (OK in repo) | Secret (NEVER in repo) |
 |---|---|
 | `SHOPIFY_SHOP`, `SHOPIFY_API_VERSION`, `SHOPIFY_APP_CLIENT_ID` | `SHOPIFY_ADMIN_TOKEN`, `SHOPIFY_CLI_THEME_TOKEN`, `SHOPIFY_WEBHOOK_SECRET` |
-| `BRAND`, `BOOKING_URL`, `WHATSAPP_NUMBER`, `OPS_EMAIL` | `OPS_PIN`, `SESSION_SECRET`, `DRIVER_ONE_TIME_CODE`, `WHATSAPP_PHONE_ID`, `WHATSAPP_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN`, `WHATSAPP_OPS_RECIPIENT`, and both class-specific template/language pairs |
+| `BRAND`, `BOOKING_URL`, `WHATSAPP_NUMBER`, `OPS_EMAIL`, `APNS_ALLOWED_TOPICS` | `OPS_PIN`, `SESSION_SECRET`, `DRIVER_ONE_TIME_CODE`, `WHATSAPP_PHONE_ID`, `WHATSAPP_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN`, `WHATSAPP_OPS_RECIPIENT`, both class-specific template/language pairs, `APNS_TEAM_ID`, `APNS_KEY_ID`, `APNS_PRIVATE_KEY_P8` |
 | brand colors, Hebrew copy | `MAPS_KEY` (Worker + theme), `SENDGRID_API_KEY`, `GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON`, `MESH_API_KEY` |
 
 > The public business phone numbers and `eden@edenmish.com` are intentionally

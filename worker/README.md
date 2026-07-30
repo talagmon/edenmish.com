@@ -29,7 +29,7 @@ It is a **single Worker** that routes by hostname (`find.` vs `ops.`).
 | `find.edenmish.com` | Business account API | `GET /business`, `/api/business/*`, including in-memory XLSX/CSV batch parsing and fail-closed smart mapping for unfamiliar layouts |
 | `ops.edenmish.com` | Ops/driver dashboard | `GET /` → `pages.js#opsHtml` |
 | `ops.edenmish.com` | Ops API (session-gated) | `/api/ops/login`, `/api/ops/orders`, `…/status`, `…/gps`, `…/approve` |
-| `ops.edenmish.com` | Driver mobile API (bearer-token scoped) | `/api/driver/v1/session`, `/session/refresh`, `/shifts/current`, `/shifts/:id/route`, `/execution-events:batch` |
+| `ops.edenmish.com` | Driver mobile API (bearer-token scoped) | `/api/driver/v1/session`, `/session/refresh`, `/shifts/current`, `/shifts/:id/route`, `/execution-events:batch`, `/push-devices` |
 | (any) | Shopify webhook | `POST /webhooks/shopify` |
 
 Staging uses separate hosts and a separate D1 database:
@@ -51,6 +51,7 @@ Staging uses separate hosts and a separate D1 database:
 | `status.js` | Shared status model: `STATUS`, `STATUS_META` (labels, lifecycle, live-GPS, queue buckets, next-status), `QUEUE_LAYOUT`, helpers. Single source of truth for both UIs. |
 | `security.js` | PII sanitizer (`publicOrderSummary`), `maskEmail`, `corsFor` (CORS allowlist), `clientIp`, `anonKey` (hashed IP rate-limit keys). |
 | `driver-api.js` | Driver mobile boundary: single-use login exchange, installation-bound bearer auth, route snapshots, and idempotent execution events. |
+| `driver-push.js` | Authenticated APNs device registration, provider-token signing, privacy-safe route notifications, invalid-token retirement, and retention cleanup. |
 | `route-optimization.js` | Fail-closed Google Route Optimization adapter for one-driver mixed pickup/drop-off plans, including locked-stop and precedence validation. |
 | `notify.js` | Provider notification wrapper: best-effort per-attempt audit trail in D1 `notifications`; never throws. |
 | `delivery-notification-outbox.js` | Unique logical delivery-completion jobs, expiring leases, and bounded at-least-once retry processing. |
@@ -98,7 +99,7 @@ Database name: `edenmish`. Binding: `DB`.
 ### Schema and migrations
 
 `schema.sql` is the **fresh-DB source of truth** — it defines every current table.
-The numbered migrations (`003`–`034`) add tables/columns that were introduced after the
+The numbered migrations (`003`–`037`) add tables/columns that were introduced after the
 initial schema. Tables are idempotent (`CREATE TABLE IF NOT EXISTS`); `ALTER TABLE …
 ADD COLUMN` migrations (`006`–`010`, `015`, `016`, `024`–`026`, and `033`) must run only on
 DBs that predate their columns.
@@ -114,7 +115,8 @@ Current tables: `orders`, `status_history`, `gps_pings`, `payments`, `pricing_ru
 `business_coupon_redemptions`,
 `analytics_conversion_claims`,
 `cancellation_requests`, `drivers`, `driver_sessions`, `driver_shifts`,
-`driver_assignments`, `driver_routes`, `driver_route_stops`, `driver_execution_events`.
+`driver_assignments`, `driver_routes`, `driver_route_stops`, `driver_execution_events`,
+`driver_push_devices`.
 The driver runtime also stores bounded samples in `driver_location_samples` while a shift is active.
 Delivery completion uses `delivery_completion_transitions` and
 `delivery_notification_outbox`; the five-minute cron retries due jobs with expiring
@@ -149,12 +151,16 @@ See `../docs/ENVIRONMENT.md` for the full list and placeholders.
 | `SHOPIFY_WEBHOOK_SECRET` | verifying Shopify payment/refund webhooks | webhook fails closed (401) if unset |
 | `SENDGRID_API_KEY` | all email notifications | currently SendGrid |
 | `GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON` | server-side mixed-route optimization | dedicated environment-specific service account; encrypted Worker secret, never shipped to Flutter |
+| `APNS_TEAM_ID` | driver route push notifications | Apple Developer Team ID; keep as a Worker secret |
+| `APNS_KEY_ID` | driver route push notifications | key ID for the APNs signing key |
+| `APNS_PRIVATE_KEY_P8` | driver route push notifications | raw APNs `.p8` private key; never commit or ship to the app |
 
 Non-secret vars live in `wrangler.toml [vars]`: `BRAND`, `BOOKING_URL`,
 `WHATSAPP_NUMBER`, `OPS_EMAIL`, `AUTO_DRIVER_DISPATCH`, `SHOPIFY_SHOP`,
 `SHOPIFY_API_VERSION`, `BUSINESS_BATCH_AI_MODEL`, `EMAIL_FROM_ADDRESS`,
 `EMAIL_FROM_NAME`, `EMAIL_SUBJECT_PREFIX`, `EMAIL_RECIPIENT_POLICY`, and
-`EMAIL_RECIPIENT_ALLOWLIST`.
+`EMAIL_RECIPIENT_ALLOWLIST`. Driver push additionally uses
+`APNS_ALLOWED_TOPICS` to allow only the production and native-beta bundle IDs.
 Route optimization additionally requires `ROUTE_OPTIMIZATION_PROVIDER=google`
 and `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID`; see
 `../docs/DRIVER_ROUTE_OPTIMIZATION.md`.
@@ -238,6 +244,7 @@ wrangler d1 execute edenmish --remote --file=./migrations/031_first_delivery_pro
 wrangler d1 execute edenmish --remote --file=./migrations/032_analytics_conversion_claims.sql
 wrangler d1 execute edenmish --remote --file=./migrations/033_business_batch_external_id.sql
 wrangler d1 execute edenmish --remote --file=./migrations/034_business_batch_mappings.sql
+wrangler d1 execute edenmish --remote --file=./migrations/037_driver_push_devices.sql
 ```
 
 > Run only migrations that have not already been applied. Several `ALTER TABLE`
@@ -257,6 +264,9 @@ wrangler secret put GOOGLE_PLACES_SERVER_KEY
 wrangler secret put SHOPIFY_ADMIN_TOKEN
 wrangler secret put SHOPIFY_WEBHOOK_SECRET
 wrangler secret put SENDGRID_API_KEY
+wrangler secret put APNS_TEAM_ID
+wrangler secret put APNS_KEY_ID
+wrangler secret put APNS_PRIVATE_KEY_P8
 ```
 
 **Optional WhatsApp Cloud API** (leave unset until issue #216 records its
@@ -295,6 +305,7 @@ Set in `wrangler.toml [vars]` (non-secret):
 | `SHOPIFY_SHOP` | `edenmish.myshopify.com` |
 | `SHOPIFY_API_VERSION` | `2026-04` |
 | `ALLOWED_ORIGINS` | `https://edenmish.com,https://www.edenmish.com,https://v2.edenmish.com,https://dash.edenmish.com,https://edenmish-v2.pages.dev` |
+| `APNS_ALLOWED_TOPICS` | `com.edenmish.edendriver,com.edenmish.edendriver.nativebeta` |
 
 > `ALLOWED_ORIGINS` controls CORS and is required for the credentialed ops cookie.
 > Shopify theme-preview domains may need to be added temporarily during testing.

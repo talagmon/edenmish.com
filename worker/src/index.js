@@ -93,7 +93,14 @@ import {
 import { getStatusMeta, getNextStatuses, isTerminalStatus } from './status.js';
 import { shopifyWebhookRegistrar } from './shopify-webhooks.js';
 import { handleDriverApi } from './driver-api.js';
-import { driverDispatchStatus, startDriverShift, endDriverShift } from './driver-dispatch.js';
+import {
+  driverDispatchStatus,
+  endDriverShift,
+  findActiveDriverShift,
+  startDriverShift,
+  syncDriverRouteAndNotify,
+} from './driver-dispatch.js';
+import { cleanupDriverPushDevices } from './driver-push.js';
 import {
   createDriverInvitation,
   listActiveDrivers,
@@ -487,6 +494,27 @@ async function isOps(req, env) {
   if (xOps && await checkSession(env, xOps)) return true;
   const c = getCookie(req, 'ops_sess');
   return await checkSession(env, c);
+}
+
+async function refreshActiveDriverRoute(env, now = Date.now()) {
+  if (env.AUTO_DRIVER_DISPATCH !== 'on') return null;
+  const shift = await findActiveDriverShift(env.DB);
+  if (!shift) return null;
+  return syncDriverRouteAndNotify(env, {
+    driverId: shift.driver_id,
+    shiftId: shift.id,
+    now,
+  });
+}
+
+function scheduleDriverRouteRefresh(env, ctx) {
+  const task = refreshActiveDriverRoute(env).catch((error) => {
+    console.error('driver_route_refresh_after_order_update_failed', {
+      message: error?.message || String(error),
+    });
+  });
+  if (ctx?.waitUntil) ctx.waitUntil(task);
+  return task;
 }
 
 function isTrustedOpsMutationOrigin(req, env) {
@@ -1409,6 +1437,7 @@ export default {
           }
           return json({ error: update.error || 'existing_order_locked' }, 409, cors);
         }
+        scheduleDriverRouteRefresh(env, ctx);
         return json({
           order_id: existingWalletOrder.id,
           token: existingWalletOrder.token,
@@ -1610,6 +1639,7 @@ export default {
           await notifyEmail(env, env.DB, { orderId: created.id, template: 'ops_new_business_order', recipient: env.OPS_EMAIL, subject: `הזמנה עסקית חדשה #${created.id} — יתרה שמורה ₪${finalPrice}`, html: `${escHtml(b.name)} · ${escHtml(b.pickup)} → ${escHtml(b.dropoff)} · מסלול ${escHtml(businessSession.plan_id)} · יתרה שמורה ₪${escHtml(finalPrice)}<br><a href="${escHtml(finalUrl)}">${escHtml(finalUrl)}</a>` });
         } catch {}
         const refreshed = await getBusinessSession(req, env);
+        scheduleDriverRouteRefresh(env, ctx);
         return json({
           order_id: created.id,
           token,
@@ -2207,6 +2237,7 @@ export default {
       if (b.status === 'paid') {
         if (before.payment_method === 'wallet') return json({ ok: true, unchanged: true });
         const paid = await confirmPaidOrder(env, before);
+        if (!paid.unchanged) scheduleDriverRouteRefresh(env, ctx);
         return paid.unchanged ? json({ ok: true, unchanged: true }) : json({ ok: true, order: paid.order });
       }
       const fields = {};
@@ -2236,11 +2267,13 @@ export default {
             eventId: completion.eventId,
           });
           ctx?.waitUntil?.(processDeliveryNotificationOutbox(env));
+          scheduleDriverRouteRefresh(env, ctx);
           return json({ ok: true, settlement });
         }
         if (o) return json({ ok: true, unchanged: true });
       } else {
         await setOrderStatus(env.DB, id, b.status, fields);
+        scheduleDriverRouteRefresh(env, ctx);
       }
       return json({ ok: true });
     }
@@ -2392,6 +2425,7 @@ export default {
         return json({ error: 'redelivery_release_conflict' }, 409);
       }
       console.log('redelivery_released', { order: id, city: pending.dropoff_city, fee: pending.fee });
+      scheduleDriverRouteRefresh(env, ctx);
       return json({ ok: true, order: await getOrderById(env.DB, id) });
     }
 
@@ -2743,6 +2777,7 @@ export default {
               orderFields: { shopify_order_id: parsed.shopifyOrderId },
               analyticsSettlement: true,
             });
+            scheduleDriverRouteRefresh(env, ctx);
           } else {
             // authorized but not yet captured (future Mesh/preauth mode)
             await env.DB.prepare('UPDATE orders SET shopify_order_id=?, payment_status=? WHERE id=?')
@@ -2758,12 +2793,20 @@ export default {
   async scheduled(event, env, ctx) {
     // Runs on every scheduled tick, not only the daily one, so a hold reverts to a return
     // close to its 24h boundary rather than up to a day late.
-    const tasks = [processDeliveryNotificationOutbox(env), runHeldPackageAutoReturn(env.DB)];
+    // Reconcile the route after the held-package transition completes so that the same
+    // tick can notify the driver about the newly created return leg.
+    const heldPackageAndRouteTask = runHeldPackageAutoReturn(env.DB)
+      .then(() => refreshActiveDriverRoute(env, event.scheduledTime || Date.now()));
+    const tasks = [
+      processDeliveryNotificationOutbox(env),
+      heldPackageAndRouteTask,
+    ];
     if (event.cron === '17 2 * * *') {
       tasks.push(
         runRetentionCleanup(env.DB),
         cleanupBusinessSecurity(env.DB),
         cleanupAnalyticsClaims(env.DB),
+        cleanupDriverPushDevices(env.DB, event.scheduledTime || Date.now()),
       );
     }
     ctx.waitUntil(Promise.all(tasks).catch((error) => {

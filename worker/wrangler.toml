@@ -29,6 +29,7 @@ EMAIL_FROM_ADDRESS = "no-reply@edenmish.com"
 EMAIL_FROM_NAME = "EdenMish"
 EMAIL_RECIPIENT_POLICY = "open"
 AUTO_DRIVER_DISPATCH = "on"
+APNS_ALLOWED_TOPICS = "com.edenmish.edendriver,com.edenmish.edendriver.nativebeta"
 ROUTE_OPTIMIZATION_PROVIDER = "google"
 GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID = "gen-lang-client-0008834106"
 SHOPIFY_SHOP = "edenmish.myshopify.com"
@@ -50,7 +51,8 @@ database_id = "f2f51b54-0170-4594-a41c-7a6037c902aa"
 #   SHOPIFY_ADMIN_TOKEN (shpat_...), SHOPIFY_WEBHOOK_SECRET,
 #   RESEND_API_KEY (or SENDGRID_API_KEY),
 #   GREENINVOICE_API_KEY, GREENINVOICE_SECRET_KEY,
-#   GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON (only when route optimization is enabled).
+#   GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON (only when route optimization is enabled),
+#   APNS_TEAM_ID, APNS_KEY_ID, APNS_PRIVATE_KEY_P8 (driver push notifications).
 # Optional WhatsApp Cloud API secrets (see docs/WHATSAPP_OPERATIONS.md):
 #   WHATSAPP_PHONE_ID, WHATSAPP_TOKEN, WHATSAPP_APP_SECRET,
 #   WHATSAPP_WEBHOOK_VERIFY_TOKEN, WHATSAPP_OPS_RECIPIENT,

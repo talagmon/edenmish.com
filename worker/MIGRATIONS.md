@@ -984,6 +984,40 @@ authenticated batch-approval endpoint.
 
 ---
 
+### 037_driver_push_devices.sql
+
+**Purpose:** Stores installation-bound APNs device registrations for authenticated
+drivers. The Worker uses the environment and app bundle ID to route each notification
+to the correct Apple Push Notification service endpoint and topic. Invalid or
+unregistered device tokens are disabled, and registrations not seen for 90 days are
+removed by the daily retention job.
+
+Migration numbers 035 and 036 are reserved by the parallel customer-messaging work.
+This table is independent of those migrations, but keep numeric order when all three
+reach the same environment.
+
+**Production command:**
+```bash
+wrangler d1 execute edenmish --remote \
+  --file=./migrations/037_driver_push_devices.sql
+```
+
+**Verification query:**
+```sql
+SELECT name, type FROM sqlite_master
+WHERE name IN (
+  'driver_push_devices',
+  'idx_driver_push_devices_active'
+)
+ORDER BY type, name;
+```
+
+Expected: one table and one active-device lookup index. The table starts empty;
+authenticated app installations populate it after the driver grants notification
+permission and signs in.
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -1020,6 +1054,7 @@ authenticated batch-approval endpoint.
 - [ ] Run `032_analytics_conversion_claims.sql` after merge and before deploying the paid-conversion Worker.
 - [ ] Run `033_business_batch_external_id.sql` after merge and before deploying business batch import.
 - [ ] Run `034_business_batch_mappings.sql` after 033 and before enabling approved mapping reuse.
+- [ ] Run `037_driver_push_devices.sql` after any merged 035/036 migrations and before enabling driver push notifications.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).
@@ -1036,7 +1071,7 @@ whether each table exists:
 ```sql
 SELECT name FROM sqlite_master
 WHERE type='table'
-AND name IN ('rate_limits', 'delivery_proofs', 'notifications', 'coupons', 'coupon_redemptions', 'business_accounts', 'business_wallets', 'business_batch_mappings', 'wallet_entries', 'delivery_completion_transitions', 'delivery_notification_outbox')
+AND name IN ('rate_limits', 'delivery_proofs', 'notifications', 'coupons', 'coupon_redemptions', 'business_accounts', 'business_wallets', 'business_batch_mappings', 'wallet_entries', 'delivery_completion_transitions', 'delivery_notification_outbox', 'driver_push_devices')
 ORDER BY name;
 ```
 
