@@ -67,7 +67,12 @@ export async function setOrderRating(DB, orderId, rating) {
 }
 
 export async function listOrders(DB, limit = 500) {
-  return DB.prepare(`SELECT * FROM orders ORDER BY id DESC LIMIT ?`).bind(limit).all();
+  return DB.prepare(`SELECT orders.*,
+    CASE WHEN payment_orders.order_id IS NULL THEN 0 ELSE 1 END AS has_payment_record
+    FROM orders
+    LEFT JOIN (SELECT DISTINCT order_id FROM payments) AS payment_orders
+      ON payment_orders.order_id = orders.id
+    ORDER BY orders.id DESC LIMIT ?`).bind(limit).all();
 }
 
 export async function getStatusHistory(DB, orderId) {

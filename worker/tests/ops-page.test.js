@@ -33,3 +33,14 @@ test('ops exposes per-driver manual and QR pairing without embedding review cred
   assert.match(html, /לאחר שימוש ראשון הקוד מתבטל אוטומטית/);
   assert.doesNotMatch(html, /DRIVER_REVIEW_CODE|DRIVER_ONE_TIME_CODE/);
 });
+
+test('ops offers a guarded action only for server-classified stale checkout orphans', () => {
+  const html = opsHtml({});
+
+  assert.match(html, /if\(o\.checkout_recovery_eligible\)/);
+  assert.match(html, /data-act="recover-checkout"/);
+  assert.match(html, /\/api\/ops\/orders\/'\+id\+'\/recover-checkout/);
+  assert.match(html, /אין לנסות ליצור חיוב נוסף/);
+  assert.match(html, /הפעולה אינה ניתנת לביטול/);
+  assert.match(html, /else if\(act==='recover-checkout'\)recoverCheckout\(id\)/);
+});
