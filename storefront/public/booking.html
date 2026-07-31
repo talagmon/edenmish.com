@@ -308,9 +308,9 @@ details[open] .details-arrow{transform:rotate(180deg)}
             <div class="order-field"><label for="f-phone">מספר טלפון</label><input id="f-phone" name="phone" dir="ltr" placeholder="050-0000000" type="tel" required autocomplete="tel"/></div>
             <div class="order-field full"><label for="f-email">אימייל לקבלה ולקישור מעקב</label><input id="f-email" name="email" dir="ltr" placeholder="email@example.com" type="email" required autocomplete="email"/>
               <div id="email-status" class="text-label-sm min-h-[1.15rem] flex items-center gap-1"></div>
-              <div id="email-suggest" hidden class="mt-2 rounded-xl border border-secondary/40 bg-secondary-container/20 p-3">
-                <div class="flex items-start justify-between gap-2"><div class="flex items-start gap-2"><span class="material-symbols-outlined text-secondary text-xl mt-0.5" aria-hidden="true">spellcheck</span><p id="email-suggest-text" class="text-label-sm text-on-surface leading-relaxed"></p></div><button type="button" id="email-suggest-x" class="text-on-surface-variant hover:text-on-surface text-xl leading-none" aria-label="סגור">×</button></div>
-                <div class="flex flex-wrap gap-2 mt-2"><button type="button" id="email-suggest-accept" class="bg-secondary text-on-secondary px-3 py-2 rounded-lg font-label-bold text-label-sm">כן, תקן בבקשה</button><button type="button" id="email-suggest-keep" class="border border-outline-variant text-on-surface px-3 py-2 rounded-lg text-label-sm">השאר כפי שהקלדתי</button></div>
+              <div id="email-suggest" hidden class="mt-2 rounded-xl border border-error/40 bg-error-container/20 p-3">
+                <div class="flex items-start gap-2"><span class="material-symbols-outlined text-error text-xl mt-0.5" aria-hidden="true">error</span><p id="email-suggest-text" class="text-label-sm text-on-surface leading-relaxed">הדומיין שהוקלד אינו תקין. האם התכוונתם ל-<b id="email-suggest-value" dir="ltr" class="text-secondary"></b>?</p></div>
+                <div class="flex flex-wrap gap-2 mt-2"><button type="button" id="email-suggest-accept" class="bg-secondary text-on-secondary px-3 py-2 rounded-lg font-label-bold text-label-sm">כן, תקן בבקשה</button><button type="button" id="email-suggest-edit" class="border border-outline-variant text-on-surface px-3 py-2 rounded-lg text-label-sm">אערוך בעצמי</button></div>
               </div>
             </div>
           </div>
@@ -519,7 +519,7 @@ async function initBusinessMode(){
       const preferredInput=document.querySelector('input[name="service"][value="'+serviceState.preferred+'"]:not(:disabled)');
       if(preferredInput){preferredInput.checked=true;sched.service=preferredInput.value;renderSchedule();}
     }
-    const email=document.getElementById("f-email");if(email){email.value=businessAccount.user.email||"";email.readOnly=true;emailState.value=email.value;emailState.resolved=true;}
+    const email=document.getElementById("f-email");if(email){email.value=businessAccount.user.email||"";email.readOnly=true;}
     const name=document.getElementById("f-name");if(name&&!name.value)name.value=businessAccount.user.name||businessAccount.account.company_name||"";
     const phone=document.getElementById("f-phone");if(phone&&!phone.value)phone.value=businessAccount.user.phone||"";
     computeEstimate();
@@ -901,7 +901,7 @@ function automaticFingerprint() {
 async function checkAutomaticCoupon() {
   if (couponState.source === "manual" || automaticCouponSuppressed) return;
   const fields = getCouponPricingFields();
-  if (!quoteState.data || !quoteState.data.available || !fields.phone || !EMAIL_RE.test(String(fields.email || "").trim())) return;
+  if (!quoteState.data || !quoteState.data.available || !fields.phone || !validateEmailAddress(fields.email).valid) return;
   const fingerprint = automaticFingerprint();
   const sequence = ++automaticCouponSequence;
   automaticCouponFingerprint = fingerprint;
@@ -1172,22 +1172,8 @@ document.querySelectorAll('input[type="text"], input[type="tel"], input[type="em
   input.addEventListener("blur",  () => { const l = input.parentElement.querySelector("label"); if (l) l.classList.replace("text-primary", "text-on-surface-variant"); });
 });
 
-// Email: shared regex (used here + at submit), real-time inline validation, trim-on-blur,
-// plus typo detection for well-known providers (gmail/outlook/icloud/...) with a
-// confirm-to-fix suggestion. Server-side validation remains authoritative.
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const KNOWN_DOMAINS = [
-  "gmail.com", "googlemail.com",
-  "outlook.com", "hotmail.com", "live.com", "msn.com",
-  "yahoo.com", "yahoo.co.il",
-  "aol.com",
-  "icloud.com", "me.com", "mac.com",
-  "protonmail.com", "proton.me",
-  "gmx.com", "gmx.net", "gmx.de",
-  "zoho.com", "yandex.com", "mail.com",
-  "walla.co.il", "walla.com",
-  "netvision.net.il", "013.net.il", "bezeqint.net"
-];
+// Email: immediate format/domain feedback. High-confidence domain typos are
+// blocking; the Worker repeats the validation before any order is created.
 const DOMAIN_FIXES = {
   "gmai.com":"gmail.com", "gmial.com":"gmail.com", "gmil.com":"gmail.com",
   "gmal.com":"gmail.com", "gnail.com":"gmail.com", "gmaill.com":"gmail.com",
@@ -1207,58 +1193,57 @@ const DOMAIN_FIXES = {
   "yaho.com":"yahoo.com", "yhaoo.com":"yahoo.com",
   "yahoo.co":"yahoo.com", "yahoo.cm":"yahoo.com",
   "iclod.com":"icloud.com", "iclould.com":"icloud.com",
-  "iclod.co":"icloud.com", "icloud.co":"icloud.com",
   "iclod.co":"icloud.com", "icloud.co":"icloud.com"
 };
-function levenshtein(a, b) {
-  const m = a.length, n = b.length;
-  if (!m) return n; if (!n) return m;
-  let prev = [], curr = [];
-  for (let j = 0; j <= n; j++) prev[j] = j;
-  for (let i = 1; i <= m; i++) {
-    curr[0] = i;
-    for (let j = 1; j <= n; j++) {
-      const cost = a[i-1] === b[j-1] ? 0 : 1;
-      curr[j] = Math.min(prev[j] + 1, curr[j-1] + 1, prev[j-1] + cost);
-    }
-    prev = curr; curr = [];
-  }
-  return prev[n];
-}
+const DOMAIN_SUFFIX_FIXES = [
+  [".co.ik",".co.il"], [".con",".com"], [".cim",".com"],
+  [".cmo",".com"], [".comm",".com"], [".ogr",".org"],
+  [".ney",".net"], [".ner",".net"], [".ik",".il"]
+];
 function suggestEmailDomain(domain) {
   const d = String(domain || "").toLowerCase().trim();
-  if (!d || KNOWN_DOMAINS.indexOf(d) >= 0) return null;
+  if (!d) return null;
   if (DOMAIN_FIXES[d]) return DOMAIN_FIXES[d];
-  let best = null, bestDist = 99;
-  for (let i = 0; i < KNOWN_DOMAINS.length; i++) {
-    const k = KNOWN_DOMAINS[i];
-    const dist = levenshtein(d, k);
-    if (dist < bestDist) { bestDist = dist; best = k; }
+  for (let i = 0; i < DOMAIN_SUFFIX_FIXES.length; i++) {
+    const wrong = DOMAIN_SUFFIX_FIXES[i][0], fixed = DOMAIN_SUFFIX_FIXES[i][1];
+    if (d.endsWith(wrong) && d.length > wrong.length) return d.slice(0, -wrong.length) + fixed;
   }
-  return (best && bestDist > 0 && bestDist <= 2 && d.length >= 4) ? best : null;
+  return null;
 }
-function splitDomain(v) {
-  const at = String(v || "").lastIndexOf("@");
-  return at < 0 ? null : { local: v.slice(0, at), domain: v.slice(at + 1) };
+function validateEmailAddress(value) {
+  const email = String(value || "").trim().toLowerCase();
+  if (!email || email.length > 254) return {valid:false,code:"invalid_email"};
+  const at = email.indexOf("@");
+  if (at <= 0 || at !== email.lastIndexOf("@")) return {valid:false,code:"invalid_email"};
+  const local = email.slice(0, at), domain = email.slice(at + 1);
+  const validLocal = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+$/;
+  if (local.length > 64 || !validLocal.test(local) || local.startsWith(".") || local.endsWith(".") || local.includes("..") || domain.length > 253) return {valid:false,code:"invalid_email"};
+  const labels = domain.split("."), validLabel = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+  if (labels.length < 2 || labels.some(label => !validLabel.test(label)) || labels[labels.length - 1].length < 2) return {valid:false,code:"invalid_email"};
+  const fixed = suggestEmailDomain(domain);
+  if (fixed && fixed !== domain) return {valid:false,code:"invalid_email_domain",suggestion:local+"@"+fixed};
+  return {valid:true,email};
 }
 const emailInput = document.getElementById("f-email");
 const emailSuggestBox = document.getElementById("email-suggest");
-const emailSuggestText = document.getElementById("email-suggest-text");
-let emailState = { value: null, suggested: null, resolved: false };
+const emailSuggestValue = document.getElementById("email-suggest-value");
+let emailState = { suggested: null };
 function showEmailSuggestion(suggestedEmail) {
   emailState.suggested = suggestedEmail;
-  emailState.resolved = false;
-  emailSuggestText.innerHTML = 'האם התכוונת ל-<b dir="ltr" class="text-secondary">' + suggestedEmail + '</b>?';
+  emailSuggestValue.textContent = suggestedEmail;
   emailSuggestBox.hidden = false;
 }
 function hideEmailSuggestion() { emailSuggestBox.hidden = true; }
 if (emailSuggestBox) {
   document.getElementById("email-suggest-accept").addEventListener("click", () => {
-    if (emailState.suggested) { emailInput.value = emailState.suggested; emailInput.dispatchEvent(new Event('input',{bubbles:true})); emailState.resolved = true; }
+    if (emailState.suggested) { emailInput.value = emailState.suggested; emailInput.dispatchEvent(new Event('input',{bubbles:true})); }
     hideEmailSuggestion();
   });
-  document.getElementById("email-suggest-keep").addEventListener("click", () => { emailState.resolved = true; hideEmailSuggestion(); });
-  document.getElementById("email-suggest-x").addEventListener("click", () => { emailState.resolved = true; hideEmailSuggestion(); });
+  document.getElementById("email-suggest-edit").addEventListener("click", () => {
+    hideEmailSuggestion();
+    emailInput.focus();
+    emailInput.select();
+  });
 }
 (function(){
   const inp = emailInput;
@@ -1273,21 +1258,17 @@ if (emailSuggestBox) {
   const check = () => {
     const v = inp.value.trim();
     if(!v) return render(false, "נא למלא אימייל");
-    if(!EMAIL_RE.test(v)) return render(false, 'פורמט לא תקין — למשל name@example.com');
-    // Typo detection on known-provider domains (format is valid, but domain may be misspelled).
-    const parts = splitDomain(v);
-    const fixed = parts ? suggestEmailDomain(parts.domain) : null;
-    if (fixed && fixed !== parts.domain) {
-      if (emailState.value !== v) { emailState.value = v; emailState.resolved = false; }
-      if (!emailState.resolved) {
-        showEmailSuggestion(parts.local + "@" + fixed);
-        st.innerHTML = '<span class="material-symbols-outlined text-alert-amber" style="font-size:16px">warning</span><span class="text-alert-amber">ייתכן שייש טעות בכתובת — בדקו את ההצעה</span>';
-        return;
+    const result = validateEmailAddress(v);
+    if (!result.valid) {
+      if (result.suggestion) {
+        showEmailSuggestion(result.suggestion);
+        return render(false, "הדומיין שהוקלד אינו תקין — יש לתקן את כתובת האימייל");
       }
-    } else {
-      emailState.suggested = null;
       hideEmailSuggestion();
+      return render(false, "פורמט לא תקין — למשל name@example.com");
     }
+    emailState.suggested = null;
+    hideEmailSuggestion();
     render(true, "");
   };
   inp.addEventListener("blur", () => { touched = true; inp.value = inp.value.trim(); check(); });
@@ -1352,13 +1333,10 @@ function validateFlowStep(step){
     if(!name.value.trim())return focusFlowField(name,"נא למלא שם מלא.");
     if(!ilPhone.test(phone.value.trim().replace(/\s/g,"")))return focusFlowField(phone,"נא למלא מספר טלפון ישראלי תקין.");
     const emailValue=email.value.trim();
-    if(!EMAIL_RE.test(emailValue))return focusFlowField(email,"נא למלא כתובת אימייל תקינה.");
-    const parts=splitDomain(emailValue);
-    const fixed=parts?suggestEmailDomain(parts.domain):null;
-    if(fixed&&fixed!==parts.domain&&(!emailState.resolved||emailState.value!==emailValue)){
-      emailState.value=emailValue;emailState.suggested=parts.local+"@"+fixed;emailState.resolved=false;
-      showEmailSuggestion(emailState.suggested);
-      return focusFlowField(email,"נראה שיש שגיאת כתיב בכתובת האימייל. אנא אשרו או דחו את ההצעה.");
+    const emailValidation=validateEmailAddress(emailValue);
+    if(!emailValidation.valid){
+      if(emailValidation.suggestion)showEmailSuggestion(emailValidation.suggestion);
+      return focusFlowField(email,emailValidation.suggestion?"הדומיין שהוקלד אינו תקין. יש לתקן את כתובת האימייל.":"נא למלא כתובת אימייל תקינה.");
     }
   }
   if(step===3&&!pickup.value.trim())return focusFlowField(pickup,"נא למלא כתובת איסוף.");
@@ -1507,20 +1485,14 @@ form.addEventListener("submit", async (e) => {
 
   if (!name) return showError("נא למלא שם מלא.");
   if (!ilPhone.test(phone.replace(/\s/g, ""))) return showError("נא למלא מספר טלפון ישראלי תקין.");
-  if (!EMAIL_RE.test(email)) return showError("נא למלא כתובת אימייל תקינה.");
-  // Typo gate: if the domain looks like a misspelling of a known provider,
-  // surface the suggestion and require the user to accept or dismiss before continuing.
-  if (!emailState.resolved || emailState.value !== email) {
-    const parts = splitDomain(email);
-    const fixed = parts ? suggestEmailDomain(parts.domain) : null;
-    if (fixed && fixed !== parts.domain) {
-      emailState.value = email;
-      emailState.suggested = parts.local + "@" + fixed;
-      emailState.resolved = false;
-      showEmailSuggestion(emailState.suggested);
+  const emailValidation = validateEmailAddress(email);
+  if (!emailValidation.valid) {
+    if (emailValidation.suggestion) {
+      showEmailSuggestion(emailValidation.suggestion);
       emailSuggestBox.scrollIntoView({ behavior: "smooth", block: "center" });
-      return showError("נראה שיש שגיאת כתיב בכתובת האימייל. אנא אשרו או דחו את ההצעה.");
+      return showError("הדומיין שהוקלד אינו תקין. יש לתקן את כתובת האימייל לפני המשך ההזמנה.");
     }
+    return showError("נא למלא כתובת אימייל תקינה.");
   }
   if (!pickupAddress) return showError("נא למלא כתובת איסוף.");
   if (!dropoffAddress) return showError("נא למלא כתובת יעד.");
@@ -1600,6 +1572,11 @@ form.addEventListener("submit", async (e) => {
     if (!res.ok) {
       if (res.status === 429) return showError("שלחנו יותר מדי בקשות. נא להמתין מספר דקות ולנסות שוב.");
       if (data && data.error && data.error.startsWith("invalid phone")) return showError("מספר הטלפון אינו תקין.");
+      if (data && data.error === "invalid_email_domain") {
+        if (data.suggestion) showEmailSuggestion(data.suggestion);
+        return showError("הדומיין שהוקלד אינו תקין. יש לתקן את כתובת האימייל.");
+      }
+      if (data && data.error === "invalid_email") return showError("כתובת האימייל אינה תקינה.");
       if (data && data.error && data.error.startsWith("invalid email")) return showError("כתובת האימייל אינה תקינה.");
       if (data && data.error === "out_of_zone") return showError("אחת הכתובות מחוץ לאזור השירות שלנו.");
       if (data && data.error === "flash_unavailable_z3") return showError("שירות מהיר אינו זמין באזור 3. בחרו שירות רגיל או חסכוני.");

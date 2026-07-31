@@ -1092,6 +1092,15 @@ describe('Frontend: Booking form', () => {
     assertContains(html, 'if (data.test && data.token)', 'paid local test-mode exception');
   });
 
+  test('blocks high-confidence email-domain typos instead of allowing an override', () => {
+    assertContains(html, '"gmail.con":"gmail.com"', 'Gmail typo correction');
+    assertContains(html, '[".co.ik",".co.il"]', 'Israeli suffix typo correction');
+    assertContains(html, 'invalid_email_domain', 'server domain-error handling');
+    assertContains(html, 'id="email-suggest-edit"', 'manual correction action');
+    assert.ok(!html.includes('id="email-suggest-keep"'), 'invalid domain must not have a keep-anyway action');
+    assert.ok(!html.includes('emailSuggestText.innerHTML'), 'suggested address must not be rendered as HTML');
+  });
+
   test('Keeps the final-submit Material icon intact across loading states', () => {
     assertContains(html, 'id="submit-btn-label"', 'submit label wrapper');
     assertContains(html, 'setSubmitButtonLabel("בודק מחיר במסלול…")', 'business quote loading label');
