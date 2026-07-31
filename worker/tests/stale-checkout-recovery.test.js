@@ -220,6 +220,25 @@ describe('stale checkout orphan recovery', () => {
     );
   });
 
+  test('blocks manual approval from retrying a classified orphan checkout', async () => {
+    const DB = d1Database();
+    insertOrder(DB.sqlite, {
+      id: 54,
+      createdAt: Date.now() - STALE_CHECKOUT_ORPHAN_AGE_MS - 10_000,
+    });
+
+    const response = await worker.fetch(
+      await opsRequest('/api/ops/orders/54/approve'),
+      envFor(DB),
+    );
+
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), {
+      error: 'stale_checkout_requires_recovery',
+    });
+    assert.equal(DB.sqlite.prepare('SELECT status FROM orders WHERE id = 54').get().status, 'priced');
+  });
+
   test('requires an authenticated Ops session', async () => {
     const DB = d1Database();
     insertOrder(DB.sqlite, {
