@@ -439,6 +439,20 @@ describe('POST /api/orders with coupon', () => {
       assert.equal(db.state.orders.length, 0);
     }
   });
+
+  test('rejects a mistyped email domain before creating an order', async () => {
+    const db = apiDb();
+    const res = await worker.fetch(
+      post('/api/orders', { ...ORDER_BODY, email: 'customer@gmail.con' }, nextIp()),
+      envFor(db),
+    );
+    assert.equal(res.status, 400);
+    assert.deepEqual(await res.json(), {
+      error: 'invalid_email_domain',
+      suggestion: 'customer@gmail.com',
+    });
+    assert.equal(db.state.orders.length, 0);
+  });
 });
 
 describe('customer tracking payment gate', () => {

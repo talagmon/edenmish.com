@@ -75,6 +75,7 @@ import {
 import { corsFor, maskEmail, publicOrderSummary, clientIp, anonKey } from './security.js';
 import { notifyEmail } from './notify.js';
 import { normalizeIlPhone, scheduleError, validIsraeliId } from './validate.js';
+import { validateEmailAddress } from './email-validation.js';
 import {
   validateCoupon,
   findAutomaticCoupon,
@@ -1214,8 +1215,14 @@ export default {
           b[field] = raw || null;
         }
       }
-      b.email = String(b.email).trim().toLowerCase();
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(b.email)) return json({ error: 'invalid email' }, 400, cors);
+      const emailValidation = validateEmailAddress(b.email);
+      if (!emailValidation.valid) {
+        return json({
+          error: emailValidation.code,
+          ...(emailValidation.suggestion ? { suggestion: emailValidation.suggestion } : {}),
+        }, 400, cors);
+      }
+      b.email = emailValidation.email;
       // A typo'd phone is a failed delivery — normalize to E.164 or reject up front.
       const phone = normalizeIlPhone(b.phone);
       if (!phone) return json({ error: 'invalid phone' }, 400, cors);
