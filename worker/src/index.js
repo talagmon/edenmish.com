@@ -83,6 +83,8 @@ import {
   attachFirstDeliveryClaim,
   releaseFirstDeliveryClaim,
   rollbackCouponedCheckoutFailure,
+  isStaleCheckoutOrphan,
+  recoverStaleCheckoutOrphan,
   recordRedemption,
   recordBusinessRedemption,
   releaseBusinessRedemption,
@@ -2197,7 +2199,11 @@ export default {
       // delivery, so the operator does not have to work out the zone rate by hand. It is a
       // suggestion only: whether to charge at all is a fault judgement Ops makes.
       const orders = (r.results || []).map((order) => {
-        if (!order || !order.retained_by_driver) return order;
+        const checkoutRecoveryEligible = isStaleCheckoutOrphan(order);
+        const { has_payment_record, ...publicOrder } = order || {};
+        if (!order || !order.retained_by_driver) {
+          return { ...publicOrder, checkout_recovery_eligible: checkoutRecoveryEligible };
+        }
         // If the owner has already supplied a corrected redelivery address, surface it and its
         // computed fee. Otherwise suggest the return-to-origin fee as a default.
         let pending = null;
@@ -2211,10 +2217,11 @@ export default {
           when_date: order.when_date,
           when_hour: order.when_hour,
         });
-        const { pending_redelivery_json, ...rest } = order;
+        const { pending_redelivery_json, ...rest } = publicOrder;
         const redeliveryCharge = redeliveryByOrder.get(Number(order.id));
         return {
           ...rest,
+          checkout_recovery_eligible: checkoutRecoveryEligible,
           retry_fee_suggested: suggestion.fee,
           retry_fee_zone: suggestion.zone,
           pending_redelivery: pending && {
@@ -2229,6 +2236,29 @@ export default {
       return json({
         orders,
         integrations: { shopify_webhooks: shopifyWebhookRegistrar.status() },
+      });
+    }
+
+    const checkoutRecoveryMatch = /^\/api\/ops\/orders\/(\d+)\/recover-checkout$/.exec(path);
+    if (onOps && checkoutRecoveryMatch && req.method === 'POST') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      if (!isTrustedOpsMutationOrigin(req, env)) return json({ error: 'untrusted_origin' }, 403);
+      const id = Number(checkoutRecoveryMatch[1]);
+      if (!Number.isSafeInteger(id) || id <= 0) return json({ error: 'invalid id' }, 400);
+      const result = await recoverStaleCheckoutOrphan(env.DB, { orderId: id });
+      if (result.reason === 'not_found') return json({ error: 'not found' }, 404);
+      if (!result.recovered) {
+        return json({ error: 'order_not_recoverable', reason: result.reason || 'state_changed' }, 409);
+      }
+      console.log('stale_checkout_orphan_recovered', {
+        order_id: id,
+        released_coupon_redemptions: result.releasedCouponRedemptions,
+        released_promotion_claims: result.releasedPromotionClaims,
+      });
+      return json({
+        ok: true,
+        released_coupon_redemptions: result.releasedCouponRedemptions,
+        released_promotion_claims: result.releasedPromotionClaims,
       });
     }
 
@@ -2300,6 +2330,15 @@ export default {
       let b; try { b = await req.json(); } catch { b = {}; }
       const o = await getOrderById(env.DB, id);
       if (!o) return json({ error: 'not found' }, 404);
+      const paymentRecord = await env.DB.prepare(
+        'SELECT 1 AS present FROM payments WHERE order_id = ? LIMIT 1'
+      ).bind(id).first();
+      if (isStaleCheckoutOrphan({
+        ...o,
+        has_payment_record: paymentRecord ? 1 : 0,
+      })) {
+        return json({ error: 'stale_checkout_requires_recovery' }, 409);
+      }
       const price = Number(b.price) || o.price;
       // A manual re-price supersedes any coupon: clear the snapshot (otherwise it would
       // corrupt the new price — draft order line = new price + stale discount) and delete

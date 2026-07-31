@@ -745,9 +745,14 @@ function actionsHtml(o){
   var h = '<div class="space-y-3 mt-2">';
   if(LIVE.includes(s)) h += gpsControlHtml(id);
   if(s==="review"||s==="priced"||s==="received"){
-    h += '<div class="flex gap-2"><input type="number" min="1" id="price-'+id+'" value="'+(o.price||"")+'" placeholder="₪" class="flex-1 bg-surface-container-lowest border border-outline-variant text-on-surface rounded-lg p-3 text-center text-lg"/>';
-    h += '<button onclick="approveInline('+id+')" class="bg-secondary text-on-secondary font-label-bold px-4 py-3 rounded-lg whitespace-nowrap">אישור מחיר ←</button></div>';
-    if(o.review_flag) h += '<div class="text-alert-amber text-label-sm">חריג: '+esc(o.review_reason||"")+'</div>';
+    if(o.checkout_recovery_eligible){
+      h += '<div class="glass-card rounded-xl p-4 border border-alert-amber/30 bg-alert-amber/5 text-alert-amber text-label-sm">ההזמנה נוצרה לפני יותר משעה, אך לא נוצרו עבורה קישור תשלום או מזהה Shopify. אין לנסות ליצור חיוב נוסף.</div>';
+      h += '<button onclick="recoverCheckout('+id+')" class="w-full bg-error/20 border border-error/40 text-error font-label-bold py-4 rounded-xl">ביטול הזמנה תקועה ושחרור הטבות</button>';
+    }else{
+      h += '<div class="flex gap-2"><input type="number" min="1" id="price-'+id+'" value="'+(o.price||"")+'" placeholder="₪" class="flex-1 bg-surface-container-lowest border border-outline-variant text-on-surface rounded-lg p-3 text-center text-lg"/>';
+      h += '<button onclick="approveInline('+id+')" class="bg-secondary text-on-secondary font-label-bold px-4 py-3 rounded-lg whitespace-nowrap">אישור מחיר ←</button></div>';
+      if(o.review_flag) h += '<div class="text-alert-amber text-label-sm">חריג: '+esc(o.review_reason||"")+'</div>';
+    }
   } else if(s==="payment_sent"){
     if(o.payment_url) h += '<button onclick="copyPay(\''+esc(o.payment_url)+'\')" class="w-full glass-card border border-primary/30 text-primary font-label-bold py-4 rounded-xl flex items-center justify-center gap-2"><span class="material-symbols-outlined">link</span> העתק קישור תשלום</button>';
     h += '<button onclick="markPaid('+id+')" class="w-full glass-card text-on-surface font-label-bold py-4 rounded-xl">סמן כשולם ידנית</button>';
@@ -796,6 +801,15 @@ async function approveInline(id){
 }
 function copyPay(url){if(navigator.clipboard)navigator.clipboard.writeText(url).catch(function(){});}
 async function markPaid(id){if(!confirm("לסמן כשולם ידנית?"))return;await setStatus(id,"paid");}
+async function recoverCheckout(id){
+  if(!confirm("לבטל את ההזמנה התקועה ולשחרר קופון או הטבת משלוח ראשון? הפעולה אינה ניתנת לביטול."))return;
+  try{
+    var r=await api("/api/ops/orders/"+id+"/recover-checkout",{method:"POST"});
+    if(!r.ok)throw new Error("checkout_recovery_failed");
+    alert("ההזמנה בוטלה וההטבות שוחררו ✓");
+    await refresh();
+  }catch(e){showTransientError("לא ניתן לבטל את ההזמנה. ייתכן שמצבה השתנה — רעננו ובדקו שוב.");}
+}
 async function setStatus(id,st){
   try{
     var r=await api("/api/ops/orders/"+id+"/status",{method:"POST",body:JSON.stringify({status:st})});

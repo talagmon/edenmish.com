@@ -1332,6 +1332,15 @@ describe('Frontend: Security and accessibility hardening', () => {
     assertContains(html, 'catch(e){return connectionErrorView();}');
   });
 
+  test('ops dashboard replaces repricing with guarded recovery for classified checkout orphans', () => {
+    const html = readPage('dash.html');
+    assertContains(html, 'if(o.checkout_recovery_eligible)', 'server-classified recovery gate');
+    assertContains(html, 'אין לנסות ליצור חיוב נוסף', 'duplicate-charge warning');
+    assertContains(html, 'onclick="recoverCheckout(', 'recovery action');
+    assertContains(html, '/recover-checkout', 'recovery endpoint');
+    assertContains(html, 'הפעולה אינה ניתנת לביטול', 'destructive confirmation');
+  });
+
   test('ops authentication uses the translucent iOS-style glass treatment', () => {
     const html = readPage('dash.html');
     assertContains(html, '.dashboard-auth-card::before', 'layered translucent glass');

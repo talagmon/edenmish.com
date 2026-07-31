@@ -10,7 +10,6 @@
     "deploy": "wrangler pages deploy public",
     "test": "node --test tests/pricing.test.js tests/scheduling.test.js tests/business-booking.test.js tests/frontend.test.js tests/api.test.js",
     "test:api": "API_URL=https://find.edenmish.com node --test tests/api.test.js",
-    "lint": "eslint public/*.html --no-eslintrc --parser-options=ecmaVersion:2022 2>/dev/null; echo \"(inline JS in HTML \u2014 use node --check for syntax)\"",
     "syntax-check": "python3 scripts/syntax-check.py",
     "version:patch": "npm version patch --no-git-tag-version",
     "version:minor": "npm version minor --no-git-tag-version",
@@ -19,7 +18,6 @@
   "devDependencies": {
     "@tailwindcss/container-queries": "^0.1.1",
     "@tailwindcss/forms": "^0.5.9",
-    "eslint": "^8.57.1",
     "tailwindcss": "^3.4.13",
     "wrangler": "^4.110.0"
   }

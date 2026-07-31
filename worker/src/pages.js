@@ -443,8 +443,12 @@ function actions(o){
   var s=o.status,id=o.id,h='<div class="ocard-actions">';
   if(LIVE.indexOf(s)>=0)h+=gpsControlHtml(id);
   if(s==='review'||s==='priced'||s==='received'){
-    h+='<div class="inline-price"><input type="number" inputmode="numeric" min="1" id="price-'+id+'" value="'+(o.price||'')+'" placeholder="מחיר ₪">'+feePresetHtml(id,o.retry_fee_suggested,o.retry_fee_zone)+'<button class="btn sm go" data-act="approve" data-id="'+id+'">אישור מחיר ושליחת קישור תשלום</button></div>';
-    if(o.review_flag)h+='<div class="stale" style="width:100%">חריג: '+esc(o.review_reason||'')+'</div>';
+    if(o.checkout_recovery_eligible){
+      h+='<div class="stale" style="width:100%">ההזמנה נוצרה לפני יותר משעה, אך לא נוצרו עבורה קישור תשלום או מזהה Shopify. אין לנסות ליצור חיוב נוסף.</div><button class="btn sm danger" data-act="recover-checkout" data-id="'+id+'">ביטול הזמנה תקועה ושחרור הטבות</button>';
+    }else{
+      h+='<div class="inline-price"><input type="number" inputmode="numeric" min="1" id="price-'+id+'" value="'+(o.price||'')+'" placeholder="מחיר ₪">'+feePresetHtml(id,o.retry_fee_suggested,o.retry_fee_zone)+'<button class="btn sm go" data-act="approve" data-id="'+id+'">אישור מחיר ושליחת קישור תשלום</button></div>';
+      if(o.review_flag)h+='<div class="stale" style="width:100%">חריג: '+esc(o.review_reason||'')+'</div>';
+    }
   }else if(s==='payment_sent'){
     if(o.payment_url)h+='<button class="btn sm" data-act="copy" data-pay="'+esc(o.payment_url)+'">העתק קישור תשלום</button><a class="btn sm alt" href="'+esc(o.payment_url)+'" target="_blank" rel="noopener">פתח קישור</a>';
     h+='<button class="btn sm alt" data-act="markpaid" data-id="'+id+'">סמן כשולם ידנית</button>';
@@ -485,6 +489,7 @@ function copyPay(url){if(navigator.clipboard&&navigator.clipboard.writeText){nav
 async function setStatus(id,st){try{var r=await api('/api/ops/orders/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:st})});if(!r.ok)throw 0;if(st==='picked_up'||st==='delivered'||st==='failed'||st==='cancelled')stopWatch();refresh();}catch(e){alert('לא הצלחנו לעדכן את ההזמנה. נסו שוב.');}}
 async function advance(id,cur){if(NEXT[cur])await setStatus(id,NEXT[cur]);}
 async function markPaid(id){if(!confirm('לסמן כשולם ידנית?'))return;await setStatus(id,'paid');}
+async function recoverCheckout(id){if(!confirm('לבטל את ההזמנה התקועה ולשחרר קופון או הטבת משלוח ראשון? הפעולה אינה ניתנת לביטול.'))return;try{var r=await api('/api/ops/orders/'+id+'/recover-checkout',{method:'POST'});if(!r.ok)throw 0;alert('ההזמנה בוטלה וההטבות שוחררו ✓');refresh();}catch(e){alert('לא ניתן לבטל את ההזמנה. ייתכן שמצבה השתנה — רעננו ובדקו שוב.');}}
 async function releaseRedelivery(id){if(!confirm('התשלום אומת. לשחרר את הכתובת המתוקנת למסלול השליח?'))return;try{var r=await api('/api/ops/orders/'+id+'/release-redelivery',{method:'POST'});if(!r.ok)throw 0;refresh();}catch(e){alert('לא הצלחנו לשחרר את המשלוח החוזר. ודאו שהתשלום אומת ונסו שוב.');}}
 var podOrderId=null,sigCtx=null,sigDrawing=false,sigHas=false;
 function showPod(id){podOrderId=id;var p=document.getElementById('pod');p.hidden=false;document.getElementById('pod-recv').value='';document.getElementById('pod-note').value='';document.getElementById('pod-photo').value='';document.getElementById('pod-photo-ph').innerHTML='<span class="material-symbols-outlined">photo_camera</span> לחצו לצלם את החבילה ביעד';clearSig();initSig();}
@@ -601,6 +606,7 @@ document.getElementById('app').addEventListener('click',function(e){
   else if(act==='advance')advance(id,b.getAttribute('data-next'));
   else if(act==='fail'){if(confirm('לסמן את ההזמנה כנכשלת?'))setStatus(id,'failed');}
   else if(act==='markpaid')markPaid(id);
+  else if(act==='recover-checkout')recoverCheckout(id);
   else if(act==='release-redelivery')releaseRedelivery(id);
   else if(act==='pod')showPod(id);
   else if(act==='driverproofs')showDriverProofs(id);
