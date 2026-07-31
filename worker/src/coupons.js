@@ -572,6 +572,119 @@ export async function rollbackCouponedCheckoutFailure(db, {
   return { rolledBack: changes === 1 };
 }
 
+export const STALE_CHECKOUT_ORPHAN_AGE_MS = 60 * 60 * 1000;
+
+function hasCheckoutArtifact(value) {
+  return value != null && String(value).trim() !== '';
+}
+
+// An order is recoverable only when the checkout handoff left no provider or
+// payment artifact at all. The age gate keeps an in-flight checkout request
+// from being mistaken for an orphan.
+export function isStaleCheckoutOrphan(order, {
+  now = Date.now(),
+  minAgeMs = STALE_CHECKOUT_ORPHAN_AGE_MS,
+} = {}) {
+  if (!order || order.status !== 'priced') return false;
+  if (String(order.payment_status || 'none').toLowerCase() !== 'none') return false;
+  if (!Number.isFinite(Number(order.created_at))) return false;
+  if (Number(order.created_at) > Number(now) - Number(minAgeMs)) return false;
+  if (Number(order.has_payment_record) === 1) return false;
+  return ![
+    order.payment_url,
+    order.payment_id,
+    order.invoice_number,
+    order.invoice_url,
+    order.shopify_draft_order_id,
+    order.shopify_order_id,
+  ].some(hasCheckoutArtifact);
+}
+
+// Ops-only recovery for a persisted exact-price order whose Shopify checkout
+// handoff never produced an artifact. This deliberately retires the orphan; it
+// never retries a charge or creates another Draft Order. The guarded UPDATE and
+// dependent cleanup statements run in one D1 batch, so a concurrent payment or
+// checkout artifact wins and leaves every benefit reservation intact.
+export async function recoverStaleCheckoutOrphan(db, {
+  orderId,
+  now = Date.now(),
+  minAgeMs = STALE_CHECKOUT_ORPHAN_AGE_MS,
+}) {
+  const order = await db.prepare(
+    `SELECT orders.*,
+       EXISTS(SELECT 1 FROM payments WHERE payments.order_id = orders.id) AS has_payment_record
+     FROM orders
+     WHERE orders.id = ?`
+  ).bind(orderId).first();
+  if (!order) return { recovered: false, reason: 'not_found' };
+  if (!isStaleCheckoutOrphan(order, { now, minAgeMs })) {
+    return { recovered: false, reason: 'not_stale_checkout_orphan' };
+  }
+
+  const cutoff = Number(now) - Number(minAgeMs);
+  const results = await db.batch([
+    db.prepare(
+      `UPDATE orders
+       SET status = 'cancelled',
+           payment_status = 'checkout_failed',
+           review_reason = 'stale_checkout_recovered'
+       WHERE id = ?
+         AND status = 'priced'
+         AND LOWER(COALESCE(payment_status, 'none')) = 'none'
+         AND created_at <= ?
+         AND NULLIF(TRIM(CAST(payment_url AS TEXT)), '') IS NULL
+         AND NULLIF(TRIM(CAST(payment_id AS TEXT)), '') IS NULL
+         AND NULLIF(TRIM(CAST(invoice_number AS TEXT)), '') IS NULL
+         AND NULLIF(TRIM(CAST(invoice_url AS TEXT)), '') IS NULL
+         AND NULLIF(TRIM(CAST(shopify_draft_order_id AS TEXT)), '') IS NULL
+         AND NULLIF(TRIM(CAST(shopify_order_id AS TEXT)), '') IS NULL
+         AND NOT EXISTS (SELECT 1 FROM payments WHERE payments.order_id = orders.id)`
+    ).bind(orderId, cutoff),
+    db.prepare(
+      `DELETE FROM coupon_redemptions
+       WHERE order_id = ?
+         AND EXISTS (
+           SELECT 1 FROM orders
+           WHERE id = ? AND status = 'cancelled'
+             AND payment_status = 'checkout_failed'
+             AND review_reason = 'stale_checkout_recovered'
+         )`
+    ).bind(orderId, orderId),
+    db.prepare(
+      `DELETE FROM first_delivery_promotion_claims
+       WHERE order_id = ? AND status = 'redeemed'
+         AND EXISTS (
+           SELECT 1 FROM orders
+           WHERE id = ? AND status = 'cancelled'
+             AND payment_status = 'checkout_failed'
+             AND review_reason = 'stale_checkout_recovered'
+         )`
+    ).bind(orderId, orderId),
+    db.prepare(
+      `INSERT INTO status_history (order_id, status, at, note)
+       SELECT ?, 'cancelled', ?, 'stale_checkout_recovered'
+       WHERE EXISTS (
+         SELECT 1 FROM orders
+         WHERE id = ? AND status = 'cancelled'
+           AND payment_status = 'checkout_failed'
+           AND review_reason = 'stale_checkout_recovered'
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM status_history
+         WHERE order_id = ? AND status = 'cancelled'
+           AND note = 'stale_checkout_recovered'
+       )`
+    ).bind(orderId, Number(now), orderId, orderId),
+  ]);
+
+  const changes = (result) => Number(result?.meta?.changes ?? result?.changes ?? 0);
+  return {
+    recovered: changes(results?.[0]) === 1,
+    releasedCouponRedemptions: changes(results?.[1]),
+    releasedPromotionClaims: changes(results?.[2]),
+  };
+}
+
 // One row per successful redemption; usage limits count these rows.
 //
 // TOCTOU guard: validateCoupon's count check and this insert are separate D1
