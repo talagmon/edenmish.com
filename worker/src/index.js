@@ -2330,6 +2330,15 @@ export default {
       let b; try { b = await req.json(); } catch { b = {}; }
       const o = await getOrderById(env.DB, id);
       if (!o) return json({ error: 'not found' }, 404);
+      const paymentRecord = await env.DB.prepare(
+        'SELECT 1 AS present FROM payments WHERE order_id = ? LIMIT 1'
+      ).bind(id).first();
+      if (isStaleCheckoutOrphan({
+        ...o,
+        has_payment_record: paymentRecord ? 1 : 0,
+      })) {
+        return json({ error: 'stale_checkout_requires_recovery' }, 409);
+      }
       const price = Number(b.price) || o.price;
       // A manual re-price supersedes any coupon: clear the snapshot (otherwise it would
       // corrupt the new price — draft order line = new price + stale discount) and delete
