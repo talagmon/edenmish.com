@@ -239,7 +239,7 @@ function trackingRefreshPolicy() {
   const html = readPage('track.html');
   const source = html.split('// ---- Tracking refresh policy ----')[1].split('async function loadOrder()')[0];
   const context = {};
-  runInNewContext(`${source}\nglobalThis.__policy = { isLiveTrackStatus, isTerminalTrackStatus, pollDelayForStatus };`, context);
+  runInNewContext(`${source}\nglobalThis.__policy = { isLiveTrackStatus, isTerminalTrackStatus, pollDelayForStatus, isFreshGps };`, context);
   return context.__policy;
 }
 
@@ -1172,6 +1172,17 @@ describe('Frontend: Tracking page', () => {
     assert.equal(policy.isTerminalTrackStatus('failed'), true);
     assert.equal(policy.isTerminalTrackStatus('cancelled'), true);
     assert.equal(policy.isTerminalTrackStatus('refund_pending'), false);
+    const now = 1_790_000_000_000;
+    assert.equal(policy.isFreshGps(null, now), false);
+    assert.equal(policy.isFreshGps({ at: now - 119_999 }, now), true);
+    assert.equal(policy.isFreshGps({ at: now - 120_001 }, now), false);
+  });
+
+  test('shows live GPS only for a fresh sample and explains a missing signal', () => {
+    assertContains(html, 'renderLiveGpsBadge(live,gps)', 'fresh-sample badge update');
+    assertContains(html, 'id="map-placeholder-copy"', 'dynamic map placeholder');
+    assertContains(html, 'ממתינים לאות המיקום הראשון מהמכשיר שלו', 'missing GPS explanation');
+    assert.ok(!html.includes('$("live-badge").classList.toggle("hidden", !live)'), 'status alone must not claim GPS is active');
   });
 
   test('tracking distinguishes missing orders, retries transient failures, and lazy-loads Maps', () => {
