@@ -5,8 +5,10 @@ import {
   getOrderById,
   setOrderStatus,
   upsertDeliveryProof,
+  addDriverGpsSamples,
 } from './db.js';
 import { syncDriverRouteAndNotify } from './driver-dispatch.js';
+import { liveGpsStatuses } from './status.js';
 import {
   registerDriverPushDevice,
   unregisterDriverPushDevice,
@@ -30,6 +32,8 @@ const MAX_BODY_BYTES = 64 * 1024;
 const MAX_LOCATION_BATCH_SIZE = 100;
 const LOCATION_FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
 const LOCATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const PUBLIC_GPS_MAX_ACCURACY_METERS = 100;
+const LIVE_GPS_STATUSES = liveGpsStatuses();
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CLIENT_VERSION = /^\d+\.\d+\.\d+\+\d+(?: \([0-9a-f]{7,40}\))?$/i;
 const ID = /^(drv|sh|stop)_[A-Za-z0-9]+$/;
@@ -818,6 +822,22 @@ function validLocationSample(sample, shiftStartedAt, now) {
         && sample.speed_meters_per_second >= 0));
 }
 
+async function liveTrackingAssignments(DB, driverId, shiftId) {
+  const placeholders = LIVE_GPS_STATUSES.map(() => '?').join(',');
+  const result = await DB.prepare(`SELECT a.order_id,
+      COALESCE((
+        SELECT MAX(h.at) FROM status_history h
+        WHERE h.order_id = a.order_id AND h.status = o.status
+      ), a.assigned_at) AS live_started_at
+    FROM driver_assignments a
+    JOIN orders o ON o.id = a.order_id
+    WHERE a.driver_id = ? AND a.shift_id = ? AND a.active = 1
+      AND o.status IN (${placeholders})
+    ORDER BY a.order_id`)
+    .bind(driverId, shiftId, ...LIVE_GPS_STATUSES).all();
+  return result.results || [];
+}
+
 async function locationBatch(req, env, auth, meta) {
   let body;
   try {
@@ -857,6 +877,11 @@ async function locationBatch(req, env, auth, meta) {
       request_id: meta.requestId,
     }, 400, meta.requestId);
   }
+  const trackingAssignments = await liveTrackingAssignments(
+    env.DB,
+    auth.driver_id,
+    body.shift_id,
+  );
   let acceptedCount = 0;
   for (const sample of body.samples) {
     const inserted = await env.DB.prepare(`INSERT OR IGNORE INTO driver_location_samples
@@ -875,6 +900,18 @@ async function locationBatch(req, env, auth, meta) {
         now,
       ).run();
     acceptedCount += Number(inserted?.meta?.changes || 0);
+  }
+  for (const assignment of trackingAssignments) {
+    const liveStartedAt = Number(assignment.live_started_at) || shift.started_at;
+    const publicSamples = body.samples
+      .filter((sample) => Date.parse(sample.captured_at) >= liveStartedAt
+        && sample.accuracy_meters <= PUBLIC_GPS_MAX_ACCURACY_METERS)
+      .map((sample) => ({
+        lat: sample.latitude,
+        lng: sample.longitude,
+        at: Date.parse(sample.captured_at),
+      }));
+    await addDriverGpsSamples(env.DB, assignment.order_id, publicSamples);
   }
   await env.DB.prepare('DELETE FROM driver_location_samples WHERE recorded_at < ?')
     .bind(now - LOCATION_RETENTION_MS).run();
