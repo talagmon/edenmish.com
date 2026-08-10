@@ -119,7 +119,7 @@
 <div class="lg:col-span-8 rounded-xl overflow-hidden glass-card h-[420px] relative">
 <div id="live-badge" class="hidden absolute top-4 right-4 z-10 flex items-center gap-2 bg-surface-container/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-glass-border">
 <span class="w-2 h-2 bg-secondary rounded-full status-pulse"></span>
-<span class="font-label-sm text-secondary uppercase tracking-wider">GPS פעיל</span>
+<span id="live-badge-label" class="font-label-sm text-secondary uppercase tracking-wider">GPS פעיל</span>
 </div>
 <div id="map" class="w-full h-full hidden"></div>
 <div id="map-status" class="hidden absolute bottom-4 right-4 left-4 z-10 glass-panel px-4 py-3 rounded-xl text-right" aria-live="polite">
@@ -128,8 +128,8 @@
 </div>
 <div id="map-placeholder" class="absolute inset-0 bg-surface-container-high flex flex-col items-center justify-center text-center p-8">
 <span class="material-symbols-outlined text-[72px] text-primary/40 mb-4">my_location</span>
-<p class="text-on-surface-variant max-w-sm">המפה החיה מוצגת בזמן אמת בעת יציאת השליח לדרך.</p>
-<div class="mt-6 glass-panel px-4 py-2 rounded-full text-label-sm text-on-surface-variant">המפה תופיע אוטומטית כשהשליח יצא לדרך</div>
+<p id="map-placeholder-copy" class="text-on-surface-variant max-w-sm">המפה החיה מוצגת בזמן אמת בעת יציאת השליח לדרך.</p>
+<div id="map-placeholder-hint" class="mt-6 glass-panel px-4 py-2 rounded-full text-label-sm text-on-surface-variant">המפה תופיע אוטומטית כשהשליח יצא לדרך</div>
 </div>
 </div>
 <!-- Stepper + support -->
@@ -218,10 +218,19 @@ const TERMINAL_TRACK_STATUSES = ["delivered", "failed", "cancelled"];
 const ACTIVE_REDELIVERY_STATES = ["address_required", "payment_required", "paid_pending_release", "released"];
 const LIVE_POLL_MS = 5000;
 const IDLE_POLL_MS = 30000;
+const FRESH_GPS_MS = 2 * 60 * 1000;
 function isLiveTrackStatus(status){ return LIVE_TRACK_STATUSES.includes(status); }
 function isTerminalTrackStatus(status){ return TERMINAL_TRACK_STATUSES.includes(status); }
 function shouldPollTrack(status){ return !isTerminalTrackStatus(status) || (status==="failed" && ACTIVE_REDELIVERY_STATES.includes(lastRedeliveryState)); }
 function pollDelayForStatus(status){ return isLiveTrackStatus(status) ? LIVE_POLL_MS : IDLE_POLL_MS; }
+function isFreshGps(gps,now=Date.now()){
+  const at=Number(gps&&gps.at);
+  return Number.isFinite(at)&&at>0&&now-at<=FRESH_GPS_MS;
+}
+function renderLiveGpsBadge(live,gps){
+  const badge=$("live-badge");
+  if(badge)badge.classList.toggle("hidden",!(live&&isFreshGps(gps)));
+}
 
 async function loadOrder(){
   if(!token){ show("entry"); return; }
@@ -362,6 +371,19 @@ function renderMap(live, gps, order, trail){
     if(!live && eta){eta.textContent="";eta.classList.add("hidden");}
   } else {
     if(mapEl) mapEl.classList.add("hidden"); if(ph) ph.classList.remove("hidden");
+    const placeholderCopy=$("map-placeholder-copy"), placeholderHint=$("map-placeholder-hint");
+    if(placeholderCopy&&placeholderHint){
+      if(live&&!hasGps){
+        placeholderCopy.textContent="השליח בדרך. ממתינים לאות המיקום הראשון מהמכשיר שלו.";
+        placeholderHint.textContent="המפה תופיע אוטומטית מיד עם קבלת מיקום עדכני";
+      }else if(needsMap&&!mapsReady){
+        placeholderCopy.textContent="טוענים את המפה החיה…";
+        placeholderHint.textContent="המיקום התקבל והמפה תופיע בעוד רגע";
+      }else{
+        placeholderCopy.textContent="המפה החיה מוצגת בזמן אמת בעת יציאת השליח לדרך.";
+        placeholderHint.textContent="המפה תופיע אוטומטית כשהשליח יצא לדרך";
+      }
+    }
     if(mapStatus) mapStatus.classList.add("hidden");
     if(eta){eta.textContent="";eta.classList.add("hidden");}
   }
@@ -385,7 +407,9 @@ async function pollTrack(){
     const o=d.order||{};
     const redeliveryState=d.redelivery&&d.redelivery.state||null;
     if(o.status!==lastStatus||redeliveryState!==lastRedeliveryState){ renderTrack(d); return; }
-    renderMap(isLiveTrackStatus(o.status), d.gps||null, o, d.gpsTrail||null);
+    const live=isLiveTrackStatus(o.status), gps=d.gps||null;
+    renderLiveGpsBadge(live,gps);
+    renderMap(live, gps, o, d.gpsTrail||null);
     scheduleTrackPoll(o.status);
   }catch(e){ showToast("בעיית תקשורת. ננסה שוב אוטומטית."); scheduleTrackPoll(lastStatus); }
 }
@@ -558,7 +582,7 @@ function renderTrack(d){
 
   // Live badge + live map (no external redirect — map renders in-page)
   const live = isLiveTrackStatus(cur);
-  $("live-badge").classList.toggle("hidden", !live);
+  renderLiveGpsBadge(live,gps);
   lastStatus = cur;
   lastRedeliveryState = d.redelivery&&d.redelivery.state||null;
   window.__lastTrack = d;

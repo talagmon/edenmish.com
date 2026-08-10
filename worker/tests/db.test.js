@@ -1,7 +1,12 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { addGps, createOrder, getGpsTrail } from '../src/db.js';
+import {
+  addDriverGpsSamples,
+  addGps,
+  createOrder,
+  getGpsTrail,
+} from '../src/db.js';
 
 function captureDb() {
   const calls = [];
@@ -66,5 +71,25 @@ describe('GPS retention', () => {
     assert.ok(read);
     assert.deepEqual(read.args, [42, 1000]);
     assert.equal(trail.length, 1);
+  });
+
+  test('mirrors native samples idempotently with their captured timestamps', async () => {
+    const db = captureDb();
+    const inserted = await addDriverGpsSamples(db, 42, [{
+      lat: 32.0809,
+      lng: 34.7806,
+      at: 1_790_000_000_000,
+    }]);
+
+    assert.equal(inserted, 1);
+    const write = db.calls.find((call) => call.sql.includes('WHERE NOT EXISTS'));
+    assert.ok(write);
+    assert.deepEqual(write.args, [
+      42, 32.0809, 34.7806, 1_790_000_000_000,
+      42, 32.0809, 34.7806, 1_790_000_000_000,
+    ]);
+    const prune = db.calls.at(-1);
+    assert.match(prune.sql, /DELETE FROM gps_pings/);
+    assert.deepEqual(prune.args, [42, 42]);
   });
 });

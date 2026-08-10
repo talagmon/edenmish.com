@@ -1104,6 +1104,70 @@ describe('driver API v1', () => {
     assert.ok(db.calls.some((call) => call.sql.startsWith('DELETE FROM driver_location_samples')));
   });
 
+  test('mirrors reliable current-leg samples for live assigned orders even on upload retry', async () => {
+    const now = Date.now();
+    const liveStartedAt = now - 30_000;
+    const db = fakeDb({
+      first: (call) => {
+        const auth = authenticatedFirst(call);
+        if (auth) return auth;
+        if (call.sql.includes('SELECT id, started_at FROM driver_shifts')) {
+          return { id: 'sh_123', started_at: now - 60_000 };
+        }
+        return null;
+      },
+      all: (call) => call.sql.includes('FROM driver_assignments a')
+        ? { results: [{ order_id: 42, live_started_at: liveStartedAt }] }
+        : { results: [] },
+      run: (call) => call.sql.includes('INSERT OR IGNORE INTO driver_location_samples')
+        ? { meta: { changes: 0 } }
+        : { meta: { changes: 1 } },
+    });
+    const samples = [
+      {
+        sample_id: '66666666-6666-4666-8666-666666666661',
+        captured_at: new Date(now).toISOString(),
+        latitude: 32.0809,
+        longitude: 34.7806,
+        accuracy_meters: 12,
+      },
+      {
+        sample_id: '66666666-6666-4666-8666-666666666662',
+        captured_at: new Date(now).toISOString(),
+        latitude: 32.081,
+        longitude: 34.781,
+        accuracy_meters: 250,
+      },
+      {
+        sample_id: '66666666-6666-4666-8666-666666666663',
+        captured_at: new Date(now - 45_000).toISOString(),
+        latitude: 32.079,
+        longitude: 34.779,
+        accuracy_meters: 10,
+      },
+    ];
+
+    const res = await handleDriverApi(request('/api/driver/v1/location:batch', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ shift_id: 'sh_123', samples }),
+    }), { DB: db });
+
+    assert.equal(res.status, 202);
+    assert.deepEqual(await res.json(), { accepted_count: 0 });
+    const assignmentQuery = db.calls.find((call) => call.sql.includes('FROM driver_assignments a'));
+    assert.deepEqual(assignmentQuery.args, ['drv_eden', 'sh_123', 'to_pickup', 'to_dropoff']);
+    const publicWrites = db.calls.filter((call) => call.sql.includes('INSERT INTO gps_pings'));
+    assert.equal(publicWrites.length, 1);
+    assert.deepEqual(publicWrites[0].args.slice(0, 4), [
+      42,
+      samples[0].latitude,
+      samples[0].longitude,
+      Date.parse(samples[0].captured_at),
+    ]);
+    assert.match(publicWrites[0].sql, /WHERE NOT EXISTS/);
+  });
+
   test('rejects stale or inaccurate location samples without persisting them', async () => {
     const now = Date.now();
     const db = fakeDb({

@@ -88,6 +88,36 @@ export async function addGps(DB, orderId, lat, lng) {
       SELECT id FROM gps_pings WHERE order_id = ? ORDER BY at DESC LIMIT 1000
     )`).bind(orderId, orderId).run();
 }
+
+export async function addDriverGpsSamples(DB, orderId, samples) {
+  let insertedCount = 0;
+  for (const sample of samples) {
+    const inserted = await DB.prepare(`INSERT INTO gps_pings (order_id, lat, lng, at)
+      SELECT ?, ?, ?, ?
+      WHERE NOT EXISTS (
+        SELECT 1 FROM gps_pings
+        WHERE order_id = ? AND lat = ? AND lng = ? AND at = ?
+      )`)
+      .bind(
+        orderId,
+        sample.lat,
+        sample.lng,
+        sample.at,
+        orderId,
+        sample.lat,
+        sample.lng,
+        sample.at,
+      ).run();
+    insertedCount += Number(inserted?.meta?.changes || 0);
+  }
+  if (samples.length > 0) {
+    await DB.prepare(`DELETE FROM gps_pings
+      WHERE order_id = ? AND id NOT IN (
+        SELECT id FROM gps_pings WHERE order_id = ? ORDER BY at DESC LIMIT 1000
+      )`).bind(orderId, orderId).run();
+  }
+  return insertedCount;
+}
 export async function latestGps(DB, orderId) {
   return DB.prepare(`SELECT lat, lng, at FROM gps_pings WHERE order_id = ? ORDER BY at DESC LIMIT 1`).bind(orderId).first();
 }
