@@ -481,6 +481,7 @@ details[open] .details-arrow{transform:rotate(180deg)}
 <script>
 // Existing Worker backend (sibling repo). Public order endpoint only.
 const API = window.EDEN_API.find;
+const PAYMENT_CONFIRMATION_KEY = "edenmish_payment_confirmation_v1";
 const BUSINESS_REQUESTED = new URLSearchParams(location.search).get("business") === "1";
 let BUSINESS_MODE = BUSINESS_REQUESTED;
 let businessAccount = null;
@@ -1602,6 +1603,13 @@ form.addEventListener("submit", async (e) => {
     // Exact-price orders continue directly to Shopify's secure checkout. Tracking is
     // intentionally unavailable until the signed paid webhook confirms the payment.
     if (data.payment_url) {
+      try {
+        if (data.payment_confirmation_token) {
+          sessionStorage.setItem(PAYMENT_CONFIRMATION_KEY, data.payment_confirmation_token);
+        } else {
+          sessionStorage.removeItem(PAYMENT_CONFIRMATION_KEY);
+        }
+      } catch {}
       if (window.edenAnalytics) {
         window.edenAnalytics.finalizeConversionContext(data.analytics_claim === true);
       }
