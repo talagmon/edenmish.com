@@ -401,7 +401,7 @@ describe('POST /api/orders with coupon', () => {
     assert.equal(db.state.redemptions.length, 0);
   });
 
-  test('exact-price order returns only the Shopify checkout URL before payment', async () => {
+  test('exact-price order returns checkout plus a status-only confirmation capability', async () => {
     const db = apiDb();
     globalThis.fetch = async (url, opts = {}) => {
       if (String(url).endsWith('/webhooks.json')) {
@@ -423,6 +423,7 @@ describe('POST /api/orders with coupon', () => {
     assert.equal(d.order_id, 1);
     assert.equal(d.status, 'payment_sent');
     assert.equal(d.payment_url, 'https://test.myshopify.com/invoice/abc?locale=he');
+    assert.match(d.payment_confirmation_token, /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
     assert.ok(!('token' in d));
     assert.ok(!('tracking_url' in d));
   });
