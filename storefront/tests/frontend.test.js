@@ -1198,6 +1198,20 @@ describe('Frontend: Booking form', () => {
     assertContains(html, 'setSubmitButtonLabel("שולח הזמנה…")', 'order submission loading label');
     assert.ok(!html.includes('submitBtn.textContent'), 'loading states must not replace the icon-bearing button contents');
   });
+
+  test('Keeps privacy preferences in the footer instead of over the fixed booking dock', () => {
+    const analytics = readFileSync(join(PUB, 'assets', 'analytics.js'), 'utf8');
+    assertContains(
+      html,
+      'type="button" data-analytics-settings hidden>העדפות פרטיות</button>',
+      'non-floating booking privacy preferences control',
+    );
+    assertContains(
+      analytics,
+      'if (controls.length) return;',
+      'existing page control suppresses the floating fallback',
+    );
+  });
 });
 
 describe('Frontend: Post-booking confirmation', () => {
