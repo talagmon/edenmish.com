@@ -61,6 +61,57 @@ function themePaymentExit(pathname, search = '') {
   return destination;
 }
 
+async function paymentConfirmationHarness({ credential = '', status = 202, body = { status: 'pending' } } = {}) {
+  const html = readPage('thank-you.html');
+  const marker = "<script>\n  (() => {\n    const STORAGE_KEY = 'edenmish_payment_confirmation_v1';";
+  const start = html.indexOf(marker);
+  assert.ok(start >= 0, 'payment confirmation script missing');
+  const sourceStart = start + '<script>'.length;
+  const sourceEnd = html.indexOf('</script>', sourceStart);
+  const source = html.slice(sourceStart, sourceEnd);
+  const listeners = {};
+  const timers = [];
+  const fetchCalls = [];
+  const session = new Map();
+  if (credential) session.set('edenmish_payment_confirmation_v1', credential);
+  const nodes = Object.fromEntries([
+    'payment-status',
+    'thank-you-title',
+    'payment-lead',
+    'payment-next',
+  ].map((id) => [id, {
+    textContent: '',
+    paid: false,
+    classList: { toggle(name, enabled) { if (name === 'is-paid') nodes[id].paid = enabled; } },
+  }]));
+  const sessionStorage = {
+    getItem(key) { return session.get(key) || null; },
+    removeItem(key) { session.delete(key); },
+  };
+  const document = {
+    title: 'EdenMish | בדיקת מצב התשלום',
+    getElementById(id) { return nodes[id]; },
+  };
+  const window = {
+    EDEN_API: { find: 'https://find.edenmish.com' },
+    addEventListener(type, handler) { listeners[type] = handler; },
+    setTimeout(callback, delay) { timers.push({ callback, delay }); },
+  };
+  runInNewContext(source, {
+    window,
+    document,
+    sessionStorage,
+    fetch: async (url, options) => {
+      fetchCalls.push({ url, options });
+      return { status, json: async () => body };
+    },
+    JSON,
+  });
+  listeners.DOMContentLoaded();
+  await new Promise(resolve => setImmediate(resolve));
+  return { document, fetchCalls, nodes, session, timers };
+}
+
 async function analyticsHarness({
   consent = {
     googleAnalytics: 'denied',
@@ -281,10 +332,14 @@ describe('Frontend: Shopify post-payment exit', () => {
     }
   });
 
-  test('publishes a branded thank-you page with one safe destination', () => {
+  test('publishes a branded payment result page that defaults to unverified', () => {
     const html = readPage('thank-you.html');
+    assertContains(html, 'בודקים את מצב התשלום', 'fail-closed initial status');
+    assertContains(html, 'התשלום עדיין לא אושר', 'unverified initial heading');
     assertContains(html, 'התשלום התקבל בהצלחה', 'payment confirmation');
     assertContains(html, 'תודה שבחרתם ב-EdenMish', 'thank-you message');
+    assertContains(html, "/api/payment-confirmation", 'authoritative payment confirmation endpoint');
+    assertContains(html, "result.status === 'paid'", 'paid-only success gate');
     assertContains(html, 'src="./assets/edenmish-thank-you-bike.webp"', 'local- and web-safe thank-you artwork URL');
     assertContains(html, 'href="https://edenmish.com/"', 'main-site CTA');
     assertContains(html, 'direction: ltr;', 'desktop image-left composition');
@@ -292,6 +347,40 @@ describe('Frontend: Shopify post-payment exit', () => {
     assertContains(html, 'width: min(calc(100% - 2rem), 1120px);', 'mobile-safe page width');
     assert.ok(existsSync(join(PUB, 'assets', 'edenmish-thank-you-bike.webp')), 'thank-you artwork not found');
     assert.ok(!html.includes('pay.edenmish.com'), 'thank-you page must not link back to the payment storefront');
+  });
+
+  test('shows success only after the Worker confirms the signed payment capability', async () => {
+    const pending = await paymentConfirmationHarness({ credential: 'pending-token' });
+    assert.equal(pending.nodes['payment-status'].paid, false);
+    assert.equal(pending.document.title, 'EdenMish | בדיקת מצב התשלום');
+    assert.equal(pending.timers.length, 1, 'pending webhook reconciliation should be retried');
+    for (let attempt = 1; attempt < 10; attempt += 1) {
+      const timer = pending.timers.shift();
+      assert.ok(timer, `payment confirmation retry ${attempt} missing`);
+      timer.callback();
+      await new Promise(resolve => setImmediate(resolve));
+    }
+    assert.equal(pending.nodes['payment-status'].textContent, 'לא התקבל אישור תשלום');
+    assert.equal(pending.nodes['thank-you-title'].textContent, 'התשלום עדיין לא הושלם');
+    assert.equal(pending.nodes['payment-status'].paid, false);
+
+    const paid = await paymentConfirmationHarness({
+      credential: 'paid-token',
+      status: 200,
+      body: { status: 'paid' },
+    });
+    assert.equal(paid.nodes['payment-status'].textContent, 'התשלום התקבל בהצלחה');
+    assert.equal(paid.nodes['payment-status'].paid, true);
+    assert.equal(paid.document.title, 'EdenMish | תודה שבחרתם בנו');
+    assert.equal(paid.session.has('edenmish_payment_confirmation_v1'), false);
+  });
+
+  test('does not claim success when the browser has no payment capability', async () => {
+    const result = await paymentConfirmationHarness();
+    assert.equal(result.fetchCalls.length, 0);
+    assert.equal(result.nodes['payment-status'].textContent, 'לא ניתן לאמת כאן את התשלום');
+    assert.equal(result.nodes['thank-you-title'].textContent, 'מחכים לאישור מ-Shopify');
+    assert.equal(result.nodes['payment-status'].paid, false);
   });
 
   test('publishes a distinct failure page with a guarded retry destination', () => {
@@ -330,7 +419,7 @@ describe('Frontend: Shopify post-payment exit', () => {
     assert.equal(nonstandardPort.href, 'https://edenmish.com/', 'nonstandard payment ports must be rejected');
   });
 
-  test('routes explicit payment failures separately from successful Shopify exits', () => {
+  test('routes explicit failures separately from the fail-closed payment result', () => {
     const theme = readFileSync(join(process.cwd(), '..', 'theme', 'layout', 'theme.liquid'), 'utf8');
     assertContains(theme, "request.host == 'pay.edenmish.com'", 'payment-host guard');
     assertContains(theme, "'/payment-failed'", 'explicit failure route');
@@ -1087,6 +1176,8 @@ describe('Frontend: Booking form', () => {
 
   test('Redirects exact-price orders to checkout before exposing tracking', () => {
     assertContains(html, 'if (data.payment_url)', 'payment redirect guard');
+    assertContains(html, 'data.payment_confirmation_token', 'signed payment confirmation capability');
+    assertContains(html, 'sessionStorage.setItem(PAYMENT_CONFIRMATION_KEY', 'same-tab confirmation storage');
     assertContains(html, 'window.location.assign(data.payment_url)', 'direct Shopify checkout redirect');
     assert.ok(!html.includes('payment_url: data.payment_url'), 'payment URL must not be copied into the success-page query');
     assertContains(html, 'if (data.test && data.token)', 'paid local test-mode exception');

@@ -128,6 +128,10 @@ import {
   observeAnalyticsClaim,
   registerAnalyticsClaim,
 } from './analytics-conversion.js';
+import {
+  makePaymentConfirmationToken,
+  verifyPaymentConfirmationToken,
+} from './payment-confirmation.js';
 
 const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra } });
 const html = (s) => new Response(s, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -1050,6 +1054,24 @@ export default {
       return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store', ...cors } });
     }
 
+    // The hosted checkout return is not proof of payment. This short-lived,
+    // signed capability lets the same browser ask only whether its order has
+    // reached the authoritative paid state; it never exposes order details.
+    if (path === '/api/payment-confirmation' && req.method === 'POST') {
+      let body;
+      try { body = await readJson(req, 2048); } catch (error) {
+        return json({ error: error.message }, error.status || 400, cors);
+      }
+      const claims = await verifyPaymentConfirmationToken(env, body.credential);
+      if (!claims) return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store', ...cors } });
+      const order = await getOrderById(env.DB, claims.orderId);
+      if (!order) return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store', ...cors } });
+      if (['paid', 'paid_manual'].includes(String(order.payment_status || ''))) {
+        return json({ status: 'paid' }, 200, cors);
+      }
+      return json({ status: 'pending' }, 202, cors);
+    }
+
     // Coupon pre-check for the booking funnel: same pricing inputs as POST /api/orders
     // + coupon_code (+ phone/email for once-per-customer checks). The price is always
     // recomputed server-side — the client never sends a price. Rate-limited per
@@ -1754,9 +1776,21 @@ export default {
       }
       if (!isReview) await notifyOpsOfPublicOrder();
 
+      let paymentConfirmationToken;
+      if (paymentUrl) {
+        try {
+          paymentConfirmationToken = await makePaymentConfirmationToken(env, created.id);
+        } catch {
+          // Missing confirmation capability must not turn an accepted order into
+          // a failed checkout. The return page will stay explicitly unverified.
+          console.error('payment_confirmation_token_failed');
+        }
+      }
+
       return json({
         order_id: created.id,
         payment_url: paymentUrl,
+        payment_confirmation_token: paymentConfirmationToken,
         status: isReview ? 'review' : (paymentUrl ? 'payment_sent' : 'priced'),
         price: finalPrice,
         subtotal_price: coupon ? coupon.subtotal : undefined,

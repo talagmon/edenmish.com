@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
-<title>EdenMish | תודה שבחרתם בנו</title>
+<title>EdenMish | בדיקת מצב התשלום</title>
 <meta name="app-version" content="v0.30.1(293658)">
-<meta name="description" content="התשלום ל-EdenMish התקבל בהצלחה. אנחנו ממשיכים לטפל בהזמנה ונשלח את פרטי ההמשך במייל."/>
+<meta name="description" content="EdenMish בודקת אם התשלום אושר לפני אישור ההזמנה."/>
 <meta name="robots" content="noindex, nofollow"/>
 <meta name="theme-color" content="#090d24"/>
 <link rel="canonical" href="https://edenmish.com/thank-you.html"/>
@@ -118,10 +118,10 @@
     display: inline-flex;
     align-items: center;
     gap: 0.55rem;
-    border: 1px solid rgba(145, 211, 200, 0.3);
+    border: 1px solid rgba(223, 183, 255, 0.32);
     border-radius: 999px;
-    background: rgba(145, 211, 200, 0.1);
-    color: var(--mint);
+    background: rgba(91, 42, 134, 0.2);
+    color: var(--primary);
     font-size: 0.9rem;
     font-weight: 700;
   }
@@ -131,6 +131,17 @@
     width: 0.55rem;
     height: 0.55rem;
     border-radius: 50%;
+    background: var(--primary);
+    box-shadow: 0 0 18px rgba(223, 183, 255, 0.65);
+  }
+
+  .status.is-paid {
+    border-color: rgba(145, 211, 200, 0.3);
+    background: rgba(145, 211, 200, 0.1);
+    color: var(--mint);
+  }
+
+  .status.is-paid::before {
     background: var(--mint);
     box-shadow: 0 0 18px rgba(145, 211, 200, 0.75);
   }
@@ -226,11 +237,11 @@
       <img src="./assets/edenmish-thank-you-bike.webp" width="1672" height="941" alt="אופנוע משלוחים של EdenMish נוסע לאורך מסלול מואר בעיר"/>
     </figure>
 
-    <section class="message" aria-labelledby="thank-you-title">
-      <p class="status">התשלום התקבל בהצלחה</p>
-      <h1 id="thank-you-title">תודה שבחרתם ב-EdenMish</h1>
-      <p class="lead">אנחנו מעדכנים עכשיו את ההזמנה או החשבון שלכם. אישור ופרטי ההמשך יישלחו לכתובת האימייל שמסרתם.</p>
-      <p class="next"><strong>מה עכשיו?</strong> אפשר לסגור את העמוד בבטחה או לחזור לאתר הראשי. אנחנו ממשיכים לטפל בכל השאר.</p>
+    <section class="message" aria-labelledby="thank-you-title" aria-live="polite">
+      <p class="status" id="payment-status">בודקים את מצב התשלום</p>
+      <h1 id="thank-you-title">התשלום עדיין לא אושר</h1>
+      <p class="lead" id="payment-lead">אנחנו ממתינים לאישור מאובטח מ-Shopify. ההזמנה תעודכן רק לאחר קבלת אישור התשלום.</p>
+      <p class="next" id="payment-next">אם סגרתם את מסך התשלום לפני שהשלמתם אותו, לא נציג אישור הזמנה. אם כבר שילמתם, אל תשלמו שוב בזמן שהבדיקה מתבצעת.</p>
       <a class="home-cta" href="https://edenmish.com/">
         <span aria-hidden="true">←</span>
         חזרה ל-edenmish.com
@@ -241,5 +252,86 @@
   <footer>© 2026 EdenMish · משלוחים בגוש דן</footer>
 </div>
 <script src="/assets/mobile-nav.js" defer></script>
+<script>
+  (() => {
+    const STORAGE_KEY = 'edenmish_payment_confirmation_v1';
+    const MAX_ATTEMPTS = 10;
+    const RETRY_DELAY_MS = 1500;
+
+    function render(state) {
+      const status = document.getElementById('payment-status');
+      const title = document.getElementById('thank-you-title');
+      const lead = document.getElementById('payment-lead');
+      const next = document.getElementById('payment-next');
+      status.classList.toggle('is-paid', state === 'paid');
+      if (state === 'paid') {
+        document.title = 'EdenMish | תודה שבחרתם בנו';
+        status.textContent = 'התשלום התקבל בהצלחה';
+        title.textContent = 'תודה שבחרתם ב-EdenMish';
+        lead.textContent = 'אנחנו מעדכנים עכשיו את ההזמנה שלכם. אישור ופרטי ההמשך יישלחו לכתובת האימייל שמסרתם.';
+        next.textContent = 'אפשר לסגור את העמוד בבטחה או לחזור לאתר הראשי. אנחנו ממשיכים לטפל בכל השאר.';
+        return;
+      }
+      if (state === 'pending') {
+        document.title = 'EdenMish | התשלום לא אושר';
+        status.textContent = 'לא התקבל אישור תשלום';
+        title.textContent = 'התשלום עדיין לא הושלם';
+        lead.textContent = 'ההזמנה עדיין ממתינה לתשלום. סגירת מסך התשלום אינה מאשרת את ההזמנה ואינה מסמנת אותה כשולמה.';
+        next.textContent = 'אם כן השלמתם תשלום או שאתם רואים חיוב, אל תשלמו שוב. המתינו לאישור במייל או פנו אלינו לבדיקה.';
+        return;
+      }
+      document.title = 'EdenMish | בדיקת מצב התשלום';
+      status.textContent = 'לא ניתן לאמת כאן את התשלום';
+      title.textContent = 'מחכים לאישור מ-Shopify';
+      lead.textContent = 'ההזמנה או החשבון יעודכנו רק לאחר שנקבל אישור תשלום מאובטח מ-Shopify.';
+      next.textContent = 'אם כבר שילמתם או שאתם רואים חיוב, אל תשלמו שוב. בדקו את האימייל או את החשבון העסקי, או פנו אלינו לבדיקה.';
+    }
+
+    async function verify(attempt = 0) {
+      let credential;
+      try { credential = sessionStorage.getItem(STORAGE_KEY); } catch {}
+      if (!credential || !window.EDEN_API || !window.EDEN_API.find) {
+        render('unknown');
+        return;
+      }
+      try {
+        const response = await fetch(window.EDEN_API.find + '/api/payment-confirmation', {
+          method: 'POST',
+          credentials: 'omit',
+          referrerPolicy: 'no-referrer',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ credential }),
+        });
+        if (response.status === 200) {
+          const result = await response.json();
+          if (result && result.status === 'paid') {
+            try { sessionStorage.removeItem(STORAGE_KEY); } catch {}
+            render('paid');
+            return;
+          }
+        }
+        if (
+          (response.status === 202 || response.status === 429 || response.status >= 500)
+          && attempt + 1 < MAX_ATTEMPTS
+        ) {
+          window.setTimeout(() => verify(attempt + 1), RETRY_DELAY_MS);
+          return;
+        }
+        if (response.status === 202) {
+          render('pending');
+          return;
+        }
+      } catch {
+        if (attempt + 1 < MAX_ATTEMPTS) {
+          window.setTimeout(() => verify(attempt + 1), RETRY_DELAY_MS);
+          return;
+        }
+      }
+      render('unknown');
+    }
+
+    window.addEventListener('DOMContentLoaded', () => verify());
+  })();
+</script>
 </body>
 </html>
