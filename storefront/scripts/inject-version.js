@@ -82,9 +82,8 @@ for (const file of htmlFiles) {
     html = html.replace(/<\/title>/, `</title>\n${newMeta}`);
   }
 
-  // 2. Cache-bust the generated Tailwind bundle and responsive navigation on
-  // every build. They must move together: mixing current navigation JS with a
-  // stale stylesheet can expose desktop links and the hamburger simultaneously.
+  // 2. Cache-bust shared runtime assets on every build. They must move with the
+  // HTML release so browsers cannot retain stale customer-facing behavior.
   html = html.replace(
     /href="\/assets\/styles\.css(?:\?v=[^"]*)?"/g,
     `href="/assets/styles.css?v=${ASSET_VERSION}"`,
@@ -92,6 +91,10 @@ for (const file of htmlFiles) {
   html = html.replace(
     /src="\/assets\/mobile-nav\.js(?:\?v=[^"]*)?"/g,
     `src="/assets/mobile-nav.js?v=${ASSET_VERSION}"`,
+  );
+  html = html.replace(
+    /src="\/assets\/analytics\.js(?:\?v=[^"]*)?"/g,
+    `src="/assets/analytics.js?v=${ASSET_VERSION}"`,
   );
 
   // 3. Footer stamp.
