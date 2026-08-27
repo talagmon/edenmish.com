@@ -21,6 +21,34 @@ export const ZONE_CITIES = {
 // Allowed service area = union of all zones (replaces the old GUSH_DAN list).
 export const GUSH_DAN = Object.values(ZONE_CITIES).flat();
 
+// Google Places may return the locality in English even when the autocomplete
+// script requests Hebrew (for example, "Tel Aviv-Yafo"). Keep the public zone
+// list canonical and Hebrew, while accepting exact locality-name aliases at the
+// authoritative pricing boundary. Do not alias "Tel Aviv District": that
+// administrative area spans cities in several delivery zones.
+const ZONE_CITY_ALIASES = {
+  'tel aviv': 1,
+  'tel aviv yafo': 1,
+  'tel aviv jaffa': 1,
+};
+
+function normalizeZoneCity(city) {
+  return String(city == null ? '' : city)
+    .normalize('NFKC')
+    .trim()
+    .toLowerCase()
+    .replace(/[\u05BE\u2010-\u2015\u2212-]+/g, ' ')
+    .replace(/\s+/g, ' ');
+}
+
+const ZONE_BY_NORMALIZED_CITY = new Map();
+for (const zone of [1, 2, 3]) {
+  for (const city of ZONE_CITIES[zone]) ZONE_BY_NORMALIZED_CITY.set(normalizeZoneCity(city), zone);
+}
+for (const [city, zone] of Object.entries(ZONE_CITY_ALIASES)) {
+  ZONE_BY_NORMALIZED_CITY.set(normalizeZoneCity(city), zone);
+}
+
 export const DEFAULT_PRICING_RULES = {
   eco_z1: 35, eco_z2: 55, eco_z3: 75,
   std_z1: 50, std_z2: 70, std_z3: 115,
@@ -37,9 +65,7 @@ export const DEFAULT_PRICING_RULES = {
 };
 
 export function zoneOf(city) {
-  const c = String(city == null ? '' : city).trim();
-  for (const z of [1, 2, 3]) if (ZONE_CITIES[z].includes(c)) return z;
-  return null;
+  return ZONE_BY_NORMALIZED_CITY.get(normalizeZoneCity(city)) ?? null;
 }
 
 function isWeekend(yyyymmdd) {

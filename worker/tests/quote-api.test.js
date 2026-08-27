@@ -123,6 +123,22 @@ describe('public quote API', () => {
     assert.deepEqual(body.reasons, ['out_of_zone']);
   });
 
+  test('accepts Google Places English Tel Aviv locality variants as Zone 1', async () => {
+    for (const dropoff_city of ['Tel Aviv-Yafo', 'Tel Aviv', 'TEL AVIV–YAFO', 'Tel Aviv-Jaffa']) {
+      const response = await postQuote({ ...baseQuote, pickup_city: 'תל אביב-יפו', dropoff_city });
+      const body = await response.json();
+      assert.equal(response.status, 200, dropoff_city);
+      assert.equal(body.available, true, dropoff_city);
+      assert.equal(body.zone, 1, dropoff_city);
+      assert.deepEqual(body.reasons, [], dropoff_city);
+    }
+
+    const district = await postQuote({ ...baseQuote, dropoff_city: 'Tel Aviv District' });
+    const districtBody = await district.json();
+    assert.equal(districtBody.available, false);
+    assert.deepEqual(districtBody.reasons, ['out_of_zone']);
+  });
+
   test('legacy pricing config exposes the canonical Worker zones', async () => {
     const request = new Request('https://find.edenmish.com/api/pricing');
     const response = await worker.fetch(request, envFor(quoteDb()));
