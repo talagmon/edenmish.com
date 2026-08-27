@@ -267,8 +267,11 @@
 
   function renderDialog() {
     removeDialog();
-    lastFocus = document.activeElement;
     var providers = configuredProviders();
+    // With no enabled measurement provider there is no customer choice to make.
+    // Keep internal configuration state out of the customer-facing UI.
+    if (!providers.length) return;
+    lastFocus = document.activeElement;
     var dialog = document.createElement("section");
     dialog.id = "eden-analytics-consent";
     dialog.dir = "rtl";
@@ -276,18 +279,6 @@
     dialog.setAttribute("aria-modal", "true");
     dialog.setAttribute("aria-labelledby", "eden-consent-title");
     dialog.style.cssText = "position:fixed;inset:auto 1rem 1rem;z-index:100;margin:auto;max-width:48rem;padding:1.25rem;border:1px solid rgba(209,218,255,.22);border-radius:1rem;background:#171b36;color:#f6f2fb;box-shadow:0 24px 70px rgba(0,0,0,.55);font-family:inherit";
-
-    if (!providers.length) {
-      dialog.innerHTML =
-        '<h2 id="eden-consent-title" style="margin:0;color:#dfb7ff;font-size:1.25rem">העדפות פרטיות</h2>' +
-        '<p style="margin:.75rem 0 1rem;line-height:1.6;color:#d7d1df">כלי המדידה החיצוניים כבויים כרגע באתר. השירותים החיוניים ממשיכים לפעול כרגיל.</p>' +
-        '<button id="eden-consent-close" type="button" style="min-height:2.75rem;padding:.65rem 1rem;border:1px solid #91d3c8;border-radius:.75rem;background:transparent;color:#fff;font:inherit;font-weight:700">סגירה</button>';
-      document.body.appendChild(dialog);
-      document.getElementById("eden-consent-close").addEventListener("click", removeDialog);
-      document.getElementById("eden-consent-close").focus();
-      document.addEventListener("keydown", handleDialogKeydown);
-      return;
-    }
 
     var names = providers.map(providerLabel).join(" ו־");
     var choices = providers.map(function (provider) {
@@ -323,8 +314,9 @@
 
   function ensurePreferencesControl() {
     var controls = document.querySelectorAll("[data-analytics-settings]");
-    controls.forEach(function (button) { button.hidden = false; });
-    if (controls.length) return;
+    var hasProviders = configuredProviders().length > 0;
+    controls.forEach(function (button) { button.hidden = !hasProviders; });
+    if (!hasProviders || controls.length) return;
     var button = document.createElement("button");
     button.type = "button";
     button.dataset.analyticsSettings = "1";
@@ -505,9 +497,9 @@
     ready: function () { return configPromise; }
   });
 
-  ensurePreferencesControl();
   configPromise = loadConfig().then(function () {
     var providers = configuredProviders();
+    ensurePreferencesControl();
     if (providers.some(function (provider) { return consent[provider] === "granted"; })) {
       initializeContainer();
     } else if (providers.some(function (provider) { return consent[provider] === "unknown"; })) {
