@@ -1247,6 +1247,21 @@ describe('Frontend: Booking form', () => {
       'inactive or existing page control suppresses the floating fallback',
     );
   });
+
+  test('Keeps the fixed action dock clear of the booking footer and isolates copyright direction', () => {
+    assertContains(
+      html,
+      '.booking-footer{padding-bottom:calc(136px + env(safe-area-inset-bottom))!important}',
+      'footer clearance for the fixed action dock',
+    );
+    assertContains(html, '<footer class="booking-footer ', 'booking footer clearance hook');
+    assertContains(
+      html,
+      '<p class="font-body-md text-body-md text-on-surface-variant" dir="ltr">© 2025 EdenMish</p>',
+      'LTR-isolated copyright',
+    );
+    assert.ok(!html.includes('כל הזכויות שמורות'), 'mixed-direction rights copy must be removed');
+  });
 });
 
 describe('Frontend: Post-booking confirmation', () => {
