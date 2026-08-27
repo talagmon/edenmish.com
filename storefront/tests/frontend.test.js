@@ -1251,7 +1251,7 @@ describe('Frontend: Booking form', () => {
   test('Keeps the fixed action dock clear of the booking footer and isolates copyright direction', () => {
     assertContains(
       html,
-      '.booking-footer{padding-bottom:calc(116px + env(safe-area-inset-bottom))!important}',
+      '.booking-footer{padding-bottom:calc(136px + env(safe-area-inset-bottom))!important}',
       'footer clearance for the fixed action dock',
     );
     assertContains(html, '<footer class="booking-footer ', 'booking footer clearance hook');
