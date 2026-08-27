@@ -1454,6 +1454,16 @@ describe('Frontend: Security and accessibility hardening', () => {
     const html = readPage('delivered.html');
     assertContains(html, '<button type="button" class="material-symbols-outlined star');
     assertContains(html, 'aria-label="דירוג ');
+    assertContains(html, '[1,2,3,4,5].map', 'all five rating choices');
+    assertContains(html, 'data-rating="\'+n+\'"', 'rating value on each star');
+    assertContains(html, 'aria-pressed="false"');
+    assertContains(html, 'min-h-[44px] min-w-[44px]', 'touch target size');
+    assertContains(html, 'Number(s.dataset.rating)', 'RTL-safe rating value');
+    assertContains(html, 'pendingRating = rating', 'latest tapped rating is queued while saving');
+    assertContains(html, 'while(pendingRating)', 'queued rating is persisted after the active request');
+    assertContains(html, 'submittedRating = rating', 'saved rating can be replaced');
+    assertContains(html, 'אפשר לבחור דירוג אחר ולעדכן', 'customer can update a submitted rating');
+    assert.ok(!html.includes('if(rated) return'), 'a saved rating must not permanently lock the stars');
   });
 
   test('FAQ controls expose keyboard and expanded state', () => {

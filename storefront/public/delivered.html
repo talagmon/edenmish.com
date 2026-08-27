@@ -167,37 +167,49 @@ function renderDetails(o, proof, history){
   return h;
 }
 
-let selectedRating = 0, rated = false;
+let selectedRating = 0, submittedRating = 0, pendingRating = 0, ratingSaving = false;
 function renderRating(o){
   return '<div id="rating-card" class="glass-card rounded-xl p-stack-lg text-center shimmer-bg border border-secondary/20">'+
     '<h3 class="font-headline-md text-headline-md text-secondary mb-stack-md">דרג את השירות שלנו</h3>'+
     '<div id="stars" class="flex justify-center gap-stack-sm mb-stack-sm">'+
-      [1,2,3,4,5].map(n => '<button type="button" class="material-symbols-outlined star text-secondary-fixed-dim text-[32px] rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary" data-n="'+n+'" aria-label="דירוג '+n+' מתוך 5">star</button>').join('')+
+      [1,2,3,4,5].map(n => '<button type="button" class="material-symbols-outlined star min-h-[44px] min-w-[44px] text-secondary-fixed-dim text-[32px] rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary" data-rating="'+n+'" aria-label="דירוג '+n+' מתוך 5" aria-pressed="false">star</button>').join('')+
     '</div>'+
-    '<p id="rating-msg" class="text-label-sm text-on-surface-variant min-h-[1em]">הדירוג שלך עוזר לנו להשתפר</p>'+
+    '<p id="rating-msg" class="text-label-sm text-on-surface-variant min-h-[1em]" aria-live="polite">בחרו דירוג של 1 עד 5 כוכבים</p>'+
   '</div>';
 }
 function bindStars(){
   const stars = Array.from(document.querySelectorAll("#stars .star"));
   if(!stars.length) return;
-  const fill = n => stars.forEach((s,i) => s.classList.toggle("fill", i <= n));
-  const setColor = () => stars.forEach(s => s.style.color = "");
-  stars.forEach((s, i) => {
-    s.addEventListener("mouseenter", () => { if(!rated) fill(i); });
-    s.addEventListener("mouseleave", () => { if(!rated) fill(selectedRating - 1); });
+  const paint = (rating, commit) => stars.forEach(s => {
+    const active = Number(s.dataset.rating) <= rating;
+    s.classList.toggle("fill", active);
+    if(commit) s.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+  stars.forEach(s => {
+    const rating = Number(s.dataset.rating);
+    s.addEventListener("mouseenter", () => paint(rating, false));
+    s.addEventListener("mouseleave", () => paint(selectedRating, true));
     s.addEventListener("click", () => {
-      if(rated) return;
-      selectedRating = i + 1;
-      fill(i);
-      stars.forEach(s => s.style.color = "#91d3c8");
-      submitRating(selectedRating);
+      selectedRating = rating;
+      paint(selectedRating, true);
+      $("rating-msg").textContent = "בחרתם " + selectedRating + " מתוך 5 כוכבים";
+      queueRating(selectedRating);
     });
   });
 }
+async function queueRating(rating){
+  pendingRating = rating;
+  if(ratingSaving) return;
+  ratingSaving = true;
+  while(pendingRating){
+    const nextRating = pendingRating;
+    pendingRating = 0;
+    await submitRating(nextRating);
+  }
+  ratingSaving = false;
+}
 async function submitRating(rating){
   const msg = $("rating-msg");
-  const stars = document.querySelectorAll("#stars .star");
-  stars.forEach(s => s.style.pointerEvents = "none");
   if(msg) msg.textContent = "שומר דירוג…";
   try {
     const r = await fetch(API + "/api/orders/" + encodeURIComponent(token) + "/rate", {
@@ -206,16 +218,13 @@ async function submitRating(rating){
       body: JSON.stringify({ rating })
     });
     if(r.ok){
-      rated = true;
-      if(msg) msg.innerHTML = '<span class="text-success-mint font-label-bold">תודה רבה על הדירוג! 🙏</span>';
+      submittedRating = rating;
+      if(msg && selectedRating === submittedRating) msg.innerHTML = '<span class="text-success-mint font-label-bold">תודה רבה! הדירוג נשמר. אפשר לבחור דירוג אחר ולעדכן.</span>';
     } else {
       throw new Error("bad status");
     }
   } catch(e){
-    if(msg) msg.innerHTML = '<span class="text-error">לא הצלחנו לשמור. נסו שוב.</span>';
-    stars.forEach(s => s.style.pointerEvents = "");
-    selectedRating = 0;
-    document.querySelectorAll("#stars .star").forEach(s => s.classList.remove("fill"));
+    if(msg && selectedRating === rating) msg.innerHTML = '<span class="text-error">לא הצלחנו לשמור. לחצו שוב על הדירוג כדי לנסות מחדש.</span>';
   }
 }
 
