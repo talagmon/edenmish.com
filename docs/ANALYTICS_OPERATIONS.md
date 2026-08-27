@@ -12,7 +12,7 @@ from `/analytics-config`. When the ID is empty/invalid, or both provider flags a
 disabled:
 
 - no initial consent prompt is shown (the privacy-preferences control remains
-  available and explains that measurement is disabled);
+  hidden because there is no customer choice to make);
 - no GTM, GA4, or Meta script is loaded;
 - `window.edenAnalytics.track()` returns without emitting an event.
 
@@ -107,7 +107,7 @@ Run in a clean browser profile with network logging:
 
 | Case | Expected result |
 |---|---|
-| Configuration empty | `/analytics-config` returns an empty ID; no banner or third-party analytics requests |
+| Configuration empty | `/analytics-config` returns an empty ID; no banner, preferences control, inactive-status message, or third-party analytics requests |
 | First visit, no choice | Consent dialog visible; no GTM/GA4/Meta request |
 | Essential-only choice | Choice persists; service works; no analytics request |
 | Measurement accepted | GTM loads once; consent state updates; allowlisted events may emit |

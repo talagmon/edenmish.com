@@ -744,6 +744,32 @@ describe('Frontend: consent-aware analytics', () => {
     assertContains(analytics, 'שמירת בחירה', 'Hebrew preference save choice');
   });
 
+  test('Hides analytics controls and internal status UI when no provider is enabled', async () => {
+    const inactive = await analyticsHarness({
+      config: {
+        gtmContainerId: '',
+        providers: { googleAnalytics: false, metaPixel: false },
+        paidConversionEnabled: false,
+      },
+    });
+    assert.equal(
+      inactive.bodyNodes.filter(node => node.dataset.analyticsSettings).length,
+      0,
+      'disabled analytics must not create a customer-facing preferences button',
+    );
+    inactive.window.edenAnalytics.openPreferences();
+    assert.equal(
+      inactive.bodyNodes.some(node => node.id === 'eden-analytics-consent'),
+      false,
+      'disabled analytics must not expose internal configuration status',
+    );
+
+    const active = await analyticsHarness();
+    const controls = active.bodyNodes.filter(node => node.dataset.analyticsSettings);
+    assert.equal(controls.length, 1, 'enabled analytics must retain a withdrawal control');
+    assert.equal(controls[0].hidden, false);
+  });
+
   test('Queues namespaced GTM events only after stored opt-in', async () => {
     const denied = await analyticsHarness();
     assert.equal(denied.appended.length, 0, 'GTM must remain unloaded after rejection');
@@ -1199,17 +1225,22 @@ describe('Frontend: Booking form', () => {
     assert.ok(!html.includes('submitBtn.textContent'), 'loading states must not replace the icon-bearing button contents');
   });
 
-  test('Keeps privacy preferences in the footer instead of over the fixed booking dock', () => {
+  test('Keeps inactive privacy controls hidden and never creates a floating booking control', () => {
     const analytics = readFileSync(join(PUB, 'assets', 'analytics.js'), 'utf8');
     assertContains(
       html,
       'type="button" data-analytics-settings hidden>העדפות פרטיות</button>',
-      'non-floating booking privacy preferences control',
+      'dormant booking privacy preferences control',
     );
     assertContains(
       analytics,
-      'if (controls.length) return;',
-      'existing page control suppresses the floating fallback',
+      'button.hidden = !hasProviders',
+      'inactive page control remains hidden',
+    );
+    assertContains(
+      analytics,
+      'if (!hasProviders || controls.length) return;',
+      'inactive or existing page control suppresses the floating fallback',
     );
   });
 });
