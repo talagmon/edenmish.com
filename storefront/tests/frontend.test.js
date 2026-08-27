@@ -725,7 +725,11 @@ describe('Frontend: consent-aware analytics', () => {
 
   test('Loads the shared consent boundary on customer pages but not the ops dashboard', () => {
     for (const page of customerPages) {
-      assertContains(readPage(page), '<script src="/assets/analytics.js" defer></script>', `${page} analytics boundary`);
+      assert.match(
+        readPage(page),
+        /<script src="\/assets\/analytics\.js(?:\?v=[^"]+)?" defer><\/script>/,
+        `${page} analytics boundary missing from page`,
+      );
     }
     assert.ok(!readPage('dash.html').includes('/assets/analytics.js'), 'ops dashboard must not load marketing analytics');
   });
@@ -1509,11 +1513,12 @@ describe('Frontend: Security and accessibility hardening', () => {
     assert.ok(!html.includes('localStorage.setItem'), 'invitation codes must not be persisted in localStorage');
   });
 
-  test('storefront fingerprints coupled navigation assets for cache consistency', () => {
+  test('storefront fingerprints shared runtime assets for cache consistency', () => {
     const script = readFileSync(join(process.cwd(), 'scripts', 'inject-version.js'), 'utf8');
     assertContains(script, 'ASSET_VERSION', 'shared release fingerprint');
     assertContains(script, '/assets/styles.css?v=', 'versioned stylesheet URL');
     assertContains(script, '/assets/mobile-nav.js?v=', 'versioned navigation URL');
+    assertContains(script, '/assets/analytics.js?v=', 'versioned analytics URL');
   });
 
   test('ops dashboard requests GPS only from an explicit start/stop control', () => {
