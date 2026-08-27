@@ -152,6 +152,7 @@ details[open] .details-arrow{transform:rotate(180deg)}
   box-shadow:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(145,211,200,.05),0 18px 50px rgba(0,0,0,.36),0 0 32px rgba(139,92,246,.08);
   backdrop-filter:blur(24px) saturate(150%);-webkit-backdrop-filter:blur(24px) saturate(150%)
 }
+.booking-footer{padding-bottom:calc(136px + env(safe-area-inset-bottom))!important}
 .action-dock-inner{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px;align-items:stretch}
 .action-dock-inner:has(.back-action[hidden]){grid-template-columns:minmax(0,1fr) auto}
 .primary-action{
@@ -453,7 +454,7 @@ details[open] .details-arrow{transform:rotate(180deg)}
 </div>
 </main>
 <!-- Footer -->
-<footer class="w-full pt-stack-lg pb-stack-md bg-surface-container-lowest border-t border-glass-border mt-stack-lg">
+<footer class="booking-footer w-full pt-stack-lg pb-stack-md bg-surface-container-lowest border-t border-glass-border mt-stack-lg">
 <div class="flex flex-col md:flex-row-reverse justify-between items-center px-gutter-desktop max-w-container-max mx-auto gap-stack-md">
 <div class="font-display-lg text-headline-md font-bold text-primary">EdenMish</div>
 <div class="flex flex-wrap justify-center gap-x-stack-lg gap-y-stack-sm">
@@ -467,7 +468,7 @@ details[open] .details-arrow{transform:rotate(180deg)}
 <button class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" type="button" data-analytics-settings hidden>העדפות פרטיות</button>
 <a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/accessibility.html">נגישות</a>
 </div>
-<p class="font-body-md text-body-md text-on-surface-variant">© 2025 EdenMish. כל הזכויות שמורות.</p>
+<p class="font-body-md text-body-md text-on-surface-variant" dir="ltr">© 2025 EdenMish</p>
 <p class="text-label-sm text-on-surface-variant opacity-50 text-center mt-1">קריניצי 111, רמת גן, ישראל</p>
 </div>
 
