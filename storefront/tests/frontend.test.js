@@ -1068,6 +1068,8 @@ describe('Frontend: Booking form', () => {
     assertContains(html, 'EdenBusinessBooking.planServiceState(activePlan)', 'tested plan-service decision');
     assertContains(html, 'typeof window.EdenBusinessBooking.businessEmailFieldState==="function"', 'cached helper compatibility check');
     assertContains(html, 'readOnly:Boolean(businessEmail)', 'cached helper fallback preserves editable missing email');
+    assertContains(html, 'Boolean(emailField.value)&&Boolean(emailField.readOnly)', 'blank email cannot inherit a readonly helper state');
+    assertContains(html, 'email.removeAttribute("readonly")', 'blank business email is explicitly editable in the live DOM');
     assertContains(html, 'preferredInput.checked=true', 'plan service selected automatically');
     assertContains(html, 'לא כלול במסלול', 'unavailable service explanation');
     assertContains(html, 'requestAuthoritativeQuoteNow', 'immediate authoritative quote before wallet spend');

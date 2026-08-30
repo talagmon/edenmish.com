@@ -522,7 +522,7 @@ async function initBusinessMode(){
       const preferredInput=document.querySelector('input[name="service"][value="'+serviceState.preferred+'"]:not(:disabled)');
       if(preferredInput){preferredInput.checked=true;sched.service=preferredInput.value;renderSchedule();}
     }
-    const email=document.getElementById("f-email");if(email){const businessEmail=String(businessAccount.user.email||"").trim();const emailField=typeof window.EdenBusinessBooking.businessEmailFieldState==="function"?window.EdenBusinessBooking.businessEmailFieldState(businessEmail):{value:businessEmail,readOnly:Boolean(businessEmail)};email.value=emailField.value;email.readOnly=emailField.readOnly;}
+    const email=document.getElementById("f-email");if(email){const businessEmail=String(businessAccount.user.email||"").trim();const emailField=typeof window.EdenBusinessBooking.businessEmailFieldState==="function"?window.EdenBusinessBooking.businessEmailFieldState(businessEmail):{value:businessEmail,readOnly:Boolean(businessEmail)};email.value=emailField.value;email.readOnly=Boolean(emailField.value)&&Boolean(emailField.readOnly);if(!email.value)email.removeAttribute("readonly");}
     const name=document.getElementById("f-name");if(name&&!name.value)name.value=businessAccount.user.name||businessAccount.account.company_name||"";
     const phone=document.getElementById("f-phone");if(phone&&!phone.value)phone.value=businessAccount.user.phone||"";
     computeEstimate();
