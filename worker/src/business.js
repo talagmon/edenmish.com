@@ -762,8 +762,8 @@ export async function releaseWalletReservation(DB, reservationId, orderId = null
 
 const businessBatchOrderUpdateSql = `UPDATE orders SET
   name = ?, phone = ?,
-  pickup = ?, pickup_city = ?,
-  dropoff = ?, dropoff_city = ?,
+  pickup = ?, pickup_city = ?, pickup_lat = ?, pickup_lng = ?,
+  dropoff = ?, dropoff_city = ?, dropoff_lat = ?, dropoff_lng = ?,
   when_text = ?, when_date = ?, when_hour = ?,
   service = ?, size = ?, package = ?, notes = ?,
   price = ?, business_external_id = ?
@@ -782,8 +782,12 @@ function businessBatchOrderUpdateStatement(DB, orderId, accountId, reservationId
     order.phone,
     order.pickup,
     order.pickup_city,
+    order.pickup_lat ?? null,
+    order.pickup_lng ?? null,
     order.dropoff,
     order.dropoff_city,
+    order.dropoff_lat ?? null,
+    order.dropoff_lng ?? null,
     order.when_text,
     order.when_date,
     order.when_hour,

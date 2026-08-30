@@ -76,7 +76,11 @@ function candidateDetails(place, declaredStreet, declaredNumber, declaredCity) {
   const number = component(place, 'street_number');
   const city = resolvedCity(place);
   const country = component(place, 'country');
+  const latitude = Number(place?.location?.latitude);
+  const longitude = Number(place?.location?.longitude);
   if (!route || !number || !city) return null;
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90
+    || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) return null;
   if (country && !['ישראל', 'israel', 'il'].includes(normalizeAddressText(country))) return null;
   if (normalizeAddressText(number) !== normalizeAddressText(declaredNumber)) return null;
 
@@ -92,6 +96,8 @@ function candidateDetails(place, declaredStreet, declaredNumber, declaredCity) {
     route,
     number,
     city,
+    latitude,
+    longitude,
     routeScore,
     cityScore,
     score: routeScore * 0.75 + cityScore * 0.25,
@@ -153,6 +159,8 @@ export function resolveBusinessAddress(street, houseNumber, city, places) {
     city: corrections.some((correction) => correction.field === 'delivery_city')
       ? best.city
       : declaredCity,
+    latitude: best.latitude,
+    longitude: best.longitude,
     corrections,
   };
 }
@@ -252,6 +260,8 @@ export async function validateBusinessBatchAddresses(rows, options = {}) {
       }
       row.delivery_street = resolution.street;
       row.delivery_city = resolution.city;
+      row.delivery_lat = resolution.latitude;
+      row.delivery_lng = resolution.longitude;
       row.delivery_address = composeDeliveryAddress(row);
       row.corrections = [...(row.corrections || []), ...resolution.corrections];
     } catch {

@@ -329,7 +329,12 @@ function routeTask(stop, executionState = null) {
     task_type: taskType,
     required_predecessor_stop_id: stop.required_predecessor_stop_id || null,
     state: executionState || (stop.state === 'delivered' ? 'completed' : stop.state),
-    contact: { display_name: stop.name, phone: stop.phone },
+    contact: {
+      display_name: isPickup && stop.pickup_contact_name
+        ? stop.pickup_contact_name : stop.name,
+      phone: isPickup && stop.pickup_contact_phone
+        ? stop.pickup_contact_phone : stop.phone,
+    },
     address: {
       display_text: [displayText, detail].filter(Boolean).join(' · '),
       latitude: isPickup ? stop.pickup_lat : stop.dropoff_lat,
@@ -360,7 +365,21 @@ async function routeSnapshot(env, auth, meta, shiftId) {
   if (!route) return response({ code: 'route_not_found', message: 'Route not found.', request_id: meta.requestId }, 404, meta.requestId);
   const rows = await env.DB.prepare(`SELECT s.*, o.name, o.phone,
       o.pickup, o.pickup_detail, o.pickup_lat, o.pickup_lng,
-      o.dropoff, o.dropoff_detail, o.dropoff_lat, o.dropoff_lng
+      o.dropoff, o.dropoff_detail, o.dropoff_lat, o.dropoff_lng,
+      (SELECT owner.name
+       FROM business_members owner_members
+       JOIN business_users owner ON owner.id = owner_members.user_id
+       WHERE owner_members.account_id = o.business_account_id
+         AND owner_members.role = 'owner'
+       ORDER BY owner_members.created_at, owner_members.user_id LIMIT 1)
+        AS pickup_contact_name,
+      (SELECT owner.phone
+       FROM business_members owner_members
+       JOIN business_users owner ON owner.id = owner_members.user_id
+       WHERE owner_members.account_id = o.business_account_id
+         AND owner_members.role = 'owner'
+       ORDER BY owner_members.created_at, owner_members.user_id LIMIT 1)
+        AS pickup_contact_phone
     FROM driver_route_stops s JOIN orders o ON o.id = s.order_id
     WHERE s.route_id = ? ORDER BY s.position`).bind(route.id).all();
   const executionRows = await env.DB.prepare(`SELECT stop_id, event_type
@@ -393,10 +412,46 @@ function parseOrderId(value) {
 }
 
 async function assignedTask(env, shiftId, stopId, orderId) {
-  return env.DB.prepare(`SELECT s.stop_id, s.task_type
+  return env.DB.prepare(`SELECT s.stop_id, s.task_type, r.revision
     FROM driver_route_stops s JOIN driver_routes r ON r.id = s.route_id
     WHERE r.shift_id = ? AND s.stop_id = ? AND s.order_id = ?
     ORDER BY r.revision DESC LIMIT 1`).bind(shiftId, stopId, orderId).first();
+}
+
+async function groupedPickupOrderIds(env, shiftId, task, leaderOrderId) {
+  if (task.task_type !== 'pickup' || !Number.isInteger(task.revision)) {
+    return [leaderOrderId];
+  }
+  const rows = await env.DB.prepare(`SELECT DISTINCT dropoff.order_id
+    FROM driver_route_stops dropoff
+    JOIN driver_routes route ON route.id = dropoff.route_id
+    WHERE route.shift_id = ? AND route.revision = ?
+      AND dropoff.task_type = 'dropoff'
+      AND dropoff.required_predecessor_stop_id = ?
+    ORDER BY dropoff.order_id`)
+    .bind(shiftId, task.revision, task.stop_id).all();
+  return [...new Set([
+    leaderOrderId,
+    ...(rows.results || []).map((row) => Number(row.order_id)).filter(Number.isInteger),
+  ])];
+}
+
+async function completeGroupedPickup(env, shiftId, task, order, orderId) {
+  const applied = await applyTaskEvent(
+    env, 'pickup_completed', task, order, orderId,
+  );
+  if (applied.status !== 'accepted') return applied;
+
+  let transitioned = applied.transitioned;
+  const groupedOrderIds = await groupedPickupOrderIds(env, shiftId, task, orderId);
+  for (const groupedOrderId of groupedOrderIds) {
+    if (groupedOrderId === orderId) continue;
+    const groupedOrder = await getOrderById(env.DB, groupedOrderId);
+    if (!groupedOrder || !['paid', 'to_pickup'].includes(groupedOrder.status)) continue;
+    await setOrderStatus(env.DB, groupedOrderId, 'picked_up', { picked_up_at: Date.now() });
+    transitioned = true;
+  }
+  return { ...applied, transitioned };
 }
 
 function validProofData(body) {
@@ -641,9 +696,11 @@ async function processEvent(env, auth, meta, event, executionContext) {
         disposition: event.payload.disposition,
       };
     } else {
-      const applied = await applyTaskEvent(
-        env, event.event_type, task, order, orderId, event.payload,
-      );
+      const applied = event.event_type === 'pickup_completed'
+        ? await completeGroupedPickup(env, event.shift_id, task, order, orderId)
+        : await applyTaskEvent(
+          env, event.event_type, task, order, orderId, event.payload,
+        );
       status = applied.status;
       conflictType = applied.conflictType;
       transitioned = applied.transitioned;
