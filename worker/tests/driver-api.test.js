@@ -700,6 +700,103 @@ describe('driver API v1', () => {
     assert.equal(orderUpdate.args[0], 'to_dropoff');
   });
 
+  test('records an obsolete next stop as a route-revision conflict', async () => {
+    const db = fakeDb({
+      first: (call) => {
+        const auth = authenticatedFirst(call);
+        if (auth) return auth;
+        if (call.sql.startsWith('SELECT event_id')) return null;
+        if (call.sql.includes('FROM driver_shifts WHERE id')) return { id: 'sh_123' };
+        if (call.sql.includes('FROM driver_assignments')) return { order_id: 9001 };
+        if (call.sql.includes('FROM driver_route_stops s JOIN driver_routes')) {
+          return {
+            stop_id: 'stop_d1',
+            task_type: 'dropoff',
+            revision: 13,
+            latest_revision: 14,
+            latest_current_stop_id: 'stop_d2',
+          };
+        }
+        return null;
+      },
+    });
+    const event = {
+      event_id: '55555555-5555-4555-8555-555555555555',
+      event_type: 'navigation_started',
+      occurred_at: '2026-07-18T15:00:00Z',
+      recorded_at_monotonic_ms: 42,
+      shift_id: 'sh_123',
+      order_id: 'ord_9001',
+      stop_id: 'stop_d1',
+      route_revision_seen: 13,
+      payload: {},
+    };
+
+    const res = await handleDriverApi(request('/api/driver/v1/execution-events:batch', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ events: [event] }),
+    }), { DB: db });
+    const result = (await res.json()).results[0];
+
+    assert.equal(result.status, 'accepted_conflict');
+    assert.equal(result.conflict_type, 'route_revision_changed');
+    assert.equal(db.calls.some((call) => call.sql.startsWith('UPDATE orders SET')), false);
+    const insert = db.calls.find((call) => (
+      call.sql.includes('INSERT OR IGNORE INTO driver_execution_events')
+    ));
+    assert.equal(insert.args[9], 'accepted_conflict');
+    assert.equal(insert.args[10], 'route_revision_changed');
+  });
+
+  test('accepts an old revision when it still points to the canonical current stop', async () => {
+    const db = fakeDb({
+      first: (call) => {
+        const auth = authenticatedFirst(call);
+        if (auth) return auth;
+        if (call.sql.startsWith('SELECT event_id')) return null;
+        if (call.sql.includes('FROM driver_shifts WHERE id')) return { id: 'sh_123' };
+        if (call.sql.includes('FROM driver_assignments')) return { order_id: 9001 };
+        if (call.sql.includes('FROM driver_route_stops s JOIN driver_routes')) {
+          return {
+            stop_id: 'stop_d1',
+            task_type: 'dropoff',
+            revision: 13,
+            latest_revision: 14,
+            latest_current_stop_id: 'stop_d1',
+          };
+        }
+        if (call.sql === 'SELECT * FROM orders WHERE id = ?') {
+          return { id: 9001, status: 'picked_up' };
+        }
+        return null;
+      },
+    });
+    const event = {
+      event_id: '66666666-6666-4666-8666-666666666666',
+      event_type: 'navigation_started',
+      occurred_at: '2026-07-18T15:00:00Z',
+      recorded_at_monotonic_ms: 42,
+      shift_id: 'sh_123',
+      order_id: 'ord_9001',
+      stop_id: 'stop_d1',
+      route_revision_seen: 13,
+      payload: {},
+    };
+
+    const res = await handleDriverApi(request('/api/driver/v1/execution-events:batch', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ events: [event] }),
+    }), { DB: db });
+    const result = (await res.json()).results[0];
+
+    assert.equal(result.status, 'accepted');
+    assert.equal(result.conflict_type, null);
+    const orderUpdate = db.calls.find((call) => call.sql.startsWith('UPDATE orders SET'));
+    assert.equal(orderUpdate.args[0], 'to_dropoff');
+  });
+
   test('atomically creates one SendGrid email job on delivery', async () => {
     const order = {
       id: 9001,

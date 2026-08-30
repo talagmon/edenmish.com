@@ -412,7 +412,30 @@ function parseOrderId(value) {
 }
 
 async function assignedTask(env, shiftId, stopId, orderId) {
-  return env.DB.prepare(`SELECT s.stop_id, s.task_type, r.revision
+  return env.DB.prepare(`SELECT s.stop_id, s.task_type, r.revision,
+      (SELECT latest.revision
+       FROM driver_routes latest
+       WHERE latest.shift_id = r.shift_id
+       ORDER BY latest.revision DESC LIMIT 1) AS latest_revision,
+      (SELECT current.stop_id
+       FROM driver_route_stops current
+       JOIN driver_routes current_route ON current_route.id = current.route_id
+       WHERE current_route.shift_id = r.shift_id
+         AND current_route.revision = (
+           SELECT MAX(latest_current.revision)
+           FROM driver_routes latest_current
+           WHERE latest_current.shift_id = r.shift_id
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM driver_execution_events terminal
+           WHERE terminal.shift_id = r.shift_id
+             AND terminal.stop_id = current.stop_id
+             AND terminal.status = 'accepted'
+             AND terminal.event_type IN (
+               'pickup_completed','delivery_completed','delivery_failed'
+             )
+         )
+       ORDER BY current.position LIMIT 1) AS latest_current_stop_id
     FROM driver_route_stops s JOIN driver_routes r ON r.id = s.route_id
     WHERE r.shift_id = ? AND s.stop_id = ? AND s.order_id = ?
     ORDER BY r.revision DESC LIMIT 1`).bind(shiftId, stopId, orderId).first();
@@ -678,32 +701,41 @@ async function processEvent(env, auth, meta, event, executionContext) {
     }
     const task = await assignedTask(env, event.shift_id, event.stop_id, orderId);
     if (!task) return { event_id: event.event_id, status: 'rejected_auth', server_received_at: new Date().toISOString() };
-    const order = await getOrderById(env.DB, orderId);
-    if (event.event_type === 'delivery_completed'
-      && task.task_type === 'dropoff'
-      && order?.status === 'to_dropoff') {
-      // This transition is committed below with its event and logical notification jobs.
-      deliveryTransitionOrder = order;
-    } else if (event.event_type === 'delivery_failed'
-      && task.task_type === 'dropoff'
-      && order?.status === 'to_dropoff'
-      && RETAINED_FAILURE_DISPOSITIONS.has(event.payload.disposition)) {
-      // A retained failure must commit the accepted driver event, canonical failure,
-      // custody state, history, and customer email job together. Otherwise a Worker
-      // crash between setOrderStatus() and enqueue would leave a customer uninformed.
-      retainedFailureTransition = {
-        order,
-        disposition: event.payload.disposition,
-      };
+    if (task.latest_current_stop_id != null
+      && task.latest_current_stop_id !== event.stop_id) {
+      // A route revision may change between proof completion and the driver's next tap.
+      // Accept an old revision only when it still names the canonical current stop; never
+      // let a task from an obsolete ordering advance an unrelated order.
+      status = 'accepted_conflict';
+      conflictType = 'route_revision_changed';
     } else {
-      const applied = event.event_type === 'pickup_completed'
-        ? await completeGroupedPickup(env, event.shift_id, task, order, orderId)
-        : await applyTaskEvent(
-          env, event.event_type, task, order, orderId, event.payload,
-        );
-      status = applied.status;
-      conflictType = applied.conflictType;
-      transitioned = applied.transitioned;
+      const order = await getOrderById(env.DB, orderId);
+      if (event.event_type === 'delivery_completed'
+        && task.task_type === 'dropoff'
+        && order?.status === 'to_dropoff') {
+        // This transition is committed below with its event and logical notification jobs.
+        deliveryTransitionOrder = order;
+      } else if (event.event_type === 'delivery_failed'
+        && task.task_type === 'dropoff'
+        && order?.status === 'to_dropoff'
+        && RETAINED_FAILURE_DISPOSITIONS.has(event.payload.disposition)) {
+        // A retained failure must commit the accepted driver event, canonical failure,
+        // custody state, history, and customer email job together. Otherwise a Worker
+        // crash between setOrderStatus() and enqueue would leave a customer uninformed.
+        retainedFailureTransition = {
+          order,
+          disposition: event.payload.disposition,
+        };
+      } else {
+        const applied = event.event_type === 'pickup_completed'
+          ? await completeGroupedPickup(env, event.shift_id, task, order, orderId)
+          : await applyTaskEvent(
+            env, event.event_type, task, order, orderId, event.payload,
+          );
+        status = applied.status;
+        conflictType = applied.conflictType;
+        transitioned = applied.transitioned;
+      }
     }
   }
   const now = Date.now();

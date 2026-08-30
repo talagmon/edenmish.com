@@ -10,6 +10,9 @@ const DEFAULT_SERVICE_SECONDS = 300;
 const AVERAGE_SPEED_METERS_PER_SECOND = 25_000 / 3_600;
 const DRIVER_LOCATION_MAX_AGE_MS = 5 * 60 * 1000;
 const DRIVER_LOCATION_MAX_ACCURACY_METERS = 100;
+const ROUTE_POLICY_VERSION = 'shortest-traffic-priority-v2';
+const URGENT_SOFT_DEADLINE_SECONDS = 90 * 60;
+const URGENT_LATE_PENALTY_METERS_PER_HOUR = 100;
 
 function israelIsoDate(now = Date.now()) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -242,33 +245,91 @@ export function orderTasksByDistance(
   const remaining = new Map(tasks.map((task) => [task.stopId, task]));
   const completed = new Set();
   const ordered = [];
-  let current = remaining.get(preferredCurrentStopId)
+  const locked = remaining.get(preferredCurrentStopId)
     || tasks.find((task) => task.state === 'navigating')
     || (vehicleLocation ? null : tasks[0]);
-  let currentLocation = current?.location || vehicleLocation;
+  let currentLocation = locked?.location || vehicleLocation;
+  if (locked) {
+    ordered.push(locked);
+    completed.add(locked.stopId);
+    remaining.delete(locked.stopId);
+  }
   while (remaining.size > 0) {
-    let next = remaining.get(current?.stopId);
-    if (!next || (next.requiredPredecessorStopId && !completed.has(next.requiredPredecessorStopId))) {
-      const available = [...remaining.values()].filter((task) => (
-        !task.requiredPredecessorStopId || completed.has(task.requiredPredecessorStopId)
-      ));
-      if (!available.length) throw new Error('driver_route_precedence_invalid');
-      available.sort((left, right) => {
-        const distanceDifference = haversineMeters(currentLocation, left.location)
-          - haversineMeters(currentLocation, right.location);
-        if (Math.abs(distanceDifference) > 1) return distanceDifference;
-        if (left.urgency !== right.urgency) return left.urgency === 'urgent' ? -1 : 1;
-        return left.stopId.localeCompare(right.stopId);
-      });
-      next = available[0];
-    }
+    const available = [...remaining.values()].filter((task) => (
+      !task.requiredPredecessorStopId || completed.has(task.requiredPredecessorStopId)
+    ));
+    if (!available.length) throw new Error('driver_route_precedence_invalid');
+    available.sort((left, right) => {
+      const distanceDifference = haversineMeters(currentLocation, left.location)
+        - haversineMeters(currentLocation, right.location);
+      if (Math.abs(distanceDifference) > 1) return distanceDifference;
+      if (left.urgency !== right.urgency) return left.urgency === 'urgent' ? -1 : 1;
+      return left.stopId.localeCompare(right.stopId);
+    });
+    const next = available[0];
     ordered.push(next);
     completed.add(next.stopId);
     remaining.delete(next.stopId);
-    current = next;
     currentLocation = next.location;
   }
-  return ordered;
+
+  const routeStartLocation = locked?.location || vehicleLocation || ordered[0]?.location;
+  const fixedPrefixLength = locked ? 1 : 0;
+  let best = ordered;
+  let bestObjective = routeObjectiveMeters(best, routeStartLocation);
+  // A greedy route is a useful seed but can contain crossing or locally wasteful legs.
+  // Deterministic 2-opt evaluates the whole trailing path and reverses only segments that
+  // preserve pickup-before-drop-off precedence. This is the provider-independent safety net
+  // for a one-pickup/many-drop batch when Google is disabled or unavailable.
+  for (let pass = 0; pass < tasks.length * 2; pass += 1) {
+    let improved = false;
+    for (let left = fixedPrefixLength; left < best.length - 1; left += 1) {
+      for (let right = left + 1; right < best.length; right += 1) {
+        const candidate = [
+          ...best.slice(0, left),
+          ...best.slice(left, right + 1).reverse(),
+          ...best.slice(right + 1),
+        ];
+        if (!hasValidPrecedence(candidate)) continue;
+        const objective = routeObjectiveMeters(candidate, routeStartLocation);
+        if (objective + 0.01 < bestObjective) {
+          best = candidate;
+          bestObjective = objective;
+          improved = true;
+        }
+      }
+    }
+    if (!improved) break;
+  }
+  return best;
+}
+
+function hasValidPrecedence(tasks) {
+  const positionByStopId = new Map(tasks.map((task, index) => [task.stopId, index]));
+  return tasks.every((task, index) => (
+    !task.requiredPredecessorStopId
+      || (positionByStopId.get(task.requiredPredecessorStopId) ?? Number.POSITIVE_INFINITY) < index
+  ));
+}
+
+function routeObjectiveMeters(tasks, startLocation) {
+  let previous = startLocation || tasks[0]?.location || null;
+  let elapsedSeconds = 0;
+  let distanceMeters = 0;
+  let urgencyPenaltyMeters = 0;
+  for (const task of tasks) {
+    const legDistance = haversineMeters(previous, task.location);
+    const safeDistance = Number.isFinite(legDistance) ? legDistance : 0;
+    distanceMeters += safeDistance;
+    elapsedSeconds += safeDistance / AVERAGE_SPEED_METERS_PER_SECOND;
+    if (task.taskType === 'dropoff' && task.urgency === 'urgent') {
+      const lateHours = Math.max(0, elapsedSeconds - URGENT_SOFT_DEADLINE_SECONDS) / 3_600;
+      urgencyPenaltyMeters += lateHours * URGENT_LATE_PENALTY_METERS_PER_HOUR;
+    }
+    elapsedSeconds += task.serviceDurationSeconds;
+    previous = task.location;
+  }
+  return distanceMeters + urgencyPenaltyMeters;
 }
 
 function localEtaByStopId(tasks, now, vehicleLocation = null) {
@@ -332,6 +393,7 @@ async function optimizedTaskOrder(env, tasks, preferredCurrentStopId, now, vehic
         requiredPredecessorStopId: task.requiredPredecessorStopId,
         state: task.state,
         location: task.location,
+        urgency: task.urgency,
         serviceDurationSeconds: task.serviceDurationSeconds,
       })),
     });
@@ -439,19 +501,22 @@ async function sha256Hex(value) {
 }
 
 async function planFingerprint(tasks) {
-  return sha256Hex(JSON.stringify(tasks.map((task) => ({
-    stopId: task.stopId,
-    orderId: task.orderId,
-    taskType: task.taskType,
-    requiredPredecessorStopId: task.requiredPredecessorStopId,
-    state: task.state,
-    latitude: task.location.latitude,
-    longitude: task.location.longitude,
-    urgency: task.urgency,
-    serviceDurationSeconds: task.serviceDurationSeconds,
-    addressFingerprint: task.addressFingerprint,
-    promisedWindowFingerprint: task.promisedWindowFingerprint,
-  })).sort((left, right) => left.stopId.localeCompare(right.stopId))));
+  return sha256Hex(JSON.stringify({
+    routePolicyVersion: ROUTE_POLICY_VERSION,
+    tasks: tasks.map((task) => ({
+      stopId: task.stopId,
+      orderId: task.orderId,
+      taskType: task.taskType,
+      requiredPredecessorStopId: task.requiredPredecessorStopId,
+      state: task.state,
+      latitude: task.location.latitude,
+      longitude: task.location.longitude,
+      urgency: task.urgency,
+      serviceDurationSeconds: task.serviceDurationSeconds,
+      addressFingerprint: task.addressFingerprint,
+      promisedWindowFingerprint: task.promisedWindowFingerprint,
+    })).sort((left, right) => left.stopId.localeCompare(right.stopId)),
+  }));
 }
 
 async function persistRouteRevision(DB, {
@@ -700,6 +765,7 @@ export async function driverDispatchStatus(env) {
 
 export const driverDispatchTest = {
   haversineMeters,
+  routeObjectiveMeters,
   routeTasksForOrder,
   planFingerprint,
 };
