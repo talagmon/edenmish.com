@@ -343,6 +343,36 @@ describe('driver dispatch planning', () => {
     assert.equal(ordered[0].stopId, 'stop_p2');
   });
 
+  test('improves the whole trailing path instead of keeping a greedy local choice', () => {
+    const points = [
+      [32.024259980279666, 34.05562530702904],
+      [32.04828307386034, 34.0025065297069],
+      [32.08956092115095, 34.02875525554145],
+      [32.0675633430564, 34.0412083333397],
+      [32.019295572719045, 34.09193068385582],
+      [32.031711036484275, 34.081572275360486],
+    ];
+    const tasks = points.map(([latitude, longitude], index) => ({
+      stopId: `stop_d${index}`,
+      orderId: index,
+      taskType: 'dropoff',
+      requiredPredecessorStopId: null,
+      state: 'pending',
+      urgency: 'normal',
+      serviceDurationSeconds: 300,
+      location: { latitude, longitude },
+    }));
+
+    const ordered = orderTasksByDistance(tasks, null, {
+      latitude: 32,
+      longitude: 34,
+    });
+
+    assert.deepEqual(ordered.map((task) => task.stopId), [
+      'stop_d1', 'stop_d2', 'stop_d3', 'stop_d0', 'stop_d5', 'stop_d4',
+    ]);
+  });
+
   test('blocks eligible orders that do not have every required coordinate', () => {
     const result = buildDispatchTasks([
       order(1, 'paid', null, 34.78),
@@ -367,6 +397,26 @@ describe('driver dispatch planning', () => {
     assert.equal(changed.route.revision, 2);
     assert.equal(db.routes.length, 2);
     assert.deepEqual(db.assignments.filter((row) => row.active).map((row) => row.order_id), [1, 2]);
+  });
+
+  test('replans an unchanged active queue when the route policy version changes', async () => {
+    const db = new DispatchDb([order(1, 'paid', 34.77, 34.78)]);
+    const env = { DB: db };
+
+    await syncDriverRoute(env, {
+      shiftId: 'sh_1',
+      now: Date.parse('2026-08-30T12:00:00Z'),
+    });
+    db.routes[0].plan_fingerprint = 'legacy-route-policy-fingerprint';
+
+    const replanned = await syncDriverRoute(env, {
+      shiftId: 'sh_1',
+      now: Date.parse('2026-08-30T12:01:00Z'),
+    });
+
+    assert.equal(replanned.changed, true);
+    assert.equal(replanned.route.revision, 2);
+    assert.equal(db.routes.length, 2);
   });
 
   test('attempts a best-effort push only when route reconciliation creates a revision', async () => {

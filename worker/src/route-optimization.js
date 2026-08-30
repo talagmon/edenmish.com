@@ -3,6 +3,15 @@ const TASK_ID = /^(?:stop|ord)_[A-Za-z0-9]+$/;
 const GOOGLE_OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_CLOUD_SCOPE = 'https://www.googleapis.com/auth/cloud-platform';
 const GOOGLE_ACCESS_TOKEN_CACHE = new Map();
+// The optimizer's costs are deliberately distance-dominant. In the shared unit below,
+// one hour of traffic-aware driving time can justify at most 240 extra metres, while
+// one hour past an urgent delivery's soft target can justify at most 100 extra metres.
+// This keeps the total travelling path primary without ignoring a material traffic
+// saving or a reasonably cheap way to serve an urgent package earlier.
+const DISTANCE_COST_PER_KILOMETER = 1_000;
+const TRAFFIC_COST_PER_TRAVELED_HOUR = 240;
+const URGENT_SOFT_DEADLINE_MS = 90 * 60 * 1_000;
+const URGENT_LATE_COST_PER_HOUR = 100;
 const TERMINAL_STATES = new Set([
   'completed', 'failed', 'cancelled', 'skipped_by_dispatch',
 ]);
@@ -150,6 +159,7 @@ function visitRequest(task, plan) {
       ? task.serviceDurationSeconds : 300}s`,
     label: task.stopId,
   };
+  let timeWindow = null;
   if (task.promisedWindow) {
     const start = Date.parse(task.promisedWindow.from);
     const end = Date.parse(task.promisedWindow.to);
@@ -159,11 +169,28 @@ function visitRequest(task, plan) {
       || start > end || start < globalStart || end > globalEnd) {
       throw optimizationError('A promised window is outside the route horizon.', 'invalid_route_plan');
     }
-    visit.timeWindows = [{
+    timeWindow = {
       startTime: googleTimestamp(start),
       endTime: googleTimestamp(end),
-    }];
+    };
   }
+  if (task.taskType === 'dropoff' && task.urgency === 'urgent') {
+    const globalStart = Date.parse(plan.routeStartTime);
+    const globalEnd = Date.parse(plan.routeEndTime);
+    timeWindow ||= {
+      startTime: googleTimestamp(globalStart),
+      endTime: googleTimestamp(globalEnd),
+    };
+    const windowStart = Date.parse(timeWindow.startTime);
+    const windowEnd = Date.parse(timeWindow.endTime);
+    const softEnd = Math.max(
+      windowStart,
+      Math.min(globalStart + URGENT_SOFT_DEADLINE_MS, windowEnd),
+    );
+    timeWindow.softEndTime = googleTimestamp(softEnd);
+    timeWindow.costPerHourAfterSoftEndTime = URGENT_LATE_COST_PER_HOUR;
+  }
+  if (timeWindow) visit.timeWindows = [timeWindow];
   return visit;
 }
 
@@ -230,6 +257,34 @@ function buildShipments(plan, remainingTasks, lockedTask) {
   return shipments;
 }
 
+function buildCrossShipmentPrecedenceRules(shipments, remainingTasks) {
+  const shipmentIndexByOrderId = new Map(
+    shipments.map((shipment, index) => [shipment.label, index]),
+  );
+  const taskByStopId = new Map(remainingTasks.map((task) => [task.stopId, task]));
+  const rules = [];
+  const seen = new Set();
+  for (const task of remainingTasks) {
+    if (!task.requiredPredecessorStopId) continue;
+    const predecessor = taskByStopId.get(task.requiredPredecessorStopId);
+    if (!predecessor || predecessor.orderId === task.orderId) continue;
+    const firstIndex = shipmentIndexByOrderId.get(predecessor.orderId);
+    const secondIndex = shipmentIndexByOrderId.get(task.orderId);
+    if (firstIndex == null || secondIndex == null) continue;
+    const key = `${firstIndex}:${predecessor.taskType}:${secondIndex}:${task.taskType}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rules.push({
+      firstIndex,
+      firstIsDelivery: predecessor.taskType === 'dropoff',
+      secondIndex,
+      secondIsDelivery: task.taskType === 'dropoff',
+      offsetDuration: '0s',
+    });
+  }
+  return rules;
+}
+
 export function buildRouteOptimizationRequest(plan) {
   validatePlan(plan);
   const lockedTask = plan.currentStopLocked
@@ -244,21 +299,24 @@ export function buildRouteOptimizationRequest(plan) {
     };
   }
   const startLocation = lockedTask?.location || plan.vehicleLocation;
+  const precedenceRules = buildCrossShipmentPrecedenceRules(shipments, remainingTasks);
   return {
     request: {
       timeout: `${Number.isInteger(plan.solverTimeoutSeconds)
         ? Math.min(Math.max(plan.solverTimeoutSeconds, 1), 15) : 5}s`,
-      searchMode: 'RETURN_FAST',
+      searchMode: 'CONSUME_ALL_AVAILABLE_TIME',
       considerRoadTraffic: true,
       model: {
         globalStartTime: googleTimestamp(Date.parse(plan.routeStartTime)),
         globalEndTime: googleTimestamp(Date.parse(plan.routeEndTime)),
         shipments,
+        ...(precedenceRules.length ? { precedenceRules } : {}),
         vehicles: [{
           label: 'eden-driver',
           travelMode: 'DRIVING',
           startWaypoint: waypoint(startLocation),
-          costPerKilometer: 1,
+          costPerKilometer: DISTANCE_COST_PER_KILOMETER,
+          costPerTraveledHour: TRAFFIC_COST_PER_TRAVELED_HOUR,
         }],
       },
     },

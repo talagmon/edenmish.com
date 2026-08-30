@@ -50,10 +50,50 @@ test('keeps the active stop fixed and models onboard deliveries without pickups'
   assert.equal(byOrder.get('ord_1').deliveries[0].label, 'stop_d1');
   assert.equal(byOrder.get('ord_2').pickups[0].label, 'stop_p2');
   assert.equal(byOrder.get('ord_2').deliveries[0].label, 'stop_d2');
-  assert.equal(request.model.vehicles[0].costPerKilometer, 1);
+  assert.equal(request.searchMode, 'CONSUME_ALL_AVAILABLE_TIME');
+  assert.equal(request.timeout, '5s');
+  assert.equal(request.model.vehicles[0].costPerKilometer, 1_000);
+  assert.equal(request.model.vehicles[0].costPerTraveledHour, 240);
   assert.equal(request.considerRoadTraffic, true);
   assert.equal(request.model.globalStartTime, '2026-07-19T08:00:00Z');
   assert.equal(request.model.globalEndTime, '2026-07-19T18:00:00Z');
+});
+
+test('models urgent drop-offs as a bounded secondary soft deadline', () => {
+  const urgentPlan = plan();
+  urgentPlan.tasks.find((routeTask) => routeTask.stopId === 'stop_d2').urgency = 'urgent';
+
+  const { request } = buildRouteOptimizationRequest(urgentPlan);
+  const urgentDelivery = request.model.shipments
+    .find((shipment) => shipment.label === 'ord_2').deliveries[0];
+
+  assert.deepEqual(urgentDelivery.timeWindows, [{
+    startTime: '2026-07-19T08:00:00Z',
+    endTime: '2026-07-19T18:00:00Z',
+    softEndTime: '2026-07-19T09:30:00Z',
+    costPerHourAfterSoftEndTime: 100,
+  }]);
+});
+
+test('constrains every shared-batch drop-off behind its one physical pickup', () => {
+  const { request } = buildRouteOptimizationRequest(plan({
+    currentStopId: null,
+    currentStopLocked: false,
+    onboardOrderIds: ['ord_2'],
+    tasks: [
+      task('stop_p1', 'ord_1', 'pickup'),
+      task('stop_d1', 'ord_1', 'dropoff', { requiredPredecessorStopId: 'stop_p1' }),
+      task('stop_d2', 'ord_2', 'dropoff', { requiredPredecessorStopId: 'stop_p1' }),
+    ],
+  }));
+
+  assert.deepEqual(request.model.precedenceRules, [{
+    firstIndex: 0,
+    firstIsDelivery: false,
+    secondIndex: 1,
+    secondIsDelivery: true,
+    offsetDuration: '0s',
+  }]);
 });
 
 test('accepts a mixed optimized pickup and delivery sequence', () => {
