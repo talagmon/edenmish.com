@@ -1025,6 +1025,7 @@ describe('Frontend: Booking form', () => {
     assertContains(html, 'id="flow-back"', 'step back action');
     assertContains(html, 'validateFlowStep', 'per-stage validation');
     assertContains(html, 'showFlowStep(currentStep+1)', 'progressive reveal');
+    assert.equal((html.match(/<details class="access-details" open>/g) || []).length, 1, 'only drop-off access details should open by default');
     assertContains(html, 'width:min(calc(100% - (2 * var(--order-gutter))),960px)', 'shared responsive action width');
     assertContains(html, '.order-shell{width:min(100%,960px);margin-inline:auto}', 'shared centered content width');
     assertContains(html, 'direction:rtl', 'RTL step rail');
