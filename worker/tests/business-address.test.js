@@ -208,4 +208,44 @@ describe('business batch address validation', () => {
     await validateBusinessBatchAddresses(unavailable, { apiKey: '' });
     assert.deepEqual(unavailable[0].errors, ['address_validation_unavailable']);
   });
+
+  test('falls back from text search to address autocomplete and place details', async () => {
+    const row = {
+      row_number: 2,
+      delivery_street: 'קריניצי',
+      delivery_house_number: '111',
+      delivery_city: 'רמת גן',
+      corrections: [],
+      errors: [],
+    };
+    const calls = [];
+    const fetchImpl = async (url, request) => {
+      calls.push({ url, request });
+      if (url.endsWith('places:searchText')) {
+        return { ok: true, async json() { return { places: [] }; } };
+      }
+      if (url.endsWith('places:autocomplete')) {
+        assert.match(request.headers['X-Goog-FieldMask'], /placeId/);
+        return {
+          ok: true,
+          async json() {
+            return { suggestions: [{ placePrediction: { placeId: 'pickup-place' } }] };
+          },
+        };
+      }
+      assert.match(url, /places\/pickup-place\?languageCode=he&regionCode=IL$/);
+      return {
+        ok: true,
+        async json() {
+          return place({ route: 'קריניצי', number: '111', city: 'רמת גן' });
+        },
+      };
+    };
+
+    await validateBusinessBatchAddresses([row], { apiKey: 'test-key', fetchImpl });
+    assert.equal(calls.length, 3);
+    assert.equal(row.delivery_lat, 32.08);
+    assert.equal(row.delivery_lng, 34.78);
+    assert.deepEqual(row.errors, []);
+  });
 });
