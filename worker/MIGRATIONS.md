@@ -1018,6 +1018,39 @@ permission and signs in.
 
 ---
 
+### 038_business_delivery_exceptions.sql
+
+**Purpose:** Adds an account-scoped, exact-external-ID exception table for one-use
+business deliveries that are outside the account plan's normal zone/service matrix.
+The signed batch row's deterministic idempotency key consumes the exception once and
+permits only retries of that same logical delivery. Global plan coverage is unchanged.
+
+**Production command:**
+```bash
+wrangler d1 execute edenmish --remote \
+  --file=./migrations/038_business_delivery_exceptions.sql
+```
+
+**Verification queries:**
+```sql
+SELECT name, type FROM sqlite_master
+WHERE name IN (
+  'business_delivery_exceptions',
+  'idx_business_delivery_exceptions_lookup'
+)
+ORDER BY type, name;
+
+SELECT name, type, "notnull", pk
+FROM pragma_table_info('business_delivery_exceptions')
+ORDER BY cid;
+```
+
+Expected: one table and one exact account/row lookup index. The migration does not
+grant any exception by itself. Operators add a bounded row only after approval, with
+an explicit account, external ID, zone, service, exact price, and expiry.
+
+---
+
 ## Full production migration checklist
 
 - [ ] Confirm current branch is `main`.
@@ -1055,6 +1088,7 @@ permission and signs in.
 - [ ] Run `033_business_batch_external_id.sql` after merge and before deploying business batch import.
 - [ ] Run `034_business_batch_mappings.sql` after 033 and before enabling approved mapping reuse.
 - [ ] Run `037_driver_push_devices.sql` after any merged 035/036 migrations and before enabling driver push notifications.
+- [ ] Run `038_business_delivery_exceptions.sql` before granting an account-scoped batch delivery exception.
 - [ ] Run verification queries (see each migration above).
 - [ ] Confirm Worker secrets are set (see `README.md` → Secret checklist).
 - [ ] Confirm Worker vars are set (see `wrangler.toml [vars]` + `ALLOWED_ORIGINS`).
@@ -1071,7 +1105,7 @@ whether each table exists:
 ```sql
 SELECT name FROM sqlite_master
 WHERE type='table'
-AND name IN ('rate_limits', 'delivery_proofs', 'notifications', 'coupons', 'coupon_redemptions', 'business_accounts', 'business_wallets', 'business_batch_mappings', 'wallet_entries', 'delivery_completion_transitions', 'delivery_notification_outbox', 'driver_push_devices')
+AND name IN ('rate_limits', 'delivery_proofs', 'notifications', 'coupons', 'coupon_redemptions', 'business_accounts', 'business_wallets', 'business_batch_mappings', 'business_delivery_exceptions', 'wallet_entries', 'delivery_completion_transitions', 'delivery_notification_outbox', 'driver_push_devices')
 ORDER BY name;
 ```
 

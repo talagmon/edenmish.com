@@ -72,6 +72,12 @@ import {
   signBusinessBatchToken,
   verifyBusinessBatchToken,
 } from './business-batch-approval.js';
+import {
+  applyBusinessDeliveryException,
+  attachBusinessDeliveryExceptionToOrder,
+  claimBusinessDeliveryException,
+  findBusinessDeliveryException,
+} from './business-delivery-exceptions.js';
 import { corsFor, maskEmail, publicOrderSummary, clientIp, anonKey } from './security.js';
 import { notifyEmail } from './notify.js';
 import { normalizeIlPhone, scheduleError, validIsraeliId } from './validate.js';
@@ -473,6 +479,40 @@ async function authoritativeQuote(env, input) {
   return priceOrder(input, await getRules(env.DB));
 }
 
+async function authoritativeBusinessQuote(env, input, session, {
+  externalId = null,
+  idempotencyKey = null,
+  claimException = false,
+  now = Date.now(),
+} = {}) {
+  const publicQuote = await authoritativeQuote(env, input);
+  const planQuote = applyBusinessPlanPricing(publicQuote, session.plan_id);
+  if (
+    !externalId
+    || !idempotencyKey
+    || !publicQuote.zone
+    || !planQuote.reasons?.includes('plan_service_unavailable')
+    || publicQuote.review
+  ) return { quote: planQuote, exception: null };
+  const exceptionInput = {
+    accountId: session.account_id,
+    externalId,
+    zone: publicQuote.zone,
+    service: publicQuote.service,
+    idempotencyKey,
+    now,
+  };
+  const result = claimException
+    ? await claimBusinessDeliveryException(env.DB, exceptionInput)
+    : { exception: await findBusinessDeliveryException(env.DB, exceptionInput) };
+  return {
+    quote: result.exception
+      ? applyBusinessDeliveryException(planQuote, session.plan_id, result.exception)
+      : planQuote,
+    exception: result.exception || null,
+  };
+}
+
 function normalizeQuoteInput(input) {
   const b = { ...(input || {}) };
   const rawHour = b.when_hour;
@@ -482,6 +522,7 @@ function normalizeQuoteInput(input) {
   b.dropoff_city = String(b.dropoff_city || '').trim().slice(0, 100);
   b.when_date = String(b.when_date || '').trim();
   b.when_hour = rawHour == null || rawHour === '' ? NaN : Number(rawHour);
+  b.external_id = String(b.external_id || '').trim().slice(0, 80) || null;
   return b;
 }
 
@@ -648,7 +689,13 @@ export default {
       const b = normalizeQuoteInput(raw);
       const inputError = quoteInputError(b);
       if (inputError) return json({ error: inputError }, 400);
-      const quote = applyBusinessPlanPricing(await authoritativeQuote(env, b), session.plan_id);
+      const idempotencyKey = b.external_id
+        ? await businessBatchIdempotencyKey(b.external_id)
+        : null;
+      const { quote } = await authoritativeBusinessQuote(env, b, session, {
+        externalId: b.external_id,
+        idempotencyKey,
+      });
       return json({ ...quote, currency: 'ILS', balance: Number(session.available_agorot || 0) / 100, balance_after: quote.available ? (Number(session.available_agorot || 0) / 100 - quote.price) : null });
     }
 
@@ -1317,6 +1364,14 @@ export default {
           )
           : true;
         if (existingWalletOrder && existingMatches) {
+          if (batchRowApproval) {
+            await attachBusinessDeliveryExceptionToOrder(env.DB, {
+              accountId: businessSession.account_id,
+              externalId: batchRowApproval.data.external_id,
+              idempotencyKey: walletIdempotencyKey,
+              orderId: existingWalletOrder.id,
+            }).catch(() => {});
+          }
           return json({
             order_id: existingWalletOrder.id,
             token: existingWalletOrder.token,
@@ -1346,8 +1401,17 @@ export default {
         }
       }
 
-      let pr = await authoritativeQuote(env, b);
-      if (businessSession) pr = applyBusinessPlanPricing(pr, businessSession.plan_id);
+      let businessException = null;
+      let pr;
+      if (businessSession) {
+        const businessQuote = await authoritativeBusinessQuote(env, b, businessSession, {
+          externalId: batchRowApproval?.data?.external_id || null,
+          idempotencyKey: walletIdempotencyKey,
+          claimException: Boolean(batchRowApproval),
+        });
+        pr = businessQuote.quote;
+        businessException = businessQuote.exception;
+      } else pr = await authoritativeQuote(env, b);
       const isReview = pr.review;
 
       // Server-side hard gates: reject out-of-zone, Flash Zone 3, outside business hours.
@@ -1468,6 +1532,14 @@ export default {
           }
           return json({ error: update.error || 'existing_order_locked' }, 409, cors);
         }
+        if (businessException) {
+          await attachBusinessDeliveryExceptionToOrder(env.DB, {
+            accountId: businessSession.account_id,
+            externalId: batchRowApproval.data.external_id,
+            idempotencyKey: walletIdempotencyKey,
+            orderId: existingWalletOrder.id,
+          }).catch(() => {});
+        }
         scheduleDriverRouteRefresh(env, ctx);
         return json({
           order_id: existingWalletOrder.id,
@@ -1479,6 +1551,7 @@ export default {
           credit_delta: Number(update.amount_agorot - update.previous_amount_agorot) / 100,
           wallet: true,
           updated: true,
+          exception_applied: Boolean(businessException),
         }, 200, cors);
       }
 
@@ -1579,6 +1652,14 @@ export default {
       if (walletReservation) {
         await linkWalletReservationToOrder(env.DB, walletReservation.id, created.id);
         await env.DB.prepare(`UPDATE orders SET email = ?, email_verified = 1, payment_mode = 'wallet' WHERE id = ?`).bind(b.email, created.id).run();
+      }
+      if (businessException) {
+        await attachBusinessDeliveryExceptionToOrder(env.DB, {
+          accountId: businessSession.account_id,
+          externalId: batchRowApproval.data.external_id,
+          idempotencyKey: walletIdempotencyKey,
+          orderId: created.id,
+        }).catch(() => {});
       }
       if (promotionClaim) {
         try {
@@ -1682,6 +1763,7 @@ export default {
           balance: refreshed ? Number(refreshed.available_agorot || 0) / 100 : undefined,
           review: false,
           reasons: [],
+          exception_applied: Boolean(businessException),
         }, 200, cors);
       }
 
