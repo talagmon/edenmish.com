@@ -11,6 +11,17 @@ const AVERAGE_SPEED_METERS_PER_SECOND = 25_000 / 3_600;
 const DRIVER_LOCATION_MAX_AGE_MS = 5 * 60 * 1000;
 const DRIVER_LOCATION_MAX_ACCURACY_METERS = 100;
 
+function israelIsoDate(now = Date.now()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jerusalem',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(now));
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
+
 function validCoordinate(value, min, max) {
   return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
 }
@@ -342,7 +353,8 @@ async function optimizedTaskOrder(env, tasks, preferredCurrentStopId, now, vehic
   }
 }
 
-async function eligibleOrders(DB, shiftId = null) {
+async function eligibleOrders(DB, shiftId = null, now = Date.now()) {
+  const today = israelIsoDate(now);
   const result = await DB.prepare(`SELECT id, status, urgent, retained_by_driver,
       business_account_id,
       pickup, pickup_detail, pickup_city, pickup_lat, pickup_lng,
@@ -352,6 +364,8 @@ async function eligibleOrders(DB, shiftId = null) {
     WHERE (status IN ('paid','to_pickup','picked_up','to_dropoff')
         OR (status = 'failed'
           AND retained_by_driver IN ('return_to_origin','hold_for_redelivery','redelivery')))
+      AND (status NOT IN ('paid','to_pickup')
+        OR when_date IS NULL OR TRIM(when_date) = '' OR when_date <= ?)
       AND (? IS NULL OR NOT EXISTS (
         SELECT 1 FROM driver_execution_events rejected
         WHERE rejected.shift_id = ? AND rejected.order_id = orders.id
@@ -359,7 +373,7 @@ async function eligibleOrders(DB, shiftId = null) {
           AND rejected.status = 'accepted'
       ))
     ORDER BY urgent DESC, COALESCE(when_date, '9999-12-31'), COALESCE(when_hour, 23), id`)
-    .bind(shiftId, shiftId).all();
+    .bind(today, shiftId, shiftId).all();
   return result.results || [];
 }
 
@@ -500,7 +514,7 @@ export async function syncDriverRoute(env, {
   now = Date.now(),
   retryCount = 0,
 } = {}) {
-  const orders = await eligibleOrders(env.DB, shiftId);
+  const orders = await eligibleOrders(env.DB, shiftId, now);
   const { tasks, blockedOrderIds } = buildDispatchTasks(orders);
   const latest = await latestRoute(env.DB, shiftId);
   const previousStops = await latestRouteStops(env.DB, latest?.id);
