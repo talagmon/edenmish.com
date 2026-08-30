@@ -17,6 +17,11 @@
     };
   }
 
+  function businessEmailFieldState(value) {
+    const email = String(value || "").trim();
+    return { value: email, readOnly: Boolean(email) };
+  }
+
   async function prepareAuthoritativeQuote({ businessMode, quote, quoteFingerprint, expectedFingerprint, fetchQuote }) {
     if (!businessMode) return { quote: quote || null, canSubmit: true, refreshed: false };
     if (quote && quoteFingerprint === expectedFingerprint) {
@@ -26,5 +31,5 @@
     return { quote: refreshedQuote || null, canSubmit: false, refreshed: true };
   }
 
-  return { planServiceState, prepareAuthoritativeQuote };
+  return { businessEmailFieldState, planServiceState, prepareAuthoritativeQuote };
 });

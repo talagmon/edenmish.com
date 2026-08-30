@@ -6,6 +6,17 @@ import businessBooking from '../public/assets/business-booking.js';
 describe('Business booking decisions', () => {
   const plan = (rates, service) => ({ rates, value: { example: { service } } });
 
+  test('only locks the business email field when the account supplies an email', () => {
+    assert.deepEqual(
+      businessBooking.businessEmailFieldState(' owner@example.com '),
+      { value: 'owner@example.com', readOnly: true },
+    );
+    assert.deepEqual(
+      businessBooking.businessEmailFieldState(''),
+      { value: '', readOnly: false },
+    );
+  });
+
   test('selects the correct default and available services for every plan family', () => {
     const cases = [
       ['Trial', plan({ '1:eco': 30 }, 'eco'), ['eco'], 'eco'],
