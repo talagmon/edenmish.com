@@ -32,3 +32,23 @@ test('migration 038 creates the guarded one-use exception table and lookup index
     db.close();
   }
 });
+
+test('deployment paths require migration 038 before exception lookups are deployed', () => {
+  const production = readFileSync(
+    new URL('../../.github/workflows/production-deploy.yml', import.meta.url),
+    'utf8',
+  );
+  const staging = readFileSync(
+    new URL('../../.github/workflows/staging-worker.yml', import.meta.url),
+    'utf8',
+  );
+  const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  for (const text of [production, staging, readme]) {
+    assert.match(text, /038_business_delivery_exceptions\.sql/);
+  }
+  assert.ok(
+    staging.indexOf('038_business_delivery_exceptions.sql')
+      < staging.indexOf('Deploy staging Worker'),
+  );
+  assert.match(staging, /business_delivery_exceptions/);
+});
