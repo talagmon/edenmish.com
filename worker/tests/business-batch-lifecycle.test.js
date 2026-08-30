@@ -127,6 +127,9 @@ function installPlacesMock(sentEmails = null) {
     if (query.includes('הרצך 10') || query.includes('הרצל 10')) {
       return new Response(JSON.stringify({ places: [place('הרצל', '10')] }));
     }
+    if (query.includes('דרך יצחק רבין 1')) {
+      return new Response(JSON.stringify({ places: [place('דרך יצחק רבין', '1', 'פתח תקווה')] }));
+    }
     throw new Error(`unexpected Places query: ${query}`);
   };
 }
@@ -150,10 +153,18 @@ function batchRequest(csv, cookie) {
   });
 }
 
-function csvFor(date, { name = 'נועה לוי', size = 'קטן', includeInvalid = false } = {}) {
+function csvFor(date, {
+  name = 'נועה לוי',
+  size = 'קטן',
+  includeInvalid = false,
+  externalId = 'ORD-LIFECYCLE',
+  street = 'הרצך',
+  houseNumber = '10',
+  city = 'תל אביב',
+} = {}) {
   const rows = [
     'מזהה משלוח,שם נמען,טלפון נמען,רחוב מסירה,מספר בית,עיר מסירה,תאריך איסוף,שעת איסוף,גודל חבילה,תכולה',
-    `ORD-LIFECYCLE,${name},0501234567,הרצך,10,תל אביב,${date},10:00,${size},מסמכים`,
+    `${externalId},${name},0501234567,${street},${houseNumber},${city},${date},10:00,${size},מסמכים`,
   ];
   if (includeInvalid) {
     rows.push(`ORD-INVALID,ללא טלפון,,הרצל,10,תל אביב,${date},10:00,קטן,מסמכים`);
@@ -171,6 +182,7 @@ function quoteBody(row, pickup) {
     when_hour: row.pickup_hour,
     service: 'standard',
     size: row.package_size,
+    external_id: row.external_id,
   };
 }
 
@@ -378,4 +390,93 @@ test('authenticated CSV lifecycle validates, approves, creates, updates and canc
     ).get(account.id) },
     { available_agorot: 100000, reserved_agorot: 0 },
   );
+});
+
+test('a one-use account exception prices and creates only its exact Zone 3 batch row', async () => {
+  const DB = d1Database();
+  const env = {
+    DB,
+    SESSION_SECRET: 'batch-exception-test-secret',
+    GOOGLE_PLACES_SERVER_KEY: 'test-places-key',
+    TEST_MODE: '1',
+  };
+  const cookie = await createBusinessSession(env);
+  const account = DB.sqlite.prepare('SELECT id FROM business_accounts').get();
+  const now = Date.now();
+  DB.sqlite.prepare(`UPDATE business_accounts
+    SET plan_id = 'gold', updated_at = ? WHERE id = ?`).run(now, account.id);
+  DB.sqlite.prepare(`UPDATE business_wallets
+    SET available_agorot = 100000, reserved_agorot = 0, updated_at = ?
+    WHERE account_id = ?`).run(now, account.id);
+  DB.sqlite.prepare(`INSERT INTO wallet_credit_lots
+    (account_id, topup_id, original_agorot, remaining_agorot, expires_at, created_at)
+    VALUES (?, 'exception-credit', 100000, 100000, ?, ?)`)
+    .run(account.id, now + 30 * 24 * 60 * 60 * 1000, now);
+  DB.sqlite.prepare(`INSERT INTO business_delivery_exceptions
+    (account_id, external_id, zone, service, price_agorot, expires_at, note, created_at)
+    VALUES (?, 'RH2026-003', 3, 'standard', 11500, ?, 'one-use test', ?)`)
+    .run(account.id, now + 24 * 60 * 60 * 1000, now);
+  DB.sqlite.prepare(`INSERT INTO orders
+    (token, status, phone, email, payment_status, business_account_id, created_at)
+    VALUES ('prior-exception-account-order', 'delivered', '+972500000003',
+            'prior-exception@example.com', 'wallet_paid', ?, ?)`)
+    .run(account.id, now - 1);
+  installPlacesMock();
+  const deliveryDate = nextBusinessDate();
+
+  let response = await worker.fetch(
+    batchRequest(csvFor(deliveryDate, {
+      externalId: 'RH2026-003',
+      street: 'דרך יצחק רבין',
+      houseNumber: '1',
+      city: 'פתח תקווה',
+    }), cookie),
+    env,
+  );
+  assert.equal(response.status, 200);
+  const parsed = await response.json();
+  let row = parsed.rows[0];
+  const approved = await approveParsedRow(env, cookie, row, parsed.pickup);
+  row.batch_token = approved.row_tokens[0];
+  parsed.pickup.batch_token = approved.pickup_token;
+
+  response = await worker.fetch(
+    jsonPost('/api/business/quote', quoteBody(row, parsed.pickup), { Cookie: cookie }),
+    env,
+  );
+  assert.equal(response.status, 200);
+  const quote = await response.json();
+  assert.equal(quote.zone, 3);
+  assert.equal(quote.price, 115);
+  assert.equal(quote.available, true);
+  assert.equal(quote.exception_applied, true);
+
+  response = await worker.fetch(
+    jsonPost('/api/orders', orderBody(row, parsed.pickup, quote.price), {
+      Cookie: cookie,
+      'Idempotency-Key': row.idempotency_key,
+    }),
+    env,
+  );
+  assert.equal(response.status, 200);
+  const created = await response.json();
+  assert.equal(created.price, 115);
+  assert.equal(created.exception_applied, true);
+  assert.deepEqual(
+    { ...DB.sqlite.prepare(`SELECT consumed_key, order_id
+      FROM business_delivery_exceptions WHERE account_id = ? AND external_id = ?`)
+      .get(account.id, 'RH2026-003') },
+    { consumed_key: row.idempotency_key, order_id: created.order_id },
+  );
+
+  response = await worker.fetch(
+    jsonPost('/api/business/quote', {
+      ...quoteBody(row, parsed.pickup),
+      external_id: 'RH2026-OTHER',
+    }, { Cookie: cookie }),
+    env,
+  );
+  const otherQuote = await response.json();
+  assert.equal(otherQuote.available, false);
+  assert.ok(otherQuote.reasons.includes('plan_service_unavailable'));
 });
