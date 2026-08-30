@@ -38,6 +38,8 @@ describe('business batch address validation', () => {
       {
         street: 'הרצל',
         city: 'תל אביב',
+        latitude: 32.08,
+        longitude: 34.78,
         corrections: [],
       },
     );
@@ -49,6 +51,8 @@ describe('business batch address validation', () => {
       {
         street: 'הרצל',
         city: 'תל אביב',
+        latitude: 32.08,
+        longitude: 34.78,
         corrections: [{
           field: 'delivery_street',
           from: 'הרצך',
@@ -64,6 +68,8 @@ describe('business batch address validation', () => {
   test('suggests a supported-city typo only when the resolved street is confident', () => {
     const result = resolveBusinessAddress('הרצל', '10', 'תל אבי', [place()]);
     assert.equal(result.city, 'תל אביב-יפו');
+    assert.equal(result.latitude, 32.08);
+    assert.equal(result.longitude, 34.78);
     assert.deepEqual(result.corrections, [{
       field: 'delivery_city',
       from: 'תל אבי',
@@ -121,6 +127,8 @@ describe('business batch address validation', () => {
     assert.equal(rows[0].delivery_address, 'הרצל 10, כניסה ב, קומה 2, דירה 12');
     assert.equal(rows[1].delivery_address, 'הרצל 10, כניסה ב, קומה 2, דירה 12');
     assert.equal(rows[0].delivery_street, 'הרצל');
+    assert.equal(rows[0].delivery_lat, 32.08);
+    assert.equal(rows[0].delivery_lng, 34.78);
     assert.deepEqual(rows[0].errors, []);
 
     const unavailable = [makeRow(4)];

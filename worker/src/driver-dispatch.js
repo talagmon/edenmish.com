@@ -167,12 +167,59 @@ function routeTasksForOrder(order) {
 export function buildDispatchTasks(orders) {
   const tasks = [];
   const blockedOrderIds = [];
+  const pickupGroups = new Map();
   for (const order of orders || []) {
     const result = routeTasksForOrder(order);
     tasks.push(...result.tasks);
     if (result.blocked) blockedOrderIds.push(Number(order.id));
+    if (!result.blocked
+      && order.business_account_id != null
+      && ['paid', 'to_pickup'].includes(order.status)) {
+      const key = JSON.stringify([
+        Number(order.business_account_id),
+        order.pickup_lat,
+        order.pickup_lng,
+        order.pickup || null,
+        order.pickup_detail || null,
+        order.pickup_city || null,
+        order.when_date || null,
+        order.when_hour ?? null,
+      ]);
+      const members = pickupGroups.get(key) || [];
+      members.push(order);
+      pickupGroups.set(key, members);
+    }
   }
-  return { tasks, blockedOrderIds };
+
+  const removedPickupStopIds = new Set();
+  const sharedPickupByOrderId = new Map();
+  for (const members of pickupGroups.values()) {
+    if (members.length < 2) continue;
+    const leader = [...members].sort((left, right) => {
+      if (left.status !== right.status) return left.status === 'to_pickup' ? -1 : 1;
+      return Number(left.id) - Number(right.id);
+    })[0];
+    const leaderStopId = `stop_p${leader.id}`;
+    for (const member of members) {
+      sharedPickupByOrderId.set(Number(member.id), leaderStopId);
+      if (Number(member.id) !== Number(leader.id)) {
+        removedPickupStopIds.add(`stop_p${member.id}`);
+      }
+    }
+  }
+
+  return {
+    tasks: tasks
+      .filter((task) => !removedPickupStopIds.has(task.stopId))
+      .map((task) => {
+        if (task.taskType !== 'dropoff') return task;
+        const sharedPickupStopId = sharedPickupByOrderId.get(task.orderId);
+        return sharedPickupStopId
+          ? { ...task, requiredPredecessorStopId: sharedPickupStopId }
+          : task;
+      }),
+    blockedOrderIds,
+  };
 }
 
 export function orderTasksByDistance(
@@ -228,6 +275,18 @@ function localEtaByStopId(tasks, now, vehicleLocation = null) {
   return etaByStopId;
 }
 
+function sharedPickupContractOrderIds(tasks) {
+  const pickupOrderIdByStopId = new Map(tasks
+    .filter((task) => task.taskType === 'pickup')
+    .map((task) => [task.stopId, task.orderId]));
+  return [...new Set(tasks
+    .filter((task) => task.taskType === 'dropoff'
+      && task.requiredPredecessorStopId
+      && pickupOrderIdByStopId.has(task.requiredPredecessorStopId)
+      && pickupOrderIdByStopId.get(task.requiredPredecessorStopId) !== task.orderId)
+    .map((task) => task.orderId))];
+}
+
 async function optimizedTaskOrder(env, tasks, preferredCurrentStopId, now, vehicleLocation) {
   const fallback = orderTasksByDistance(tasks, preferredCurrentStopId, vehicleLocation);
   let optimizer;
@@ -241,9 +300,12 @@ async function optimizedTaskOrder(env, tasks, preferredCurrentStopId, now, vehic
   }
   const locked = tasks.find((task) => task.stopId === preferredCurrentStopId && task.state === 'navigating')
     || tasks.find((task) => task.state === 'navigating');
-  const onboardOrderIds = [...new Set(tasks
+  const onboardOrderIds = [...new Set([
+    ...tasks
     .filter((task) => task.taskType === 'dropoff' && task.requiredPredecessorStopId == null)
-    .map((task) => `ord_${task.orderId}`))];
+    .map((task) => task.orderId),
+    ...sharedPickupContractOrderIds(tasks),
+  ])].map((orderId) => `ord_${orderId}`);
   try {
     const result = await optimizer.optimize({
       routeStartTime: new Date(now).toISOString(),
@@ -282,6 +344,7 @@ async function optimizedTaskOrder(env, tasks, preferredCurrentStopId, now, vehic
 
 async function eligibleOrders(DB, shiftId = null) {
   const result = await DB.prepare(`SELECT id, status, urgent, retained_by_driver,
+      business_account_id,
       pickup, pickup_detail, pickup_city, pickup_lat, pickup_lng,
       dropoff, dropoff_detail, dropoff_city, dropoff_lat, dropoff_lng,
       when_date, when_hour, service
@@ -478,10 +541,18 @@ export async function syncDriverRoute(env, {
   // order is onboard from needing a pickup predecessor. A retained package must therefore stay
   // listed, or the return/redelivery leg is rejected as missingPickupPredecessor and the whole
   // snapshot is refused.
-  const onboardOrderIds = [...new Set(orders
+  const onboardOrderIds = [...new Set([
+    ...orders
     .filter((order) => ['picked_up', 'to_dropoff'].includes(order.status)
       || isRetainedByDriver(order))
-    .map((order) => Number(order.id)))];
+    .map((order) => Number(order.id)),
+    // Released clients validate pickup precedence per order. Sibling orders in a
+    // shared business pickup have no duplicate pickup task, so include them in the
+    // contract's onboard set while the single physical pickup remains the first
+    // required stop. Canonical order states stay paid/to_pickup until that pickup
+    // completes, and the API still rejects any premature drop-off transition.
+    ...sharedPickupContractOrderIds(tasks),
+  ])];
   const current = optimized.tasks[0];
   let inserted;
   try {

@@ -176,8 +176,12 @@ function quoteBody(row, pickup) {
   return {
     pickup: pickup.address,
     pickup_city: pickup.city,
+    pickup_lat: pickup.lat,
+    pickup_lng: pickup.lng,
     dropoff: row.delivery_address,
     dropoff_city: row.delivery_city,
+    dropoff_lat: row.delivery_lat,
+    dropoff_lng: row.delivery_lng,
     when_date: row.pickup_date,
     when_hour: row.pickup_hour,
     service: 'standard',
@@ -193,8 +197,12 @@ function orderBody(row, pickup, price) {
     phone: row.recipient_phone,
     pickup: pickup.address,
     pickup_city: pickup.city,
+    pickup_lat: pickup.lat,
+    pickup_lng: pickup.lng,
     dropoff: row.delivery_address,
     dropoff_city: row.delivery_city,
+    dropoff_lat: row.delivery_lat,
+    dropoff_lng: row.delivery_lng,
     when_date: row.pickup_date,
     when_hour: row.pickup_hour,
     when_text: `${row.pickup_date} · 10:00`,
@@ -293,6 +301,12 @@ test('authenticated CSV lifecycle validates, approves, creates, updates and canc
   assert.equal(response.status, 200);
   const created = await response.json();
   assert.equal(created.price, quote.price);
+  assert.deepEqual(
+    { ...DB.sqlite.prepare(
+      'SELECT pickup_lat, pickup_lng, dropoff_lat, dropoff_lng FROM orders WHERE id = ?'
+    ).get(created.order_id) },
+    { pickup_lat: 32.08, pickup_lng: 34.78, dropoff_lat: 32.08, dropoff_lng: 34.78 },
+  );
   const orderNotifications = DB.sqlite.prepare(
     `SELECT template, recipient, status
      FROM notifications

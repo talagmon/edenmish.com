@@ -372,6 +372,7 @@ describe('driver API v1', () => {
           stop_id: 'stop_p1', order_id: 9001, position: 1, task_type: 'pickup',
           required_predecessor_stop_id: null, state: 'navigating',
           name: 'נועה לוי', phone: '+972541234567', pickup: 'הרצל 42, תל אביב',
+          pickup_contact_name: 'Pickup Owner', pickup_contact_phone: '+972501234567',
           pickup_detail: 'קומה 2', pickup_lat: 32.0632, pickup_lng: 34.7708,
           dropoff: 'אבן גבירול 81, תל אביב', dropoff_detail: null,
           dropoff_lat: 32.0801, dropoff_lng: 34.7813,
@@ -403,7 +404,8 @@ describe('driver API v1', () => {
     assert.deepEqual(body.onboard_order_ids, ['ord_9000']);
     assert.equal(body.stops[0].task_type, 'pickup');
     assert.equal(body.stops[0].state, 'arrived');
-    assert.equal(body.stops[0].contact.display_name, 'נועה לוי');
+    assert.equal(body.stops[0].contact.display_name, 'Pickup Owner');
+    assert.equal(body.stops[0].contact.phone, '+972501234567');
     assert.equal(body.stops[0].address.display_text, 'הרצל 42, תל אביב · קומה 2');
     assert.equal(body.stops[1].task_type, 'dropoff');
     assert.equal(body.stops[1].required_predecessor_stop_id, 'stop_p0');
@@ -601,6 +603,62 @@ describe('driver API v1', () => {
     assert.equal(orderUpdate.args[0], 'picked_up');
     assert.equal(orderUpdate.args.at(-1), 9001);
     assert.ok(db.calls.some((call) => call.sql.includes('INSERT INTO status_history')));
+  });
+
+  test('completes every order behind one grouped business pickup', async () => {
+    const orderStatus = new Map([
+      [9001, 'to_pickup'],
+      [9002, 'paid'],
+      [9003, 'paid'],
+    ]);
+    const db = fakeDb({
+      first: (call) => {
+        const auth = authenticatedFirst(call);
+        if (auth) return auth;
+        if (call.sql.startsWith('SELECT event_id')) return null;
+        if (call.sql.includes('FROM driver_shifts WHERE id')) return { id: 'sh_123' };
+        if (call.sql.includes('FROM driver_assignments')) return { order_id: 9001 };
+        if (call.sql.includes('FROM driver_route_stops s JOIN driver_routes')) {
+          return { stop_id: 'stop_p9001', task_type: 'pickup', revision: 13 };
+        }
+        if (call.sql === 'SELECT * FROM orders WHERE id = ?') {
+          return { id: call.args[0], status: orderStatus.get(call.args[0]) };
+        }
+        return null;
+      },
+      all: (call) => call.sql.startsWith('SELECT DISTINCT dropoff.order_id')
+        ? { results: [{ order_id: 9001 }, { order_id: 9002 }, { order_id: 9003 }] }
+        : { results: [] },
+      run: (call) => {
+        if (call.sql.startsWith('UPDATE orders SET')) {
+          orderStatus.set(call.args.at(-1), call.args[0]);
+        }
+        return { meta: { changes: 1 } };
+      },
+    });
+    const event = {
+      event_id: '44444444-4444-4444-8444-444444444444',
+      event_type: 'pickup_completed',
+      occurred_at: '2026-08-30T09:00:00Z',
+      recorded_at_monotonic_ms: 42,
+      shift_id: 'sh_123',
+      order_id: 'ord_9001',
+      stop_id: 'stop_p9001',
+      route_revision_seen: 13,
+      payload: {},
+    };
+
+    const res = await handleDriverApi(request('/api/driver/v1/execution-events:batch', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ events: [event] }),
+    }), { DB: db });
+    const body = await res.json();
+
+    assert.equal(body.results[0].status, 'accepted');
+    assert.deepEqual([...orderStatus.values()], ['picked_up', 'picked_up', 'picked_up']);
+    const updates = db.calls.filter((call) => call.sql.startsWith('UPDATE orders SET'));
+    assert.deepEqual(updates.map((call) => call.args.at(-1)), [9001, 9002, 9003]);
   });
 
   test('starts drop-off navigation only after the package is picked up', async () => {
