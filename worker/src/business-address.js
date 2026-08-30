@@ -1,4 +1,3 @@
-import { zoneOf } from './pricing.js';
 import { composeDeliveryAddress } from './business-batch.js';
 
 const PLACES_TEXT_SEARCH_URL = 'https://places.googleapis.com/v1/places:searchText';
@@ -71,6 +70,41 @@ function resolvedCity(place) {
   return '';
 }
 
+function exactFormattedAddressDetails(place, declaredStreet, declaredNumber, declaredCity) {
+  const formattedAddress = String(place?.formattedAddress || '').trim();
+  if (!formattedAddress) return null;
+
+  const segments = formattedAddress.split(',').map((segment) => segment.trim()).filter(Boolean);
+  const firstLineCompact = normalizeAddressText(segments[0]).replace(/\s+/g, '');
+  const declaredStreetCompact = normalizeAddressText(declaredStreet).replace(/\s+/g, '');
+  const declaredNumberCompact = normalizeAddressText(declaredNumber).replace(/\s+/g, '');
+  if (!declaredStreetCompact || !declaredNumberCompact
+    || !firstLineCompact.includes(`${declaredStreetCompact}${declaredNumberCompact}`)) return null;
+
+  const declaredCityNormalized = normalizeCity(declaredCity);
+  const cityMatches = segments.slice(1).some((segment) => (
+    normalizeCity(segment) === declaredCityNormalized
+  ));
+  if (!cityMatches) return null;
+
+  const componentCountry = normalizeAddressText(component(place, 'country'));
+  const formattedCountryMatches = segments.some((segment) => (
+    ['ישראל', 'israel', 'il'].includes(normalizeAddressText(segment))
+  ));
+  if (componentCountry) {
+    if (!['ישראל', 'israel', 'il'].includes(componentCountry)) return null;
+  } else if (!formattedCountryMatches) return null;
+
+  return {
+    route: declaredStreet,
+    number: declaredNumber,
+    city: declaredCity,
+    routeScore: 1,
+    cityScore: 1,
+    score: 1,
+  };
+}
+
 function candidateDetails(place, declaredStreet, declaredNumber, declaredCity) {
   const route = component(place, 'route');
   const number = component(place, 'street_number');
@@ -78,30 +112,39 @@ function candidateDetails(place, declaredStreet, declaredNumber, declaredCity) {
   const country = component(place, 'country');
   const latitude = Number(place?.location?.latitude);
   const longitude = Number(place?.location?.longitude);
-  if (!route || !number || !city) return null;
   if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90
     || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) return null;
   if (country && !['ישראל', 'israel', 'il'].includes(normalizeAddressText(country))) return null;
-  if (normalizeAddressText(number) !== normalizeAddressText(declaredNumber)) return null;
 
-  const routeScore = similarity(declaredStreet, route);
-  const cityScore = similarity(normalizeCity(declaredCity), normalizeCity(city));
-  const routeLength = normalizeAddressText(declaredStreet).length;
-  const routeDistance = editDistance(normalizeAddressText(declaredStreet), normalizeAddressText(route));
-  const routeConfident = routeScore >= 0.72
-    && routeDistance <= (routeLength <= 5 ? 1 : 2);
-  if (!routeConfident || cityScore < 0.72 || zoneOf(city) == null) return null;
+  if (route && number && city
+    && normalizeAddressText(number) === normalizeAddressText(declaredNumber)) {
+    const routeScore = similarity(declaredStreet, route);
+    const cityScore = similarity(normalizeCity(declaredCity), normalizeCity(city));
+    const routeLength = normalizeAddressText(declaredStreet).length;
+    const routeDistance = editDistance(normalizeAddressText(declaredStreet), normalizeAddressText(route));
+    const routeConfident = routeScore >= 0.72
+      && routeDistance <= (routeLength <= 5 ? 1 : 2);
+    if (routeConfident && cityScore >= 0.72) {
+      return {
+        route,
+        number,
+        city,
+        latitude,
+        longitude,
+        routeScore,
+        cityScore,
+        score: routeScore * 0.75 + cityScore * 0.25,
+      };
+    }
+  }
 
-  return {
-    route,
-    number,
-    city,
-    latitude,
-    longitude,
-    routeScore,
-    cityScore,
-    score: routeScore * 0.75 + cityScore * 0.25,
-  };
+  const exactFormatted = exactFormattedAddressDetails(
+    place,
+    declaredStreet,
+    declaredNumber,
+    declaredCity,
+  );
+  return exactFormatted ? { ...exactFormatted, latitude, longitude } : null;
 }
 
 export function resolveBusinessAddress(street, houseNumber, city, places) {
@@ -181,7 +224,7 @@ async function searchPlaces(street, houseNumber, city, apiKey, fetchImpl) {
       textQuery: `${street} ${houseNumber}, ${city}, ישראל`,
       languageCode: 'he',
       regionCode: 'IL',
-      pageSize: 3,
+      pageSize: 10,
       locationRestriction: { rectangle: SERVICE_AREA_RECTANGLE },
     }),
   });
