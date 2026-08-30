@@ -102,7 +102,7 @@ Database name: `edenmish`. Binding: `DB`.
 ### Schema and migrations
 
 `schema.sql` is the **fresh-DB source of truth** — it defines every current table.
-The numbered migrations (`003`–`037`) add tables/columns that were introduced after the
+The numbered migrations (`003`–`038`) add tables/columns that were introduced after the
 initial schema. Tables are idempotent (`CREATE TABLE IF NOT EXISTS`); `ALTER TABLE …
 ADD COLUMN` migrations (`006`–`010`, `015`, `016`, `024`–`026`, and `033`) must run only on
 DBs that predate their columns.
@@ -116,6 +116,7 @@ DBs that predate their columns.
 Current tables: `orders`, `status_history`, `gps_pings`, `payments`, `pricing_rules`,
 `rate_limits`, `delivery_proofs`, `notifications`, `coupons`, `coupon_redemptions`,
 `business_coupon_redemptions`,
+`business_delivery_exceptions`,
 `analytics_conversion_claims`,
 `cancellation_requests`, `drivers`, `driver_sessions`, `driver_shifts`,
 `driver_assignments`, `driver_routes`, `driver_route_stops`, `driver_execution_events`,
@@ -248,6 +249,7 @@ wrangler d1 execute edenmish --remote --file=./migrations/032_analytics_conversi
 wrangler d1 execute edenmish --remote --file=./migrations/033_business_batch_external_id.sql
 wrangler d1 execute edenmish --remote --file=./migrations/034_business_batch_mappings.sql
 wrangler d1 execute edenmish --remote --file=./migrations/037_driver_push_devices.sql
+wrangler d1 execute edenmish --remote --file=./migrations/038_business_delivery_exceptions.sql
 ```
 
 > Run only migrations that have not already been applied. Several `ALTER TABLE`

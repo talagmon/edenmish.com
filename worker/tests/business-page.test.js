@@ -268,6 +268,7 @@ describe('business account dashboard', () => {
     assert.match(html, /batchMappingsLoaded=false/);
     assert.match(html, /ממתין לאישור תיקון/);
     assert.match(html, /batchScheduleError/);
+    assert.match(html, /external_id:row\.external_id/);
     assert.match(html, /אין איסוף בשבת/);
     assert.match(html, /עד 100 שורות/);
     assert.match(html, /id="batch-exceptions"/);
