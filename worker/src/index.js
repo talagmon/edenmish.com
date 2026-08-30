@@ -501,17 +501,21 @@ async function authoritativeBusinessQuote(env, input, session, {
 } = {}) {
   const publicQuote = await authoritativeQuote(env, input);
   const planQuote = applyBusinessPlanPricing(publicQuote, session.plan_id);
+  const outOfZoneOnly = publicQuote.review === true
+    && publicQuote.reasons?.length === 1
+    && publicQuote.reasons[0] === 'out_of_zone';
+  const exceptionZone = publicQuote.zone || (outOfZoneOnly ? 3 : null);
   if (
     !externalId
     || !idempotencyKey
-    || !publicQuote.zone
+    || !exceptionZone
     || !planQuote.reasons?.includes('plan_service_unavailable')
-    || publicQuote.review
+    || (publicQuote.review && !outOfZoneOnly)
   ) return { quote: planQuote, exception: null };
   const exceptionInput = {
     accountId: session.account_id,
     externalId,
-    zone: publicQuote.zone,
+    zone: exceptionZone,
     service: publicQuote.service,
     idempotencyKey,
     now,
