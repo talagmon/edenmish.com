@@ -113,6 +113,25 @@ describe('business batch address validation', () => {
     );
   });
 
+  test('accepts canonical street aliases with exact number, city and country', () => {
+    const aliases = [
+      ['שמואל יבניאלי', 'יבניאלי 24, גבעתיים 5360324, ישראל'],
+      ['ז׳בוטינסקי', 'זאב ז׳בוטינסקי 24, גבעתיים, ישראל'],
+      ['יעל רום', 'רום יעל 24, גבעתיים, ישראל'],
+      ['קריניצי', '24 קריניצי, גבעתיים, ישראל'],
+    ];
+    for (const [declaredStreet, formattedAddress] of aliases) {
+      const result = resolveBusinessAddress(declaredStreet, '24', 'גבעתיים', [{
+        formattedAddress,
+        location: { latitude: 32.07, longitude: 34.81 },
+        addressComponents: [],
+      }]);
+      assert.equal(result.street, declaredStreet);
+      assert.equal(result.city, 'גבעתיים');
+      assert.deepEqual(result.corrections, []);
+    }
+  });
+
   test('keeps exact formatted fallback closed for a wrong house number or city', () => {
     const exactFormatted = {
       formattedAddress: 'זאב ז׳בוטינסקי 60 ב׳, תל אביב, ישראל',
@@ -125,6 +144,10 @@ describe('business batch address validation', () => {
     );
     assert.equal(
       resolveBusinessAddress('ז׳בוטינסקי', '60ב', 'רמת גן', [exactFormatted]).error,
+      'invalid_delivery_address',
+    );
+    assert.equal(
+      resolveBusinessAddress('ז׳בוטינסקי', '60', 'תל אביב', [exactFormatted]).error,
       'invalid_delivery_address',
     );
   });
