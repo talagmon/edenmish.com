@@ -228,6 +228,10 @@ describe('business account dashboard', () => {
     assert.match(html, /\/api\/business\/batches\/approve/);
     assert.match(html, /batch_row_token:row\.batch_token/);
     assert.match(html, /batch_pickup_token:settings\.pickup\.batch_token/);
+    assert.match(html, /pickup_lat:settings\.pickup\.lat/);
+    assert.match(html, /pickup_lng:settings\.pickup\.lng/);
+    assert.match(html, /dropoff_lat:row\.delivery_lat/);
+    assert.match(html, /dropoff_lng:row\.delivery_lng/);
     assert.match(html, /expected_price:row\.price/);
     assert.match(html, /phone_delivery_link_opt_in:false/);
     assert.match(html, /when_date:row\.pickup_date/);

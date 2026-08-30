@@ -180,6 +180,8 @@ function batchRowTokenData(row, idempotencyKey) {
     recipient_phone: row.recipient_phone,
     delivery_address: row.delivery_address,
     delivery_city: row.delivery_city,
+    dropoff_lat: row.delivery_lat,
+    dropoff_lng: row.delivery_lng,
     pickup_date: row.pickup_date,
     pickup_hour: row.pickup_hour,
     package_size: row.package_size,
@@ -192,10 +194,18 @@ function batchPickupTokenData(pickup, service, defaultContents, smartMapping = n
   return {
     address: pickup.address,
     city: pickup.city,
+    pickup_lat: pickup.lat,
+    pickup_lng: pickup.lng,
     service,
     default_contents: defaultContents,
     ...(smartMapping ? { smart_mapping: smartMapping } : {}),
   };
+}
+function sameBatchCoordinate(actual, approved) {
+  if (actual == null || approved == null) return actual == null && approved == null;
+  return Number.isFinite(Number(actual))
+    && Number.isFinite(Number(approved))
+    && Math.abs(Number(actual) - Number(approved)) < 1e-8;
 }
 function batchOrderMatchesTokenData(order, row, pickup) {
   const expectedNotes = [
@@ -208,8 +218,12 @@ function batchOrderMatchesTokenData(order, row, pickup) {
     && String(order.phone || '') === String(row.recipient_phone || '')
     && String(order.pickup || '') === String(pickup.address || '')
     && String(order.pickup_city || '') === String(pickup.city || '')
+    && sameBatchCoordinate(order.pickup_lat, pickup.pickup_lat)
+    && sameBatchCoordinate(order.pickup_lng, pickup.pickup_lng)
     && String(order.dropoff || '') === String(row.delivery_address || '')
     && String(order.dropoff_city || '') === String(row.delivery_city || '')
+    && sameBatchCoordinate(order.dropoff_lat, row.dropoff_lat)
+    && sameBatchCoordinate(order.dropoff_lng, row.dropoff_lng)
     && String(order.when_date || '') === String(row.pickup_date || '')
     && Number(order.when_hour) === Number(row.pickup_hour)
     && String(order.service || '') === String(pickup.service || '')
@@ -784,6 +798,8 @@ export default {
         pickup.floor = validatedPickup.delivery_floor;
         pickup.apartment = validatedPickup.delivery_apartment;
         pickup.address = validatedPickup.delivery_address;
+        pickup.lat = validatedPickup.delivery_lat;
+        pickup.lng = validatedPickup.delivery_lng;
         pickup.corrections = validatedPickup.corrections.map((correction) => ({
           ...correction,
           field: correction.field.replace(/^delivery_/, 'pickup_'),

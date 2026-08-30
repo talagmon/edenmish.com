@@ -147,6 +147,71 @@ describe('driver dispatch planning', () => {
     assert.deepEqual(blockedOrderIds, []);
   });
 
+  test('groups one business batch into one physical pickup and keeps every drop-off', () => {
+    const sharedPickup = {
+      business_account_id: 2,
+      pickup: 'קריניצי 111',
+      pickup_city: 'רמת גן',
+      when_date: '2026-08-30',
+      when_hour: 12,
+    };
+    const { tasks, blockedOrderIds } = buildDispatchTasks([
+      order(101, 'paid', 34.814, 34.780, sharedPickup),
+      order(102, 'to_pickup', 34.814, 34.790, sharedPickup),
+      order(103, 'paid', 34.814, 34.800, sharedPickup),
+    ]);
+
+    const pickups = tasks.filter((task) => task.taskType === 'pickup');
+    const dropoffs = tasks.filter((task) => task.taskType === 'dropoff');
+    assert.deepEqual(pickups.map((task) => task.stopId), ['stop_p102']);
+    assert.equal(pickups[0].state, 'navigating');
+    assert.deepEqual(dropoffs.map((task) => task.orderId), [101, 102, 103]);
+    assert.ok(dropoffs.every((task) => task.requiredPredecessorStopId === 'stop_p102'));
+    assert.deepEqual(blockedOrderIds, []);
+  });
+
+  test('does not combine pickups belonging to different business accounts or schedules', () => {
+    const common = {
+      pickup: 'קריניצי 111',
+      pickup_city: 'רמת גן',
+      when_date: '2026-08-30',
+      when_hour: 12,
+    };
+    const { tasks } = buildDispatchTasks([
+      order(201, 'paid', 34.814, 34.780, { ...common, business_account_id: 2 }),
+      order(202, 'paid', 34.814, 34.790, { ...common, business_account_id: 3 }),
+      order(203, 'paid', 34.814, 34.800, {
+        ...common, business_account_id: 2, when_hour: 13,
+      }),
+    ]);
+
+    assert.deepEqual(
+      tasks.filter((task) => task.taskType === 'pickup').map((task) => task.stopId),
+      ['stop_p201', 'stop_p202', 'stop_p203'],
+    );
+  });
+
+  test('publishes grouped siblings as contract-onboard for released driver clients', async () => {
+    const sharedPickup = {
+      business_account_id: 2,
+      pickup: 'קריניצי 111',
+      pickup_city: 'רמת גן',
+      when_date: '2026-08-30',
+      when_hour: 12,
+    };
+    const db = new DispatchDb([
+      order(301, 'paid', 34.814, 34.780, sharedPickup),
+      order(302, 'paid', 34.814, 34.790, sharedPickup),
+      order(303, 'paid', 34.814, 34.800, sharedPickup),
+    ]);
+
+    await syncDriverRoute({ DB: db }, { shiftId: 'sh_batch', now: Date.now() });
+
+    assert.deepEqual(JSON.parse(db.routes[0].onboard_order_ids_json), [302, 303]);
+    assert.equal(db.stops.filter((stop) => stop.task_type === 'pickup').length, 1);
+    assert.equal(db.stops.filter((stop) => stop.task_type === 'dropoff').length, 3);
+  });
+
   test('routes a return leg for a retained package and holds a redelivery until it is paid', () => {
     const returning = order(5, 'failed', 34.77, 34.90, {
       retained_by_driver: 'return_to_origin',
