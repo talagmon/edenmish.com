@@ -31,6 +31,50 @@ function normalizeCity(value) {
     .replace(/^פתח תקוה$/, 'פתח תקווה');
 }
 
+function normalizeHouseNumber(value) {
+  return normalizeAddressText(value).replace(/\s+/g, '');
+}
+
+function streetNameTokens(value) {
+  const tokens = normalizeAddressText(value).split(' ').filter(Boolean);
+  while (['שדרות', 'שדרה', 'דרך'].includes(tokens[0])) tokens.shift();
+  return tokens;
+}
+
+function streetNamesEquivalent(left, right) {
+  const leftTokens = streetNameTokens(left);
+  const rightTokens = streetNameTokens(right);
+  if (!leftTokens.length || !rightTokens.length) return false;
+  const leftCompact = leftTokens.join('');
+  const rightCompact = rightTokens.join('');
+  if (leftCompact === rightCompact) return true;
+  if (
+    Math.min(leftCompact.length, rightCompact.length) >= 4
+    && (leftCompact.endsWith(rightCompact) || rightCompact.endsWith(leftCompact))
+  ) return true;
+  return leftTokens.length === rightTokens.length
+    && [...leftTokens].sort().join('|') === [...rightTokens].sort().join('|');
+}
+
+function formattedStreetMatches(segment, declaredStreet, declaredNumber) {
+  const normalized = normalizeAddressText(segment)
+    .replace(/(\d)\s+([א-ת])(?=\s|$)/g, '$1$2');
+  const tokens = normalized.split(' ').filter(Boolean);
+  const number = normalizeHouseNumber(declaredNumber);
+  const numberIndex = tokens.findIndex((token) => normalizeHouseNumber(token) === number);
+  if (numberIndex < 0) return false;
+  const street = tokens.filter((_, index) => index !== numberIndex).join(' ');
+  return streetNamesEquivalent(street, declaredStreet);
+}
+
+function formattedCityMatches(segment, declaredCity) {
+  const withoutPostcode = normalizeAddressText(segment)
+    .split(' ')
+    .filter((token) => !/^\d{5,7}$/.test(token))
+    .join(' ');
+  return normalizeCity(withoutPostcode) === normalizeCity(declaredCity);
+}
+
 function editDistance(left, right) {
   const a = [...left];
   const b = [...right];
@@ -75,16 +119,11 @@ function exactFormattedAddressDetails(place, declaredStreet, declaredNumber, dec
   if (!formattedAddress) return null;
 
   const segments = formattedAddress.split(',').map((segment) => segment.trim()).filter(Boolean);
-  const firstLineCompact = normalizeAddressText(segments[0]).replace(/\s+/g, '');
-  const declaredStreetCompact = normalizeAddressText(declaredStreet).replace(/\s+/g, '');
-  const declaredNumberCompact = normalizeAddressText(declaredNumber).replace(/\s+/g, '');
-  if (!declaredStreetCompact || !declaredNumberCompact
-    || !firstLineCompact.includes(`${declaredStreetCompact}${declaredNumberCompact}`)) return null;
+  if (!segments.some((segment) => (
+    formattedStreetMatches(segment, declaredStreet, declaredNumber)
+  ))) return null;
 
-  const declaredCityNormalized = normalizeCity(declaredCity);
-  const cityMatches = segments.slice(1).some((segment) => (
-    normalizeCity(segment) === declaredCityNormalized
-  ));
+  const cityMatches = segments.some((segment) => formattedCityMatches(segment, declaredCity));
   if (!cityMatches) return null;
 
   const componentCountry = normalizeAddressText(component(place, 'country'));
@@ -122,8 +161,8 @@ function candidateDetails(place, declaredStreet, declaredNumber, declaredCity) {
     const cityScore = similarity(normalizeCity(declaredCity), normalizeCity(city));
     const routeLength = normalizeAddressText(declaredStreet).length;
     const routeDistance = editDistance(normalizeAddressText(declaredStreet), normalizeAddressText(route));
-    const routeConfident = routeScore >= 0.72
-      && routeDistance <= (routeLength <= 5 ? 1 : 2);
+    const routeConfident = streetNamesEquivalent(declaredStreet, route)
+      || (routeScore >= 0.72 && routeDistance <= (routeLength <= 5 ? 1 : 2));
     if (routeConfident && cityScore >= 0.72) {
       return {
         route,
@@ -131,9 +170,10 @@ function candidateDetails(place, declaredStreet, declaredNumber, declaredCity) {
         city,
         latitude,
         longitude,
-        routeScore,
+        routeScore: streetNamesEquivalent(declaredStreet, route) ? 1 : routeScore,
         cityScore,
-        score: routeScore * 0.75 + cityScore * 0.25,
+        score: (streetNamesEquivalent(declaredStreet, route) ? 1 : routeScore) * 0.75
+          + cityScore * 0.25,
       };
     }
   }
