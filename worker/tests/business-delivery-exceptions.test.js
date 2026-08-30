@@ -95,6 +95,20 @@ test('finds and applies only the exact account, row, zone and service exception'
     applyBusinessDeliveryException({ available: true, review: false, price: 65 }, 'gold', exception),
     { available: true, review: false, price: 65 },
   );
+
+  const outOfZone = applyBusinessDeliveryException({
+    zone: null,
+    service: 'standard',
+    price: 50,
+    review: true,
+    available: false,
+    reasons: ['out_of_zone', 'plan_service_unavailable'],
+    breakdown: { base: null, total: 50 },
+  }, 'gold', exception);
+  assert.equal(outOfZone.zone, 3);
+  assert.equal(outOfZone.price, 115);
+  assert.equal(outOfZone.available, true);
+  assert.deepEqual(outOfZone.reasons, []);
 });
 
 test('claims once, permits the same idempotent retry, and rejects a different key', async () => {

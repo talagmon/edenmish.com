@@ -130,6 +130,9 @@ function installPlacesMock(sentEmails = null) {
     if (query.includes('דרך יצחק רבין 1')) {
       return new Response(JSON.stringify({ places: [place('דרך יצחק רבין', '1', 'פתח תקווה')] }));
     }
+    if (query.includes('שדרות מנחם בגין 5')) {
+      return new Response(JSON.stringify({ places: [place('שדרות מנחם בגין', '5', 'בית דגן')] }));
+    }
     throw new Error(`unexpected Places query: ${query}`);
   };
 }
@@ -493,4 +496,81 @@ test('a one-use account exception prices and creates only its exact Zone 3 batch
   const otherQuote = await response.json();
   assert.equal(otherQuote.available, false);
   assert.ok(otherQuote.reasons.includes('plan_service_unavailable'));
+});
+
+test('an exact one-use exception treats one out-of-zone batch row as Zone 3', async () => {
+  const DB = d1Database();
+  const env = {
+    DB,
+    SESSION_SECRET: 'batch-out-of-zone-exception-test-secret',
+    GOOGLE_PLACES_SERVER_KEY: 'test-places-key',
+    TEST_MODE: '1',
+  };
+  const cookie = await createBusinessSession(env);
+  const account = DB.sqlite.prepare('SELECT id FROM business_accounts').get();
+  const now = Date.now();
+  DB.sqlite.prepare(`UPDATE business_accounts
+    SET plan_id = 'gold', updated_at = ? WHERE id = ?`).run(now, account.id);
+  DB.sqlite.prepare(`UPDATE business_wallets
+    SET available_agorot = 100000, reserved_agorot = 0, updated_at = ?
+    WHERE account_id = ?`).run(now, account.id);
+  DB.sqlite.prepare(`INSERT INTO wallet_credit_lots
+    (account_id, topup_id, original_agorot, remaining_agorot, expires_at, created_at)
+    VALUES (?, 'out-of-zone-exception-credit', 100000, 100000, ?, ?)`)
+    .run(account.id, now + 30 * 24 * 60 * 60 * 1000, now);
+  DB.sqlite.prepare(`INSERT INTO business_delivery_exceptions
+    (account_id, external_id, zone, service, price_agorot, expires_at, note, created_at)
+    VALUES (?, 'RH2026-008', 3, 'standard', 11500, ?, 'one-use out-of-zone test', ?)`)
+    .run(account.id, now + 24 * 60 * 60 * 1000, now);
+  DB.sqlite.prepare(`INSERT INTO orders
+    (token, status, phone, email, payment_status, business_account_id, created_at)
+    VALUES ('prior-out-of-zone-account-order', 'delivered', '+972500000008',
+            'prior-out-of-zone@example.com', 'wallet_paid', ?, ?)`)
+    .run(account.id, now - 1);
+  installPlacesMock();
+
+  let response = await worker.fetch(
+    batchRequest(csvFor(nextBusinessDate(), {
+      externalId: 'RH2026-008',
+      street: 'שדרות מנחם בגין',
+      houseNumber: '5',
+      city: 'בית דגן',
+    }), cookie),
+    env,
+  );
+  assert.equal(response.status, 200);
+  const parsed = await response.json();
+  let row = parsed.rows[0];
+  const approved = await approveParsedRow(env, cookie, row, parsed.pickup);
+  row.batch_token = approved.row_tokens[0];
+  parsed.pickup.batch_token = approved.pickup_token;
+
+  response = await worker.fetch(
+    jsonPost('/api/business/quote', quoteBody(row, parsed.pickup), { Cookie: cookie }),
+    env,
+  );
+  assert.equal(response.status, 200);
+  const quote = await response.json();
+  assert.equal(quote.zone, 3);
+  assert.equal(quote.price, 115);
+  assert.equal(quote.available, true);
+  assert.equal(quote.exception_applied, true);
+
+  response = await worker.fetch(
+    jsonPost('/api/orders', orderBody(row, parsed.pickup, quote.price), {
+      Cookie: cookie,
+      'Idempotency-Key': row.idempotency_key,
+    }),
+    env,
+  );
+  assert.equal(response.status, 200);
+  const created = await response.json();
+  assert.equal(created.price, 115);
+  assert.equal(created.exception_applied, true);
+  assert.deepEqual(
+    { ...DB.sqlite.prepare(`SELECT consumed_key, order_id
+      FROM business_delivery_exceptions WHERE account_id = ? AND external_id = ?`)
+      .get(account.id, 'RH2026-008') },
+    { consumed_key: row.idempotency_key, order_id: created.order_id },
+  );
 });
