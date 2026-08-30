@@ -44,7 +44,9 @@ class DispatchDb {
         if (normalized.includes("FROM orders") && normalized.includes("status IN")) {
           return { results: db.orders.filter((candidate) => (
             ['paid', 'to_pickup', 'picked_up', 'to_dropoff'].includes(candidate.status)
-            && (!this.args[0] || !db.rejectedOrderIds.has(candidate.id))
+            && (!['paid', 'to_pickup'].includes(candidate.status)
+              || !candidate.when_date || candidate.when_date <= this.args[0])
+            && (!this.args[1] || !db.rejectedOrderIds.has(candidate.id))
           )) };
         }
         if (normalized.startsWith('SELECT order_id FROM driver_assignments')) {
@@ -210,6 +212,36 @@ describe('driver dispatch planning', () => {
     assert.deepEqual(JSON.parse(db.routes[0].onboard_order_ids_json), [302, 303]);
     assert.equal(db.stops.filter((stop) => stop.task_type === 'pickup').length, 1);
     assert.equal(db.stops.filter((stop) => stop.task_type === 'dropoff').length, 3);
+  });
+
+  test('keeps future paid orders out of the active route until their Israel delivery date', async () => {
+    const db = new DispatchDb([
+      order(401, 'paid', 34.814, 34.780, { when_date: '2026-08-30', when_hour: 12 }),
+      order(402, 'paid', 34.814, 34.790, { when_date: '2026-09-01', when_hour: 12 }),
+      order(403, 'paid', 34.814, 34.800, { when_date: '2026-09-02', when_hour: 12 }),
+    ]);
+
+    const today = await syncDriverRoute(
+      { DB: db },
+      { shiftId: 'sh_scheduled', now: Date.parse('2026-08-30T09:00:00Z') },
+    );
+
+    assert.equal(today.readyOrderCount, 1);
+    assert.deepEqual(db.assignments.filter((row) => row.active).map((row) => row.order_id), [401]);
+    assert.deepEqual(db.stops.map((row) => row.order_id), [401, 401]);
+
+    db.orders[0].status = 'delivered';
+    const septemberFirst = await syncDriverRoute(
+      { DB: db },
+      { shiftId: 'sh_scheduled', now: Date.parse('2026-09-01T00:05:00Z') },
+    );
+
+    assert.equal(septemberFirst.readyOrderCount, 1);
+    assert.deepEqual(db.assignments.filter((row) => row.active).map((row) => row.order_id), [402]);
+    assert.deepEqual(
+      db.stops.filter((row) => row.route_id === septemberFirst.route.id).map((row) => row.order_id),
+      [402, 402],
+    );
   });
 
   test('routes a return leg for a retained package and holds a redelivery until it is paid', () => {
