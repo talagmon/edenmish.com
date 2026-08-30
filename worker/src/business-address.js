@@ -1,6 +1,8 @@
 import { composeDeliveryAddress } from './business-batch.js';
 
 const PLACES_TEXT_SEARCH_URL = 'https://places.googleapis.com/v1/places:searchText';
+const PLACES_AUTOCOMPLETE_URL = 'https://places.googleapis.com/v1/places:autocomplete';
+const PLACES_DETAILS_URL = 'https://places.googleapis.com/v1/places';
 const ADDRESS_COMPONENT_TYPES = ['locality', 'postal_town', 'administrative_area_level_2'];
 const SERVICE_AREA_RECTANGLE = {
   low: { latitude: 31.84, longitude: 34.64 },
@@ -273,6 +275,50 @@ async function searchPlaces(street, houseNumber, city, apiKey, fetchImpl) {
   return Array.isArray(payload?.places) ? payload.places : [];
 }
 
+async function autocompletePlaces(street, houseNumber, city, apiKey, fetchImpl) {
+  const signal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+    ? AbortSignal.timeout(5000)
+    : undefined;
+  const response = await fetchImpl(PLACES_AUTOCOMPLETE_URL, {
+    method: 'POST',
+    ...(signal ? { signal } : {}),
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': apiKey,
+      'X-Goog-FieldMask': 'suggestions.placePrediction.placeId',
+    },
+    body: JSON.stringify({
+      input: `${street} ${houseNumber}, ${city}, ישראל`,
+      languageCode: 'he',
+      regionCode: 'IL',
+      includedRegionCodes: ['il'],
+      locationRestriction: { rectangle: SERVICE_AREA_RECTANGLE },
+    }),
+  });
+  if (!response.ok) return [];
+  const payload = await response.json();
+  const placeIds = [...new Set((payload?.suggestions || [])
+    .map((suggestion) => String(suggestion?.placePrediction?.placeId || '').trim())
+    .filter(Boolean))].slice(0, 5);
+
+  const details = await mapLimit(placeIds, 3, async (placeId) => {
+    const detailsResponse = await fetchImpl(
+      `${PLACES_DETAILS_URL}/${encodeURIComponent(placeId)}?languageCode=he&regionCode=IL`,
+      {
+        method: 'GET',
+        ...(signal ? { signal } : {}),
+        headers: {
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': 'id,formattedAddress,addressComponents,location,types',
+        },
+      },
+    );
+    if (!detailsResponse.ok) return null;
+    return detailsResponse.json();
+  });
+  return details.filter(Boolean);
+}
+
 async function mapLimit(items, limit, work) {
   const results = new Array(items.length);
   const cursor = { value: 0 };
@@ -319,24 +365,40 @@ export async function validateBusinessBatchAddresses(rows, options = {}) {
       normalizeCity(row.delivery_city),
     ].join('|');
     try {
-      let placesPromise = cache.get(key);
-      if (!placesPromise) {
-        placesPromise = searchPlaces(
-          row.delivery_street,
-          row.delivery_house_number,
-          row.delivery_city,
-          apiKey,
-          fetchImpl,
-        );
-        cache.set(key, placesPromise);
+      let resolutionPromise = cache.get(key);
+      if (!resolutionPromise) {
+        resolutionPromise = (async () => {
+          const places = await searchPlaces(
+            row.delivery_street,
+            row.delivery_house_number,
+            row.delivery_city,
+            apiKey,
+            fetchImpl,
+          );
+          const textResolution = resolveBusinessAddress(
+            row.delivery_street,
+            row.delivery_house_number,
+            row.delivery_city,
+            places,
+          );
+          if (!textResolution.error) return textResolution;
+          const predictions = await autocompletePlaces(
+            row.delivery_street,
+            row.delivery_house_number,
+            row.delivery_city,
+            apiKey,
+            fetchImpl,
+          ).catch(() => []);
+          return resolveBusinessAddress(
+            row.delivery_street,
+            row.delivery_house_number,
+            row.delivery_city,
+            [...places, ...predictions],
+          );
+        })();
+        cache.set(key, resolutionPromise);
       }
-      const places = await placesPromise;
-      const resolution = resolveBusinessAddress(
-        row.delivery_street,
-        row.delivery_house_number,
-        row.delivery_city,
-        places,
-      );
+      const resolution = await resolutionPromise;
       if (resolution.error) {
         row.errors = [...new Set([...row.errors, resolution.error])];
         return;
