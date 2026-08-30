@@ -113,15 +113,22 @@ export async function attachBusinessDeliveryExceptionToOrder(DB, {
 
 export function applyBusinessDeliveryException(quote, planId, exception) {
   const priceAgorot = Number(exception && exception.price_agorot);
+  const exceptionZone = Number(exception && exception.zone);
+  const reasons = quote && quote.reasons || [];
   if (
     !quote
     || quote.review !== true
-    || !(quote.reasons || []).includes('plan_service_unavailable')
+    || (!reasons.includes('plan_service_unavailable') && !reasons.includes('out_of_zone'))
   ) return quote;
-  if (!Number.isSafeInteger(priceAgorot) || priceAgorot <= 0) return quote;
+  if (
+    !Number.isSafeInteger(priceAgorot)
+    || priceAgorot <= 0
+    || ![1, 2, 3].includes(exceptionZone)
+  ) return quote;
   const price = priceAgorot / 100;
   return {
     ...quote,
+    zone: exceptionZone,
     price,
     available: true,
     review: false,
