@@ -75,7 +75,8 @@ class SQLiteD1 {
         route_id INTEGER NOT NULL,
         stop_id TEXT NOT NULL,
         order_id INTEGER NOT NULL,
-        task_type TEXT NOT NULL
+        task_type TEXT NOT NULL,
+        position INTEGER NOT NULL
       );
       CREATE TABLE driver_execution_events (
         event_id TEXT PRIMARY KEY,
@@ -144,8 +145,8 @@ function seedDriverRoute(DB) {
     INSERT INTO driver_assignments (driver_id, shift_id, order_id, active)
       VALUES ('drv_eden', 'sh_123', 9001, 1);
     INSERT INTO driver_routes (id, shift_id, revision) VALUES (1, 'sh_123', 13);
-    INSERT INTO driver_route_stops (route_id, stop_id, order_id, task_type)
-      VALUES (1, 'stop_d1', 9001, 'dropoff');
+    INSERT INTO driver_route_stops (route_id, stop_id, order_id, task_type, position)
+      VALUES (1, 'stop_d1', 9001, 'dropoff', 1);
   `);
 }
 
