@@ -80,6 +80,55 @@ describe('business batch address validation', () => {
     }]);
   });
 
+  test('accepts an exact formatted postal address when provider components are incomplete', () => {
+    const exactFormatted = {
+      formattedAddress: 'שדרות מנחם בגין 5, בית דגן, ישראל',
+      location: { latitude: 32.001, longitude: 34.829 },
+      addressComponents: [],
+    };
+    assert.deepEqual(
+      resolveBusinessAddress('מנחם בגין', '5', 'בית דגן', [exactFormatted]),
+      {
+        street: 'מנחם בגין',
+        city: 'בית דגן',
+        latitude: 32.001,
+        longitude: 34.829,
+        corrections: [],
+      },
+    );
+  });
+
+  test('prefers an exact formatted postal address over inconsistent provider components', () => {
+    const exactFormatted = place({ route: 'השלום', number: '7', city: 'תל אביב' });
+    exactFormatted.formattedAddress = 'הרכש 7, תל אביב, ישראל';
+    assert.deepEqual(
+      resolveBusinessAddress('הרכש', '7', 'תל אביב', [exactFormatted]),
+      {
+        street: 'הרכש',
+        city: 'תל אביב',
+        latitude: 32.08,
+        longitude: 34.78,
+        corrections: [],
+      },
+    );
+  });
+
+  test('keeps exact formatted fallback closed for a wrong house number or city', () => {
+    const exactFormatted = {
+      formattedAddress: 'זאב ז׳בוטינסקי 60 ב׳, תל אביב, ישראל',
+      location: { latitude: 32.097, longitude: 34.795 },
+      addressComponents: [],
+    };
+    assert.equal(
+      resolveBusinessAddress('ז׳בוטינסקי', '60א', 'תל אביב', [exactFormatted]).error,
+      'invalid_delivery_address',
+    );
+    assert.equal(
+      resolveBusinessAddress('ז׳בוטינסקי', '60ב', 'רמת גן', [exactFormatted]).error,
+      'invalid_delivery_address',
+    );
+  });
+
   test('blocks missing house numbers, weak matches, and competing candidates', () => {
     assert.equal(
       resolveBusinessAddress('הרצל', '', 'תל אביב', [place()]).error,
@@ -115,6 +164,7 @@ describe('business batch address validation', () => {
     const fetchImpl = async (_url, request) => {
       calls += 1;
       assert.match(request.body, /הרצך 10/);
+      assert.match(request.body, /"pageSize":10/);
       assert.equal(request.headers['X-Goog-FieldMask'].includes('places.addressComponents'), true);
       return {
         ok: true,
