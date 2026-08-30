@@ -68,6 +68,7 @@ jobs:
             echo "  wrangler d1 execute edenmish --remote --file=./migrations/033_business_batch_external_id.sql"
             echo "  wrangler d1 execute edenmish --remote --file=./migrations/034_business_batch_mappings.sql"
             echo "  wrangler d1 execute edenmish --remote --file=./migrations/037_driver_push_devices.sql"
+            echo "  wrangler d1 execute edenmish --remote --file=./migrations/038_business_delivery_exceptions.sql"
             echo ""
             echo "See worker/MIGRATIONS.md for verification queries."
             exit 1
