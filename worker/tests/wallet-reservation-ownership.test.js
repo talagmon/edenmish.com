@@ -1,4 +1,4 @@
-import { afterEach, describe, test } from 'node:test';
+import { beforeEach, afterEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
@@ -150,6 +150,12 @@ async function fundBusinessWallet(DB, env) {
   ).run(account.id, now + 30 * 24 * 60 * 60 * 1000, now);
   return { cookie, account, now };
 }
+
+// These scenarios exercise eligibility while the launch promotion was active.
+// Keep their clock independent of the day CI runs; expiry has explicit boundary tests.
+beforeEach((t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-07-27T07:00:00Z') });
+});
 
 const openDatabases = [];
 afterEach(() => {

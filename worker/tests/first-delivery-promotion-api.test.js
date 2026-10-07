@@ -1,4 +1,4 @@
-import { afterEach, describe, test } from 'node:test';
+import { beforeEach, afterEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
@@ -6,6 +6,12 @@ import { readFileSync } from 'node:fs';
 import worker from '../src/index.js';
 
 const schema = readFileSync(new URL('../schema.sql', import.meta.url), 'utf8');
+// These scenarios exercise eligibility while the launch promotion was active.
+// Keep their clock independent of the day CI runs; expiry has explicit boundary tests.
+beforeEach((t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-07-27T07:00:00Z') });
+});
+
 const openDatabases = [];
 const realFetch = globalThis.fetch;
 afterEach(() => {

@@ -1,3 +1,7 @@
+## Release validation · 2026-10-08
+
+Full CI exposed seven historical promotion assertions tied to the real clock after the launch offer expired. Three test files now use the Node test context's Date mock during the active offer window; explicit expiration boundary checks remain. No production pricing or promotion dates changed. All 464 Worker tests, including bundle verification, passed locally using the existing installed dependencies. The 174 storefront tests and storefront build passed in CI. Publication requested by the owner; release proceeds through develop and main PRs and the existing workflows.
+
 ## Account plan deck follow-up · 2026-10-08
 
 - Replaced two plan rows with one fixed-height scene containing all five existing plans. Added RTL swipe, previous/next controls, direct plan chips and keyboard Home/End/arrow navigation; reduced-motion preferences suppress transitions.
