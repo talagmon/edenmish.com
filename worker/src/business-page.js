@@ -112,7 +112,7 @@ export function businessAccountHtml(storefrontBase = 'https://edenmish.com') {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#0F172A">
+  <meta name="theme-color" content="#faf8fc">
   <meta name="robots" content="noindex,nofollow">
   <title>EdenMish | החשבון העסקי שלי</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -120,7 +120,7 @@ export function businessAccountHtml(storefrontBase = 'https://edenmish.com') {
   <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="${storefront}/assets/site-nav.css" data-eden-site-nav-styles>
-  <script src="${storefront}/assets/mobile-nav.js" defer></script>
+  <script src="${storefront}/assets/mobile-nav.js?v=20261008-nav" defer></script>
   <style>
     :root{--navy:#0f172a;--navy-deep:#091121;--panel:rgba(21,30,50,.86);--panel-strong:#16213a;--purple:#5b2a86;--purple-bright:#8b5cf6;--lilac:#dfb7ff;--mint:#91d3c8;--mint-ink:#102822;--ink:#f8fafc;--muted:#a9b4c5;--line:rgba(223,183,255,.2);--line-soft:rgba(255,255,255,.08);--success:#8be0b0;--warning:#f6cf83;--danger:#fca5a5;--shadow:0 22px 70px rgba(0,0,0,.22)}
     *{box-sizing:border-box}html{background:var(--navy);color:var(--ink);font-family:"Hanken Grotesk",Arial,sans-serif;scroll-behavior:smooth}body{margin:0;min-height:100vh;background:radial-gradient(circle at 12% 6%,rgba(91,42,134,.3),transparent 34rem),radial-gradient(circle at 92% 88%,rgba(145,211,200,.1),transparent 30rem),var(--navy);overflow-x:hidden}a{color:inherit}button,input,select{font:inherit}.hidden{display:none!important}.muted{color:var(--muted)}.ltr{direction:ltr;unicode-bidi:embed}.material-symbols-outlined{font-variation-settings:"FILL" 0,"wght" 400,"GRAD" 0,"opsz" 24;line-height:1}
@@ -143,8 +143,13 @@ export function businessAccountHtml(storefrontBase = 'https://edenmish.com') {
     @media(max-width:620px){.shell{padding:86px 14px 52px}.top{margin-bottom:14px}.top-actions{gap:6px}.top-actions .btn,.top-actions button{padding:9px 11px}.top-actions .label{display:none}.auth-backdrop img{object-position:center top}.auth-backdrop::after{background:linear-gradient(180deg,rgba(7,12,28,.02) 0,rgba(7,12,28,.14) 38%,rgba(7,12,28,.52) 58%,rgba(7,12,28,.82) 100%)}.auth{margin:clamp(300px,46vh,430px) auto 0;padding:24px 20px;background:linear-gradient(145deg,rgba(19,28,51,.84),rgba(9,16,34,.68))}.auth h1{font-size:clamp(1.72rem,9vw,2.25rem)}.session-context{align-items:stretch;flex-direction:column}.session-context button{width:100%}.session-copy bdi{max-width:78vw}.command-card{grid-template-columns:1fr 1fr}.active-plan{grid-template-columns:112px minmax(0,1fr);padding:13px;gap:12px}.active-plan img{width:112px}.active-copy h1{font-size:1.06rem}.active-copy p{font-size:.78rem}.stat{padding:14px 8px}.stat-value{font-size:1.65rem}.stat-label{font-size:.75rem}.status-banner{grid-template-columns:auto 1fr;padding:13px}.status-actions{grid-column:1/-1;width:100%}.status-actions .btn{flex:1}.operations{gap:11px}.feed{padding:16px}.row{align-items:flex-start}.route{max-width:205px}.drawer-body{padding:14px}.plans,.plans.entry{grid-template-columns:1fr}.plans .plan:last-child{grid-column:auto;max-width:none}.program-heading{display:block}.program-heading p{margin-top:4px}.batch-intro{align-items:stretch;flex-direction:column}.batch-intro .btn{width:100%}.batch-grid{grid-template-columns:1fr 1fr}.batch-grid .wide{grid-column:1/-1}.batch-summary{grid-template-columns:1fr 1fr}.batch-actions .btn,.batch-actions button{width:100%}.profile-grid{grid-template-columns:1fr}.otp input{width:42px;height:54px}.summary-copy span{max-width:230px}.drawer>summary{padding:14px}.avatar{width:38px;height:38px}.brand{font-size:1.25rem}}
     @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn,button,.chevron{transition:none}}
   </style>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="${storefront}/assets/eden-light.css?v=20261008-nav">
+  <link rel="stylesheet" href="${storefront}/assets/journey-theme.css">
+  <link rel="stylesheet" href="${storefront}/assets/business-dashboard.css?v=2">
+  <script src="${storefront}/assets/business-dashboard.js?v=2" defer></script>
 </head>
-<body>
+<body class="eden-light business-dashboard">
 <header data-eden-site-nav data-storefront-origin="${storefront}"></header>
 <div id="auth-backdrop" class="auth-backdrop" aria-hidden="true">
   <picture>
@@ -159,6 +164,7 @@ export function businessAccountHtml(storefrontBase = 'https://edenmish.com') {
   </header>
 
   <section id="auth" class="auth card">
+    <div class="dashboard-auth-art" aria-hidden="true"><img src="${storefront}/assets/service-standard-3d.webp" alt="" width="320" height="240"><span>EdenMish Business</span></div>
     <div id="email-step">
       <h1>החשבון העסקי שלך</h1><p class="muted">נשלח אליך קישור כניסה מהיר וגם קוד בן 6 ספרות. אין צורך בסיסמה.</p>
       <form id="email-form"><div class="field"><label for="email">אימייל עסקי</label><input id="email" type="email" dir="ltr" autocomplete="email" required placeholder="name@business.co.il"></div><button class="purple" type="submit">שלחו לי קישור וקוד</button></form>
@@ -172,8 +178,20 @@ export function businessAccountHtml(storefrontBase = 'https://edenmish.com') {
   </section>
 
   <section id="dashboard" class="hidden">
+    <div class="dashboard-welcome">
+      <div><p class="dashboard-kicker">EDENMISH BUSINESS</p><p class="dashboard-title">העסק שלך. בתנועה.</p><p class="muted">המשלוחים, היתרה והמסלול שלך. הכול במקום אחד.</p></div>
+      <img src="${storefront}/assets/service-standard-3d.webp" alt="" width="220" height="160" aria-hidden="true">
+    </div>
+    <nav class="dashboard-shortcuts" aria-label="ניווט בחשבון העסקי">
+      <a href="#dashboard-overview"><span class="material-symbols-outlined" aria-hidden="true">space_dashboard</span>סקירה</a>
+      <a href="#dashboard-orders"><span class="material-symbols-outlined" aria-hidden="true">two_wheeler</span>משלוחים</a>
+      <a href="#dashboard-wallet"><span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span>ארנק</a>
+      <a href="#batch-import"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>ייבוא קובץ</a>
+      <a href="#programs"><span class="material-symbols-outlined" aria-hidden="true">layers</span>מסלולים</a>
+      <a href="#business-details"><span class="material-symbols-outlined" aria-hidden="true">tune</span>הגדרות</a>
+    </nav>
     <section class="session-context card" aria-label="החשבון המחובר"><div class="session-identity"><span class="material-symbols-outlined" aria-hidden="true">verified_user</span><div class="session-copy"><span>מחוברים כעת · הכניסה נשמרת במכשיר זה עד 3 ימים</span><bdi id="session-email"></bdi></div></div><button id="switch-account" class="ghost" type="button" data-business-logout><span class="material-symbols-outlined" aria-hidden="true">switch_account</span>החלפת חשבון</button></section>
-    <section class="command-card card" aria-labelledby="active-plan-title">
+    <section id="dashboard-overview" tabindex="-1" class="command-card card" aria-labelledby="active-plan-title">
       <div class="active-plan"><img id="active-plan-art" src="${storefront}/assets/business-wallet.webp" alt="ארנק דיגיטלי מחבר רשת של שליחים על אופנועים" width="1200" height="800"><div class="active-copy"><div id="active-plan-eyebrow" class="eyebrow">החשבון העסקי שלך</div><h1 id="active-plan-title">עדיין אין מסלול פעיל</h1><p id="active-plan-copy" class="muted">בחרו תוכנית כדי להפעיל מחיר עסקי ויתרה למשלוחים.</p><div class="active-meta"><span id="active-plan-badge" class="badge">ממתין לבחירה</span><a id="active-plan-link" class="section-link" href="#programs">לכל התוכניות</a></div></div></div>
       <div class="stat"><span class="material-symbols-outlined stat-icon" aria-hidden="true">account_balance_wallet</span><div class="stat-value mint"><bdi id="balance">0</bdi> ₪</div><div class="stat-label">יתרה זמינה<br><span id="reserved">0 ₪ בהמתנה</span></div></div>
       <div class="stat"><span class="material-symbols-outlined stat-icon" aria-hidden="true">local_shipping</span><div id="estimated-deliveries" class="stat-value">—</div><div id="estimate-basis" class="stat-label">משלוחים משוערים</div></div>
@@ -195,14 +213,15 @@ export function businessAccountHtml(storefrontBase = 'https://edenmish.com') {
     </dialog>
 
     <div class="operations">
-      <article class="feed card"><div class="section-title"><h2>משלוחים אחרונים</h2><a class="section-link" href="${storefront}/booking.html?business=1">יצירת משלוח</a></div><div id="orders" class="list"></div><button id="orders-toggle" class="feed-toggle hidden" type="button"></button></article>
-      <article class="feed card"><div class="section-title"><h2>פעילות בארנק</h2><span id="expiry" class="muted"></span></div><div id="entries" class="list"></div><button id="entries-toggle" class="feed-toggle hidden" type="button"></button></article>
+      <article id="dashboard-orders" tabindex="-1" class="feed card"><div class="section-title"><h2>משלוחים אחרונים</h2><a class="section-link" href="${storefront}/booking.html?business=1">יצירת משלוח</a></div><div id="orders" class="list"></div><button id="orders-toggle" class="feed-toggle hidden" type="button"></button></article>
+      <article id="dashboard-wallet" tabindex="-1" class="feed card"><div class="section-title"><h2>פעילות בארנק</h2><span id="expiry" class="muted"></span></div><div id="entries" class="list"></div><button id="entries-toggle" class="feed-toggle hidden" type="button"></button></article>
     </div>
 
     <details id="batch-import" class="drawer">
       <summary><span class="summary-main"><span class="summary-icon"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span></span><span class="summary-copy"><b>ייבוא משלוחים מקובץ</b><span>מעלים Excel או CSV, בודקים מחיר ויוצרים עד 100 משלוחים ברצף</span></span></span><span class="material-symbols-outlined chevron" aria-hidden="true">expand_more</span></summary>
       <div class="drawer-body">
         <div class="batch-intro"><p><b>אפשר להעלות את התבנית או קובץ משלכם.</b><br>התבנית עוברת בדיקה ישירה. בקובץ במבנה אחר, מסייע חכם ימפה את העמודות ויפצל כתובות ותאריכים — וכל פירוש יוצג לאישור לפני יצירת משלוחים.</p><a class="btn ghost" href="${storefront}/downloads/edenmish-business-batch-template.xlsx" download><span class="material-symbols-outlined" aria-hidden="true">download</span>הורדת תבנית Excel</a></div>
+        <ol class="dashboard-import-steps" aria-label="שלבי ייבוא קובץ"><li><span>1</span>פרטי האיסוף והקובץ</li><li><span>2</span>בדיקת השורות והמחיר</li><li><span>3</span>אישור ויצירת משלוחים</li></ol>
         <form id="batch-form">
           <div class="batch-grid">
             <div class="wide"><label for="batch-pickup-street">רחוב איסוף משותף</label><input id="batch-pickup-street" required maxlength="120" autocomplete="address-line1" placeholder="שם הרחוב בלבד"></div>
@@ -240,11 +259,17 @@ export function businessAccountHtml(storefrontBase = 'https://edenmish.com') {
     <details id="programs" class="drawer">
       <summary><span class="summary-main"><span class="summary-icon"><span class="material-symbols-outlined" aria-hidden="true">tune</span></span><span class="summary-copy"><b>השוואה ושינוי תוכנית</b><span>חבילת ניסיון, ארנק עסקי ומסלולי Silver, Gold ו־Platinum</span></span></span><span class="material-symbols-outlined chevron" aria-hidden="true">expand_more</span></summary>
       <div class="drawer-body">
+        <section class="account-plan-scene" aria-label="בחירת מסלול עסקי">
+          <div class="account-plan-heading"><h3>המסלול שמתאים לעסק שלך</h3><p>מחליקים בין חמש התוכניות ובוחרים</p></div>
+          <div class="account-plan-controls" hidden></div>
+          <div class="account-plan-deck" tabindex="0" role="region" aria-roledescription="קרוסלה" aria-label="מסלולים עסקיים, אפשר להחליק או להשתמש בחיצים">
+            <div id="entry-plan-cards" class="plans entry"></div>
+            <div id="plan-cards" class="plans"></div>
+          </div>
+          <p class="account-plan-position" aria-live="polite" aria-atomic="true"></p>
+        </section>
         <div class="business-coupon"><div><label for="business-coupon">קוד קופון למסלול עסקי (אופציונלי)</label><input id="business-coupon" dir="ltr" autocomplete="off" maxlength="48" placeholder="BUSINESS10"></div><span class="material-symbols-outlined coupon-icon" aria-hidden="true">sell</span><p>הקופון ייבדק מול המסלול שתבחרו, וההנחה תוצג ב־Shopify לפני התשלום.</p></div>
-        <div class="program-heading"><div><h3>מסלולי התחלה בחשבון</h3><p>חבילת ניסיון או ארנק עסקי עם תשלום מאובטח, יתרה והיסטוריית שימוש.</p></div></div>
-        <div id="entry-plan-cards" class="plans entry"></div>
-        <div class="program-heading spaced"><div><h3>Silver, Gold ו־Platinum</h3><p>כיסוי רחב יותר, מחיר עסקי אוטומטי ועדיפות לפי המסלול.</p></div></div>
-        <div id="plan-cards" class="plans"></div>
+        <details class="account-plan-context"><summary>על המסלולים</summary><div class="program-heading"><div><h3>מסלולי התחלה בחשבון</h3><p>חבילת ניסיון או ארנק עסקי עם תשלום מאובטח, יתרה והיסטוריית שימוש.</p></div></div><div class="program-heading"><div><h3>Silver, Gold ו־Platinum</h3><p>כיסוי רחב יותר, מחיר עסקי אוטומטי ועדיפות לפי המסלול.</p></div></div></details>
         <p class="fine-print">החיסכון מחושב מול מחיר הבסיס הרגיל למשלוח קטן בשעות הפעילות, לפי המחירון הנוכחי. תוספות גודל, ערב וסוף שבוע מחושבות בנפרד. הקרדיט מחויב לפי השימוש בפועל.</p>
       </div>
     </details>

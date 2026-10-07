@@ -104,6 +104,11 @@
   panel.setAttribute('aria-label', 'ניווט ראשי במובייל');
   panel.hidden = true;
   navItems.forEach(function (item) { panel.appendChild(buildLink(item)); });
+  var mobileCta = document.createElement('a');
+  mobileCta.className = 'eden-mobile-order';
+  mobileCta.href = storefrontUrl('/booking.html');
+  mobileCta.textContent = 'שלחו עכשיו';
+  panel.appendChild(mobileCta);
   headerEl.parentNode.insertBefore(panel, headerEl.nextSibling);
 
   function setMenu(open) {
@@ -119,6 +124,16 @@
   });
   panel.addEventListener('click', function (event) {
     if (event.target.closest('a')) setMenu(false);
+  });
+  document.addEventListener('click', function (event) {
+    if (!panel.hidden && !headerEl.contains(event.target) && !panel.contains(event.target)) setMenu(false);
+  });
+  window.matchMedia('(min-width: 1024px)').addEventListener('change', function (event) {
+    if (event.matches && !panel.hidden) {
+      var focusInPanel = panel.contains(document.activeElement);
+      setMenu(false);
+      if (focusInPanel) brand.focus();
+    }
   });
   document.addEventListener('keydown', function (event) {
     if (event.key === 'Escape' && !panel.hidden) {

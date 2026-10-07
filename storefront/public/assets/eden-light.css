@@ -1,0 +1,64 @@
+/* Shared light presentation. Order and payment behavior is unchanged. */
+body.eden-light{color:#241334;background:#faf8fc;font-family:Heebo,"Hanken Grotesk",Arial,sans-serif;color-scheme:light}
+
+.eden-light .eden-site-header{background:transparent!important;box-shadow:none!important}
+
+.eden-light .eden-site-nav{flex-direction:row;background:rgba(255,255,255,.92);border:1px solid #e9e1ed;box-shadow:0 8px 30px #43226308;border-radius:18px;height:66px}
+
+.eden-light .eden-site-nav::before{display:none}
+
+.eden-light .eden-site-brand{color:#5b2a86;text-shadow:none;font-size:1.65rem;font-family:"Hanken Grotesk",Arial,sans-serif}
+
+.eden-light .eden-site-link,.eden-light .eden-site-toggle{background:transparent;color:#574762;border-color:transparent;box-shadow:none}
+
+.eden-light .eden-site-link[aria-current=page]{color:#5b2a86;background:#f2ebf8;border-color:transparent}
+
+.eden-light .eden-site-cta{background:#5b2a86;color:#fff;border:0;box-shadow:none}
+
+.eden-light .eden-site-mobile-nav{background:#fff;border-color:#e5dce9;box-shadow:0 14px 32px #28133614}
+
+.eden-light .text-on-surface{color:#241334}
+.eden-light .text-on-surface-variant{color:#6c6175}
+.eden-light .text-primary{color:#5b2a86}
+.eden-light .text-secondary{color:#276e65}
+.eden-light .text-error{color:#ac263e}
+
+.eden-light :focus-visible{outline:3px solid #6c3993;outline-offset:4px}
+
+.eden-light footer{background:#f1ecf5!important;border-color:#e2d8e9!important;color:#66566f}
+
+.eden-light footer .home-footer-brand{color:#5b2a86}
+.eden-light footer .home-footer-meta,.eden-light footer .home-footer-meta p{color:#66566f}
+.eden-light footer a{color:#594764}
+.eden-light .vstamp{color:#6c6175}
+
+@media(max-width:700px){.eden-light .eden-site-nav{height:58px;padding:0 14px}
+.eden-light .eden-site-brand{font-size:1.4rem}
+.eden-light .eden-site-cta{font-size:.85rem}
+}
+
+/* Quiet glass navigation, shared by all light customer journeys. */
+.eden-light .eden-site-nav{height:58px;padding-inline:20px;border-radius:19px;background:linear-gradient(120deg,#ffffffeb,#faf5ffe6);border-color:#e4d8ee;box-shadow:inset 0 1px 0 #fff,0 8px 30px #5130630a;backdrop-filter:blur(24px) saturate(130%);-webkit-backdrop-filter:blur(24px) saturate(130%);overflow:visible;font-family:Heebo,Arial,sans-serif}
+.eden-light .eden-site-brand{font-size:24px;letter-spacing:-.05em;transition:text-shadow .2s}
+.eden-light .eden-site-brand:hover{text-shadow:0 0 18px #a86ace55}
+.eden-light .eden-site-links{gap:5px;padding:3px;border-radius:99px;background:#f2ebf54d}
+.eden-light .eden-site-link{min-height:36px;padding:0 15px;border-radius:99px;font-size:12px;font-weight:500;color:#725e7e;isolation:isolate}
+.eden-light .eden-site-link::after{content:'';position:absolute;bottom:3px;left:50%;width:4px;height:4px;border-radius:50%;background:#9360b5;box-shadow:0 0 8px #b079d3;opacity:0;transform:translate(-50%,3px);transition:opacity .2s,transform .2s}
+.eden-light .eden-site-link:hover,.eden-light .eden-site-link:focus-visible{background:#f0e5f8;border-color:#ddc8eb;color:#5b2a86;box-shadow:0 0 17px #b185d126,inset 0 1px 0 white;transform:translateY(-1px)}
+.eden-light .eden-site-link[aria-current=page]{color:#5b2a86;background:linear-gradient(#fff,#eee2f7);border-color:#dcc9e9;box-shadow:0 3px 12px #8e59b11c,inset 0 1px 0 white;font-weight:750}
+.eden-light .eden-site-link[aria-current=page]::after{opacity:1;transform:translate(-50%,0)}
+.eden-light .eden-site-cta,.eden-light .eden-mobile-order{background:linear-gradient(120deg,#744494,#5b2a86);border:1px solid #8555a3;border-radius:99px;color:#fff;box-shadow:inset 0 1px 0 #ffffff25,0 4px 14px #5b2a8624;font-family:Heebo,Arial,sans-serif;font-size:12px;min-height:36px;padding-inline:16px;gap:12px;transition:transform .2s,box-shadow .2s}
+.eden-light .eden-site-cta::after,.eden-light .eden-mobile-order::after{content:'←';font-size:16px;font-weight:400}
+.eden-light .eden-site-cta:hover,.eden-light .eden-mobile-order:hover{box-shadow:0 0 20px #a274c54d,inset 0 1px 0 #ffffff35;transform:translateY(-1px)}
+.eden-light .eden-site-toggle{width:44px;height:44px;border-radius:50%;background:#f5eff9;color:#5b2a86;border:1px solid #e8daef;transition:background .2s,box-shadow .2s}
+.eden-light .eden-site-toggle[aria-expanded=true]{background:#eee1f7;box-shadow:0 0 15px #ba90d53d;border-color:#d1b5e2}
+.eden-light .eden-site-mobile-nav{width:min(390px,calc(100% - 24px));top:84px;right:12px;left:12px;padding:12px;border-radius:22px;display:flex;flex-direction:column;gap:5px;background:linear-gradient(145deg,#fffffffa,#f6effbf5);border:1px solid #ddcce9;box-shadow:0 20px 65px #43226326,inset 0 1px 0 #fff;font-family:Heebo,Arial,sans-serif;transform-origin:top center;animation:edenMenuIn .22s ease both}
+.eden-light .eden-site-mobile-nav[hidden]{display:none}
+.eden-light .eden-site-mobile-nav .eden-site-link{justify-content:flex-start;min-height:45px;padding:11px 17px;font-size:14px;border-radius:12px}
+.eden-light .eden-site-mobile-nav .eden-site-link::after{left:18px;bottom:50%;transform:translateY(50%);width:5px;height:5px}
+.eden-light .eden-mobile-order{display:flex;align-items:center;justify-content:space-between;min-height:46px;text-decoration:none;padding:10px 17px;margin-top:5px}
+@keyframes edenMenuIn{from{opacity:0;transform:translateY(-7px) scale(.985)}to{opacity:1;transform:none}}
+@media(max-width:767px){.eden-light .eden-site-nav{height:56px;padding-inline:14px;border-radius:18px}.eden-light .eden-site-brand{font-size:22px}.eden-light .eden-site-mobile-nav{top:76px}}
+@media(prefers-reduced-motion:reduce){.eden-light .eden-site-mobile-nav{animation:none}.eden-light .eden-site-link,.eden-light .eden-site-link::after,.eden-light .eden-site-cta,.eden-light .eden-mobile-order,.eden-light .eden-site-toggle,.eden-light .eden-site-brand{transition:none}}
+html.eden-a11y-motion .eden-site-mobile-nav{animation:none}
+html.eden-a11y-motion :is(.eden-site-link,.eden-site-cta,.eden-mobile-order,.eden-site-toggle,.eden-site-brand),html.eden-a11y-motion .eden-site-link::after{transition:none}

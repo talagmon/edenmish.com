@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html class="dark" dir="rtl" lang="he">
+<html dir="rtl" lang="he">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
@@ -8,7 +8,7 @@
 <meta name="description" content="הזמנת שליח EdenMish בגוש דן - מילוי פרטי המשלוח וקבלת הצעת מחיר."/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800;900&amp;family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="/assets/styles.css?v=0.30.1-293658-43a4044"/>
 <link rel="stylesheet" href="/assets/site-nav.css" data-eden-site-nav-styles/>
@@ -209,8 +209,15 @@ details[open] .details-arrow{transform:rotate(180deg)}
 <link rel="icon" href="/assets/favicon.ico"/>
 <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"/>
 <meta name="theme-color" content="#8B5CF6"/>
+<link rel="stylesheet" href="/assets/eden-light.css?v=20261008-nav"/>
+<link rel="stylesheet" href="/assets/booking-light.css?v=20261008-five-screens-v2"/>
+<link rel="stylesheet" href="/assets/booking-cinema.css?v=6"/>
+<script src="/assets/booking-cinema.js?v=1" defer></script>
+<link rel="stylesheet" href="/assets/booking-time-hub.css?v=3"/>
+<script src="/assets/booking-time-hub.js?v=2" defer></script>
+<link rel="stylesheet" href="/assets/journey-theme.css"/>
 </head>
-<body class="antialiased min-h-screen">
+<body class="eden-light booking-light antialiased min-h-screen">
 <div class="fixed inset-0 overflow-hidden pointer-events-none -z-10" aria-hidden="true">
 <div class="glow-bg absolute top-[-10%] left-[-10%]"></div>
 <div class="glow-bg absolute bottom-[-10%] right-[-10%]"></div>
@@ -237,17 +244,32 @@ details[open] .details-arrow{transform:rotate(180deg)}
     <p class="order-slogan"><span class="material-symbols-outlined" aria-hidden="true">bolt</span>הזמנת משלוח? זה כבר בדרך.</p>
   </div>
 
+  <aside class="booking-cinema" data-scene="1" aria-label="המשלוח שלכם, צעד אחר צעד" hidden>
+    <div class="cinema-heading"><span class="cinema-chapter" id="cinema-chapter">01 / החבילה שלכם</span><h2 id="cinema-title">כל משלוח<br>מתחיל כאן.</h2><p id="cinema-caption">בוחרים מה שולחים, ויוצאים לדרך.</p></div>
+    <div class="cinema-stage" aria-hidden="true">
+      <div class="cinema-halo"></div>
+      <div class="cinema-world"><img src="/assets/booking-tel-aviv-diorama.webp" width="900" height="900" alt="" decoding="async"/></div>
+      <div class="cinema-platform"></div>
+      <div class="cinema-package"><img id="cinema-package-image" src="/assets/package-small-3d.webp" width="512" height="512" alt="" decoding="async"/></div>
+      <div class="cinema-label"><span class="label-brand">EdenMish</span><span class="label-rule"></span><small>העדכונים בדרך אל</small><strong id="cinema-recipient">השם שלכם</strong><span class="label-bars"></span><small>שירות אישי. לאורך כל הדרך.</small></div>
+      <svg class="cinema-route" viewBox="0 0 500 500" fill="none"><path d="M355 355 C340 280 210 290 222 205 S145 120 125 100" stroke="#fff" stroke-width="12" stroke-linecap="round"/><path class="route-line" d="M355 355 C340 280 210 290 222 205 S145 120 125 100" stroke="#6a3694" stroke-width="5" stroke-linecap="round"/><circle cx="355" cy="355" r="10" fill="#5b2a86" stroke="white" stroke-width="5"/><circle cx="125" cy="100" r="10" fill="#276e65" stroke="white" stroke-width="5"/></svg>
+      <div class="cinema-route-label route-origin"><small>איסוף</small><strong id="cinema-origin">מהדלת שלכם</strong></div>
+      <div class="cinema-route-label route-destination"><small>מסירה</small><strong id="cinema-destination">לידיים הנכונות</strong></div>
+      <div class="cinema-time"><span class="cinema-clock"><i></i><b></b></span><div><small>השירות שבחרתם</small><strong id="cinema-service">רגיל</strong><span id="cinema-time-label">בוחרים מועד לאיסוף</span></div></div>
+      <div class="cinema-ticket"><span class="label-brand">EdenMish</span><span class="ticket-heading">המשלוח שלכם, במבט אחד</span><div><small>חבילה</small><strong id="cinema-review-size">קטנה</strong></div><div><small>שירות</small><strong id="cinema-review-service">רגיל</strong></div><div><small>מועד</small><strong id="cinema-review-time">טרם נבחר</strong></div><span class="ticket-status">ממתין לאישור שלכם</span></div>
+    </div>
+    <div class="cinema-foot"><span id="cinema-footnote">החבילה שלכם במרכז.</span><span class="cinema-five-dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></div>
+  </aside>
+
   <div class="order-stack">
     <section class="order-layer order-progress" aria-label="התקדמות בהזמנה">
-      <div class="progress-meta"><strong id="progress-label">גודל החבילה</strong><span id="progress-count">שלב 1 מתוך 7</span></div>
+      <div class="progress-meta"><strong id="progress-label">גודל החבילה</strong><span id="progress-count">שלב 1 מתוך 5</span></div>
       <div id="booking-stepper" class="step-rail">
-        <button class="step-dot is-active" type="button" data-step-target="1" aria-label="שלב 1, גודל החבילה" aria-current="step"><span>1</span></button>
-        <button class="step-dot" type="button" data-step-target="2" aria-label="שלב 2, פרטי קשר"><span>2</span></button>
-        <button class="step-dot" type="button" data-step-target="3" aria-label="שלב 3, נקודת איסוף"><span>3</span></button>
-        <button class="step-dot" type="button" data-step-target="4" aria-label="שלב 4, נקודת מסירה"><span>4</span></button>
-        <button class="step-dot" type="button" data-step-target="5" aria-label="שלב 5, רמת שירות"><span>5</span></button>
-        <button class="step-dot" type="button" data-step-target="6" aria-label="שלב 6, מועד איסוף"><span>6</span></button>
-        <button class="step-dot" type="button" data-step-target="7" aria-label="שלב 7, סיכום ואישור"><span>7</span></button>
+<button class="step-dot" type="button" data-step-target="1" aria-label="חבילה"><span class="step-marker">1</span><strong>חבילה</strong><small class="step-status">בהמשך</small></button>
+<button class="step-dot" type="button" data-step-target="2" aria-label="פרטים"><span class="step-marker">2</span><strong>פרטים</strong><small class="step-status">בהמשך</small></button>
+<button class="step-dot" type="button" data-step-target="3" aria-label="מסלול"><span class="step-marker">3</span><strong>מסלול</strong><small class="step-status">בהמשך</small></button>
+<button class="step-dot" type="button" data-step-target="5" aria-label="שירות ומועד"><span class="step-marker">4</span><strong>שירות ומועד</strong><small class="step-status">בהמשך</small></button>
+<button class="step-dot" type="button" data-step-target="7" aria-label="אישור"><span class="step-marker">5</span><strong>אישור</strong><small class="step-status">בהמשך</small></button>
       </div>
     </section>
 
@@ -258,26 +280,25 @@ details[open] .details-arrow{transform:rotate(180deg)}
       </div>
     </section>
 
-    <section id="flow-summary" class="order-layer summary-strip" hidden aria-label="הפרטים שבחרתם">
-      <div class="summary-strip-header"><h2>הפרטים שבחרתם</h2><button id="summary-edit" class="summary-edit" type="button">עריכה</button></div>
+    <details id="flow-summary" class="order-layer summary-strip" hidden>
+      <summary>הפרטים שבחרתם <span class="material-symbols-outlined" aria-hidden="true">expand_more</span></summary>
       <div id="summary-chips" class="summary-chips" aria-live="polite"></div>
-    </section>
+    </details>
 
     <form id="booking-form" novalidate>
-      <div class="order-stack">
+      <div class="order-stack booking-panels">
         <section class="booking-step order-layer order-layer--mint is-entering" data-step="1" role="group" aria-labelledby="step-1-title">
           <div class="step-heading">
             <div class="step-heading-copy"><span class="step-icon material-symbols-outlined" aria-hidden="true">inventory_2</span><div><h2 id="step-1-title">מה גודל החבילה?</h2><p>בחרו את האפשרות הקרובה ביותר. הגודל משפיע ישירות על המחיר.</p></div></div>
-            <span class="step-number" dir="ltr">01 / 07</span>
           </div>
-          <div class="choice-grid">
+          <div class="choice-grid package-choices">
             <label class="choice-card">
               <input type="radio" name="size" value="small" checked/>
-              <span class="choice-surface"><span class="choice-copy"><h3>קטן</h3><p>מעטפה, מסמך או פריט קטן</p><span class="choice-price">ללא תוספת</span></span><span class="choice-icon material-symbols-outlined" aria-hidden="true">draft</span></span>
+              <span class="choice-surface"><span class="choice-copy"><h3>קטן</h3><p>מעטפה, מסמך או פריט קטן</p><span class="choice-price">ללא תוספת</span></span><span class="package-art" aria-hidden="true"><img src="/assets/package-small-3d.webp" alt="" width="512" height="512" decoding="async"/></span><span class="package-selection" aria-hidden="true"><span class="material-symbols-outlined">check</span></span></span>
             </label>
             <label class="choice-card">
               <input type="radio" name="size" value="medium"/>
-              <span class="choice-surface"><span class="choice-copy"><h3>בינוני</h3><p>עד גודל קופסת נעליים ועד 5 ק״ג</p><span class="choice-price">+₪15</span></span><span class="choice-icon material-symbols-outlined" aria-hidden="true">package_2</span></span>
+              <span class="choice-surface"><span class="choice-copy"><h3>בינוני</h3><p>עד גודל קופסת נעליים ועד 5 ק״ג</p><span class="choice-price">+₪15</span></span><span class="package-art" aria-hidden="true"><img src="/assets/package-medium-3d.webp" alt="" width="512" height="512" decoding="async"/></span><span class="package-selection" aria-hidden="true"><span class="material-symbols-outlined">check</span></span></span>
             </label>
           </div>
           <details class="price-details">
@@ -302,7 +323,6 @@ details[open] .details-arrow{transform:rotate(180deg)}
         <section class="booking-step order-layer" data-step="2" role="group" aria-labelledby="step-2-title" hidden>
           <div class="step-heading">
             <div class="step-heading-copy"><span class="step-icon material-symbols-outlined" aria-hidden="true">person</span><div><h2 id="step-2-title">למי שולחים עדכונים?</h2><p>נשתמש בפרטים האלה לקבלה, לקישור המעקב ולעדכונים תפעוליים.</p></div></div>
-            <span class="step-number" dir="ltr">02 / 07</span>
           </div>
           <div class="field-grid">
             <div class="order-field"><label for="f-name">שם מלא</label><input id="f-name" name="name" placeholder="ישראל ישראלי" type="text" required autocomplete="name"/></div>
@@ -320,7 +340,6 @@ details[open] .details-arrow{transform:rotate(180deg)}
         <section class="booking-step order-layer" data-step="3" role="group" aria-labelledby="step-3-title" hidden>
           <div class="step-heading">
             <div class="step-heading-copy"><span class="step-icon material-symbols-outlined" aria-hidden="true">trip_origin</span><div><h2 id="step-3-title">מאיפה אוספים?</h2><p>בחרו כתובת מדויקת. את פרטי הגישה אפשר להוסיף רק אם צריך.</p></div></div>
-            <span class="step-number" dir="ltr">03 / 07</span>
           </div>
           <div class="order-field"><label for="f-pickup-addr">כתובת איסוף</label><div id="f-pickup-places" hidden></div><input id="f-pickup-addr" name="pickup_address" placeholder="רחוב, מספר בית, עיר" type="text" required autocomplete="street-address"/></div>
           <details class="access-details">
@@ -336,10 +355,9 @@ details[open] .details-arrow{transform:rotate(180deg)}
         <section class="booking-step order-layer" data-step="4" role="group" aria-labelledby="step-4-title" hidden>
           <div class="step-heading">
             <div class="step-heading-copy"><span class="step-icon material-symbols-outlined" aria-hidden="true">location_on</span><div><h2 id="step-4-title">לאן מוסרים?</h2><p>אחרי בחירת היעד נבדוק את המרחק ואת אזור השירות.</p></div></div>
-            <span class="step-number" dir="ltr">04 / 07</span>
           </div>
           <div class="order-field"><label for="f-dropoff-addr">כתובת יעד</label><div id="f-dropoff-places" hidden></div><input id="f-dropoff-addr" name="dropoff_address" placeholder="רחוב, מספר בית, עיר" type="text" required autocomplete="street-address"/></div>
-          <details class="access-details" open>
+          <details class="access-details">
             <summary><span class="flex items-center gap-2"><span class="material-symbols-outlined text-secondary" aria-hidden="true">door_open</span>הוספת פרטי גישה ואיש קשר <small class="text-on-surface-variant">(אופציונלי)</small></span><span class="details-arrow material-symbols-outlined" aria-hidden="true">expand_more</span></summary>
             <div class="details-content field-grid">
               <div class="order-field"><label for="f-dropoff-floor">קומה</label><input id="f-dropoff-floor" name="dropoff_floor" placeholder="קרקע" type="text"/></div>
@@ -357,22 +375,26 @@ details[open] .details-arrow{transform:rotate(180deg)}
         <section class="booking-step order-layer" data-step="5" role="group" aria-labelledby="step-5-title" hidden>
           <div class="step-heading">
             <div class="step-heading-copy"><span class="step-icon material-symbols-outlined" aria-hidden="true">speed</span><div><h2 id="step-5-title">איזה שירות מתאים?</h2><p>המחיר מבוסס על המסלול והגודל שבחרתם. במסלול עסקי יוצגו רק השירותים הזמינים.</p></div></div>
-            <span class="step-number" dir="ltr">05 / 07</span>
           </div>
           <div class="service-grid">
-            <label class="choice-card"><input class="sr-only peer" name="service" type="radio" value="eco"/><span class="choice-surface"><span class="choice-copy"><h3>חסכוני</h3><p>מסירה עד סוף היום · איסוף עד 13:00</p><p>הזמנה לאותו היום עד 09:00 כולל</p><span data-service-rate="eco" class="choice-price">החל מ־₪35</span></span><span class="choice-icon material-symbols-outlined" aria-hidden="true">schedule</span></span></label>
-            <label class="choice-card"><input checked class="sr-only peer" name="service" type="radio" value="standard"/><span class="choice-surface"><span class="choice-copy"><h3>רגיל</h3><p>מסירה תוך 4 שעות</p><span data-service-rate="standard" class="choice-price">החל מ־₪50</span></span><span class="choice-icon material-symbols-outlined" aria-hidden="true">two_wheeler</span></span></label>
-            <label class="choice-card"><input class="sr-only peer" name="service" type="radio" value="flash"/><span class="choice-surface"><span class="choice-copy"><h3>מהיר</h3><p>90 דקות, נקודה לנקודה</p><span data-service-rate="flash" class="choice-price">החל מ־₪85</span></span><span class="choice-icon material-symbols-outlined" aria-hidden="true">bolt</span></span></label>
+            <label class="choice-card"><input class="sr-only peer" name="service" type="radio" value="eco"/><span class="choice-surface"><span class="choice-copy"><h3>חסכוני</h3><p>מסירה עד סוף היום · איסוף עד 13:00</p><p>הזמנה לאותו היום עד 09:00 כולל</p><span data-service-rate="eco" class="choice-price">החל מ־₪35</span></span><span class="service-art" aria-hidden="true"><img src="/assets/service-eco-3d.webp" alt="" width="420" height="420" loading="lazy"/><span class="service-selected">✓</span></span></span></label>
+            <label class="choice-card"><input checked class="sr-only peer" name="service" type="radio" value="standard"/><span class="choice-surface"><span class="choice-copy"><h3>רגיל</h3><p>מסירה תוך 4 שעות</p><span data-service-rate="standard" class="choice-price">החל מ־₪50</span></span><span class="service-art" aria-hidden="true"><img src="/assets/service-standard-3d.webp" alt="" width="420" height="420" loading="lazy"/><span class="service-selected">✓</span></span></span></label>
+            <label class="choice-card"><input class="sr-only peer" name="service" type="radio" value="flash"/><span class="choice-surface"><span class="choice-copy"><h3>מהיר</h3><p>90 דקות, נקודה לנקודה</p><span data-service-rate="flash" class="choice-price">החל מ־₪85</span></span><span class="service-art" aria-hidden="true"><img src="/assets/service-flash-3d.webp" alt="" width="420" height="420" loading="lazy"/><span class="service-selected">✓</span></span></span></label>
           </div>
         </section>
 
         <section class="booking-step order-layer" data-step="6" role="group" aria-labelledby="step-6-title" hidden>
           <div class="step-heading">
             <div class="step-heading-copy"><span class="step-icon material-symbols-outlined" aria-hidden="true">calendar_month</span><div><h2 id="step-6-title">מתי לאסוף?</h2><p>נציג רק חלונות זמן שמתאימים לשירות ולשעות הפעילות.</p></div></div>
-            <span class="step-number" dir="ltr">06 / 07</span>
           </div>
-          <div class="schedule-shell">
+          <div class="schedule-shell schedule-hub">
+            <div class="time-hub-display" hidden>
+              <div class="time-hub-clock" aria-hidden="true"><span class="clock-twelve">12</span><span class="clock-three">3</span><span class="clock-six">6</span><span class="clock-nine">9</span><i class="hub-hour"></i><i class="hub-minute"></i><b></b></div>
+              <div class="time-hub-readout"><span class="time-hub-eyebrow">המועד שלכם</span><strong id="time-hub-day">מתחילים בבחירת יום</strong><span id="time-hub-slot">ואז בוחרים חלון איסוף נוח</span><small id="time-hub-status">אפשר לשנות את הבחירה בכל רגע</small></div>
+            </div>
+            <div class="hub-controls">
             <p class="text-label-sm text-on-surface-variant">א׳–ה׳ 09:00–20:00 · ו׳ 08:00–13:00 · שבת סגור</p>
+            <h3 class="hub-step-label hub-date-label"><span>1</span> בוחרים יום</h3>
             <div id="sched-dates" class="flex flex-wrap"></div>
             <div id="sched-custom-wrap" class="order-field">
               <label for="sched-custom-date">תאריך אחר</label>
@@ -381,18 +403,20 @@ details[open] .details-arrow{transform:rotate(180deg)}
                 <button id="sched-custom-open" class="date-picker-button" type="button" aria-label="פתיחת לוח שנה"><span class="material-symbols-outlined" aria-hidden="true">calendar_month</span></button>
               </div>
             </div>
+            <h3 class="hub-step-label hub-window-label"><span>2</span> בוחרים חלון איסוף</h3>
+            <p class="hub-empty" hidden>בחרו יום למעלה כדי לראות את שעות האיסוף</p>
             <div id="sched-windows" class="grid grid-cols-2 md:grid-cols-3"></div>
             <div id="sched-flash" class="schedule-flash-card" hidden></div>
             <p id="sched-hint" class="text-label-sm text-on-surface-variant min-h-[1em]"></p>
+            </div>
           </div>
         </section>
 
         <section class="booking-step order-layer" data-step="7" role="group" aria-labelledby="step-7-title" hidden>
           <div class="step-heading">
             <div class="step-heading-copy"><span class="step-icon material-symbols-outlined" aria-hidden="true">fact_check</span><div><h2 id="step-7-title">בדיקה אחרונה ואישור</h2><p>המחיר הסופי מוצג כאן. אפשר להוסיף הוראה לשליח לפני שמאשרים.</p></div></div>
-            <span class="step-number" dir="ltr">07 / 07</span>
           </div>
-          <div class="order-field"><label for="order-notes">הוראות מיוחדות לשליח <small class="text-on-surface-variant">(אופציונלי)</small></label><textarea id="order-notes" name="notes" rows="3" placeholder="לדוגמה: קומה 3 ללא מעלית · להתקשר לפני הגעה · פריט שביר"></textarea></div>
+          <div class="courier-note"><img class="courier-note-art" src="/assets/courier-instructions-3d.webp" width="480" height="480" alt="לקוחה מוסרת פתק עם הוראות לשליח" loading="lazy"/><div class="order-field"><label for="order-notes">הוראות מיוחדות לשליח <small class="text-on-surface-variant">(אופציונלי)</small></label><textarea id="order-notes" name="notes" rows="3" placeholder="לדוגמה: קומה 3 ללא מעלית · להתקשר לפני הגעה · פריט שביר"></textarea></div></div>
 
           <div class="price-details" role="region" aria-labelledby="final-price-title">
             <div class="details-content" style="border-top:0">
@@ -440,8 +464,8 @@ details[open] .details-arrow{transform:rotate(180deg)}
 
       <div class="action-dock" aria-label="פעולות הזמנה">
         <div class="action-dock-inner">
-          <button id="flow-back" class="back-action" type="button" hidden aria-label="חזרה לשלב הקודם"><span class="material-symbols-outlined" aria-hidden="true">chevron_right</span></button>
-          <button id="flow-next" class="primary-action" type="button"><span id="flow-next-label">המשך לפרטי קשר</span><span class="material-symbols-outlined" dir="ltr" aria-hidden="true">arrow_back</span></button>
+          <button id="flow-back" class="back-action" type="button" hidden aria-label="חזרה לשלב הקודם"><span class="material-symbols-outlined" aria-hidden="true">chevron_right</span><span>חזרה</span></button>
+          <button id="flow-next" class="primary-action" type="button"><span id="flow-next-label">המשך לפרטים</span><span class="material-symbols-outlined" dir="ltr" aria-hidden="true">arrow_back</span></button>
           <button id="submit-btn" class="primary-action" type="submit" hidden><span id="submit-btn-label">אישור והזמנת שליח</span><span class="material-symbols-outlined" dir="ltr" aria-hidden="true">arrow_back</span></button>
           <div class="dock-price" aria-live="polite">
             <span class="dock-price-icon material-symbols-outlined" aria-hidden="true">sell</span>
@@ -473,8 +497,7 @@ details[open] .details-arrow{transform:rotate(180deg)}
 </div>
 
 <div class="flex items-center justify-center gap-2 mt-3 opacity-60">
-  <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener"><img src="/assets/se-footer.png" class="w-7 h-7 rounded-full" alt="Six Elements Altiora"></a>
-  <span class="text-label-sm">פותח על ידי <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Six Elements Altiora</a> · <a href="https://talagmon.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Tal Agmon</a></span>
+  <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener"><img src="/assets/tal-sunflower.png" width="56" height="56" loading="lazy" decoding="async" style="width:56px;height:56px;object-fit:contain" alt="הלוגו של טל אגמון"></a>
 <span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.30.1(293658)</span>
 </div>
 </footer>
@@ -1290,20 +1313,28 @@ function showError(msg) {
   errBox.classList.remove("hidden");
   errBox.scrollIntoView({ behavior: "smooth", block: "center" });
 }
-function clearError() { errBox.classList.add("hidden"); errBox.textContent = ""; }
+function clearError() {
+  errBox.classList.add("hidden");errBox.textContent="";
+  document.getElementById('flow-field-error')?.remove();
+  form.querySelectorAll('.flow-invalid').forEach(field=>{
+    field.classList.remove('flow-invalid');field.removeAttribute('aria-invalid');
+    const description=(field.getAttribute('aria-describedby')||'').split(' ').filter(id=>id&&id!=='flow-field-error').join(' ');
+    if(description)field.setAttribute('aria-describedby',description);else field.removeAttribute('aria-describedby');
+  });
+}
 
 // ---- Guided order flow: preserve the canonical payload and reveal only the
 // fields required for the current decision. The Worker remains authoritative
 // for pricing, zones, business plans and order creation.
 const FLOW_STEPS = [
-  {title:"גודל החבילה",next:"המשך לפרטי קשר"},
-  {title:"פרטי קשר",next:"המשך לנקודת האיסוף"},
-  {title:"נקודת איסוף",next:"המשך לנקודת המסירה"},
-  {title:"נקודת מסירה",next:"המשך לבחירת שירות"},
-  {title:"רמת שירות",next:"המשך לבחירת מועד"},
-  {title:"מועד איסוף",next:"המשך לפרטים ואישור"},
-  {title:"סיכום ואישור",next:""}
+  {steps:[1],title:"החבילה",next:"המשך לפרטים"},
+  {steps:[2],title:"הפרטים שלכם",next:"המשך למסלול"},
+  {steps:[3,4],title:"איסוף ומסירה",next:"שירות ומועד"},
+  {steps:[5,6],title:"שירות ומועד",next:"לסיכום ההזמנה"},
+  {steps:[7],title:"בדיקה ואישור",next:""}
 ];
+function flowGroupIndex(step){return FLOW_STEPS.findIndex(group=>group.steps.includes(Number(step)));}
+const completedFlowGroups=new Set();
 const flowNext=document.getElementById("flow-next");
 const flowBack=document.getElementById("flow-back");
 const flowNextLabel=document.getElementById("flow-next-label");
@@ -1317,11 +1348,20 @@ let currentStep=1;
 let furthestStep=1;
 
 function focusFlowField(field,message){
-  showError(message);
-  if(field){
-    const visibleField=field.hidden&&field.previousElementSibling?field.previousElementSibling:field;
-    requestAnimationFrame(()=>{if(visibleField&&typeof visibleField.focus==="function")visibleField.focus();});
-  }
+  clearError();
+  if(!field){showError(message);return false;}
+  const visibleField=field.hidden&&field.previousElementSibling?field.previousElementSibling:field;
+  const error=document.createElement('p');
+  error.id='flow-field-error';error.className='flow-field-error';error.setAttribute('role','alert');error.textContent=message;
+  const container=visibleField.closest('.order-field')||visibleField.closest('.booking-step');
+  if(container)container.appendChild(error);else{showError(message);return false;}
+  if(!visibleField.matches('input,textarea,select,button,a,[tabindex]'))visibleField.tabIndex=-1;
+  visibleField.classList.add('flow-invalid');visibleField.setAttribute('aria-invalid','true');
+  visibleField.setAttribute('aria-describedby',((visibleField.getAttribute('aria-describedby')||'')+' flow-field-error').trim());
+  requestAnimationFrame(()=>{
+    visibleField.scrollIntoView({behavior:'auto',block:'center'});
+    if(typeof visibleField.focus==='function')visibleField.focus({preventScroll:true});
+  });
   return false;
 }
 function validateFlowStep(step){
@@ -1407,55 +1447,117 @@ function syncGuidedView(){
   updateFlowSummary();
   updateDockPrice();
 }
+function renderFlowProgress(){
+  const index=flowGroupIndex(currentStep);
+  document.getElementById("progress-label").textContent=FLOW_STEPS[index].title;
+  document.getElementById("progress-count").textContent="שלב "+(index+1)+" מתוך "+FLOW_STEPS.length;
+  document.querySelectorAll("[data-step-target]").forEach(button=>{
+    const target=Number(button.dataset.stepTarget);
+    const targetIndex=flowGroupIndex(target);
+    const active=targetIndex===index;
+    const complete=completedFlowGroups.has(targetIndex);
+    const needsReview=target<furthestStep&&!complete&&!active;
+    button.classList.toggle("is-active",active);
+    button.classList.toggle("is-complete",complete&&!active);
+    button.classList.toggle("needs-review",needsReview);
+    button.disabled=target>furthestStep;
+    if(active)button.setAttribute("aria-current","step");else button.removeAttribute("aria-current");
+    button.querySelector(".step-marker").textContent=complete&&!active?"✓":String(targetIndex+1);
+    const status=active?"עכשיו":complete?"הושלם":needsReview?"לבדיקה":"בהמשך";
+    button.querySelector(".step-status").textContent=status;
+    button.setAttribute("aria-label",FLOW_STEPS[targetIndex].title+", "+status);
+  });
+}
 function showFlowStep(step,options={}){
-  const next=Math.max(1,Math.min(7,Number(step)||1));
-  currentStep=next;
+  const index=Math.max(0,flowGroupIndex(step));
+  const group=FLOW_STEPS[index];
+  currentStep=group.steps[0];
   furthestStep=Math.max(furthestStep,currentStep);
+  form.dataset.flowScreen=String(index+1);
   document.querySelectorAll(".booking-step").forEach(section=>{
-    const active=Number(section.dataset.step)===currentStep;
+    const active=group.steps.includes(Number(section.dataset.step));
     section.hidden=!active;
     section.classList.remove("is-entering");
     if(active)requestAnimationFrame(()=>section.classList.add("is-entering"));
   });
-  document.getElementById("progress-label").textContent=FLOW_STEPS[currentStep-1].title;
-  document.getElementById("progress-count").textContent="שלב "+currentStep+" מתוך 7";
-  document.querySelectorAll("[data-step-target]").forEach(button=>{
-    const target=Number(button.dataset.stepTarget);
-    const active=target===currentStep;
-    button.classList.toggle("is-active",active);
-    button.classList.toggle("is-complete",target<furthestStep&&!active);
-    button.disabled=target>furthestStep;
-    if(active)button.setAttribute("aria-current","step");else button.removeAttribute("aria-current");
-    const marker=button.querySelector("span");
-    marker.textContent=target<furthestStep&&!active?"✓":String(target);
-  });
-  flowBack.hidden=currentStep===1;
-  flowNext.hidden=currentStep===7;
-  submitBtn.hidden=currentStep!==7;
-  if(flowNextLabel)flowNextLabel.textContent=FLOW_STEPS[currentStep-1].next;
+  renderFlowProgress();
+  flowBack.hidden=index===0;
+  flowNext.hidden=index===FLOW_STEPS.length-1;
+  submitBtn.hidden=index!==FLOW_STEPS.length-1;
+  if(flowNextLabel)flowNextLabel.textContent=group.next;
   clearError();
   syncGuidedView();
+  flowSummary.open=index===FLOW_STEPS.length-1;
   if(options.scroll!==false){
     const active=document.querySelector('.booking-step[data-step="'+currentStep+'"]');
-    if(active)active.scrollIntoView({behavior:"smooth",block:"start"});
+    if(active){
+      const scene=document.querySelector('.booking-cinema:not([hidden])');
+      const scrollTarget=scene&&matchMedia('(max-width:900px)').matches?scene:active;
+      scrollTarget.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});
+      const heading=active.querySelector('h2');
+      heading.tabIndex=-1;heading.focus({preventScroll:true});
+    }
   }
 }
-if(flowNext)flowNext.addEventListener("click",()=>{
-  if(!validateFlowStep(currentStep))return;
-  showFlowStep(currentStep+1);
-});
-if(flowBack)flowBack.addEventListener("click",()=>showFlowStep(currentStep-1));
+function validateFlowGroup(index){
+  for(const step of FLOW_STEPS[index].steps){
+    if(!validateFlowStep(step))return false;
+  }
+  return true;
+}
+function openFlowReview(){
+  // Re-check earlier answers after edits before presenting the final review.
+  for(let index=0;index<FLOW_STEPS.length-1;index++){
+    if(!validateFlowGroup(index)){
+      showFlowStep(FLOW_STEPS[index].steps[0]);
+      validateFlowGroup(index);
+      return;
+    }
+    completedFlowGroups.add(index);
+  }
+  showFlowStep(7);
+}
+function advanceFlow(){
+  const index=flowGroupIndex(currentStep);
+  if(!validateFlowGroup(index))return;
+  completedFlowGroups.add(index);
+  if(index===FLOW_STEPS.length-2){openFlowReview();return;}
+  if(index<FLOW_STEPS.length-1)showFlowStep(FLOW_STEPS[index+1].steps[0]);
+}
+function previousFlow(){
+  const index=flowGroupIndex(currentStep);
+  if(index>0)showFlowStep(FLOW_STEPS[index-1].steps[0]);
+}
+if(flowNext)flowNext.addEventListener("click",advanceFlow);
+if(flowBack)flowBack.addEventListener("click",previousFlow);
 document.querySelectorAll("[data-step-target]").forEach(button=>button.addEventListener("click",()=>{
   const target=Number(button.dataset.stepTarget);
-  if(target<=furthestStep)showFlowStep(target);
+  if(target<=furthestStep){if(target===7)openFlowReview();else showFlowStep(target);}
 }));
 if(summaryChips)summaryChips.addEventListener("click",event=>{
   const target=event.target.closest("[data-summary-step]");
   if(target)showFlowStep(Number(target.dataset.summaryStep));
 });
-if(summaryEdit)summaryEdit.addEventListener("click",()=>showFlowStep(Math.max(1,currentStep-1)));
-form.addEventListener("input",syncGuidedView);
-form.addEventListener("change",syncGuidedView);
+if(summaryEdit)summaryEdit.addEventListener("click",previousFlow);
+function markFlowEdited(event){
+  if(event.target.classList.contains('flow-invalid'))clearError();
+  const section=event.target.closest('.booking-step');
+  if(section){
+    const index=flowGroupIndex(section.dataset.step);
+    for(const completed of completedFlowGroups){
+      if(completed===index||(index!==1&&completed>index))completedFlowGroups.delete(completed);
+    }
+    renderFlowProgress();
+  }
+  syncGuidedView();
+}
+form.addEventListener("input",markFlowEdited);
+form.addEventListener("change",markFlowEdited);
+form.addEventListener('click',event=>{
+  if(event.target.closest('#sched-dates button,#sched-windows button')){
+    clearError();markFlowEdited(event);
+  }
+});
 const priceObserver=new MutationObserver(syncGuidedView);
 ["price-val","price-note","est-zone"].forEach(id=>{const el=document.getElementById(id);if(el)priceObserver.observe(el,{childList:true,subtree:true,characterData:true,attributes:true});});
 showFlowStep(1,{scroll:false});
@@ -1660,6 +1762,6 @@ form.addEventListener("submit", async (e) => {
 });
 businessModeReady=initBusinessMode();
 </script>
-<script src="/assets/mobile-nav.js" defer></script>
+<script src="/assets/mobile-nav.js?v=20261008-nav" defer></script>
 </body>
 </html>

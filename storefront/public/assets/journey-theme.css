@@ -1,0 +1,83 @@
+/* Shared customer-facing journey theme. No workflow or form state changes. */
+html:has(body.eden-light){color-scheme:light;background:#faf8fc}
+body.eden-light{--surface:#faf8fc;--surface-soft:#fff;--outline:#e1d6e8;--primary:#5b2a86;--primary-strong:#5b2a86;--mint:#276e65;--text:#241334;--muted:#71627b;--biz-panel:#fff;--biz-line:#e0d5e8;--biz-muted:#71627b;--biz-mint:#276e65;--biz-lilac:#5b2a86;--navy:#faf8fc;--navy-deep:#f1eaf6;--panel:#fff;--panel-strong:#f3edf7;--ink:#241334;--lilac:#5b2a86;--line:#ded1e7;--line-soft:#e9e0ef;--shadow:0 12px 40px #43226308;--success:#236549;--warning:#795315;--danger:#a33146;color:#241334!important;background:#faf8fc!important;font-family:Heebo,"Hanken Grotesk",Arial,sans-serif}
+.eden-light :is(.glass-card,.glass-panel,.card){background:#ffffffed!important;border-color:#e2d7ea!important;box-shadow:0 8px 32px #43226308!important;color:#241334}
+.eden-light :is(.bg-surface,.bg-surface-dim,.bg-surface-container,.bg-surface-container-low,.bg-surface-container-high){background-color:#f7f3fa}
+.eden-light :is(.text-on-background,.text-on-surface){color:#241334}
+.eden-light :is(.text-on-surface-variant,.text-on-background-variant){color:#71627b}
+.eden-light :is(.text-primary,.text-primary-fixed,.text-primary-container){color:#5b2a86}
+.eden-light :is(.text-secondary,.text-secondary-fixed,.text-tertiary){color:#276e65}
+.eden-light :is(input:not([type=radio]):not([type=checkbox]),textarea,select){color:#352141;background-color:#fdfbfe;border-color:#d9cce1;color-scheme:light}
+.eden-light :is(input,textarea)::placeholder{color:#86748f}
+.eden-light :is(.bg-primary,.bg-primary-container){background:#5b2a86;color:white}
+.eden-light .brand-slogan{color:#5b2a86;background:#f1eaf7;border-color:#dfd2e8}
+.eden-light .gradient-text{background:none;color:#5b2a86;-webkit-text-fill-color:#5b2a86}
+.eden-light footer :is(p,.home-footer-meta){color:#71627b}
+.eden-light footer{border-color:#e2d7ea;color:#71627b}
+.eden-light .map-gradient-overlay{background:linear-gradient(to top,#faf8fc 0%,transparent 40%)}
+.eden-light .tracking-film-shell{box-shadow:0 12px 45px #43226312}
+.eden-light .business-title span{background:none;color:#5b2a86;-webkit-text-fill-color:#5b2a86}
+.eden-light .business-eyebrow{background:#e8f2ee;color:#276e65;border-color:#c9ded6}
+.eden-light .business-hero{padding:110px 0 44px}
+.eden-light :is(.offer-card,.offer-card.featured,.value-item,.step,.business-terms){background:#fff;border-color:#e0d5e8;box-shadow:0 8px 26px #43226306}
+.eden-light .offer-card.featured{border-color:#9b7bb2;background:#f7f2fb}
+.eden-light .biz-button.primary{background:#5b2a86;color:#fff}
+.eden-light .biz-button.secondary{background:#fff;color:#5b2a86;border-color:#d6c6e1}
+.eden-light :is(.card-benefits,.saving-callout span){color:#66516f}
+.eden-light .price-breakdown{border-color:#e3d7eb}
+.eden-light .card-art{border-color:#e0d5e8}
+.eden-light .city-pills span{background:#fff;border-color:#e0d5e8}
+.eden-light :is(.thank-you,.payment-failed,.failure){background:#fff;border-color:#e2d7ea;box-shadow:0 15px 55px #4322630b}
+.eden-light :is(.next,.note,.detail){border-color:#e2d7ea}
+.eden-light :is(.home-cta,.cta.primary){background:#5b2a86;color:#fff;border-color:#5b2a86;box-shadow:0 7px 24px #43226314}
+.eden-light .cta.secondary{background:#eef6f2;color:#276e65;border-color:#cddfd6;box-shadow:none}
+.eden-light .auth-backdrop{background:#faf8fc}
+.eden-light .auth-backdrop img{opacity:.2}
+.eden-light .auth-backdrop::after{background:#faf8fc55}
+.eden-light .auth{background:#fffffff2!important;box-shadow:0 18px 70px #4322630f!important}
+.eden-light .auth::before{display:none}
+.eden-light .ghost{background:#f4edf9;color:#5b2a86}
+.eden-light :is(.status-banner,.modal-card,.drawer,.summary-box){background:#fff;color:#241334}
+.eden-light .badge.active{color:#236549;background:#edf7f0}
+.eden-light .negative{color:#a33146}
+.eden-light :focus-visible{outline:3px solid #75449a;outline-offset:4px}
+/* Native same-origin page transitions progressively enhance normal links. */
+@view-transition{navigation:auto}
+::view-transition-old(root){animation:eden-depart .22s ease both}
+::view-transition-new(root){animation:eden-arrive .4s cubic-bezier(.2,.7,.2,1) both}
+@keyframes eden-depart{to{opacity:0;transform:scale(.985)}}
+@keyframes eden-arrive{from{opacity:0;transform:translateY(15px) scale(1.015)}to{opacity:1;transform:none}}
+.eden-light .booking-step:not(.hidden){animation:eden-arrive .35s ease both}
+@media(prefers-reduced-motion:reduce){::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}.eden-light .booking-step:not(.hidden){animation:none}}
+html.eden-a11y-motion::view-transition-old(root),html.eden-a11y-motion::view-transition-new(root){animation:none!important}
+html.eden-a11y-motion .booking-step:not(.hidden){animation:none}
+/* About uses custom selectors rather than the shared utility tokens. */
+.eden-light :is(.about-founder-copy>h1,.about-hours h3,.about-hours dd,.about-contact-link__copy strong,.about-contact-link__copy>span,.about-postal-address strong,.about-section-heading h2,.about-cta h2,.about-team-person h3,.about-team-story h3){color:#241334}
+.eden-light :is(.about-founder-title__eden,.about-founder-slogan,.about-founder-value h3,.about-contact-panel>h2,.about-faq-question){color:#5b2a86;text-shadow:none}
+.eden-light :is(.about-founder-slogan strong,.about-founder-value>.material-symbols-outlined,.about-section-heading h2 span,.about-area-panel__copy h3,.about-area-panel__copy h3 .material-symbols-outlined){color:#276e65}
+.eden-light :is(.about-founder-intro,.about-founder-value p,.about-hours dt,.about-hours__note,.about-postal-address>span:last-child>span,.about-area-panel__copy p,.about-faq-answer,.about-cta__copy>p:last-child,.about-team-person p,.about-team-story>p){color:#71627b}
+.eden-light :is(.about-founder-values,.about-contact-panel,.about-area-panel,.about-contact-link,.about-hours dl,.about-hours__note,.about-postal-address,.about-faq-list,.about-team-shell,.about-team-person){background:#fff;border-color:#e1d5e8;box-shadow:0 8px 28px #43226307}
+.eden-light :is(.about-area-panel__copy,.about-cta){background:#f3edf8;border-color:#e1d5e8;box-shadow:none}
+.eden-light :is(.about-contact-link__icon,.about-postal-address>.material-symbols-outlined,.about-section-kicker,.about-faq-question .chevron,.about-team-story__icon,.about-team-story__links a){background:#f1e9f8;color:#5b2a86;border-color:#dfd1e9;box-shadow:none}
+.eden-light .about-cta__primary{background:#5b2a86;color:white;border-color:#5b2a86;box-shadow:none}
+.eden-light .about-cta__secondary{background:#eaf3ef;color:#276e65;border-color:#cbdfd6;box-shadow:none}
+.eden-light .about-founder-portrait{border-color:#ded0e7;box-shadow:0 12px 40px #43226314}
+.eden-light .about-founder-copy>h1{margin-bottom:30px;line-height:1.07}
+.eden-light .about-founder-intro{margin-bottom:36px;font-size:18px;line-height:1.85}
+.eden-light .about-area-label{background:#fffffff0;color:#5b2a86;text-shadow:none}
+.eden-light .about-founder-copy>h1{font-size:clamp(32px,3.6vw,54px)}
+.eden-light .about-founder-copy>h1>span{white-space:normal}
+.eden-light .hero-actions .biz-button{box-shadow:none}
+.eden-light .hero-actions .biz-button::before,.eden-light .hero-actions .biz-button::after{display:none}
+.eden-light :is(input:not([type=radio]):not([type=checkbox]),textarea,select){background:#fdfbfe!important;color:#352141!important;border-color:#d9cce1}
+.eden-light #entry-form button{background:#5b2a86;color:#fff}
+.eden-light :is(.payment-result,.thank-you) .message{background:#fff;border-color:#e2d7ea;box-shadow:0 10px 34px #43226309}
+.eden-light :is(.payment-result,.thank-you) :is(.note,.next){color:#71627b;background:#f7f3fa;border-color:#e2d7ea}
+.eden-light :is(.payment-result,.thank-you) .art{box-shadow:0 10px 34px #43226312;border-color:#e2d7ea}
+
+@media(max-width:700px){.eden-light .business-hero .hero-actions{padding-inline:20px}}
+@media(max-width:620px){.eden-light .auth{margin:30px auto 0}.eden-light .auth-backdrop img{object-position:center;opacity:.13}}
+.eden-light :is(button.primary,a.primary){background:#5b2a86;color:#fff}
+.eden-light .text-status-alert{color:#a33146}
+.eden-light .text-status-success{color:#236549}
+.eden-light .text-status-progress{color:#5b2a86}
