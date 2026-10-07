@@ -1,3 +1,11 @@
+## Account plan deck follow-up · 2026-10-08
+
+- Replaced two plan rows with one fixed-height scene containing all five existing plans. Added RTL swipe, previous/next controls, direct plan chips and keyboard Home/End/arrow navigation; reduced-motion preferences suppress transitions.
+- Local synthetic preview verified at 1280×900, 390×844 and 320×740: active Silver on opening, Trial for an empty account, linked Gold preselection, native horizontal swipe, keyboard endpoints and selection retention through an account refresh. No page overflow at phone widths. Payment CTA stays within the card while long details scroll independently.
+- Validation: 174 storefront tests and 22 business-account tests passed; storefront inline scripts, Worker sources and the dashboard enhancement passed syntax checks. No browser console errors. Account inline JavaScript is byte-identical to the pre-change version; prices, coupons, eligibility and payment logic were not changed.
+- Screenshots: `business-account-fixed-plans-desktop.png` and `business-account-fixed-plans-mobile.png` in the local EdenMish review evidence folder.
+- Scope: local presentation changes only. No real payment, production account, physical phone, push or deployment was used for verification.
+
 # Ops redesign and unified style checkpoint, 2026-10-08
 
 Applied the light journey design to the active operations interface, `storefront/public/dash.html`. `worker/src/index.js` redirects the Ops hostname to this page; the unused legacy `opsHtml()` renderer was not changed. Added scoped `assets/ops-dashboard.css` and presentation class hooks for the toolbar, metrics, shift panel, queue, statistics, coupons, order details and timeline. Login, driver invitation and proof-of-delivery forms inherit the same light treatment. All six queue filters remain visible on phone screens. Desktop statistics use the available width, coupon headings have readable light surfaces, and the delivery timeline fits a 320px viewport.

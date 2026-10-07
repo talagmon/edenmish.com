@@ -20,7 +20,7 @@ Use the approved purple motor scooter with a delivery box marked exactly `EdenMi
 
 ## Business and operations
 
-The business account prioritizes balance, active plan and new delivery, followed by recent shipments and wallet activity. Imports, plan selection and profile details remain native expandable panels with direct shortcuts.
+The business account prioritizes balance, active plan and new delivery, followed by recent shipments and wallet activity. Imports, plan selection and profile details remain native expandable panels with direct shortcuts. Account plan comparison uses one fixed-height, swipeable 3D glass-card deck, matching the public business page. Keep the active or linked plan centered on opening, preserve the viewed plan across account refreshes, and retain the existing top-up button and disabled state. Long plan details scroll within the card while its action stays visible.
 
 Ops prioritizes queue filters, daily figures, driver shift state and readable order cards. Statistics can use the desktop width; on mobile, forms and cards stack naturally. Retain every warning, confirmation, explicit GPS consent control and payment boundary. Never introduce an illustrative control that appears to change real operational state.
 

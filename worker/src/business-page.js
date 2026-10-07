@@ -146,8 +146,8 @@ export function businessAccountHtml(storefrontBase = 'https://edenmish.com') {
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="${storefront}/assets/eden-light.css?v=20261008-nav">
   <link rel="stylesheet" href="${storefront}/assets/journey-theme.css">
-  <link rel="stylesheet" href="${storefront}/assets/business-dashboard.css?v=1">
-  <script src="${storefront}/assets/business-dashboard.js?v=1" defer></script>
+  <link rel="stylesheet" href="${storefront}/assets/business-dashboard.css?v=2">
+  <script src="${storefront}/assets/business-dashboard.js?v=2" defer></script>
 </head>
 <body class="eden-light business-dashboard">
 <header data-eden-site-nav data-storefront-origin="${storefront}"></header>
@@ -259,11 +259,17 @@ export function businessAccountHtml(storefrontBase = 'https://edenmish.com') {
     <details id="programs" class="drawer">
       <summary><span class="summary-main"><span class="summary-icon"><span class="material-symbols-outlined" aria-hidden="true">tune</span></span><span class="summary-copy"><b>השוואה ושינוי תוכנית</b><span>חבילת ניסיון, ארנק עסקי ומסלולי Silver, Gold ו־Platinum</span></span></span><span class="material-symbols-outlined chevron" aria-hidden="true">expand_more</span></summary>
       <div class="drawer-body">
+        <section class="account-plan-scene" aria-label="בחירת מסלול עסקי">
+          <div class="account-plan-heading"><h3>המסלול שמתאים לעסק שלך</h3><p>מחליקים בין חמש התוכניות ובוחרים</p></div>
+          <div class="account-plan-controls" hidden></div>
+          <div class="account-plan-deck" tabindex="0" role="region" aria-roledescription="קרוסלה" aria-label="מסלולים עסקיים, אפשר להחליק או להשתמש בחיצים">
+            <div id="entry-plan-cards" class="plans entry"></div>
+            <div id="plan-cards" class="plans"></div>
+          </div>
+          <p class="account-plan-position" aria-live="polite" aria-atomic="true"></p>
+        </section>
         <div class="business-coupon"><div><label for="business-coupon">קוד קופון למסלול עסקי (אופציונלי)</label><input id="business-coupon" dir="ltr" autocomplete="off" maxlength="48" placeholder="BUSINESS10"></div><span class="material-symbols-outlined coupon-icon" aria-hidden="true">sell</span><p>הקופון ייבדק מול המסלול שתבחרו, וההנחה תוצג ב־Shopify לפני התשלום.</p></div>
-        <div class="program-heading"><div><h3>מסלולי התחלה בחשבון</h3><p>חבילת ניסיון או ארנק עסקי עם תשלום מאובטח, יתרה והיסטוריית שימוש.</p></div></div>
-        <div id="entry-plan-cards" class="plans entry"></div>
-        <div class="program-heading spaced"><div><h3>Silver, Gold ו־Platinum</h3><p>כיסוי רחב יותר, מחיר עסקי אוטומטי ועדיפות לפי המסלול.</p></div></div>
-        <div id="plan-cards" class="plans"></div>
+        <details class="account-plan-context"><summary>על המסלולים</summary><div class="program-heading"><div><h3>מסלולי התחלה בחשבון</h3><p>חבילת ניסיון או ארנק עסקי עם תשלום מאובטח, יתרה והיסטוריית שימוש.</p></div></div><div class="program-heading"><div><h3>Silver, Gold ו־Platinum</h3><p>כיסוי רחב יותר, מחיר עסקי אוטומטי ועדיפות לפי המסלול.</p></div></div></details>
         <p class="fine-print">החיסכון מחושב מול מחיר הבסיס הרגיל למשלוח קטן בשעות הפעילות, לפי המחירון הנוכחי. תוספות גודל, ערב וסוף שבוע מחושבות בנפרד. הקרדיט מחויב לפי השימוש בפועל.</p>
       </div>
     </details>
