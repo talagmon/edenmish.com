@@ -1,0 +1,125 @@
+.process-story{width:100%;min-width:0;direction:rtl}
+.process-deck{display:flex;gap:14px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;scrollbar-width:none;padding:8px 0 12px;direction:rtl}
+.process-deck::-webkit-scrollbar{display:none}
+.process-deck>.process-card{flex:0 0 92%;scroll-snap-align:start;display:grid;grid-template-columns:48% minmax(0,1fr);align-items:center;gap:16px;min-height:230px;padding:18px 22px;border:1px solid #e1d5e9;border-radius:23px;background:linear-gradient(135deg,#fff 25%,#f1e9f8);box-shadow:0 5px 0 -2px #dfd2e9;opacity:.65;transition:opacity .25s}
+.process-deck>.process-card:last-child{margin-inline-end:8%}
+.process-deck>.process-card.is-story-current{opacity:1}
+.process-card h3{font-size:23px;line-height:1.4;font-weight:750;color:#4c2966;margin:0 0 10px}
+.process-card p{font-size:14px;line-height:1.7;color:#735f7e;margin:0}
+.process-controls{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:3px}
+.process-controls[hidden]{display:none}
+.process-step-buttons{display:flex;justify-content:center;gap:5px;flex:1}
+.process-controls button{border:1px solid #dfd2e8;border-radius:99px;background:#fff;color:#755b86;font-family:inherit;cursor:pointer}
+.process-step-buttons button{font-size:11px;padding:8px 11px;white-space:nowrap}
+.process-step-buttons button[aria-pressed="true"]{background:#5b2a86;border-color:#5b2a86;color:#fff}
+.process-controls .process-arrow{flex:0 0 34px;width:34px;height:34px;font-size:18px}
+.process-controls .process-arrow:disabled{opacity:.3;cursor:default}
+.process-story :focus-visible{outline:3px solid #8553a7;outline-offset:3px}
+.process-visual{position:relative;height:190px;min-width:0;display:flex;align-items:center;justify-content:center;isolation:isolate;pointer-events:none}
+.process-visual::before{content:'';position:absolute;bottom:4%;width:78%;height:16%;border-radius:50%;background:#cfbcdf55;filter:blur(9px);z-index:-1}
+.process-visual>img:not(.story-parcel):not(.story-scooter){height:100%;width:100%;object-fit:contain;filter:drop-shadow(0 6px 5px #5b2a860c)}
+.story-phone{position:relative;width:98px;height:163px;border:5px solid #d1b9e2;border-bottom-width:8px;border-radius:21px;background:linear-gradient(145deg,#fff,#eee4f7);box-shadow:4px 5px 0 #b599c9,10px 16px 20px #5b2a8618;transform:rotate(-8deg);display:flex;flex-direction:column;align-items:center;gap:8px;padding:15px 8px}
+.story-phone::before{content:'';position:absolute;top:3px;width:28px;height:4px;border-radius:8px;background:#aa8cbd}
+.story-phone-brand{font-size:10px;color:#5b2a86;font-weight:800}
+.story-phone .story-phone-symbol{font-size:32px;color:#704094}
+.story-phone i{height:4px;width:75%;background:#d6c4e2;border-radius:4px}.story-phone i+i{width:55%}
+.story-phone-action{width:58px;padding:3px 0;border-radius:7px;text-align:center;font-size:12px;color:#fff;background:#5b2a86}
+.process-visual .story-parcel{position:absolute;bottom:0;left:4%;width:51%;height:56%;object-fit:contain;filter:drop-shadow(0 7px 5px #5b2a8614);transform:rotate(7deg)}
+.story-phone--map{background:linear-gradient(120deg,#f9fffc,#d9ede6);padding-bottom:6px}
+.story-phone--map svg{width:70px;height:112px;overflow:visible}
+.story-phone--map path{fill:none;stroke:#7c529b;stroke-width:6;stroke-linecap:round;stroke-dasharray:5 8}
+.story-phone--map circle{fill:#5b2a86;stroke:white;stroke-width:3}
+.process-visual .story-scooter{position:absolute;left:-1%;bottom:-4%;width:72%;height:66%;object-fit:contain;filter:drop-shadow(0 6px 5px #5b2a8614)}
+.process-visual--wallet .story-phone{transform:rotate(8deg)}
+:is(#journey-how,#journey-eden) .flow-copy{width:70%;max-width:760px}
+:is(#journey-how,#journey-eden) .flow-copy h2{font-size:29px;margin-bottom:6px}:is(#journey-how,#journey-eden) h2 br{display:none}
+:is(#journey-how,#journey-eden) .flow-intro{font-size:13px;margin-bottom:8px}
+:is(#journey-how,#journey-eden) .process-card{min-height:200px}
+:is(#journey-how,#journey-eden) .process-visual{height:175px}
+:is(#journey-how,#journey-eden) .process-card h3{font-size:21px}
+:is(#journey-how,#journey-eden) .flow-signature{margin-top:10px}
+.about-process-story{max-width:960px;margin:0 auto 72px;position:relative}
+.about-process-story>h2{font-size:32px;font-weight:800;color:#4c2966;margin-bottom:8px}
+.about-process-story>p{color:#735f7e;margin-bottom:14px}
+.about-process-story .process-card{min-height:280px}.about-process-story .process-visual{height:235px}
+.process-brand-film{margin-top:16px;border:1px solid #e2d7e9;border-radius:15px;padding:12px 16px;color:#5b2a86;background:white}
+.process-brand-film summary{cursor:pointer;font-size:13px}.process-brand-film video{display:block;width:100%;max-height:500px;margin-top:12px;border-radius:12px}
+.business-section .process-story{max-width:940px;margin:0 auto}
+.business-section .process-card{min-height:250px}
+.tracking-entry-visual{padding-inline-start:220px;min-height:235px}
+.tracking-entry-visual>.process-visual{position:absolute;right:0;top:5px;width:190px;height:220px}
+@media(max-width:700px){
+.process-deck{gap:10px}
+.process-deck>.process-card{flex-basis:94%;grid-template-columns:1fr;gap:8px;padding:14px;min-height:0;text-align:center}
+.process-deck>.process-card:last-child{margin-inline-end:6%}
+.process-visual{height:160px}
+.process-card h3{font-size:19px;margin-bottom:5px}.process-card p{font-size:12px;line-height:1.5}
+.process-step-buttons{gap:3px}.process-step-buttons button{font-size:10px;padding:8px 6px}
+.process-controls{gap:4px}.process-controls .process-arrow{flex-basis:28px;width:28px;height:30px}
+:is(#journey-how,#journey-eden) .flow-copy{width:100%;padding:14px}:is(#journey-how,#journey-eden) .flow-copy h2{font-size:23px}
+:is(#journey-how,#journey-eden) .process-card{min-height:0;gap:4px;padding:10px 12px}:is(#journey-how,#journey-eden) .process-card h3{font-size:17px;margin-bottom:3px}
+:is(#journey-how,#journey-eden) .process-visual{height:124px}:is(#journey-how,#journey-eden) .process-card p{font-size:11px;line-height:1.45}
+:is(#journey-how,#journey-eden) .story-phone{width:72px;height:114px;border-width:4px;border-radius:15px;gap:4px;padding:10px 5px}
+:is(#journey-how,#journey-eden) .story-phone-symbol{font-size:22px}:is(#journey-how,#journey-eden) .story-phone-brand{font-size:8px}:is(#journey-how,#journey-eden) .story-phone-action{width:43px;font-size:10px}
+:is(#journey-how,#journey-eden) .story-phone--map svg{width:50px;height:75px}
+:is(#journey-how,#journey-eden) .story-parcel{left:15%;width:40%}:is(#journey-how,#journey-eden) .story-scooter{left:8%;width:65%}
+:is(#journey-how,#journey-eden) .flow-signature{font-size:10px;margin-top:7px}
+.about-process-story{margin-bottom:40px}.about-process-story>h2{font-size:27px}.about-process-story .process-card{min-height:0}.about-process-story .process-visual{height:180px}
+.business-section .process-card{min-height:0}
+.tracking-entry-visual{padding-inline-start:0;min-height:0}
+.tracking-entry-visual>.process-visual{position:relative;top:auto;right:auto;margin:0 auto 8px;height:120px;width:180px}
+.tracking-entry-visual .story-phone{transform:scale(.72) rotate(-8deg);transform-origin:center}
+}
+@media(prefers-reduced-motion:reduce){.process-deck>.process-card{transition:none;scroll-behavior:auto}}
+html.eden-a11y-motion .process-deck>.process-card{transition:none}
+.process-deck>.process-card{box-shadow:0 4px 0 -1px #f7f2fb,0 7px 0 -2px #dfd2e9;perspective:900px}
+.process-card .process-visual{transform:scale(.96);transition:transform .35s ease}
+.process-card.is-story-current .process-visual{transform:scale(1)}
+#how-stop-title>span{margin-inline-start:.2em}
+@media(prefers-reduced-motion:reduce){.process-card .process-visual{transition:none}}
+html.eden-a11y-motion .process-card .process-visual{transition:none}
+
+#journey-eden .flow-eden{font-size:12px;margin:8px 0;line-height:1.5}
+#journey-eden .flow-links a{padding:4px 0}
+@media(max-width:700px){
+:is(#journey-how,#journey-eden) .journey-eyebrow{display:none}
+#journey-eden .process-visual{height:105px}
+#journey-eden .flow-eden{font-size:11px}
+#journey-eden .flow-links{font-size:11px;gap:18px}
+}
+#eden-stop-title>span{margin-inline-start:.2em}
+#about-process-title,#how-business-works{scroll-margin-top:110px}
+#journey-more .flow-copy{position:relative;padding-inline-end:175px;width:73%;max-width:780px}
+.eden-storybook{position:absolute;left:23px;top:38px;width:128px;height:186px;perspective:700px;text-decoration:none}
+.eden-storybook-cover{position:relative;display:flex;align-items:center;flex-direction:column;gap:8px;width:100%;height:100%;padding:13px 8px 12px 13px;border-radius:6px 15px 15px 6px;background:linear-gradient(90deg,#3f1c5d 0 8px,#744899 9px,#5b2a86 24px,#6e4392);box-shadow:7px 4px 0 -1px #fff,11px 7px 0 -2px #dfd4e7,15px 11px 22px #43226328;transform:rotateY(12deg) rotateZ(-6deg);transition:transform .3s,box-shadow .3s;color:#fff}
+.eden-storybook-brand{font-size:11px;font-weight:800;color:#ebddf5}
+.eden-storybook-cover img{width:76px;height:86px;object-fit:cover;object-position:center 23%;border-radius:38px 38px 22px 22px;border:3px solid #e9d6f4;box-shadow:0 4px 10px #22133130}
+.eden-storybook-cover strong{font-size:13px;line-height:1.3}.eden-storybook-cover small{font-size:8px;color:#e4d1f1}
+.eden-storybook:hover .eden-storybook-cover,.eden-storybook:focus-visible .eden-storybook-cover{transform:rotateY(0) rotateZ(-2deg) translateY(-4px);box-shadow:7px 4px 0 -1px #fff,11px 7px 0 -2px #dfd4e7,15px 15px 26px #43226330}
+#journey-more .home-footer{margin-inline-end:-150px}
+@media(max-width:700px){
+#journey-more .flow-copy{width:100%;padding:14px}
+#journey-more .eden-storybook{left:20px;top:17px;width:68px;height:99px}
+#journey-more .eden-storybook-cover{padding:6px 4px 6px 9px;gap:3px;border-radius:4px 9px 9px 4px}
+#journey-more .eden-storybook-cover img{width:38px;height:44px;border-width:2px}
+#journey-more .eden-storybook-brand{font-size:7px}#journey-more .eden-storybook-cover strong{font-size:8px}#journey-more .eden-storybook-cover small{display:none}
+#journey-more .journey-eyebrow{display:none}#journey-more .flow-copy h2{padding-inline-end:82px;font-size:24px;min-height:80px;margin-bottom:8px}
+#journey-more .home-footer{margin-inline-end:0}
+}
+@media(prefers-reduced-motion:reduce){.eden-storybook-cover{transition:none}}
+html.eden-a11y-motion .eden-storybook-cover{transition:none}
+/* Keep the final chapter compact; its panel can still scroll on short screens. */
+#journey-more .flow-copy h2{font-size:32px;line-height:1.18;margin-bottom:10px}
+#journey-more .flow-intro{font-size:14px;margin-bottom:8px}
+#journey-more .flow-eden{margin:8px 0 12px;font-size:12px}
+#journey-more .journey-button{min-height:44px;padding:10px 18px;font-size:13px}
+#journey-more .home-footer{width:calc(100% + 150px);margin-top:14px;padding-top:10px}
+@media(max-width:700px){
+#journey-more .flow-copy h2{font-size:23px;min-height:80px}
+#journey-more .flow-intro{margin-bottom:6px}
+#journey-more .flow-eden{font-size:11px;line-height:1.5;margin:6px 0 10px}
+#journey-more .flow-final-actions{flex-wrap:nowrap;gap:12px}
+#journey-more .journey-button{width:auto;flex:1;font-size:10px;padding:8px;gap:5px;white-space:nowrap}
+#journey-more .flow-story-button{font-size:10px;flex-shrink:0}
+#journey-more .home-footer{width:100%;margin-top:12px;padding-top:8px}
+}

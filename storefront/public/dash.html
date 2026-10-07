@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html class="dark" dir="rtl" lang="he">
+<html dir="rtl" lang="he">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="/assets/styles.css?v=0.28.0-293096-a8d8b91"/>
 <link rel="icon" href="/assets/favicon.ico"/>
 <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"/>
-<meta name="theme-color" content="#8B5CF6"/>
+<meta name="theme-color" content="#faf8fc"/>
 <style>
 .dashboard-auth-shell{position:relative;isolation:isolate;overflow:hidden;background:#090d24 url("/assets/edenmish-home-hero-neon.webp") center/cover no-repeat}
 .dashboard-auth-shell::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,rgba(9,13,36,.18),rgba(9,13,36,.42) 54%,rgba(9,13,36,.7)),linear-gradient(180deg,rgba(9,13,36,.08),rgba(9,13,36,.34))}
@@ -69,8 +69,12 @@
 @media(min-width:900px){.ops-queue-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:640px){.dashboard-auth-shell{background-position:19% center}.dashboard-auth-shell::before{background:linear-gradient(180deg,rgba(9,13,36,.26),rgba(9,13,36,.62))}.dashboard-auth-card{max-width:360px;padding:34px 26px 30px!important;border-radius:52px!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),inset 0 -1px 0 rgba(145,211,200,.07),0 0 0 6px rgba(3,5,18,.58),0 0 0 7px rgba(209,218,255,.1),0 32px 90px rgba(0,0,0,.46),0 0 60px rgba(91,42,134,.13)}.dashboard-auth-icon{width:66px;height:66px;border-radius:22px}.ios-order-card{padding:14px;border-radius:18px}.ios-order-identity{grid-template-columns:40px minmax(0,1fr) auto;gap:10px}.ios-order-icon{width:40px;height:40px}.ios-order-name{font-size:1.02rem}.ios-order-step-label{font-size:.53rem}}
 </style>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/assets/eden-light.css?v=20261008-nav"/>
+<link rel="stylesheet" href="/assets/journey-theme.css"/>
+<link rel="stylesheet" href="/assets/ops-dashboard.css?v=1"/>
 </head>
-<body class="bg-surface-dim">
+<body class="bg-surface-dim eden-light ops-dashboard">
 <div id="app">טוען…</div>
 <script src="/assets/api-origin.js"></script>
 <script>
@@ -214,10 +218,10 @@ function renderQueue(){
   var cards = sorted.map(queueCard).join("");
 
   function kpiCard(label,val,color){
-    return '<div class="glass-card flex-1 rounded-xl p-2 text-center min-w-0"><div class="text-label-sm text-on-surface-variant truncate">'+label+'</div><div class="font-headline-md text-headline-md-mobile mt-0.5 text-'+color+' truncate">'+val+'</div></div>';
+    return '<div class="ops-kpi glass-card flex-1 rounded-xl p-2 text-center min-w-0"><div class="text-label-sm text-on-surface-variant truncate">'+label+'</div><div class="font-headline-md text-headline-md-mobile mt-0.5 text-'+color+' truncate">'+val+'</div></div>';
   }
   function dailyCard(label,val,icon,tone){
-    return '<div class="glass-card rounded-xl p-2 min-w-0 flex items-center gap-2"><span class="material-symbols-outlined text-'+tone+' text-xl">'+icon+'</span><div class="min-w-0"><div class="font-label-bold text-'+tone+' truncate">'+val+'</div><div class="text-label-sm text-on-surface-variant truncate">'+label+'</div></div></div>';
+    return '<div class="ops-daily glass-card rounded-xl p-2 min-w-0 flex items-center gap-2"><span class="material-symbols-outlined text-'+tone+' text-xl">'+icon+'</span><div class="min-w-0"><div class="font-label-bold text-'+tone+' truncate">'+val+'</div><div class="text-label-sm text-on-surface-variant truncate">'+label+'</div></div></div>';
   }
   function tabBtn(key,label,count){
     var isActive = activeFilter===key;
@@ -238,7 +242,7 @@ function renderQueue(){
     if(!d)return '<div class="glass-card rounded-xl p-3 text-on-surface-variant">סטטוס השליח נטען…</div>';
     var active=!!d.active;
     var blocked=Number(d.blockedOrderCount||0);
-    return '<section class="glass-card rounded-2xl p-4 border '+(active?'border-success-mint/40':'border-outline-variant')+'">'+
+    return '<section class="ops-driver-panel glass-card rounded-2xl p-4 border '+(active?'border-success-mint/40':'border-outline-variant')+'">'+
       '<div class="flex items-center justify-between gap-3">'+
       '<div class="flex items-center gap-3 min-w-0"><span class="material-symbols-outlined text-3xl '+(active?'text-success-mint':'text-on-surface-variant')+'">two_wheeler</span><div class="min-w-0">'+
       '<div class="font-label-bold text-primary">משמרת Eden</div><div class="text-label-sm text-on-surface-variant">'+(active?'פעילה · המסלול מתעדכן אוטומטית':'לא פעילה · האפליקציה ממתינה')+'</div></div></div>'+
@@ -248,7 +252,7 @@ function renderQueue(){
   }
 
   $("app").innerHTML =
-    '<div class="sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm">'+
+    '<div class="ops-toolbar sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm">'+
     '<div class="flex items-center justify-between gap-stack-sm">'+
     '<div class="flex items-center gap-2 min-w-0"><strong class="font-label-bold text-label-bold text-primary truncate">מעקב הזמנות | עדן מיש</strong>'+(urgentCount?'<span class="bg-error/20 text-error text-label-sm px-2 py-0.5 rounded-full animate-pulse flex items-center gap-1 shrink-0"><span class="material-symbols-outlined text-[14px]">priority_high</span>'+urgentCount+'</span>':'')+'</div>'+
     headerActionsHtml()+
@@ -260,10 +264,10 @@ function renderQueue(){
     '<div class="flex gap-2 mt-2">'+
     kpiCard("סה״כ",counts.all,"primary")+kpiCard("פעילות",counts.active,"secondary")+kpiCard("הכנסה","₪"+revenue,"success-mint")+kpiCard("חריגות",counts.problems+counts.cancelled,(counts.problems+counts.cancelled)>0?"error":"on-surface-variant")+
     '</div>'+
-    '<div class="flex gap-2 mt-2 overflow-x-auto scrollbar-hide pb-1">'+
+    '<div class="ops-filters flex gap-2 mt-2 overflow-x-auto scrollbar-hide pb-1">'+
     tabBtn("all","הכל",counts.all)+tabBtn("inbox","חדשות",counts.inbox)+tabBtn("active","פעילות",counts.active)+tabBtn("done","הושלם",counts.done)+tabBtn("cancelled","בוטלו",counts.cancelled)+tabBtn("problems","תקלות",counts.problems)+
     '</div></div>'+
-    '<div class="px-gutter-mobile py-stack-sm max-w-6xl mx-auto space-y-3 pb-24">'+
+    '<div class="ops-queue-content px-gutter-mobile py-stack-sm max-w-6xl mx-auto space-y-3 pb-24">'+
     driverPanel()+
     webhookWarning()+
     (cards?'<div class="ops-queue-grid">'+cards+'</div>':'<div class="glass-card rounded-2xl p-stack-lg text-center text-on-surface-variant">אין הזמנות בקטגוריה זו.</div>')+
@@ -533,8 +537,8 @@ function renderStats(){
   var sBars=Object.entries(sc).filter(function(e){return e[1]>0;}).sort(function(a,b){return b[1]-a[1];}).map(function(e){var p=e[1]/sMax*100;return '<div class="flex items-center gap-2"><span class="text-label-sm text-on-surface-variant w-20 truncate">'+HE[e[0]]+'</span><div class="flex-1 bg-surface-container-low rounded-full h-4 overflow-hidden"><div class="h-full bg-primary-container rounded-full" style="width:'+p+'%"></div></div><span class="text-label-bold text-on-surface w-5 text-center">'+e[1]+'</span></div>';}).join('');
   var hdr=viewTabsHtml();
   $("app").innerHTML=
-    '<div class="sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm"><div class="flex items-center justify-between gap-stack-sm"><strong class="font-label-bold text-label-bold text-primary truncate">מעקב הזמנות | עדן מיש</strong>'+headerActionsHtml()+'</div><div class="flex gap-2 mt-2">'+hdr+'</div></div>'+
-    '<div class="px-gutter-mobile py-stack-sm max-w-lg mx-auto space-y-3 pb-24">'+
+    '<div class="ops-toolbar sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm"><div class="flex items-center justify-between gap-stack-sm"><strong class="font-label-bold text-label-bold text-primary truncate">מעקב הזמנות | עדן מיש</strong>'+headerActionsHtml()+'</div><div class="flex gap-2 mt-2">'+hdr+'</div></div>'+
+    '<div class="ops-stats-content px-gutter-mobile py-stack-sm max-w-lg mx-auto space-y-3 pb-24">'+
     '<div class="grid grid-cols-2 gap-3">'+kpi('אחוז הצלחה',sr+'%','verified','#91d3c8')+kpi('זמן ממוצע',at>0?at+' דק\'':'—','schedule','#8B5CF6')+kpi('דירוג ממוצע',ar,'star','#fbbf24')+kpi('הכנסה','₪'+rev,'payments','#91d3c8')+'</div>'+
     '<div class="glass-card rounded-2xl p-stack-md"><h3 class="font-headline-md text-on-surface mb-3">הזמנות ליום</h3><svg viewBox="0 0 280 100" class="w-full">'+bars+'</svg></div>'+
     '<div class="grid grid-cols-1 md:grid-cols-2 gap-3">'+
@@ -665,7 +669,7 @@ function statusStepIdx(s){
 function timelineHtml(o){
   var cur = statusStepIdx(o.status);
   var problem = ["failed","cancelled","refund_pending"].includes(o.status);
-  var h = '<div class="glass-card rounded-xl p-3 mb-4"><div class="flex items-start">';
+  var h = '<div class="ops-timeline glass-card rounded-xl p-3 mb-4"><div class="flex items-start">';
   STEPS.forEach(function(st, i){
     var done = i < cur && !problem;
     var active = i === cur;
@@ -696,11 +700,11 @@ function renderDetail(o){
   var statusBadge = '<div class="glass-card px-3 py-1 rounded-xl text-center"><span class="text-label-sm '+(isLive?"text-secondary":"text-primary")+' block">'+esc(HE[s]||s)+'</span></div>';
 
   $("app").innerHTML =
-    '<div class="sticky top-0 z-50 bg-surface-container-lowest/90 backdrop-blur-xl border-b border-outline-variant/10 px-gutter-mobile py-3 flex items-center justify-between">'+
+    '<div class="ops-detail-toolbar sticky top-0 z-50 bg-surface-container-lowest/90 backdrop-blur-xl border-b border-outline-variant/10 px-gutter-mobile py-3 flex items-center justify-between">'+
     '<button onclick="backToQueue()" class="flex items-center gap-2 text-primary"><span class="material-symbols-outlined">arrow_forward</span><span class="font-label-bold">חזור לתור</span></button>'+
     statusBadge+
     '</div>'+
-    '<main class="px-gutter-mobile pb-24 max-w-lg mx-auto">'+
+    '<main class="ops-detail-content px-gutter-mobile pb-24 max-w-lg mx-auto">'+
     '<div class="flex justify-between items-center mb-6 pt-stack-md">'+
     '<div><h2 class="font-headline-md text-headline-lg-mobile text-on-surface">הזמנה #'+o.id+'</h2>'+
     '<p class="text-label-sm text-on-surface-variant">'+fmt(o.created_at)+'</p></div>'+
@@ -992,14 +996,14 @@ function renderCoupons(){
 
   var hdr = viewTabsHtml();
   $("app").innerHTML =
-    '<div class="sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm">'+
+    '<div class="ops-toolbar sticky top-0 z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border px-gutter-mobile py-stack-sm">'+
     '<div class="flex items-center justify-between gap-stack-sm">'+
     '<div class="flex items-center gap-2 min-w-0"><strong class="font-label-bold text-label-bold text-primary truncate">מעקב הזמנות | עדן מיש</strong></div>'+
     headerActionsHtml()+
     '</div>'+
     '<div class="flex gap-2 mt-2">'+hdr+'</div>'+
     '</div>'+
-    '<div class="px-gutter-mobile py-stack-sm max-w-3xl mx-auto space-y-3 pb-24">'+
+    '<div class="ops-coupons-content px-gutter-mobile py-stack-sm max-w-3xl mx-auto space-y-3 pb-24">'+
     '<div class="flex items-center justify-between">'+
       '<h2 class="font-headline-md text-headline-md-mobile text-on-surface">קופונים</h2>'+
       '<button onclick="showCouponForm()" class="bg-tertiary text-on-tertiary font-label-bold px-4 py-2 rounded-xl active:scale-95 flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">add</span>קופון חדש</button>'+

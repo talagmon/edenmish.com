@@ -1,0 +1,197 @@
+/* Presentation layer only. Existing field order, validation and scripts remain intact. */
+body.booking-light{--order-edge:#ded2e6;--order-edge-strong:#5b2a86;--order-purple:#5b2a86;--order-purple-soft:#5b2a86;--order-mint:#276e65;background:#faf8fc}
+
+.booking-light>.fixed[aria-hidden=true]{display:none}
+.booking-light .order-main{max-width:880px}
+.booking-light .order-hero{padding-top:34px;padding-bottom:26px}
+.booking-light .order-kicker{color:#806b91}
+.booking-light .order-title{color:#241334;font-family:Heebo,Arial,sans-serif;letter-spacing:-.04em;font-size:clamp(34px,5vw,48px)}
+.booking-light .order-title span{color:#5b2a86}
+.booking-light .order-subtitle{color:#76677e;font-size:15px;line-height:1.8}
+.booking-light .order-slogan{color:#5b2a86;font-size:14px}
+
+.booking-light .order-layer{background:#fff;border:1px solid #e8dfed;box-shadow:0 5px 24px #34204b04;backdrop-filter:none}
+.booking-light .order-layer--mint{border-color:#e8dfed;box-shadow:none}
+.booking-light .order-progress{background:transparent;border:0;box-shadow:none;padding:12px 4px 24px}
+.booking-light .progress-meta{color:#7c6e86}
+.booking-light .progress-meta strong{color:#4c325e}
+.booking-light .step-dot span{background:#f1ebf6;border-color:#e3d9ea;color:#887494;width:30px;height:30px}
+.booking-light .step-dot::before{background:#e3d9ea}
+.booking-light .step-dot.is-active span{background:#5b2a86;border-color:#5b2a86;color:#fff;box-shadow:0 0 0 5px #eee5f5}
+.booking-light .step-dot.is-complete span{background:#dfeee9;border-color:#d2e5df;color:#276e65}
+.booking-light .step-dot.is-complete::before{background:#cddfd8}
+.booking-light .booking-step{min-height:0;padding:32px}
+.booking-light .step-heading h2{color:#301e3c;font-size:24px;letter-spacing:-.03em}
+.booking-light .step-heading p{color:#7b6e84;font-size:14px;line-height:1.7}
+.booking-light .step-number{color:#8e7b9b}
+.booking-light .step-icon{background:#f3edf8;border:0;box-shadow:none;color:#5b2a86;border-radius:12px}
+
+.booking-light .choice-surface{background:#fff;border:1px solid #ddd1e5;box-shadow:none;min-height:116px;border-radius:16px;padding:20px}
+.booking-light .choice-card:hover .choice-surface{border-color:#9c7bb3}
+.booking-light .choice-card input:checked+.choice-surface{background:#f6f0fa;border-color:#6a3a8c;box-shadow:0 0 0 1px #6a3a8c}
+.booking-light .choice-copy h3{color:#382348;font-size:18px}
+.booking-light .choice-copy p{color:#776681;line-height:1.7}
+.booking-light .choice-price{color:#276e65}
+.booking-light .choice-icon{background:#f3edf7;border:0;color:#8c709d;box-shadow:none}
+.booking-light .choice-card input:checked+.choice-surface .choice-icon{color:#5b2a86;border:0;box-shadow:none}
+.booking-light .choice-card input:focus-visible+.choice-surface{outline:3px solid #5b2a86;outline-offset:4px}
+.booking-light .order-field label{color:#4f395f;font-size:14px}
+.booking-light .order-field input,.booking-light .order-field textarea,.booking-light .order-input{background:#fdfbfe!important;border-color:#d9cce1;color:#352141!important;box-shadow:none;font-size:16px}
+.booking-light .order-field input::placeholder,.booking-light .order-field textarea::placeholder{color:#8d7e95}
+.booking-light .order-field input:focus,.booking-light .order-field textarea:focus{border-color:#5b2a86;box-shadow:0 0 0 3px #5b2a8610}
+.booking-light gmp-place-autocomplete.eden-places{color-scheme:light}
+
+.booking-light .access-details,.booking-light .price-details,.booking-light .legal-details{background:#faf8fc;border-color:#e8dfed;border-radius:14px}
+.booking-light summary{color:#5b456a}
+.booking-light .details-content{border-color:#e8dfed}
+.booking-light .details-arrow{color:#8e789d}
+.booking-light .route-result{background:#e1d5e9;border-color:#e1d5e9}
+.booking-light .route-result>div{background:#f7f3fa;color:#5d486a}
+.booking-light .summary-strip h2,.booking-light .security-note{color:#77677f}
+.booking-light .summary-chip{background:#f3edf7;border-color:#e5d9ed;color:#684b79}
+.booking-light .summary-edit{color:#5b2a86}
+.booking-light .price-breakdown{color:#6b5876}
+.booking-light .price-total{color:#392447;border-color:#e4d9ea}
+.booking-light .check-row{color:#675571}
+.booking-light .schedule-flash-card{background:#eff7f4;border-color:#d6e8e1}
+.booking-light .date-picker-button{background:#f5eff9;color:#5b2a86;border-color:#dfd2e8;box-shadow:none}
+.booking-light #sched-dates button,.booking-light #sched-windows button{color:#5c4070;background:#fff;border-color:#dacde3}
+.booking-light #sched-dates button.bg-primary,.booking-light #sched-windows button.bg-primary{color:#fff;background:#5b2a86}
+.booking-light #sched-dates button.bg-primary-container,.booking-light #sched-windows button.bg-primary-container{color:#fff;background:#5b2a86}
+.booking-light #sched-dates button:disabled,.booking-light #sched-windows button:disabled{opacity:.42}
+.booking-light .form-error{background:#fff1f2;border-color:#edbec7;color:#a12d42}
+
+.booking-light .action-dock{max-width:820px;background:rgba(255,255,255,.97);border-color:#e3d7eb;box-shadow:0 8px 38px #43265c14;border-radius:20px}
+.booking-light .primary-action{background:#5b2a86;border:0;box-shadow:none;border-radius:13px;color:#fff}
+.booking-light .dock-price{background:#f7f3fa;border:0;box-shadow:none;border-radius:13px}
+.booking-light .dock-price-copy strong{color:#392447}
+.booking-light .dock-price-copy span{color:#82708d}
+.booking-light .dock-price-copy small{color:#276e65}
+.booking-light .dock-price-icon{color:#9475a6}
+.booking-light .back-action{color:#5b2a86;background:#f2ebf7;border:0;box-shadow:none}
+.booking-light .coupon-glass{border-color:#e1d5e9}
+.booking-light .text-white{color:#392447}
+.booking-light .bg-primary{background:#5b2a86;color:#fff}
+.booking-light .text-tertiary{color:#7d3670}
+
+@media(max-width:700px){.booking-light .order-main{padding-top:86px}
+.booking-light .order-hero{padding-top:22px;padding-bottom:18px}
+.booking-light .order-title{font-size:34px}
+.booking-light .order-subtitle{font-size:14px}
+.booking-light .order-slogan{font-size:13px}
+.booking-light .order-progress{padding-bottom:18px}
+.booking-light .booking-step{padding:24px 18px;border-radius:20px}
+.booking-light .step-heading{gap:8px;margin-bottom:24px}
+.booking-light .step-heading-copy{gap:9px}
+.booking-light .step-heading h2{font-size:21px}
+.booking-light .step-heading p{font-size:13px}
+.booking-light .step-icon{width:36px;height:36px;font-size:22px}
+.booking-light .choice-surface{min-height:102px;padding:16px}
+.booking-light .field-grid{gap:20px}
+.booking-light .service-grid .choice-surface{min-height:114px}
+.booking-light .action-dock{bottom:max(8px,env(safe-area-inset-bottom))}
+.booking-light .primary-action{min-height:54px}
+}
+
+.booking-light .order-main{margin-inline:auto}
+.booking-light .order-kicker{background:#eee6f5;color:#6f5282;border-color:#e3d6eb}
+.booking-light #sched-dates button[aria-pressed=true],.booking-light #sched-windows button[aria-pressed=true]{background:#5b2a86!important;border-color:#5b2a86!important;color:#fff}
+
+
+.booking-light .order-field input,.booking-light .order-field textarea{scroll-margin-block:110px 130px}
+.booking-light .order-title span{background:none;filter:none}
+
+
+/* Branded package illustrations keep the original radios and price rules. */
+.booking-light .package-choices{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.booking-light .package-choices .choice-surface{position:relative;flex-direction:column;justify-content:flex-start;gap:0;padding:18px;text-align:right;isolation:isolate;background:linear-gradient(155deg,#fff,#faf7fd);overflow:hidden}
+.booking-light .package-art{display:block;order:-1;width:100%;height:155px;perspective:700px}
+.booking-light .package-art img{width:100%;height:100%;object-fit:contain;transform:translateY(2px) scale(.93);transition:transform .28s ease;filter:drop-shadow(0 8px 9px #4821640c)}
+.booking-light .package-choices .choice-copy{display:block;width:100%;margin-top:2px;padding:0 4px}
+.booking-light .package-choices .choice-copy p{min-height:46px}
+.booking-light .package-choices .choice-copy h3{font-size:20px}
+.booking-light .package-selection{position:absolute;inset-inline-start:14px;top:14px;width:24px;height:24px;border:1px solid #cbb9d8;border-radius:50%;background:#fff;display:grid;place-items:center;color:#fff}
+.booking-light .package-selection .material-symbols-outlined{font-size:17px;visibility:hidden}
+.booking-light .package-choices input:checked+.choice-surface{background:linear-gradient(155deg,#fcfaff,#f0e7f8);border-color:#5b2a86;box-shadow:0 0 0 1px #5b2a86,0 8px 24px #5b2a8610}
+.booking-light .package-choices input:checked+.choice-surface .package-selection{background:#5b2a86;border-color:#5b2a86}
+.booking-light .package-choices input:checked+.choice-surface .package-selection span{visibility:visible}
+.booking-light .package-choices input:checked+.choice-surface img{transform:translateY(-3px) scale(1)}
+@media(hover:hover){.booking-light .package-choices .choice-card:hover img{transform:translateY(-5px) scale(1)}}
+@media(max-width:700px){.booking-light .package-choices{gap:10px}.booking-light .package-choices .choice-surface{padding:12px 10px}.booking-light .package-art{height:115px}.booking-light .package-choices .choice-copy{padding:0}.booking-light .package-choices .choice-copy h3{font-size:18px}.booking-light .package-choices .choice-copy p{font-size:12px;line-height:1.6;min-height:58px}.booking-light .package-choices .choice-price{font-size:13px}.booking-light .package-selection{width:21px;height:21px;inset-inline-start:10px;top:10px}}
+@media(max-width:360px){.booking-light .package-art{height:94px}.booking-light .package-choices .choice-copy p{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.booking-light .package-art img{transition:none;transform:none!important}}
+
+/* Five customer decisions, backed by the original seven validation groups. */
+.booking-light .order-hero{padding-top:18px;padding-bottom:12px}
+.booking-light .order-title{font-size:34px;margin-bottom:8px}
+.booking-light .order-kicker{display:none}
+.booking-light .order-subtitle{font-size:12px;margin:0;line-height:1.6}
+.booking-light .order-slogan{font-size:12px;margin-top:8px}
+.booking-light .order-progress{position:sticky;top:80px;z-index:20;padding:12px 16px 14px;background:#faf8fcf7;border:1px solid #e7deed;border-radius:20px;backdrop-filter:blur(14px)}
+.booking-light .progress-meta{margin-bottom:12px;font-size:12px}
+.booking-light .step-rail{grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.booking-light .step-dot{flex-direction:column;gap:6px;cursor:pointer;min-height:74px}
+.booking-light .step-dot:disabled{cursor:default}
+.booking-light .step-dot::before{top:15px;width:calc(100% + 8px)}
+.booking-light .step-dot strong{font-size:12px;color:#6b547a;font-weight:500}
+.booking-light .step-dot small{font-size:10px;color:#887594}
+.booking-light .step-dot.is-active strong,.booking-light .step-dot.is-active small{color:#5b2a86;font-weight:700}
+.booking-light .step-dot.is-complete small{color:#276e65}
+.booking-light .step-dot.needs-review small{color:#9c4a36}
+.booking-light .step-dot:focus-visible{outline:2px solid #5b2a86;outline-offset:3px;border-radius:10px}
+.booking-light .booking-step{scroll-margin-top:235px}
+.booking-light .step-heading{margin-bottom:20px}
+.booking-light #flow-summary{padding:0 16px;background:transparent;border:0;box-shadow:none}
+.booking-light #flow-summary>summary{display:flex;align-items:center;justify-content:space-between;min-height:44px;font-size:12px;cursor:pointer;list-style:none}
+.booking-light #flow-summary>summary::-webkit-details-marker{display:none}
+.booking-light #flow-summary[open]>summary span{transform:rotate(180deg)}
+.booking-light #summary-chips{padding-bottom:12px}
+.booking-light .booking-panels{position:relative;gap:16px}
+.booking-light #booking-form[data-flow-screen="3"] .booking-panels,.booking-light #booking-form[data-flow-screen="4"] .booking-panels{display:grid;grid-template-columns:1fr 1fr;align-items:start}
+.booking-light .booking-panels #form-error{grid-column:1/-1}
+.booking-light #booking-form[data-flow-screen="3"] .booking-step,.booking-light #booking-form[data-flow-screen="4"] .booking-step{padding:24px}
+.booking-light #booking-form[data-flow-screen="4"] .service-grid{grid-template-columns:1fr;gap:10px}
+.booking-light #booking-form[data-flow-screen="4"] .service-grid .choice-surface{min-height:90px;padding:12px 14px;flex-direction:row;text-align:right;justify-content:space-between}
+.booking-light #booking-form[data-flow-screen="4"] .service-grid .choice-copy h3{font-size:16px}
+.booking-light #booking-form[data-flow-screen="4"] .service-grid .choice-copy p{font-size:12px}
+.booking-light #booking-form[data-flow-screen="4"] .step-heading h2,.booking-light #booking-form[data-flow-screen="3"] .step-heading h2{font-size:22px}
+.booking-light #booking-form[data-flow-screen="4"] .step-heading p,.booking-light #booking-form[data-flow-screen="3"] .step-heading p{font-size:12px}
+.booking-light .action-dock{padding:12px 16px;border-radius:24px;background:#fffffff5;box-shadow:0 8px 32px #43265c12}
+.booking-light .action-dock-inner,.booking-light .action-dock-inner:has(.back-action[hidden]){grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"price back next";align-items:center;gap:12px}
+.booking-light .primary-action{grid-area:next;min-height:52px;min-width:210px;border-radius:99px;padding:6px 8px 6px 24px;justify-content:space-between;font-size:14px;gap:18px;background:linear-gradient(125deg,#6e3e99,#5b2a86);box-shadow:0 5px 15px #5b2a8620;backdrop-filter:none}
+.booking-light .primary-action>.material-symbols-outlined{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:#ffffff20;font-size:21px}
+.booking-light .back-action{grid-area:back;min-height:44px;border-radius:99px;padding:8px 12px;font-size:13px;background:transparent;color:#6b547a}
+.booking-light .back-action:hover{background:#f5f0f8}
+.booking-light .back-action .material-symbols-outlined{font-size:18px}
+.booking-light .dock-price{grid-area:price;justify-content:flex-start;background:transparent;padding:0;gap:0}
+.booking-light .dock-price-icon{display:none}
+.booking-light .dock-price-copy strong{font-size:16px}
+.booking-light .dock-price-copy small{font-size:10px}
+@media(max-width:700px){
+.booking-light .order-main{padding-top:78px}
+.booking-light .order-title{font-size:28px}
+.booking-light .order-hero{padding-top:10px;padding-bottom:6px}
+.booking-light .order-subtitle{font-size:11px}
+.booking-light .order-progress{top:74px;padding:10px 10px 12px;border-radius:16px}
+.booking-light .step-dot{gap:5px;min-height:67px}
+.booking-light .step-dot strong{font-size:10px;white-space:nowrap}
+.booking-light .step-dot small{font-size:9px}
+.booking-light .step-rail{gap:4px}
+.booking-light .booking-step{scroll-margin-top:220px}
+.booking-light #booking-form[data-flow-screen="3"] .booking-panels,.booking-light #booking-form[data-flow-screen="4"] .booking-panels{grid-template-columns:1fr}
+.booking-light #booking-form[data-flow-screen="3"] .booking-step,.booking-light #booking-form[data-flow-screen="4"] .booking-step{padding:22px 18px}
+.booking-light .action-dock{padding:10px 12px;border-radius:22px}
+.booking-light .action-dock-inner,.booking-light .action-dock-inner:has(.back-action[hidden]){grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"price price" "back next";gap:8px}
+.booking-light .action-dock-inner:has(.back-action[hidden]){grid-template-areas:"price next";grid-template-columns:minmax(0,1fr) auto}
+.booking-light .dock-price-copy{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.booking-light .dock-price-copy strong{font-size:13px}
+.booking-light .dock-price-copy span{font-size:10px}
+.booking-light .dock-price-copy small{display:none}
+.booking-light .primary-action{min-width:170px;min-height:48px;font-size:13px;padding:5px 6px 5px 16px;gap:12px}
+.booking-light .primary-action>.material-symbols-outlined{width:34px;height:34px;font-size:19px}
+.booking-light .back-action{justify-self:start;padding:6px 0;font-size:12px}
+}
+@media(max-width:360px){.booking-light .primary-action{min-width:148px;font-size:12px}.booking-light .step-dot strong{font-size:9px}}
+.booking-light .flow-field-error{color:#a12d42;font-size:12px;line-height:1.6;margin:8px 0 0}
+.booking-light .order-field .flow-invalid{border-color:#bd4055!important;background:#fff9fa!important}
+.booking-light .order-field input,.booking-light .order-field textarea{scroll-margin-top:240px}

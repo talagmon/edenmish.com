@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="he" dir="rtl" class="dark">
+<html lang="he" dir="rtl" class="">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -21,7 +21,7 @@
   <link rel="stylesheet" href="/assets/site-nav.css" data-eden-site-nav-styles>
   <script src="/assets/analytics.js" defer></script>
   <link rel="icon" href="/assets/favicon.ico">
-  <meta name="theme-color" content="#090D24">
+  <meta name="theme-color" content="#faf8fc">
   <style>
     :root{--biz-purple:#5b2a86;--biz-lilac:#dfb7ff;--biz-mint:#91d3c8;--biz-navy:#090d24;--biz-panel:rgba(17,23,53,.72);--biz-line:rgba(209,218,255,.14);--biz-muted:#b8b8c8}
     html{scroll-behavior:smooth}.business-page{background:radial-gradient(circle at 10% 8%,rgba(91,42,134,.32),transparent 32rem),radial-gradient(circle at 90% 70%,rgba(45,226,208,.1),transparent 28rem),linear-gradient(180deg,#090d24,#0b1029 48%,#090d24)}
@@ -34,8 +34,16 @@
     @media(max-width:900px){.plan-grid{grid-template-columns:1fr 1fr}.plan-grid .offer-card:last-child{grid-column:1/-1;max-width:450px;width:100%;justify-self:center}.value-strip{grid-template-columns:1fr}.steps{grid-template-columns:1fr}}
     @media(max-width:680px){.business-shell{padding-inline:16px}.business-hero{padding-top:92px}.offer-grid,.plan-grid{grid-template-columns:1fr}.plan-grid .offer-card:last-child{grid-column:auto;max-width:none}.business-title{font-size:2.65rem}.hero-actions{flex-direction:column}.hero-actions .biz-button{width:100%}.card-summary{min-height:0}}
   </style>
+<link rel="stylesheet" href="/assets/eden-light.css?v=20261008-nav"/>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/assets/journey-theme.css"/>
+<link rel="stylesheet" href="/assets/process-story.css?v=5"/>
+<script src="/assets/process-story.js?v=1" defer></script>
+<link rel="stylesheet" href="/assets/business-journey.css?v=1"/>
+<link rel="stylesheet" href="/assets/business-plan-deck.css?v=3"/>
+<script src="/assets/business-plan-deck.js?v=2" defer></script>
 </head>
-<body class="business-page text-on-surface">
+<body class="eden-light business-page text-on-surface">
   <header class="fixed top-0 w-full z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border shadow-sm">
     <div class="flex flex-row-reverse justify-between items-center px-gutter-desktop max-w-container-max mx-auto h-16">
       <a href="/" class="font-display-lg text-headline-md font-bold text-primary">EdenMish</a>
@@ -47,7 +55,8 @@
   </header>
 
   <main id="main-content">
-    <section class="business-hero business-shell">
+    <section class="business-hero business-shell" id="business-intro">
+<div class="business-hero-copy">
       <span class="business-eyebrow">הצעה מיוחדת לעסקים</span>
       <h1 class="business-title">שליח קבוע לעסק,<br><span>בלי להעסיק שליח.</span></h1>
       <p class="business-subtitle">שירות אישי וישיר למסמכים וחבילות קטנות, עם מחיר עסקי ברור, מעקב ועדכון — ועכשיו גם חשבון עסקי שמראה בכל רגע את היתרה והחיסכון.</p>
@@ -57,70 +66,71 @@
       </p>
       <div class="hero-actions"><a class="biz-button primary" href="#business-plans"><span class="material-symbols-outlined" aria-hidden="true">payments</span>השוואת מסלולים ומחירים</a><a class="biz-button secondary" href="https://wa.me/972534058498?text=%D7%A9%D7%9C%D7%95%D7%9D%20%D7%A2%D7%93%D7%9F%2C%20%D7%90%D7%A9%D7%9E%D7%97%20%D7%9C%D7%91%D7%93%D7%95%D7%A7%20%D7%90%D7%99%D7%96%D7%94%20%D7%9E%D7%A1%D7%9C%D7%95%D7%9C%20%D7%A2%D7%A1%D7%A7%D7%99%20%D7%9E%D7%AA%D7%90%D7%99%D7%9D%20%D7%9C%D7%99."><span class="material-symbols-outlined" aria-hidden="true">chat</span>בדיקת התאמה בוואטסאפ</a></div>
       <div class="city-pills" aria-label="אזורי שירות מרכזיים"><span>תל אביב</span><span>רמת גן</span><span>גבעתיים</span><span>בני ברק</span><span>ועוד 17 ערים</span></div>
+      </div>
+      <div class="business-hero-scene" aria-hidden="true">
+        <div class="business-scene-orbit"></div><div class="business-scene-platform"></div>
+        <div class="business-pass"><span>EdenMish</span><span class="material-symbols-outlined">account_balance_wallet</span><strong>החשבון העסקי שלי</strong><small>הכול במקום אחד</small></div>
+        <img src="/assets/service-standard-3d.webp" alt="" width="420" height="420"/>
+        <span class="business-scene-label"><i></i> העסק שלכם. הדרך שלנו.</span>
+      </div>
     </section>
+    <nav class="business-chapters business-shell" aria-label="פרקי המסלול העסקי">
+      <a href="#starter-offers"><span>01</span> חבילות התחלה</a>
+      <a href="#business-plans"><span>02</span> מסלולים עסקיים</a>
+      <a href="#how-business-section"><span>03</span> איך זה עובד</a>
+      <a href="/business-account.html" aria-label="החשבון שלי"><span class="material-symbols-outlined" aria-hidden="true">person</span> החשבון שלי</a>
+    </nav>
 
-    <section class="business-section business-shell" aria-labelledby="starter-offers-title">
-      <div class="section-heading"><p class="section-kicker">שתי ההצעות המקוריות</p><h2 id="starter-offers-title">מתחילים בדרך שמתאימה לכם</h2><p>רוצים לבדוק את השירות או עובדים רק באזור 1? שתי ההצעות האלה נשארות בדיוק בשביל התחלה פשוטה ואישית.</p></div>
-      <div class="offer-grid">
-        <article class="offer-card">
-          <img class="card-art" src="/assets/business-trial.webp" alt="שליח על אופנוע מתחיל מסלול משלוח באזור עירוני" width="1200" height="800" loading="eager">
-          <div class="card-top"><div><p class="card-audience">להתחיל בלי התחייבות</p><h3 class="card-name">חבילת ניסיון</h3></div><div class="card-icon"><span class="material-symbols-outlined" aria-hidden="true">rocket_launch</span></div></div>
+    <section id="business-plans" class="business-shell business-plan-section" aria-labelledby="business-plans-title">
+<div id="starter-offers" class="business-plan-selector" data-plan-selector>
+<div class="business-selector-heading"><p>בחרו את הקצב של העסק שלכם</p><h2 id="business-plans-title">איזה מסלול עסקי מתאים לכם?</h2></div>
+<div class="business-plan-controls" data-plan-controls hidden></div>
+<div class="business-plan-stage"><div class="business-plan-deck" tabindex="0" aria-label="חמש חבילות לעסק, החליקו או השתמשו בחצים"><article id="business-plan-0" data-plan-name="ניסיון" class="offer-card">
+          <div class="business-plan-skin business-plan-skin--trial" aria-hidden="true"><div class="business-skin-pass"><span>EdenMish</span><strong>5</strong><small>חבילת ניסיון</small></div><img src="/assets/package-small-3d.webp" alt="" width="420" height="420" loading="lazy"/></div>
+<div class="business-plan-content">          <div class="card-top"><div><p class="card-audience">להתחיל בלי התחייבות</p><h3 class="card-name">חבילת ניסיון</h3></div><div class="card-icon"><span class="material-symbols-outlined" aria-hidden="true">rocket_launch</span></div></div>
           <div class="card-price"><strong>150</strong><span>₪ בתשלום מראש</span></div><p class="card-summary">5 משלוחים חסכוניים באזור 1</p>
           <div class="saving-callout"><strong>חיסכון כולל ₪25</strong><span>שווי רגיל ₪175 · חיסכון של כ־14%</span></div>
-          <div class="price-breakdown"><div class="price-row"><span>מחיר רגיל למשלוח</span><b class="old-price">₪35</b></div><div class="price-row"><span>מחיר במסגרת החבילה</span><b>₪30</b></div><div class="price-row"><span>מספר משלוחים</span><b>5</b></div></div>
+          <details class="business-price-details"><summary>פירוט מחירים וחיסכון <span aria-hidden="true">+</span></summary><div class="price-breakdown"><div class="price-row"><span>מחיר רגיל למשלוח</span><b class="old-price">₪35</b></div><div class="price-row"><span>מחיר במסגרת החבילה</span><b>₪30</b></div><div class="price-row"><span>מספר משלוחים</span><b>5</b></div></div></details>
           <ul class="card-benefits"><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>מימוש בתוך 14 יום</li><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>תשלום מראש; חבילה אחת לעסק</li><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>חשבון עסקי, יתרה והיסטוריית חיובים</li></ul>
-          <a class="biz-button primary" href="/business-account.html?plan=trial"><span class="material-symbols-outlined" aria-hidden="true">person_add</span>פתיחת חשבון ובחירת ניסיון</a>
-        </article>
-
-        <article class="offer-card featured">
-          <span class="card-ribbon">המסלול לעסק קבוע</span><img class="card-art" src="/assets/business-wallet.webp" alt="ארנק דיגיטלי מחבר רשת של שליחים על אופנועים" width="1200" height="800" loading="lazy">
-          <div class="card-top"><div><p class="card-audience">יתרה עסקית לשימוש חודשי</p><h3 class="card-name">ארנק עסקי</h3></div><div class="card-icon"><span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span></div></div>
+          </div><a class="biz-button primary" href="/business-account.html?plan=trial"><span class="material-symbols-outlined" aria-hidden="true">person_add</span>פתיחת חשבון ובחירת ניסיון</a>
+        </article><article id="business-plan-1" data-plan-name="ארנק עסקי" class="offer-card featured">
+          <span class="card-ribbon">המסלול לעסק קבוע</span><div class="business-plan-skin business-plan-skin--wallet" aria-hidden="true"><div class="business-skin-pass"><span>EdenMish</span><strong>50</strong><small>ארנק עסקי</small></div><img src="/assets/package-medium-3d.webp" alt="" width="420" height="420" loading="lazy"/></div>
+<div class="business-plan-content">          <div class="card-top"><div><p class="card-audience">יתרה עסקית לשימוש חודשי</p><h3 class="card-name">ארנק עסקי</h3></div><div class="card-icon"><span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span></div></div>
           <div class="card-price"><strong>1,500</strong><span>₪ בתשלום מראש</span></div><p class="card-summary">50 משלוחים חסכוניים באזור 1</p>
           <div class="saving-callout"><strong>חיסכון כולל ₪250</strong><span>שווי רגיל ₪1,750 · חיסכון של כ־14%</span></div>
-          <div class="price-breakdown"><div class="price-row"><span>מחיר רגיל למשלוח</span><b class="old-price">₪35</b></div><div class="price-row"><span>ניכוי מהיתרה למשלוח</span><b>₪30</b></div><div class="price-row"><span>מספר משלוחים</span><b>50</b></div></div>
+          <details class="business-price-details"><summary>פירוט מחירים וחיסכון <span aria-hidden="true">+</span></summary><div class="price-breakdown"><div class="price-row"><span>מחיר רגיל למשלוח</span><b class="old-price">₪35</b></div><div class="price-row"><span>ניכוי מהיתרה למשלוח</span><b>₪30</b></div><div class="price-row"><span>מספר משלוחים</span><b>50</b></div></div></details>
           <ul class="card-benefits"><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>היתרה תקפה ל־30 יום</li><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>חשבון עסקי, יתרה והיסטוריית חיובים</li><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>מתאים למשלוחים חסכוניים קבועים באזור 1</li></ul>
-          <a class="biz-button primary" href="/business-account.html?plan=wallet"><span class="material-symbols-outlined" aria-hidden="true">person_add</span>פתיחת חשבון ובחירת ארנק עסקי</a>
-        </article>
-      </div>
-    </section>
-
-    <section id="business-plans" class="business-section business-shell" aria-labelledby="business-plans-title">
-      <div class="section-heading"><p class="section-kicker">Silver · Gold · Platinum</p><h2 id="business-plans-title">איזה מסלול עסקי מתאים לכם?</h2><p>המסלולים החדשים מיועדים לעסק שרוצה לנהל הכול לבד: תשלום מאובטח, יתרה בזמן אמת, מחיר עסקי אוטומטי והיסטוריית חיובים.</p></div>
-      <div class="value-strip"><div class="value-item"><strong>ללא דמי מנוי</strong><span>כל שקל ששילמתם הופך לקרדיט למשלוחים.</span></div><div class="value-item"><strong>מחיר לפני הזמנה</strong><span>רואים כמה עולה המשלוח וכמה חסכתם מול המחיר הרגיל.</span></div><div class="value-item"><strong>חיוב מדויק</strong><span>הקרדיט נשמר מראש ומנוכה רק כשהמשלוח מבוצע.</span></div></div>
-      <div class="plan-grid">
-        <article class="offer-card">
-          <img class="card-art" src="/assets/business-silver.webp" alt="שליח על אופנוע מחבר ארבע נקודות שירות במסלול עירוני" width="1200" height="800" loading="lazy">
-          <div class="card-top"><div><p class="card-audience">לעסק מקומי באזור 1</p><h3 class="card-name">Silver · כסף</h3></div><div class="card-icon"><span class="material-symbols-outlined" aria-hidden="true">business_center</span></div></div>
+          </div><a class="biz-button primary" href="/business-account.html?plan=wallet"><span class="material-symbols-outlined" aria-hidden="true">person_add</span>פתיחת חשבון ובחירת ארנק עסקי</a>
+        </article><article id="business-plan-2" data-plan-name="Silver" class="offer-card">
+          <div class="business-plan-skin business-plan-skin--silver" aria-hidden="true"><div class="business-skin-pass"><span>EdenMish</span><strong>Silver</strong><small>BUSINESS</small></div><img src="/assets/service-eco-3d.webp" alt="" width="420" height="420" loading="lazy"/></div>
+<div class="business-plan-content">          <div class="card-top"><div><p class="card-audience">לעסק מקומי באזור 1</p><h3 class="card-name">Silver · כסף</h3></div><div class="card-icon"><span class="material-symbols-outlined" aria-hidden="true">business_center</span></div></div>
           <div class="card-price"><strong>600</strong><span>₪ קרדיט</span></div><p class="card-summary">למשלוחים חסכוניים ורגילים בתל אביב, רמת גן, גבעתיים ובני ברק</p>
           <div class="saving-callout"><strong>חיסכון מוערך ₪65</strong><span>בדוגמה של 13 משלוחים רגילים באזור 1</span></div>
-          <div class="price-breakdown"><div class="price-row"><span>מחיר רגיל לדוגמה</span><b class="old-price">₪50</b></div><div class="price-row"><span>מחיר Silver</span><b>₪45</b></div><div class="price-row"><span>חיסכון למשלוח</span><b>₪5</b></div><div class="price-row"><span>יתרה אחרי 13 משלוחים</span><b>₪15</b></div></div>
-          <ul class="card-benefits"><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>אזור שירות 1</li><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>עד 20 משלוחים חסכוניים</li><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>קרדיט תקף ל־60 יום</li></ul><a class="biz-button primary" href="/business-account.html?plan=silver">פתיחת חשבון ובחירת Silver</a>
-        </article>
-
-        <article class="offer-card featured">
-          <span class="card-ribbon">הבחירה המומלצת</span><img class="card-art" src="/assets/business-gold.webp" alt="שליח על אופנוע נכנס למסלול עדיפות המחבר שני אזורי שירות" width="1200" height="800" loading="lazy">
-          <div class="card-top"><div><p class="card-audience">לעסק שצריך יותר כיסוי וגמישות</p><h3 class="card-name">Gold · זהב</h3></div><div class="card-icon"><span class="material-symbols-outlined" aria-hidden="true">workspace_premium</span></div></div>
+          <details class="business-price-details"><summary>פירוט מחירים וחיסכון <span aria-hidden="true">+</span></summary><div class="price-breakdown"><div class="price-row"><span>מחיר רגיל לדוגמה</span><b class="old-price">₪50</b></div><div class="price-row"><span>מחיר Silver</span><b>₪45</b></div><div class="price-row"><span>חיסכון למשלוח</span><b>₪5</b></div><div class="price-row"><span>יתרה אחרי 13 משלוחים</span><b>₪15</b></div></div></details>
+          <ul class="card-benefits"><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>אזור שירות 1</li><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>עד 20 משלוחים חסכוניים</li><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>קרדיט תקף ל־60 יום</li></ul></div><a class="biz-button primary" href="/business-account.html?plan=silver">פתיחת חשבון ובחירת Silver</a>
+        </article><article id="business-plan-3" data-plan-name="Gold" class="offer-card featured">
+          <span class="card-ribbon">הבחירה המומלצת</span><div class="business-plan-skin business-plan-skin--gold" aria-hidden="true"><div class="business-skin-pass"><span>EdenMish</span><strong>Gold</strong><small>BUSINESS</small></div><img src="/assets/service-standard-3d.webp" alt="" width="420" height="420" loading="lazy"/></div>
+<div class="business-plan-content">          <div class="card-top"><div><p class="card-audience">לעסק שצריך יותר כיסוי וגמישות</p><h3 class="card-name">Gold · זהב</h3></div><div class="card-icon"><span class="material-symbols-outlined" aria-hidden="true">workspace_premium</span></div></div>
           <div class="card-price"><strong>1,500</strong><span>₪ קרדיט</span></div><p class="card-summary">אזורים 1–2, משלוח חסכוני, רגיל ומהיר ועדיפות בתור</p>
           <div class="saving-callout"><strong>חיסכון מוערך ₪115</strong><span>בדוגמה של 23 משלוחים רגילים באזור 2</span></div>
-          <div class="price-breakdown"><div class="price-row"><span>מחיר רגיל לדוגמה</span><b class="old-price">₪70</b></div><div class="price-row"><span>מחיר Gold</span><b>₪65</b></div><div class="price-row"><span>חיסכון למשלוח</span><b>₪5</b></div><div class="price-row"><span>יתרה אחרי 23 משלוחים</span><b>₪5</b></div></div>
-          <ul class="card-benefits"><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>כיסוי אזורים 1–2</li><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>כולל משלוח מהיר</li><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>קרדיט תקף ל־60 יום</li></ul><a class="biz-button primary" href="/business-account.html?plan=gold">פתיחת חשבון ובחירת Gold</a>
-        </article>
-
-        <article class="offer-card">
-          <img class="card-art" src="/assets/business-platinum.webp" alt="שליח על אופנוע נוסע אל מרכז שליטה המחבר שלושה אזורי שירות" width="1200" height="800" loading="lazy">
-          <div class="card-top"><div><p class="card-audience">לנפח גבוה ולכיסוי מלא</p><h3 class="card-name">Platinum · פלטינום</h3></div><div class="card-icon"><span class="material-symbols-outlined" aria-hidden="true">diamond</span></div></div>
+          <details class="business-price-details"><summary>פירוט מחירים וחיסכון <span aria-hidden="true">+</span></summary><div class="price-breakdown"><div class="price-row"><span>מחיר רגיל לדוגמה</span><b class="old-price">₪70</b></div><div class="price-row"><span>מחיר Gold</span><b>₪65</b></div><div class="price-row"><span>חיסכון למשלוח</span><b>₪5</b></div><div class="price-row"><span>יתרה אחרי 23 משלוחים</span><b>₪5</b></div></div></details>
+          <ul class="card-benefits"><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>כיסוי אזורים 1–2</li><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>כולל משלוח מהיר</li><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>קרדיט תקף ל־60 יום</li></ul></div><a class="biz-button primary" href="/business-account.html?plan=gold">פתיחת חשבון ובחירת Gold</a>
+        </article><article id="business-plan-4" data-plan-name="Platinum" class="offer-card">
+          <div class="business-plan-skin business-plan-skin--platinum" aria-hidden="true"><div class="business-skin-pass"><span>EdenMish</span><strong>Platinum</strong><small>BUSINESS</small></div><img src="/assets/service-flash-3d.webp" alt="" width="420" height="420" loading="lazy"/></div>
+<div class="business-plan-content">          <div class="card-top"><div><p class="card-audience">לנפח גבוה ולכיסוי מלא</p><h3 class="card-name">Platinum · פלטינום</h3></div><div class="card-icon"><span class="material-symbols-outlined" aria-hidden="true">diamond</span></div></div>
           <div class="card-price"><strong>3,000</strong><span>₪ קרדיט</span></div><p class="card-summary">כל אזורי השירות, המחירים העסקיים הטובים ביותר ועדיפות ראשונה</p>
           <div class="saving-callout"><strong>חיסכון מוערך ₪308</strong><span>בדוגמה של 28 משלוחים רגילים באזור 3</span></div>
-          <div class="price-breakdown"><div class="price-row"><span>מחיר רגיל לדוגמה</span><b class="old-price">₪115</b></div><div class="price-row"><span>מחיר Platinum</span><b>₪104</b></div><div class="price-row"><span>חיסכון למשלוח</span><b>₪11</b></div><div class="price-row"><span>יתרה אחרי 28 משלוחים</span><b>₪88</b></div></div>
-          <ul class="card-benefits"><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>כיסוי מלא באזורים 1–3</li><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>עדיפות ראשונה בטיפול</li><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>קרדיט תקף ל־60 יום</li></ul><a class="biz-button primary" href="/business-account.html?plan=platinum">פתיחת חשבון ובחירת Platinum</a>
-        </article>
-      </div>
-      <p class="plan-note">החיסכון במסלולים מחושב מול מחיר הבסיס הרגיל למשלוח קטן בשעות הפעילות, לפי המחירון הנוכחי. תוספות גודל, ערב וסוף שבוע מחושבות בנפרד. מספר המשלוחים הוא המחשה; הקרדיט מחויב לפי השימוש בפועל.</p>
-    </section>
+          <details class="business-price-details"><summary>פירוט מחירים וחיסכון <span aria-hidden="true">+</span></summary><div class="price-breakdown"><div class="price-row"><span>מחיר רגיל לדוגמה</span><b class="old-price">₪115</b></div><div class="price-row"><span>מחיר Platinum</span><b>₪104</b></div><div class="price-row"><span>חיסכון למשלוח</span><b>₪11</b></div><div class="price-row"><span>יתרה אחרי 28 משלוחים</span><b>₪88</b></div></div></details>
+          <ul class="card-benefits"><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>כיסוי מלא באזורים 1–3</li><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>עדיפות ראשונה בטיפול</li><li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>קרדיט תקף ל־60 יום</li></ul></div><a class="biz-button primary" href="/business-account.html?plan=platinum">פתיחת חשבון ובחירת Platinum</a>
+        </article></div></div>
+<p class="business-plan-hint">החליקו בין הכרטיסים ובחרו את המסלול שמתאים לכם</p>
+</div>
+<div class="business-selector-context"><div class="value-strip"><div class="value-item"><strong>ללא דמי מנוי</strong><span>כל שקל ששילמתם הופך לקרדיט למשלוחים.</span></div><div class="value-item"><strong>מחיר לפני הזמנה</strong><span>רואים כמה עולה המשלוח וכמה חסכתם מול המחיר הרגיל.</span></div><div class="value-item"><strong>חיוב מדויק</strong><span>הקרדיט נשמר מראש ומנוכה רק כשהמשלוח מבוצע.</span></div></div><details class="business-offer-context"><summary>על החבילות והמסלולים</summary><div class="section-heading"><p class="section-kicker">שתי ההצעות המקוריות</p><h2 id="starter-offers-title">מתחילים בדרך שמתאימה לכם</h2><p>רוצים לבדוק את השירות או עובדים רק באזור 1? שתי ההצעות האלה נשארות בדיוק בשביל התחלה פשוטה ואישית.</p></div><div class="section-heading"><p class="section-kicker">Silver · Gold · Platinum</p><h2 id="business-plans-explained">איזה מסלול עסקי מתאים לכם?</h2><p>המסלולים החדשים מיועדים לעסק שרוצה לנהל הכול לבד: תשלום מאובטח, יתרה בזמן אמת, מחיר עסקי אוטומטי והיסטוריית חיובים.</p></div></details><p class="plan-note">החיסכון במסלולים מחושב מול מחיר הבסיס הרגיל למשלוח קטן בשעות הפעילות, לפי המחירון הנוכחי. תוספות גודל, ערב וסוף שבוע מחושבות בנפרד. מספר המשלוחים הוא המחשה; הקרדיט מחויב לפי השימוש בפועל.</p></div>
+</section>
 
-    <section class="business-section business-shell" aria-labelledby="how-business-works">
+    <section id="how-business-section" class="business-section business-shell" aria-labelledby="how-business-works">
       <div class="section-heading"><p class="section-kicker">פשוט להתחיל</p><h2 id="how-business-works">כך החשבון העסקי עובד</h2></div>
-      <div class="steps"><article class="step"><div class="step-number">1</div><h3>נכנסים עם האימייל</h3><p>מקבלים קישור כניסה וקוד בן שש ספרות. אין סיסמה שצריך לזכור.</p></article><article class="step"><div class="step-number">2</div><h3>בוחרים מסלול ומשלמים</h3><p>התשלום נעשה בסביבה המאובטחת של Shopify ו‑PayPlus, וכל הסכום הופך לקרדיט.</p></article><article class="step"><div class="step-number">3</div><h3>שולחים ורואים את החיוב</h3><p>המערכת מציגה יתרה, שומרת את הסכום להזמנה ומנכה אותו לאחר ביצוע המשלוח.</p></article></div>
+<div class="process-story" data-process-story><div class="process-deck" tabindex="0" aria-label="כך החשבון העסקי עובד, החליקו בין הכרטיסים"><article class="process-card" data-story-label="כניסה"><div class="process-visual process-visual--login" aria-hidden="true"><div class="story-phone"><span class="story-phone-brand">EdenMish</span><span class="story-phone-symbol material-symbols-outlined">mark_email_read</span><i></i><i></i><b class="story-phone-action">••••••</b></div><img class="story-parcel" src="/assets/package-small-3d.webp" alt="" width="512" height="512" loading="lazy"/></div><div class="process-card-copy"><h3>נכנסים עם האימייל</h3><p>מקבלים קישור כניסה וקוד בן שש ספרות. אין סיסמה שצריך לזכור.</p></div></article><article class="process-card" data-story-label="מסלול"><div class="process-visual process-visual--wallet" aria-hidden="true"><div class="story-phone"><span class="story-phone-brand">EdenMish</span><span class="story-phone-symbol material-symbols-outlined">account_balance_wallet</span><i></i><i></i><b class="story-phone-action">✓</b></div><img class="story-parcel" src="/assets/package-medium-3d.webp" alt="" width="512" height="512" loading="lazy"/></div><div class="process-card-copy"><h3>בוחרים מסלול ומשלמים</h3><p>התשלום נעשה בסביבה המאובטחת של Shopify ו‑PayPlus, וכל הסכום הופך לקרדיט.</p></div></article><article class="process-card" data-story-label="משלוחים"><div class="process-visual process-visual--tracking" aria-hidden="true"><div class="story-phone story-phone--map"><span class="story-phone-brand">EdenMish</span><svg viewBox="0 0 100 140"><path d="M25 25C95 40 5 90 75 116"/><circle cx="25" cy="25" r="7"/><circle cx="75" cy="116" r="7"/></svg></div><img class="story-scooter" src="/assets/service-standard-3d.webp" alt="" width="420" height="420" loading="lazy"/></div><div class="process-card-copy"><h3>שולחים ורואים את החיוב</h3><p>המערכת מציגה יתרה, שומרת את הסכום להזמנה ומנכה אותו לאחר ביצוע המשלוח.</p></div></article></div><div class="process-controls" data-process-controls hidden></div></div>
       <div class="business-terms"><strong>תנאים חשובים:</strong> חבילת הניסיון והארנק המקורי מיועדים לעסקים באזור 1 ובכפוף לזמינות ולאישור EdenMish. משלוחים שאינם כלולים בחבילה, המתנה, שעות ערב, סוף שבוע ופריט בינוני מחויבים לפי המחירון. יתרה שלא נוצלה פוקעת בתום תקופת ההצעה או המסלול. המחירים סופיים; EdenMish הוא עוסק פטור ואינו גובה מע״מ. <a class="text-primary underline" href="/terms.html">לתנאים המלאים</a>.</div>
     </section>
 
@@ -128,6 +138,6 @@
   </main>
 
   <footer class="w-full pt-stack-lg pb-stack-md bg-surface-container-lowest border-t border-glass-border"><div class="flex flex-col md:flex-row-reverse justify-between items-center px-gutter-desktop max-w-container-max mx-auto gap-stack-md"><a class="font-display-lg text-headline-md font-bold text-primary" href="/">EdenMish</a><div class="flex flex-wrap justify-center gap-x-stack-lg gap-y-stack-sm"><a class="text-on-surface-variant hover:text-secondary" href="/">בית</a><a class="text-on-surface-variant hover:text-secondary" href="/booking.html">שירותים</a><a class="text-primary font-bold" href="/business">לעסקים</a><a class="text-on-surface-variant hover:text-secondary" href="/track.html">מעקב משלוחים</a><a class="text-on-surface-variant hover:text-secondary" href="/about.html">אודות</a><a class="text-on-surface-variant hover:text-secondary" href="/terms.html">תקנון</a><a class="text-on-surface-variant hover:text-secondary" href="/privacy.html">מדיניות פרטיות</a><a class="text-on-surface-variant hover:text-secondary" href="/accessibility.html">נגישות</a></div><span class="text-on-surface-variant text-label-sm">© 2026 EdenMish</span></div></footer>
-  <script src="/assets/mobile-nav.js" defer></script>
+  <script src="/assets/mobile-nav.js?v=20261008-nav" defer></script>
 </body>
 </html>

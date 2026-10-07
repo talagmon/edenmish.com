@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html class="dark" dir="rtl" lang="he">
+<html class="" dir="rtl" lang="he">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
@@ -28,8 +28,15 @@
   @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
   .animate-shake { animation: shake .4s ease-in-out; }
 </style>
+<link rel="stylesheet" href="/assets/tracking-film.css"/>
+<script src="/assets/tracking-film.js" defer></script>
+<link rel="stylesheet" href="/assets/eden-light.css?v=20261008-nav"/>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/assets/journey-theme.css"/>
+<link rel="stylesheet" href="/assets/process-story.css?v=5"/>
+<script src="/assets/process-story.js?v=1" defer></script>
 </head>
-<body class="bg-background text-on-background selection:bg-primary/30">
+<body class="eden-light bg-background text-on-background selection:bg-primary/30">
 <div id="toast" class="fixed top-20 left-1/2 -translate-x-1/2 z-[60] glass-panel rounded-full px-stack-md py-2 text-label-bold opacity-0 transition-opacity duration-300 pointer-events-none">מתחבר למערכת המעקב של עדן…</div>
 <!-- Nav -->
 <header class="fixed top-0 w-full z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border shadow-sm h-16">
@@ -50,7 +57,7 @@
 
 <!-- VIEW: ENTRY -->
 <section id="view-entry">
-<div class="mb-stack-lg text-center md:text-right relative z-10">
+<div class="mb-stack-lg text-center md:text-right relative z-10 tracking-entry-visual"><div class="process-visual process-visual--tracking" aria-hidden="true"><div class="story-phone story-phone--map"><span class="story-phone-brand">EdenMish</span><svg viewBox="0 0 100 140"><path d="M25 25C95 40 5 90 75 116"/><circle cx="25" cy="25" r="7"/><circle cx="75" cy="116" r="7"/></svg></div><img class="story-scooter" src="/assets/service-standard-3d.webp" alt="" width="420" height="420" loading="lazy"/></div>
 <h1 class="font-display-lg text-headline-lg-mobile md:text-display-lg mb-stack-sm text-primary">איפה החבילה שלך?</h1>
 <p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl md:ml-0">הזינו מספר מעקב וקבלו עדכון חי על מיקום השליח וזמן הגעה משוער.</p>
 <p class="brand-slogan brand-slogan--responsive">
@@ -66,18 +73,11 @@
 </form>
 <p id="entry-msg" class="hidden mt-4 text-status-alert font-label-bold"></p>
 </div>
-<!-- Video Section -->
-<div class="relative z-10 mt-stack-lg">
-<div class="glass-card rounded-[2rem] overflow-hidden group relative h-[300px] md:h-[480px]">
-<video class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" autoplay muted loop playsinline>
-  <source src="/assets/edenmish-v2.mp4" type="video/mp4">
-</video>
-<div class="absolute inset-0 bg-gradient-to-t from-surface-dim via-transparent to-transparent pointer-events-none"></div>
-<div class="absolute bottom-8 right-8 text-right p-6 glass-card rounded-xl pointer-events-none">
-<div class="text-primary font-bold text-headline-md">מעקב חי</div>
-<div class="text-on-surface-variant text-label-sm uppercase tracking-widest">רואים את השליח בזמן אמת</div>
-</div>
-</div>
+<!-- Decorative film is separate from the real tracking map. -->
+<div class="tracking-film-shell">
+<video id="tracking-film" muted loop playsinline preload="none" poster="/assets/eden-tayelet-branded.webp" aria-label="סרטון המחשה של קטנוע EdenMish בטיילת תל אביב" data-src="/assets/eden-tayelet-branded.mp4"></video>
+<button id="tracking-motion" type="button" aria-pressed="false" hidden>עצירת תנועה</button>
+<p>הדרך של EdenMish <span>סרטון המחשה, אינו מיקום המשלוח שלכם.</span></p>
 </div>
 </section>
 
@@ -178,8 +178,7 @@
 </div>
 
 <div class="flex items-center justify-center gap-2 mt-3 opacity-60">
-  <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener"><img src="/assets/se-footer.png" class="w-7 h-7 rounded-full" alt="Six Elements Altiora"></a>
-  <span class="text-label-sm">פותח על ידי <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Six Elements Altiora</a> · <a href="https://talagmon.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Tal Agmon</a></span>
+  <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener"><img src="/assets/tal-sunflower.png" width="56" height="56" loading="lazy" decoding="async" style="width:56px;height:56px;object-fit:contain" alt="הלוגו של טל אגמון"></a>
 <span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.30.1(293658)</span>
 </div>
 </footer>
@@ -730,6 +729,6 @@ $("otp-resend").addEventListener("click", async () => {
   else { show("entry"); }
 })();
 </script>
-<script src="/assets/mobile-nav.js" defer></script>
+<script src="/assets/mobile-nav.js?v=20261008-nav" defer></script>
 </body>
 </html>

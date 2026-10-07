@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html class="dark" dir="rtl" lang="he">
+<html class="" dir="rtl" lang="he">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
@@ -28,8 +28,14 @@
   @keyframes eden-about-sunflower-spin { to { transform: rotate(1turn); } }
   @media (prefers-reduced-motion: reduce) { .eden-about-sunflower { animation: none; } }
 </style>
+<link rel="stylesheet" href="/assets/eden-light.css?v=20261008-nav"/>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/assets/journey-theme.css"/>
+<link rel="stylesheet" href="/assets/process-story.css?v=5"/>
+<script src="/assets/process-story.js?v=1" defer></script>
+<link rel="stylesheet" href="/assets/about-journey.css?v=1"/>
 </head>
-<body class="font-body-md text-body-md">
+<body class="eden-light about-page font-body-md text-body-md">
 <!-- TopNavBar -->
 <nav class="fixed top-0 w-full z-50 bg-glass-bg backdrop-blur-xl border-b border-glass-border shadow-sm">
 <div class="flex flex-row-reverse justify-between items-center px-gutter-desktop max-w-container-max mx-auto h-16">
@@ -44,12 +50,12 @@
 <a href="/booking.html" class="bg-primary-container text-on-primary-container px-6 py-2 rounded-lg font-label-bold active:scale-95 transition-transform hover:opacity-90">שלחו עכשיו</a>
 </div>
 </nav>
-<main class="pt-24 pb-stack-lg px-gutter-mobile md:px-gutter-desktop max-w-container-max mx-auto relative overflow-hidden">
+<main class="pt-24 pb-stack-lg px-gutter-mobile md:px-gutter-desktop max-w-container-max mx-auto relative">
 <div class="absolute top-[-10%] right-[-10%] w-96 h-96 bg-primary opacity-10 blur-[120px] rounded-full pointer-events-none"></div>
 <div class="absolute bottom-[20%] left-[-10%] w-80 h-80 bg-secondary opacity-10 blur-[100px] rounded-full pointer-events-none"></div>
 <!-- Hero -->
-<section class="about-founder-hero mb-24" aria-labelledby="about-founder-title">
-<div class="about-founder-copy">
+<section id="about-eden" class="about-founder-hero mb-24" aria-labelledby="about-founder-title">
+<div class="about-founder-copy"><p class="about-chapter-label">01 / האיש שמאחורי המשלוח</p>
 <h1 id="about-founder-title">
 <span>השליחות האישית</span>
 <span>של <span class="about-founder-title__eden">עדן</span></span>
@@ -62,14 +68,14 @@
 </p>
 <div class="about-founder-values">
 <div class="about-founder-value">
-<span class="material-symbols-outlined" aria-hidden="true">speed</span>
+<img class="about-value-art" src="/assets/service-flash-3d.webp" alt="" width="420" height="420" loading="lazy"/>
 <div>
 <h3>דיוק מירבי</h3>
 <p>הגעה תוך דקות, לא שעות.</p>
 </div>
 </div>
 <div class="about-founder-value">
-<span class="material-symbols-outlined" aria-hidden="true">verified_user</span>
+<img class="about-value-art" src="/assets/courier-instructions-3d.webp" alt="" width="420" height="420" loading="lazy"/>
 <div>
 <h3>אחריות אישית</h3>
 <p>החבילה שלכם בידיים בטוחות.</p>
@@ -77,27 +83,41 @@
 </div>
 </div>
 </div>
-<div class="about-founder-portrait">
+<div class="about-founder-portrait"><span class="about-portrait-brand" aria-hidden="true">EdenMish</span>
 <img alt="פורטרט של עדן אריאלי, היזם שמאחורי EdenMish" src="/assets/eden-arieli-portrait.webp" width="971" height="1619"/>
 <a class="about-founder-portrait__cta" href="/booking.html">
 <span>שלחו עכשיו</span>
 </a>
 </div>
 </section>
-<!-- Brand film -->
-<section class="about-story-video mb-24" aria-label="EdenMish בפעולה">
-<video autoplay muted loop playsinline preload="metadata">
-<source src="/assets/edenmish-v0.mp4" type="video/mp4"/>
-</video>
-<div class="about-story-video__caption">
-<p class="brand-slogan brand-slogan--center">
-<span class="material-symbols-outlined" aria-hidden="true">route</span>
-מהזמנה עד מסירה — אתם בשליטה
-</p>
+<nav class="about-chapters" aria-label="פרקי הסיפור שלנו"><a href="#about-eden">עדן והסיפור</a><a href="#about-process">איך זה עובד</a><a href="#about-contact">מדברים עם עדן</a><a href="#about-questions">שאלות נפוצות</a></nav>
+<section id="about-process" class="about-process-story" aria-labelledby="about-process-title"><h2 id="about-process-title">מהזמנה עד מסירה</h2><p>אתם ממשיכים ביום. עדן דואג למשלוח.</p><div class="process-story" data-process-story><div class="process-deck" tabindex="0" aria-label="ארבעה צעדים מהזמנה למסירה, החליקו בין הכרטיסים"><article class="flow-card process-card" data-story-label="הזמנה"><div class="process-visual process-visual--order" aria-hidden="true"><div class="story-phone"><span class="story-phone-brand">EdenMish</span><span class="story-phone-symbol material-symbols-outlined">inventory_2</span><i></i><i></i><b class="story-phone-action">✓</b></div><img class="story-parcel" src="/assets/package-medium-3d.webp" alt="" width="512" height="512" loading="lazy"/></div>
+
+<div class="text-right">
+<h3 class="font-headline-md text-headline-md text-on-surface">1. הזמנה</h3>
+<p class="font-body-md text-body-md text-on-surface-variant">הזינו את פרטי המשלוח במערכת החכמה שלנו תוך פחות מדקה.</p>
 </div>
-</section>
+</article><article class="flow-card process-card" data-story-label="איסוף"><div class="process-visual process-visual--pickup" aria-hidden="true"><img src="/assets/process-pickup-3d.webp" alt="" width="560" height="560" loading="lazy"/></div>
+
+<div class="text-right">
+<h3 class="font-headline-md text-headline-md text-on-surface">2. איסוף מהיר</h3>
+<p class="font-body-md text-body-md text-on-surface-variant">שליח מגיע אליכם ברגע שההזמנה אושרה. אין המתנה מיותרת.</p>
+</div>
+</article><article class="flow-card process-card" data-story-label="מעקב"><div class="process-visual process-visual--tracking" aria-hidden="true"><div class="story-phone story-phone--map"><span class="story-phone-brand">EdenMish</span><svg viewBox="0 0 100 140"><path d="M25 25C95 40 5 90 75 116"/><circle cx="25" cy="25" r="7"/><circle cx="75" cy="116" r="7"/></svg></div><img class="story-scooter" src="/assets/service-standard-3d.webp" alt="" width="420" height="420" loading="lazy"/></div>
+
+<div class="text-right">
+<h3 class="font-headline-md text-headline-md text-on-surface">3. מעקב חי</h3>
+<p class="font-body-md text-body-md text-on-surface-variant">צפו במיקום המדויק של השליח על המפה בזמן אמת, בכל רגע נתון.</p>
+</div>
+</article><article class="flow-card process-card" data-story-label="מסירה"><div class="process-visual process-visual--delivery" aria-hidden="true"><img src="/assets/process-delivery-3d.webp" alt="" width="560" height="560" loading="lazy"/></div>
+
+<div class="text-right">
+<h3 class="font-headline-md text-headline-md text-on-surface">4. מסירה ואישור</h3>
+<p class="font-body-md text-body-md text-on-surface-variant">קבלת חתימה דיגיטלית וצילום POD (הוכחת מסירה) ישירות לנייד.</p>
+</div>
+</article></div><div class="process-controls" data-process-controls hidden></div></div><p class="brand-slogan brand-slogan--center">מהזמנה עד מסירה — אתם בשליטה</p></section>
 <!-- Contact + Area -->
-<section class="about-contact-console mb-24" aria-labelledby="about-contact-title">
+<section id="about-contact" class="about-contact-console mb-24" aria-labelledby="about-contact-title">
 <div class="about-contact-panel">
 <h2 id="about-contact-title">צרו איתנו קשר</h2>
 <div class="about-contact-actions">
@@ -137,7 +157,7 @@
 </div>
 </div>
 <aside class="about-area-panel" aria-labelledby="about-area-title">
-<img src="/assets/edenmish-city-orbit.webp" alt="מפה מסוגננת של גוש דן עם רשת אזורי המשלוחים של EdenMish" width="1536" height="1024" loading="lazy"/>
+<img src="/assets/eden-service-area-light.webp" alt="מפה מסוגננת של גוש דן עם רשת אזורי המשלוחים של EdenMish" width="1536" height="1024" loading="lazy"/>
 <div class="about-area-labels" aria-hidden="true">
 <span class="about-area-label about-area-label--tel-aviv">תל אביב</span>
 <span class="about-area-label about-area-label--ramat-gan">רמת גן</span>
@@ -155,7 +175,7 @@
 </aside>
 </section>
 <!-- FAQ -->
-<section class="about-faq mb-24" aria-labelledby="about-faq-title">
+<section id="about-questions" class="about-faq mb-24" aria-labelledby="about-faq-title">
 <header class="about-section-heading">
 <span class="about-section-kicker" aria-hidden="true">01</span>
 <h2 id="about-faq-title">שאלות <span>נפוצות</span></h2>
@@ -218,34 +238,15 @@
 <section class="about-team" aria-labelledby="about-team-title">
   <header class="about-section-heading">
     <span class="about-section-kicker" aria-hidden="true">02</span>
-    <h2 id="about-team-title">הצוות שמאחורי <span>EdenMish</span></h2>
+    <h2 id="about-team-title">מאחורי הקלעים של <span>EdenMish</span></h2>
   </header>
   <div class="about-team-shell">
-    <div class="about-team-people">
-      <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener" class="about-team-person">
-        <span class="about-team-person__visual about-team-person__visual--sunflower">
-          <img src="/assets/se-about-transparent.png" class="eden-about-sunflower" alt="Six Elements Altiora">
-        </span>
-        <div>
-          <h3>Six Elements Altiora Ltd</h3>
-          <p>עיצוב ופיתוח הפלטפורמה</p>
-        </div>
-      </a>
-      <a href="https://talagmon.com" target="_blank" rel="noopener" class="about-team-person">
-        <span class="about-team-person__visual">
-          <img src="/assets/tal-agmon-avatar.webp" alt="Tal Agmon">
-        </span>
-        <div>
-          <h3>Tal Agmon</h3>
-          <p>מייסד Six Elements</p>
-        </div>
-      </a>
-    </div>
+    <div class="about-team-people"><a href="https://sixelementsaltiora.com" target="_blank" rel="noopener" class="about-sunflower-mark" aria-label="Six Elements Altiora"><img src="/assets/tal-sunflower.png" class="eden-about-sunflower" alt="" width="180" height="180" loading="lazy"/></a></div>
     <div class="about-team-story">
       <span class="about-team-story__icon material-symbols-outlined" aria-hidden="true">auto_stories</span>
       <h3>הסיפור והאבטחה שמאחורי הפלטפורמה</h3>
       <p>
-        טל אגמון כתב באנגלית על בניית מערכת התפעול של EdenMish. במאמר נוסף בעברית אנחנו מסבירים כיצד בדקנו את האבטחה ומה עשינו לאחר שמצאנו נקודות שדרשו שיפור.
+        הסיפור של בניית מערכת התפעול של EdenMish, ומאמר בעברית על בדיקות האבטחה והשיפורים שעשינו כדי לשמור על המידע שלכם.
       </p>
       <div class="about-team-story__links">
         <a href="https://talagmon.com/2026/07/16/building-edenmish-delivery-operations-system/" target="_blank" rel="noopener">
@@ -281,8 +282,7 @@
 </div>
 
 <div class="flex items-center justify-center gap-2 mt-3 opacity-60">
-  <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener"><img src="/assets/se-footer.png" class="w-7 h-7 rounded-full" alt="Six Elements Altiora"></a>
-  <span class="text-label-sm">פותח על ידי <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Six Elements Altiora</a> · <a href="https://talagmon.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Tal Agmon</a></span>
+  <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener"><img src="/assets/tal-sunflower.png" width="56" height="56" loading="lazy" decoding="async" style="width:56px;height:56px;object-fit:contain" alt="הלוגו של טל אגמון"></a>
 <span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.30.1(293658)</span>
 </div>
 </footer>
@@ -293,6 +293,6 @@ function toggleFaq(el) {
   el.setAttribute('aria-expanded', el.classList.contains('active') ? 'true' : 'false');
 }
 </script>
-<script src="/assets/mobile-nav.js" defer></script>
+<script src="/assets/mobile-nav.js?v=20261008-nav" defer></script>
 </body>
 </html>

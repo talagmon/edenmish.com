@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html class="dark" dir="rtl" lang="he">
+<html class="eden-home" dir="rtl" lang="he">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
@@ -23,10 +23,15 @@
 <meta name="twitter:image" content="https://edenmish.com/assets/og-image.jpg"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800;900&amp;family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="/assets/styles.css?v=0.30.1-293658-43a4044"/>
 <link rel="stylesheet" href="/assets/site-nav.css" data-eden-site-nav-styles/>
+<link rel="stylesheet" href="/assets/eden-light.css?v=20261008-nav"/>
+<link rel="stylesheet" href="/assets/home-journey.css"/>
+<link rel="stylesheet" href="/assets/journey-navigation.css"/>
+
+<script src="/assets/journey-navigation.js" defer></script>
 <script src="/assets/analytics.js" defer></script>
 <script src="/assets/service-areas.js" defer></script>
 <link rel="icon" href="/assets/favicon.ico"/>
@@ -112,8 +117,11 @@ html.eden-a11y-motion *,html.eden-a11y-motion *::before,html.eden-a11y-motion *:
 @media (max-width:480px){.eden-floating-tools{right:12px;bottom:12px}.eden-floating-button{width:50px;height:50px;border-radius:14px}.eden-a11y-panel{bottom:120px}}
 @media (prefers-reduced-motion:reduce){.eden-floating-button{transition:none}}
 </style>
+<link rel="stylesheet" href="/assets/journey-theme.css"/>
+<link rel="stylesheet" href="/assets/process-story.css?v=5"/>
+<script src="/assets/process-story.js?v=1" defer></script>
 </head>
-<body class="home-page bg-surface-dim selection:bg-primary-container selection:text-on-primary-container">
+<body class="home-page eden-light bg-surface-dim selection:bg-primary-container selection:text-on-primary-container">
 <!-- TopNavBar -->
 <header class="home-header fixed top-0 w-full z-50">
 <div class="home-nav flex flex-row-reverse justify-between items-center px-gutter-mobile md:px-gutter-desktop max-w-container-max mx-auto h-16">
@@ -131,126 +139,74 @@ html.eden-a11y-motion *,html.eden-a11y-motion *::before,html.eden-a11y-motion *:
 </div>
 </header>
 <main class="home-main relative pt-16">
-<!-- Decorative Glows -->
-<div class="home-ambient home-ambient--one" aria-hidden="true"></div>
-<div class="home-ambient home-ambient--two" aria-hidden="true"></div>
-<!-- Hero Section -->
-<section class="home-hero relative flex items-center px-gutter-mobile md:px-gutter-desktop max-w-container-max mx-auto">
-<div class="home-hero-backdrop absolute inset-0" aria-hidden="true">
-<img class="home-hero-backdrop__media w-full h-full object-cover" src="/assets/edenmish-home-hero-neon.webp" alt="" width="1536" height="1024" fetchpriority="high" decoding="async"/>
-</div>
-<div class="home-hero-backdrop__shade absolute inset-0" aria-hidden="true"></div>
-<div class="home-hero-grid grid grid-cols-1 lg:grid-cols-2 gap-stack-lg items-center w-full">
-<div class="home-hero-copy text-center lg:text-right space-y-stack-md z-10">
-<span class="home-eyebrow inline-flex items-center gap-2 px-4 py-2 rounded-full font-label-bold text-label-sm">
-<span class="home-live-dot" aria-hidden="true"></span>
-דור חדש של לוגיסטיקה חכמה
-</span>
-<h1 class="home-title font-display-lg text-on-surface">
-משלוחים חכמים <br/>
-<span>בגוש דן</span>
-</h1>
-<p class="home-lead font-body-lg text-body-lg text-on-surface-variant max-w-xl mx-auto lg:mr-0 lg:ml-auto">
-טכנולוגיה מתקדמת פוגשת שירות אישי. אנחנו משנים את הדרך שבה חבילות נעות במרכז הארץ, עם דיוק מקסימלי ושקיפות מלאה.
-</p>
-<div class="home-actions flex flex-col sm:flex-row-reverse justify-center lg:justify-start gap-stack-md pt-4">
-<a href="/booking.html" class="home-primary-action text-on-primary px-10 py-4 rounded-xl font-headline-md active:scale-95 transition-all text-center">
-הזמינו עכשיו
-</a>
-<a href="/track.html" class="home-secondary-action text-on-surface px-10 py-4 rounded-xl font-headline-md flex items-center justify-center gap-2 active:scale-95 transition-all">
-<span class="material-symbols-outlined" aria-hidden="true">track_changes</span>
-עקבו אחרי משלוח
-</a>
-</div>
-<p class="home-slogan-signature">
-תזמינו בדקה. תשכחו מהדאגה.
-</p>
-<article class="home-live-card text-right" aria-label="דוגמה לסטטוס משלוח חי">
-<div class="home-live-card__top flex items-center justify-between gap-4">
-<div>
-<div class="home-live-kicker flex items-center gap-2 font-label-bold text-label-sm"><span class="home-live-dot" aria-hidden="true"></span>משלוח חי</div>
-<div class="text-on-surface-variant text-label-sm">מתעדכן עכשיו</div>
-</div>
-<div class="home-live-order font-label-bold">איסוף <span>#9101</span></div>
-</div>
-<div class="home-live-card__main">
-<div>
-<h2 class="home-live-name">נועה לוי</h2>
-<p class="home-live-address"><span class="material-symbols-outlined" aria-hidden="true">location_on</span>הרצל 42, תל אביב</p>
-</div>
-<div class="home-live-eta">
-<span>שעת יעד</span>
-<strong>09:30</strong>
-<small>17 דק׳ ליעד</small>
-</div>
-</div>
-<div class="home-delivery-progress" aria-label="שלבי המשלוח: התקבלה, אושר, לאיסוף, למסירה, נמסר">
-<div class="home-progress-step is-done"><span class="material-symbols-outlined" aria-hidden="true">check</span><small>התקבלה</small></div>
-<div class="home-progress-line is-done"></div>
-<div class="home-progress-step is-done"><span class="material-symbols-outlined" aria-hidden="true">check</span><small>אושר</small></div>
-<div class="home-progress-line is-done"></div>
-<div class="home-progress-step is-current"><span class="material-symbols-outlined" aria-hidden="true">two_wheeler</span><small>לאיסוף</small></div>
-<div class="home-progress-line"></div>
-<div class="home-progress-step"><span></span><small>למסירה</small></div>
-<div class="home-progress-line"></div>
-<div class="home-progress-step"><span></span><small>נמסר</small></div>
-</div>
-<p class="home-live-slogan">רואים הכול. סומכים על הכול.</p>
-<a href="/track.html" class="home-live-track flex items-center justify-center gap-2"><span class="material-symbols-outlined" aria-hidden="true">near_me</span>עקבו אחרי משלוח</a>
-</article>
-</div>
-<div class="home-hero-visual relative" aria-hidden="true"></div>
-</div>
-</section>
-<!-- How It Works Section -->
-<section class="home-process px-gutter-mobile md:px-gutter-desktop max-w-container-max mx-auto overflow-hidden">
-<div class="home-process-shell">
-<div class="text-center mb-stack-lg">
-<span class="home-section-kicker">מהזמנה למסירה</span>
-<h2 class="font-headline-lg text-headline-lg text-on-surface mt-2">איך זה עובד?</h2>
-</div>
-<div class="home-process-steps grid grid-cols-1 md:grid-cols-4">
-<article class="home-process-step">
-<div class="home-process-icon home-process-icon--purple">
-<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">add_shopping_cart</span>
-</div>
+<section class="delivery-journey" aria-label="המסע של EdenMish">
+  <div class="delivery-scene" aria-hidden="true">
+    <video id="journey-film" muted loop playsinline preload="none" poster="/assets/eden-tayelet-branded.webp" data-src="/assets/eden-tayelet-branded.mp4"></video>
+  </div>
+  <div class="journey-gateway" hidden>
+    <div class="gateway-copy">
+      <p class="journey-eyebrow">EDENMISH · תל אביב והסביבה</p>
+      <h1>הדרך שלכם.<br><span>מתחילה כאן.</span></h1>
+      <p>משלוחים חכמים בגוש דן.<br>טכנולוגיה מתקדמת פוגשת שירות אישי.</p>
+      <div class="gateway-options">
+        <button type="button" data-audience="individual"><span class="material-symbols-outlined" aria-hidden="true">person</span><strong>לפרטיים</strong><small>משלוח אישי, בראש שקט</small></button>
+        <button type="button" data-audience="business"><span class="material-symbols-outlined" aria-hidden="true">storefront</span><strong>לעסקים</strong><small>שותף לדרך של העסק</small></button>
+      </div>
+      <a class="gateway-direct" href="/track.html">כבר שלחתם? עקבו אחרי המשלוח</a>
+    </div>
+  </div>
+  <button type="button" class="journey-audience-switch" hidden>בחירת מסלול</button>
+  <div class="journey-scroller" tabindex="0" role="region" aria-label="גללו בין תחנות המסע">
+    <section class="journey-stop is-current" id="journey-send" aria-labelledby="journey-title">
+      <div class="stop-copy">
+        <p class="journey-eyebrow">01 / EDENMISH · תל אביב והסביבה</p>
+        <h1 id="journey-title">המשלוח שלכם.<br><span>בידיים של עדן.</span></h1>
+        <p class="stop-lead">שליחויות אישיות על קטנוע.<br>מהדלת שלכם, עד לידיים הנכונות.</p>
+        <a class="journey-button" href="/booking.html">בדיקת מחיר והזמנה <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span></a>
+        <p class="home-slogan-signature">תזמינו בדקה. תשכחו מהדאגה.</p>
+      </div>
+    </section>
+    <section class="journey-stop journey-stop--information" id="journey-how" aria-labelledby="how-stop-title">
+      <div class="stop-copy flow-copy" id="home-info">
+        <p class="journey-eyebrow">02 / מהזמנה למסירה</p>
+        <h2 id="how-stop-title">איך זה עובד?<br> <span>אתם ממשיכים ביום.</span></h2>
+        <p class="flow-intro">עדן דואג למשלוח.</p>
+<div class="process-story" data-process-story><div class="process-deck" tabindex="0" aria-label="ארבעה צעדים מהזמנה למסירה, החליקו בין הכרטיסים"><article class="flow-card process-card" data-story-label="הזמנה"><div class="process-visual process-visual--order" aria-hidden="true"><div class="story-phone"><span class="story-phone-brand">EdenMish</span><span class="story-phone-symbol material-symbols-outlined">inventory_2</span><i></i><i></i><b class="story-phone-action">✓</b></div><img class="story-parcel" src="/assets/package-medium-3d.webp" alt="" width="512" height="512" loading="lazy"/></div>
+
 <div class="text-right">
 <h3 class="font-headline-md text-headline-md text-on-surface">1. הזמנה</h3>
 <p class="font-body-md text-body-md text-on-surface-variant">הזינו את פרטי המשלוח במערכת החכמה שלנו תוך פחות מדקה.</p>
 </div>
-</article>
-<article class="home-process-step">
-<div class="home-process-icon home-process-icon--mint">
-<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">two_wheeler</span>
-</div>
+</article><article class="flow-card process-card" data-story-label="איסוף"><div class="process-visual process-visual--pickup" aria-hidden="true"><img src="/assets/process-pickup-3d.webp" alt="" width="560" height="560" loading="lazy"/></div>
+
 <div class="text-right">
 <h3 class="font-headline-md text-headline-md text-on-surface">2. איסוף מהיר</h3>
 <p class="font-body-md text-body-md text-on-surface-variant">שליח מגיע אליכם ברגע שההזמנה אושרה. אין המתנה מיותרת.</p>
 </div>
-</article>
-<article class="home-process-step">
-<div class="home-process-icon home-process-icon--purple">
-<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">map</span>
-</div>
+</article><article class="flow-card process-card" data-story-label="מעקב"><div class="process-visual process-visual--tracking" aria-hidden="true"><div class="story-phone story-phone--map"><span class="story-phone-brand">EdenMish</span><svg viewBox="0 0 100 140"><path d="M25 25C95 40 5 90 75 116"/><circle cx="25" cy="25" r="7"/><circle cx="75" cy="116" r="7"/></svg></div><img class="story-scooter" src="/assets/service-standard-3d.webp" alt="" width="420" height="420" loading="lazy"/></div>
+
 <div class="text-right">
 <h3 class="font-headline-md text-headline-md text-on-surface">3. מעקב חי</h3>
 <p class="font-body-md text-body-md text-on-surface-variant">צפו במיקום המדויק של השליח על המפה בזמן אמת, בכל רגע נתון.</p>
 </div>
-</article>
-<article class="home-process-step">
-<div class="home-process-icon home-process-icon--mint">
-<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">verified</span>
-</div>
+</article><article class="flow-card process-card" data-story-label="מסירה"><div class="process-visual process-visual--delivery" aria-hidden="true"><img src="/assets/process-delivery-3d.webp" alt="" width="560" height="560" loading="lazy"/></div>
+
 <div class="text-right">
 <h3 class="font-headline-md text-headline-md text-on-surface">4. מסירה ואישור</h3>
 <p class="font-body-md text-body-md text-on-surface-variant">קבלת חתימה דיגיטלית וצילום POD (הוכחת מסירה) ישירות לנייד.</p>
 </div>
-</article>
-</div>
-</div>
-<p class="home-slogan-band">מהזמנה עד מסירה <span aria-hidden="true">—</span> אתם בשליטה</p>
-</section>
-<!-- Service Areas Section -->
+</article></div><div class="process-controls" data-process-controls hidden></div></div>
+        <p class="flow-signature">מהזמנה עד מסירה <span aria-hidden="true">—</span> אתם בשליטה</p>
+      </div>
+    </section>
+    <section class="journey-stop journey-stop--areas" id="journey-areas" aria-labelledby="areas-stop-title">
+      <div class="stop-copy">
+        <p class="journey-eyebrow">03 / קרוב אליכם</p>
+        <h2 id="areas-stop-title">העיר שלכם. <br><span>הדרך שלנו.</span></h2>
+        <p class="stop-lead">בחרו עיר במפה או חפשו ברשימת אזורי השירות.</p>
+        <a class="journey-button" href="/booking.html">ממשיכים להזמנה <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span></a>
+      </div>
+      <div class="journey-map-hub" id="service-area-hub"><!-- Service Areas Section -->
 <section class="home-section home-service-areas py-stack-lg px-gutter-mobile md:px-gutter-desktop" aria-labelledby="service-areas-title">
 <div class="service-areas-shell glass-card max-w-container-max mx-auto">
 <header class="service-areas-intro text-center">
@@ -275,7 +231,7 @@ html.eden-a11y-motion *,html.eden-a11y-motion *::before,html.eden-a11y-motion *:
 </div>
 <div class="service-areas-stage">
 <div id="service-areas-map-panel" class="service-areas-panel service-areas-panel--map" role="tabpanel" aria-labelledby="service-areas-map-tab">
-<img class="service-orbit-art" src="/assets/edenmish-city-orbit.webp" alt="" width="1536" height="1024" loading="lazy" decoding="async"/>
+<img class="service-orbit-art" src="/assets/eden-service-area-light.webp" alt="" width="1536" height="1024" fetchpriority="high" decoding="async"/>
 <div class="service-orbit-selection" aria-live="polite">
 <span class="service-orbit-selection__eyebrow">אזור שירות פעיל</span>
 <strong id="service-orbit-selected-city">תל אביב-יפו</strong>
@@ -341,38 +297,103 @@ html.eden-a11y-motion *,html.eden-a11y-motion *::before,html.eden-a11y-motion *:
 </div>
 </div>
 </div>
+</section></div>
+    </section>
+    <section class="journey-stop" id="journey-track" aria-labelledby="track-stop-title">
+      <div class="stop-copy">
+        <p class="journey-eyebrow">04 / לאורך כל הדרך</p>
+        <h2 id="track-stop-title">רואים הכול.<br><span>סומכים על הכול.</span></h2>
+        <p class="stop-lead">מרגע האיסוף ועד למסירה, פרטי המשלוח שלכם במקום אחד.</p>
+        <a class="journey-button" href="/track.html">עקבו אחרי משלוח <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span></a>
+      </div>
+    </section>
+    <section class="journey-stop journey-stop--information" id="journey-eden" aria-labelledby="eden-stop-title">
+      <div class="stop-copy flow-copy">
+        <p class="journey-eyebrow">05 / למה לבחור ב-EdenMish?</p>
+        <h2 id="eden-stop-title">המשלוח<br> <span>בידיים בטוחות.</span></h2>
+        <p class="flow-intro">טכנולוגיה חכמה. שירות אישי.</p>
+<div class="process-story" data-process-story><div class="process-deck" tabindex="0" aria-label="שלוש סיבות לבחור בעדן, החליקו בין הכרטיסים"><article class="process-card" data-story-label="מהירות"><div class="process-visual" aria-hidden="true"><img src="/assets/service-flash-3d.webp" alt="" width="420" height="420" loading="lazy"/></div><div><h3>1. מהירות וזריזות</h3><p>זמן ממוצע למשלוח פנים-עירוני של 45 דקות בלבד.</p></div></article><article class="process-card" data-story-label="יחס אישי"><div class="process-visual" aria-hidden="true"><img src="/assets/courier-instructions-3d.webp" alt="" width="480" height="480" loading="lazy"/></div><div><h3>2. שירות אישי</h3><p>שירות לקוחות אנושי וזמין, ללא בוטים מתישים.</p></div></article><article class="process-card" data-story-label="מעקב"><div class="process-visual process-visual--tracking" aria-hidden="true"><div class="story-phone story-phone--map"><span class="story-phone-brand">EdenMish</span><svg viewBox="0 0 100 140"><path d="M25 25C95 40 5 90 75 116"/><circle cx="25" cy="25" r="7"/><circle cx="75" cy="116" r="7"/></svg></div><img class="story-scooter" src="/assets/service-standard-3d.webp" alt="" width="420" height="420" loading="lazy"/></div><div><h3>3. מעקב מדויק</h3><p>דיוק של מטרים בודדים על המפה בזמן אמת.</p></div></article></div><div class="process-controls" data-process-controls hidden></div></div>
+        <p class="flow-eden">EdenMish הוא עדן. משלוחים בתל אביב והסביבה, עם יחס אישי מההתחלה ועד המסירה.</p>
+        <div class="flow-links"><a href="/about.html">הסיפור של עדן</a><a href="/business">פתרונות לעסקים</a></div>
+      </div>
+    </section>
+    <section class="journey-stop journey-stop--information journey-stop--finish" id="journey-more" aria-labelledby="more-stop-title">
+      <div class="stop-copy flow-copy">
+        <a class="eden-storybook" href="/about.html" aria-label="הסיפור של עדן, לעמוד אודות"><span class="eden-storybook-cover"><span class="eden-storybook-brand">EdenMish</span><img src="/assets/eden-arieli-portrait.webp" alt="" width="971" height="1619" loading="lazy"/><strong>הסיפור של עדן</strong><small>האיש שמאחורי המשלוח</small></span></a>
+        <p class="journey-eyebrow">06 / דור חדש של לוגיסטיקה חכמה</p>
+        <h2 id="more-stop-title">שירות שיגרום<br><span>לכם לחזור.</span></h2>
+        <p class="flow-intro">מוכנים לשלוח?</p>
+        <p class="flow-eden">מהדלת שלכם, עד לידיים הנכונות. מתחילים בכמה פרטים פשוטים.</p>
+        <div class="flow-final-actions"><a class="journey-button" data-final-order href="/booking.html">התחילו משלוח חדש <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span></a>
+        <button class="flow-story-button" type="button" data-open-story aria-haspopup="dialog">מאחורי הקלעים <span class="material-symbols-outlined" aria-hidden="true">add</span></button></div>
+        <footer role="contentinfo" class="home-footer w-full pt-stack-lg pb-stack-md border-t border-glass-border">
+<div class="flex flex-col md:flex-row-reverse justify-between items-center px-gutter-desktop max-w-container-max mx-auto gap-stack-md">
+<div class="home-footer-brand font-display-lg text-headline-md font-bold text-on-surface">EdenMish</div>
+<div class="flex flex-wrap justify-center gap-x-stack-lg gap-y-stack-sm">
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/">בית</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/booking.html">שירותים</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/track.html">מעקב משלוחים</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/about.html">אודות</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/#behind-the-scenes">מאחורי הקלעים</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/about.html">צור קשר</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/terms.html">תקנון</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/privacy.html">מדיניות פרטיות</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/accessibility.html">נגישות</a>
+<a class="font-body-md text-body-md text-error font-bold hover:opacity-80 transition-colors" href="/cancel.html">ביטול עסקה</a>
+</div>
+<div class="home-footer-meta font-body-md text-body-md">
+© 2025 EdenMish. כל הזכויות שמורות.
+<p class="text-label-sm text-center mt-1">EdenMish מופעלת על ידי עדן אריאלי · עוסק פטור 211568928</p>
+<p class="text-label-sm text-center mt-1">קריניצי 111, רמת גן, ישראל</p>
+</div>
+</div>
+
+<div class="home-footer-credit flex items-center justify-center gap-2 mt-3">
+  <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener"><img src="/assets/tal-sunflower.png" width="56" height="56" loading="lazy" decoding="async" style="width:56px;height:56px;object-fit:contain" alt="הלוגו של טל אגמון"></a>
+<span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.30.1(293658)</span>
+</div>
+</footer>
+      </div>
+    </section>
+  </div>
+  <div class="journey-controls" hidden>
+    <div class="journey-control-top">
+      <p id="journey-scroll-hint"><span class="material-symbols-outlined" aria-hidden="true">south</span> גללו לתחנה הבאה</p>
+      <button id="journey-motion" type="button" aria-pressed="false">עצירת תנועה</button>
+    </div>
+    <nav class="journey-stops" aria-label="תחנות המסע">
+      <button type="button" data-stop="0"><span>01</span> שולחים</button>
+      <button type="button" data-stop="1"><span>02</span> איך זה עובד</button>
+      <button type="button" data-stop="2"><span>03</span> אזורי שירות</button>
+      <button type="button" data-stop="3"><span>04</span> עוקבים</button>
+      <button type="button" data-stop="4"><span>05</span> למה עדן</button>
+      <button type="button" data-stop="5"><span>06</span> עוד עלינו</button>
+    </nav>
+    <p class="journey-illustration">המחשה של הדרך שלנו בתל אביב</p>
+  </div>
 </section>
-<!-- Why Choose Us -->
-<section class="home-section home-benefits py-stack-lg px-gutter-mobile md:px-gutter-desktop max-w-container-max mx-auto">
-<div class="text-center mb-stack-lg">
-<h2 class="font-display-lg text-headline-lg md:text-display-lg text-on-surface">למה לבחור ב-EdenMish?</h2>
-<p class="home-benefits-slogan">המשלוח בידיים בטוחות</p>
+</main>
+<div class="eden-floating-tools" aria-label="כלים מהירים">
+  <div id="eden-a11y-panel" class="eden-a11y-panel" role="dialog" aria-modal="false" aria-labelledby="eden-a11y-title" hidden>
+    <h2 id="eden-a11y-title">כלי נגישות</h2>
+    <div class="eden-a11y-grid">
+      <button type="button" class="eden-a11y-action" data-a11y-class="eden-a11y-text" aria-pressed="false">הגדלת טקסט</button>
+      <button type="button" class="eden-a11y-action" data-a11y-class="eden-a11y-contrast" aria-pressed="false">ניגודיות גבוהה</button>
+      <button type="button" class="eden-a11y-action" data-a11y-class="eden-a11y-links" aria-pressed="false">הדגשת קישורים</button>
+      <button type="button" class="eden-a11y-action" data-a11y-class="eden-a11y-motion" aria-pressed="false">עצירת אנימציות</button>
+    </div>
+    <button type="button" id="eden-a11y-reset" class="eden-a11y-reset">איפוס התאמות</button>
+    <a class="eden-a11y-statement" href="/accessibility.html">הצהרת הנגישות</a>
+  </div>
+  <button type="button" id="eden-accessibility-toggle" class="eden-floating-button eden-floating-button--accessibility" aria-label="פתיחת כלי נגישות" aria-expanded="false" aria-controls="eden-a11y-panel">
+    <span class="material-symbols-outlined" aria-hidden="true" style="font-size:32px">accessibility_new</span>
+  </button>
+  <a class="eden-floating-button eden-floating-button--whatsapp" href="https://wa.me/972534058498?text=%D7%A9%D7%9C%D7%95%D7%9D%20%D7%A2%D7%93%D7%9F%2C%20%D7%90%D7%A9%D7%9E%D7%97%20%D7%9C%D7%A4%D7%A8%D7%98%D7%99%D7%9D%20%D7%A2%D7%9C%20%D7%A9%D7%9C%D7%99%D7%97%D7%95%D7%AA" target="_blank" rel="noopener" aria-label="שליחת הודעת וואטסאפ לעדן">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16.03 3C8.86 3 3.03 8.79 3.03 15.92c0 2.27.6 4.49 1.73 6.44L3 28.8l6.61-1.73a13.05 13.05 0 0 0 6.41 1.63h.01C23.2 28.7 29 22.91 29 15.78 29 8.66 23.2 3 16.03 3Zm0 23.51h-.01a10.8 10.8 0 0 1-5.48-1.49l-.39-.23-3.92 1.03 1.05-3.81-.25-.39a10.67 10.67 0 0 1-1.68-5.7c0-5.93 4.79-10.75 10.68-10.75 5.88 0 10.65 4.75 10.65 10.61 0 5.92-4.78 10.73-10.65 10.73Zm5.86-8.04c-.32-.16-1.9-.94-2.2-1.04-.29-.11-.51-.16-.72.16-.21.32-.83 1.04-1.02 1.26-.19.21-.37.24-.69.08-.32-.16-1.35-.5-2.58-1.59a9.64 9.64 0 0 1-1.78-2.21c-.19-.32-.02-.49.14-.65.14-.14.32-.37.48-.56.16-.18.21-.32.32-.53.11-.21.05-.4-.03-.56-.08-.16-.72-1.74-.99-2.38-.26-.63-.53-.54-.72-.55h-.61c-.21 0-.56.08-.85.4-.29.32-1.12 1.1-1.12 2.67s1.15 3.09 1.31 3.31c.16.21 2.25 3.43 5.45 4.82.76.33 1.35.52 1.82.67.76.24 1.46.21 2 .13.61-.09 1.9-.77 2.17-1.52.27-.75.27-1.39.19-1.52-.08-.14-.29-.21-.61-.37Z"/></svg>
+  </a>
 </div>
-<div class="grid grid-cols-1 md:grid-cols-3 gap-stack-lg">
-<div class="text-center p-stack-lg space-y-stack-sm group">
-<div class="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-on-primary transition-all duration-300">
-<span class="home-benefit-number" aria-hidden="true">1</span>
-</div>
-<h3 class="font-headline-md text-headline-md text-on-surface">מהירות וזריזות</h3>
-<p class="font-body-md text-body-md text-on-surface-variant">זמן ממוצע למשלוח פנים-עירוני של 45 דקות בלבד.</p>
-</div>
-<div class="text-center p-stack-lg space-y-stack-sm group">
-<div class="mx-auto w-16 h-16 rounded-full bg-secondary/10 flex items-center justify-center text-secondary group-hover:bg-secondary group-hover:text-on-secondary transition-all duration-300">
-<span class="home-benefit-number" aria-hidden="true">2</span>
-</div>
-<h3 class="font-headline-md text-headline-md text-on-surface">שירות אישי</h3>
-<p class="font-body-md text-body-md text-on-surface-variant">שירות לקוחות אנושי וזמין, ללא בוטים מתישים.</p>
-</div>
-<div class="text-center p-stack-lg space-y-stack-sm group">
-<div class="mx-auto w-16 h-16 rounded-full bg-tertiary/10 flex items-center justify-center text-tertiary group-hover:bg-tertiary group-hover:text-on-tertiary transition-all duration-300">
-<span class="home-benefit-number" aria-hidden="true">3</span>
-</div>
-<h3 class="font-headline-md text-headline-md text-on-surface">מעקב מדויק</h3>
-<p class="font-body-md text-body-md text-on-surface-variant">דיוק של מטרים בודדים על המפה בזמן אמת.</p>
-</div>
-</div>
-</section>
-<!-- Behind the Scenes -->
+<dialog id="journey-story-dialog" class="journey-story-dialog" aria-labelledby="behind-the-scenes-title">
+<form method="dialog" class="story-dialog-bar"><button aria-label="סגירת מאחורי הקלעים" autofocus>סגירה <span aria-hidden="true">×</span></button></form>
 <section id="behind-the-scenes" class="home-section home-story py-stack-lg px-gutter-mobile md:px-gutter-desktop max-w-container-max mx-auto" aria-labelledby="behind-the-scenes-title">
 <div class="glass-card rounded-3xl overflow-hidden grid grid-cols-1 md:grid-cols-2">
 <div class="relative overflow-hidden" style="background:#020821">
@@ -404,74 +425,7 @@ EdenMish היא מערכת תפעולית שמחברת בין הזמנה, תמח
 </div>
 </div>
 </section>
-<!-- CTA Section -->
-<section class="home-section home-final-cta py-stack-lg px-gutter-mobile md:px-gutter-desktop">
-<div class="home-final-cta-shell max-w-container-max mx-auto glass-card p-stack-lg overflow-hidden relative">
-<div class="relative z-10 text-center space-y-stack-md py-8">
-<p class="home-slogan-signature home-slogan-signature--center">
-הזמנה ראשונה, 10% פחות. שירות שיגרום לכם לחזור.
-</p>
-<h2 class="font-display-lg text-headline-lg md:text-display-lg text-on-surface">מוכנים לשלוח?</h2>
-<p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl mx-auto">
-10% הנחה על המשלוח הראשון ללקוחות חדשים, להזמנות שיבוצעו עד 31.08.2026 בשעה 23:59:59 לפי שעון ישראל. ההטבה תחול אוטומטית לאחר בדיקת הזכאות, בכפוף ל<a href="/terms.html#first-delivery-promotion" class="text-primary underline">תנאי ההטבה</a>.
-</p>
-<div class="pt-stack-md">
-<a href="/booking.html" class="inline-block bg-primary text-on-primary font-headline-md px-12 py-5 rounded-2xl shadow-2xl shadow-primary/40 hover:scale-105 active:scale-95 transition-all">
-התחילו עכשיו — 10% הנחה במשלוח הראשון
-</a>
-</div>
-</div>
-</div>
-</section>
-</main>
-<div class="eden-floating-tools" aria-label="כלים מהירים">
-  <div id="eden-a11y-panel" class="eden-a11y-panel" role="dialog" aria-modal="false" aria-labelledby="eden-a11y-title" hidden>
-    <h2 id="eden-a11y-title">כלי נגישות</h2>
-    <div class="eden-a11y-grid">
-      <button type="button" class="eden-a11y-action" data-a11y-class="eden-a11y-text" aria-pressed="false">הגדלת טקסט</button>
-      <button type="button" class="eden-a11y-action" data-a11y-class="eden-a11y-contrast" aria-pressed="false">ניגודיות גבוהה</button>
-      <button type="button" class="eden-a11y-action" data-a11y-class="eden-a11y-links" aria-pressed="false">הדגשת קישורים</button>
-      <button type="button" class="eden-a11y-action" data-a11y-class="eden-a11y-motion" aria-pressed="false">עצירת אנימציות</button>
-    </div>
-    <button type="button" id="eden-a11y-reset" class="eden-a11y-reset">איפוס התאמות</button>
-    <a class="eden-a11y-statement" href="/accessibility.html">הצהרת הנגישות</a>
-  </div>
-  <button type="button" id="eden-accessibility-toggle" class="eden-floating-button eden-floating-button--accessibility" aria-label="פתיחת כלי נגישות" aria-expanded="false" aria-controls="eden-a11y-panel">
-    <span class="material-symbols-outlined" aria-hidden="true" style="font-size:32px">accessibility_new</span>
-  </button>
-  <a class="eden-floating-button eden-floating-button--whatsapp" href="https://wa.me/972534058498?text=%D7%A9%D7%9C%D7%95%D7%9D%20%D7%A2%D7%93%D7%9F%2C%20%D7%90%D7%A9%D7%9E%D7%97%20%D7%9C%D7%A4%D7%A8%D7%98%D7%99%D7%9D%20%D7%A2%D7%9C%20%D7%A9%D7%9C%D7%99%D7%97%D7%95%D7%AA" target="_blank" rel="noopener" aria-label="שליחת הודעת וואטסאפ לעדן">
-    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16.03 3C8.86 3 3.03 8.79 3.03 15.92c0 2.27.6 4.49 1.73 6.44L3 28.8l6.61-1.73a13.05 13.05 0 0 0 6.41 1.63h.01C23.2 28.7 29 22.91 29 15.78 29 8.66 23.2 3 16.03 3Zm0 23.51h-.01a10.8 10.8 0 0 1-5.48-1.49l-.39-.23-3.92 1.03 1.05-3.81-.25-.39a10.67 10.67 0 0 1-1.68-5.7c0-5.93 4.79-10.75 10.68-10.75 5.88 0 10.65 4.75 10.65 10.61 0 5.92-4.78 10.73-10.65 10.73Zm5.86-8.04c-.32-.16-1.9-.94-2.2-1.04-.29-.11-.51-.16-.72.16-.21.32-.83 1.04-1.02 1.26-.19.21-.37.24-.69.08-.32-.16-1.35-.5-2.58-1.59a9.64 9.64 0 0 1-1.78-2.21c-.19-.32-.02-.49.14-.65.14-.14.32-.37.48-.56.16-.18.21-.32.32-.53.11-.21.05-.4-.03-.56-.08-.16-.72-1.74-.99-2.38-.26-.63-.53-.54-.72-.55h-.61c-.21 0-.56.08-.85.4-.29.32-1.12 1.1-1.12 2.67s1.15 3.09 1.31 3.31c.16.21 2.25 3.43 5.45 4.82.76.33 1.35.52 1.82.67.76.24 1.46.21 2 .13.61-.09 1.9-.77 2.17-1.52.27-.75.27-1.39.19-1.52-.08-.14-.29-.21-.61-.37Z"/></svg>
-  </a>
-</div>
-<!-- Footer -->
-<footer class="home-footer w-full pt-stack-lg pb-stack-md border-t border-glass-border">
-<div class="flex flex-col md:flex-row-reverse justify-between items-center px-gutter-desktop max-w-container-max mx-auto gap-stack-md">
-<div class="home-footer-brand font-display-lg text-headline-md font-bold text-on-surface">EdenMish</div>
-<div class="flex flex-wrap justify-center gap-x-stack-lg gap-y-stack-sm">
-<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/">בית</a>
-<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/booking.html">שירותים</a>
-<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/track.html">מעקב משלוחים</a>
-<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/about.html">אודות</a>
-<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/#behind-the-scenes">מאחורי הקלעים</a>
-<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/about.html">צור קשר</a>
-<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/terms.html">תקנון</a>
-<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/privacy.html">מדיניות פרטיות</a>
-<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="/accessibility.html">נגישות</a>
-<a class="font-body-md text-body-md text-error font-bold hover:opacity-80 transition-colors" href="/cancel.html">ביטול עסקה</a>
-</div>
-<div class="home-footer-meta font-body-md text-body-md">
-© 2025 EdenMish. כל הזכויות שמורות.
-<p class="text-label-sm text-center mt-1">EdenMish מופעלת על ידי עדן אריאלי · עוסק פטור 211568928</p>
-<p class="text-label-sm text-center mt-1">קריניצי 111, רמת גן, ישראל</p>
-</div>
-</div>
-
-<div class="home-footer-credit flex items-center justify-center gap-2 mt-3">
-  <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener"><img src="/assets/se-footer.png" class="w-7 h-7 rounded-full" alt="Six Elements Altiora"></a>
-  <span class="text-label-sm">פותח על ידי <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Six Elements Altiora</a> · <a href="https://talagmon.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Tal Agmon</a></span>
-<span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.30.1(293658)</span>
-</div>
-</footer>
+</dialog>
 <script>
 // Smooth scroll for in-page anchors (guarded)
 document.querySelectorAll('a[href^="#"]').forEach(anchor => {
@@ -479,7 +433,7 @@ anchor.addEventListener('click', function (e) {
 const id = this.getAttribute('href');
 if (id && id.length > 1) {
 const el = document.querySelector(id);
-if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth' }); }
+if (el) { e.preventDefault(); el.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.classList.contains('eden-a11y-motion') ? 'auto' : 'smooth' }); }
 }
 });
 });
@@ -528,6 +482,6 @@ else { header.classList.remove('bg-surface-dim/80'); header.classList.remove('sh
   });
 })();
 </script>
-<script src="/assets/mobile-nav.js" defer></script>
+<script src="/assets/mobile-nav.js?v=20261008-nav" defer></script>
 </body>
 </html>

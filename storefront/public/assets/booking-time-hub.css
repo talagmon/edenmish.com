@@ -1,0 +1,83 @@
+/* A tactile scheduling console around the original date/window controls. */
+.booking-light .schedule-hub{gap:14px;--hub-hour:305deg;--hub-minute:60deg}
+.time-hub-display{display:flex;align-items:center;gap:26px;padding:22px 28px;border:1px solid #e2d4ed;border-radius:24px;background:radial-gradient(ellipse at 85% 20%,#fff 5%,transparent 65%),linear-gradient(130deg,#efe5f8,#faf7fd);box-shadow:0 5px 0 -2px #e2d6ec,0 14px 25px #5b2a8608}
+.time-hub-display[hidden]{display:none}
+.time-hub-clock{position:relative;direction:ltr;flex:0 0 104px;width:104px;height:104px;border:8px solid #dfcbed;border-radius:50%;background:radial-gradient(circle at 35% 25%,#fff,#f5eff9);box-shadow:inset 0 2px 5px #5b2a8620,0 4px 0 #bfa2d2,0 12px 17px #5b2a8620;transform:rotate(-7deg);color:#785a8b;font-size:10px;font-weight:600}
+.time-hub-clock>span{position:absolute;line-height:1}
+.clock-twelve{top:7px;left:50%;transform:translateX(-50%)}.clock-three{right:7px;top:50%;transform:translateY(-50%)}.clock-six{bottom:6px;left:50%;transform:translateX(-50%)}.clock-nine{left:7px;top:50%;transform:translateY(-50%)}
+.time-hub-clock i{position:absolute;bottom:50%;left:50%;border-radius:5px;transform-origin:50% 100%;transition:transform .4s ease}
+.hub-hour{height:22px;width:5px;margin-left:-2.5px;background:#5b2a86;transform:rotate(var(--hub-hour))}
+.hub-minute{height:30px;width:3px;margin-left:-1.5px;background:#76b7aa;transform:rotate(var(--hub-minute))}
+.time-hub-clock b{position:absolute;left:50%;top:50%;width:10px;height:10px;transform:translate(-50%,-50%);border-radius:50%;background:#5b2a86;border:2px solid #fff}
+.schedule-hub[data-ready="false"] .time-hub-clock i{opacity:.35}
+.time-hub-readout{display:flex;flex-direction:column;gap:5px;min-width:0}
+.time-hub-eyebrow{font-size:11px;color:#877092}
+#time-hub-day{font-size:20px;line-height:1.4;color:#4e286d}
+#time-hub-slot{font-size:24px;font-weight:700;line-height:1.5;color:#5b2a86;unicode-bidi:plaintext}
+.schedule-hub[data-ready="false"] #time-hub-slot{font-size:14px;font-weight:500}
+#time-hub-status{font-size:11px;color:#7d6c86}
+.booking-light .hub-step-label{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#543969;margin:5px 0 0}
+.hub-step-label>span{display:grid;place-items:center;border-radius:50%;width:23px;height:23px;background:#ede3f5;color:#5b2a86;font-size:11px}
+.booking-light #sched-dates{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.booking-light #sched-dates[hidden],.booking-light #sched-windows[hidden],.booking-light #sched-custom-wrap[hidden]{display:none}
+.booking-light #sched-dates button{position:relative;display:flex;flex-direction:column;gap:9px;align-items:center;justify-content:center;min-width:0;min-height:85px;border:1px solid #dacee4!important;border-radius:14px;background:linear-gradient(#fff,#f8f4fb)!important;box-shadow:0 4px 0 #e5daed;padding:12px 6px;color:#59356f;font-size:12px;line-height:1.4;transition:transform .18s,box-shadow .18s}
+.booking-light #sched-dates button[data-date]{font-size:0}
+.booking-light #sched-dates button[data-date]::before{content:attr(data-day);font-size:11px;font-weight:600;color:#816b90}
+.booking-light #sched-dates button[data-date]::after{content:attr(data-date);font-family:Heebo,Arial,sans-serif;direction:ltr;font-size:23px;font-weight:700;line-height:1}
+.booking-light #sched-dates button[aria-pressed="true"]{background:linear-gradient(145deg,#8b60a9,#5b2a86)!important;border-color:#5b2a86!important;box-shadow:0 3px 0 #38184f,0 6px 12px #5b2a8620;transform:translateY(2px);color:#fff}
+.booking-light #sched-dates button[aria-pressed="true"]::before{color:#f0e3fa}
+.booking-light #sched-dates button:disabled{opacity:.45;box-shadow:none;background:#f3eff5!important;cursor:not-allowed}
+.booking-light #sched-dates button:disabled::after{text-decoration:line-through}
+.booking-light #sched-windows{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.booking-light #sched-windows:empty{display:none}
+.booking-light #sched-windows button{position:relative;min-height:56px;padding:10px 8px;border:1px solid #dfd4e7!important;border-radius:13px;background:linear-gradient(#fff,#f9f6fc)!important;color:#654877;box-shadow:0 3px 0 #e8deee;font-size:15px;direction:ltr;white-space:nowrap;transition:transform .18s,box-shadow .18s}
+.booking-light #sched-windows button[aria-pressed="true"]{background:#eaf5f0!important;border-color:#72ab9a!important;box-shadow:0 3px 0 #a5cabc;color:#245f50;font-weight:800;transform:translateY(1px)}
+.booking-light #sched-windows button[aria-pressed="true"]::after{content:'✓';position:absolute;top:-7px;right:-4px;width:18px;height:18px;display:grid;place-items:center;border-radius:50%;background:#397a68;color:white;font-size:10px;border:2px solid white}
+.booking-light #sched-dates button:focus-visible,.booking-light #sched-windows button:focus-visible{outline:3px solid #5b2a86;outline-offset:4px}
+.booking-light #sched-custom-wrap{display:grid;grid-template-columns:auto minmax(0,230px);align-items:center;justify-content:space-between;gap:12px;padding:9px 0}
+.booking-light #sched-custom-wrap label{font-size:12px;font-weight:500}
+.booking-light #sched-custom-wrap input{min-height:44px;padding:8px 12px;font-size:14px}
+.booking-light #sched-custom-wrap .date-picker-button{width:44px;height:44px;min-height:44px}
+.hub-empty{padding:16px;border:1px dashed #ded1e7;border-radius:12px;text-align:center;color:#8b7697;font-size:12px;background:#fcfafe}
+.hub-empty[hidden]{display:none}
+.schedule-hub[data-mode="flash"] .hub-step-label{display:none}
+.schedule-hub[data-mode="flash"] .time-hub-clock{box-shadow:inset 0 2px 5px #5b2a8620,0 4px 0 #bfa2d2,0 12px 17px #5b2a8620}
+@media(hover:hover){.booking-light #sched-dates button:not(:disabled):hover,.booking-light #sched-windows button:hover{transform:translateY(-2px);border-color:#9c7bb3!important}}
+@media(max-width:600px){
+.time-hub-display{padding:18px 14px;gap:17px;border-radius:20px}
+.time-hub-clock{flex-basis:80px;width:80px;height:80px;border-width:6px;font-size:8px}
+.hub-hour{height:16px}.hub-minute{height:23px}
+#time-hub-day{font-size:16px}#time-hub-slot{font-size:20px}#time-hub-status{font-size:10px}
+.time-hub-eyebrow{font-size:10px}.schedule-hub[data-ready="false"] #time-hub-slot{font-size:12px}
+.booking-light #sched-dates{gap:7px}.booking-light #sched-dates button{min-height:78px;padding-inline:3px;gap:8px}.booking-light #sched-dates button[data-date]::before{font-size:10px}.booking-light #sched-dates button[data-date]::after{font-size:19px}
+.booking-light #sched-windows{grid-template-columns:repeat(2,minmax(0,1fr))}
+.booking-light #sched-custom-wrap{grid-template-columns:auto minmax(0,205px)}
+}
+@media(prefers-reduced-motion:reduce){.time-hub-clock i,.booking-light #sched-dates button,.booking-light #sched-windows button{transition:none}}
+html.eden-a11y-motion .time-hub-clock i,html.eden-a11y-motion #sched-dates button,html.eden-a11y-motion #sched-windows button{transition:none}
+.hub-controls{display:grid;gap:10px;min-width:0}
+@media(min-width:601px){
+.booking-light .schedule-hub{grid-template-columns:minmax(0,1fr) 154px;gap:18px;align-items:stretch}
+.time-hub-display{grid-column:2;grid-row:1;flex-direction:column;justify-content:center;padding:20px 12px;gap:22px;text-align:center}
+.hub-controls{grid-column:1;grid-row:1}
+.time-hub-clock{flex-basis:90px;width:90px;height:90px;border-width:7px}
+.time-hub-readout{gap:9px}
+#time-hub-day{font-size:15px}#time-hub-slot{font-size:18px}#time-hub-status{font-size:10px}
+.booking-light #sched-windows{grid-template-columns:repeat(2,minmax(0,1fr))}
+.booking-light #sched-windows button{min-height:48px;font-size:14px}
+.booking-light #sched-dates button{min-height:75px}
+.booking-light #sched-dates button[data-date]::after{font-size:20px}
+.booking-light #sched-custom-wrap{grid-template-columns:auto minmax(0,190px);padding:4px 0}
+}
+@media(max-width:600px){
+.time-hub-display{padding:12px 16px;gap:16px}
+.time-hub-clock{flex-basis:70px;width:70px;height:70px;border-width:5px}
+.time-hub-eyebrow{display:none}.time-hub-readout{gap:2px}
+#time-hub-status{font-size:9px}
+}
+@media(min-width:1101px){
+.booking-light #sched-windows{grid-template-columns:repeat(3,minmax(0,1fr))}
+.booking-light #sched-windows button{font-size:13px;padding-inline:5px}
+.booking-cinematic .booking-step[data-step="6"]{padding:20px 24px}
+.booking-cinematic .booking-step[data-step="6"] .step-heading{margin-bottom:14px}
+}
