@@ -1,0 +1,178 @@
+/* A quiet miniature world. Motion only occurs when the existing screen changes. */
+.booking-cinema[hidden]{display:none}
+.booking-cinematic .order-main{max-width:1320px;padding-inline:28px}
+.booking-cinematic .order-shell{width:100%;max-width:none;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(320px,1fr);gap:20px 32px;align-items:start}
+.booking-cinematic .order-hero{grid-column:1/-1;padding-bottom:0}
+.booking-cinematic .order-shell>.order-stack{grid-column:1;grid-row:2;min-width:0}
+.booking-cinematic .order-title{font-size:30px}
+.booking-cinematic .order-progress{top:84px}
+.booking-cinematic .action-dock{max-width:1240px}
+.booking-cinema{grid-column:2;grid-row:2;position:sticky;top:100px;height:calc(100svh - 140px);min-height:480px;max-height:760px;border-radius:30px;background:linear-gradient(155deg,#f5effb,#fdfbff 65%,#eee8f6);border:1px solid #e9e0ef;overflow:hidden;isolation:isolate;color:#342044;direction:rtl}
+.cinema-heading{position:absolute;top:32px;right:30px;left:30px;z-index:4;pointer-events:none}
+.cinema-chapter{display:block;color:#856795;font-size:10px;letter-spacing:.08em;margin-bottom:14px}
+.cinema-heading h2{font-size:clamp(25px,2.6vw,38px);font-weight:800;line-height:1.24;margin:0 0 12px;letter-spacing:-.035em;color:#5b2a86}
+.cinema-heading p{font-size:13px;line-height:1.7;color:#796586;max-width:290px;margin:0}
+.cinema-stage{position:absolute;inset:190px 0 48px;perspective:1100px;isolation:isolate}
+.cinema-halo{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 58%,#dfc8f66b,transparent 65%)}
+.cinema-world{position:absolute;inset:-5% -8%;opacity:0;transform:scale(.7) translateY(14%);transition:transform 1.1s cubic-bezier(.2,.7,.2,1),opacity .7s;z-index:0}
+.cinema-world img{width:100%;height:100%;object-fit:contain;mix-blend-mode:multiply}
+.cinema-platform{position:absolute;width:78%;height:27%;left:11%;bottom:13%;border-radius:50%;background:linear-gradient(170deg,#fff,#e6d7f1);box-shadow:0 16px 0 #d9c7e7,0 34px 35px #5b2a8620;border:1px solid #ffffff;transform:rotateX(22deg);transition:opacity .8s,transform 1s}
+.cinema-package{position:absolute;left:13%;top:7%;width:74%;height:76%;z-index:3;transform:translateY(0) rotate(-5deg);filter:drop-shadow(0 24px 14px #4b286315);transition:transform 1s cubic-bezier(.2,.7,.2,1),opacity .7s,left 1s,top 1s,width 1s,height 1s}
+.cinema-package img{width:100%;height:100%;object-fit:contain}
+.cinema-label,.cinema-time,.cinema-ticket{position:absolute;z-index:4;background:#ffffffef;border:1px solid #e2d4eb;box-shadow:0 18px 40px #46226316;border-radius:18px;opacity:0;transform:translateY(28px) rotateY(-15deg) scale(.85);transition:transform .85s cubic-bezier(.2,.7,.2,1),opacity .55s;pointer-events:none}
+.cinema-label{left:34%;top:15%;width:59%;padding:22px;text-align:right;display:grid;gap:12px}
+.label-brand{font-size:17px;font-weight:800;letter-spacing:-.04em;color:#5b2a86;direction:ltr;text-align:right}
+.label-rule{height:1px;background:#e9dfef}
+.cinema-label small{font-size:10px;color:#8c769a}
+.cinema-label strong{font-size:20px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.label-bars{height:27px;width:75%;background:repeating-linear-gradient(90deg,#5b2a86 0 2px,transparent 2px 5px,#5b2a86 5px 6px,transparent 6px 9px);opacity:.35;margin:8px 0}
+.cinema-route{position:absolute;inset:0;width:100%;height:100%;z-index:2;opacity:0;transform:scale(.84);transition:opacity .6s,transform 1s}
+.route-line{stroke-dasharray:450;stroke-dashoffset:450;transition:stroke-dashoffset 1.1s .25s}
+.cinema-route-label{position:absolute;z-index:4;max-width:48%;padding:8px 12px;background:#ffffffed;border:1px solid #e4d8ec;border-radius:12px;box-shadow:0 5px 16px #4822630b;opacity:0;transform:translateY(16px);transition:opacity .7s .2s,transform .8s .2s}
+.cinema-route-label small{display:block;color:#8b729d;font-size:9px;margin-bottom:2px}
+.cinema-route-label strong{display:block;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.route-origin{right:6%;bottom:22%}.route-destination{left:5%;top:5%}
+.cinema-time{right:8%;left:8%;bottom:10%;padding:18px;display:flex;gap:18px;align-items:center}
+.cinema-time small{display:block;font-size:10px;color:#8b729d;margin-bottom:4px}
+.cinema-time strong{display:block;font-size:22px;color:#5b2a86;font-weight:700}
+.cinema-time div>span{display:block;font-size:11px;line-height:1.7;color:#756080;margin-top:5px}
+.cinema-clock{display:block;position:relative;width:62px;height:62px;flex-shrink:0;border:1px solid #d7c2e7;border-radius:50%;background:linear-gradient(130deg,#fff,#eee4f7);box-shadow:0 4px 10px #5b2a8610}
+.cinema-clock::after{content:'';position:absolute;width:6px;height:6px;background:#5b2a86;border-radius:50%;top:27px;left:27px}
+.cinema-clock i,.cinema-clock b{position:absolute;background:#5b2a86;left:29px;top:12px;width:2px;height:19px;border-radius:2px;transform-origin:bottom}
+.cinema-clock b{transform:rotate(100deg);height:14px;top:17px;background:#8e6ea5}
+.cinema-ticket{right:7%;left:17%;top:6%;padding:22px;display:grid;gap:15px}
+.ticket-heading{font-size:13px;color:#7d658a;border-bottom:1px dashed #d8c9e2;padding-bottom:14px}
+.cinema-ticket>div{display:flex;justify-content:space-between;gap:18px}
+.cinema-ticket small{font-size:10px;color:#8c739b}
+.cinema-ticket strong{font-size:12px;font-weight:600;max-width:73%;line-height:1.6;text-align:left}
+.ticket-status{padding:9px 12px;background:#f0e8f7;color:#5b2a86;border-radius:10px;font-size:11px;text-align:center}
+.cinema-foot{position:absolute;bottom:22px;left:24px;right:24px;display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:10px;color:#8a7398}
+.cinema-five-dots{display:flex;gap:5px;flex-shrink:0}.cinema-five-dots i{width:5px;height:5px;border-radius:50%;background:#d9cce3;transition:background .3s,width .3s}
+.booking-cinema[data-scene="1"] .cinema-five-dots i:nth-child(1),.booking-cinema[data-scene="2"] .cinema-five-dots i:nth-child(2),.booking-cinema[data-scene="3"] .cinema-five-dots i:nth-child(3),.booking-cinema[data-scene="4"] .cinema-five-dots i:nth-child(4),.booking-cinema[data-scene="5"] .cinema-five-dots i:nth-child(5){background:#5b2a86;width:18px;border-radius:4px}
+.booking-cinema[data-scene="2"] .cinema-package{left:-5%;top:43%;width:61%;height:55%;transform:rotate(-15deg)}
+.booking-cinema[data-scene="2"] .cinema-label{opacity:1;transform:rotateY(-8deg) rotateZ(3deg)}
+.booking-cinema[data-scene="2"] .cinema-platform{transform:translateY(16%) scale(.9);opacity:.5}
+.booking-cinema[data-scene="3"] .cinema-world{opacity:1;transform:scale(1.08) translateY(1%)}
+.booking-cinema[data-scene="3"] .cinema-package{left:66%;top:59%;width:23%;height:25%;transform:rotate(-5deg)}
+.booking-cinema[data-scene="3"] .cinema-platform,.booking-cinema[data-scene="4"] .cinema-platform,.booking-cinema[data-scene="5"] .cinema-platform{opacity:0;transform:scale(.6)}
+.booking-cinema[data-scene="3"] .cinema-route{opacity:1;transform:scale(1)}
+.booking-cinema[data-scene="3"] .route-line{stroke-dashoffset:0}
+.booking-cinema[data-scene="3"] .cinema-route-label{opacity:1;transform:none}
+.booking-cinema[data-scene="4"] .cinema-world{opacity:1;transform:scale(1.55) translate(12%,-10%)}
+.booking-cinema[data-scene="4"] .cinema-package{opacity:0;transform:scale(.25);left:12%;top:45%;width:25%}
+.booking-cinema[data-scene="4"] .cinema-time{opacity:1;transform:none}
+.booking-cinema[data-scene="5"] .cinema-ticket{opacity:1;transform:rotateY(-5deg) rotateZ(-3deg)}
+.booking-cinema[data-scene="5"] .cinema-package{width:41%;height:40%;left:-3%;top:65%;transform:rotate(-12deg)}
+.booking-cinema[data-scene="5"] .cinema-world{opacity:.15;transform:scale(.8)}
+.booking-cinematic .booking-panels{perspective:1300px}
+.booking-cinematic .booking-step{box-shadow:0 5px 0 -2px #efe7f5,0 10px 0 -4px #e4d8ed,0 18px 30px #5b2a8608}
+.booking-cinematic .booking-step.is-entering{animation:cinemaCardIn .5s cubic-bezier(.2,.7,.2,1)}
+@keyframes cinemaCardIn{from{opacity:.3;transform:translateY(18px) rotateX(5deg)}to{opacity:1;transform:none}}
+@media(min-width:901px) and (max-width:1200px){.booking-cinematic #booking-form[data-flow-screen="3"] .booking-panels,.booking-cinematic #booking-form[data-flow-screen="4"] .booking-panels{grid-template-columns:1fr}.booking-cinematic .order-shell{gap:20px}.booking-cinematic .step-heading h2{font-size:21px}.booking-cinematic .package-art{height:135px}}
+@media(max-height:760px) and (min-width:901px){.cinema-heading{top:24px}.cinema-heading h2{font-size:28px}.cinema-heading p{font-size:12px}.cinema-stage{top:150px;bottom:36px}.cinema-label,.cinema-ticket{padding:16px;gap:10px}.cinema-ticket strong{font-size:11px}.cinema-foot{bottom:14px;font-size:9px}}
+@media(max-width:900px){
+.booking-cinematic .order-main{padding-inline:16px;max-width:760px}
+.booking-cinematic .order-shell{display:flex;flex-direction:column;gap:12px}
+.booking-cinematic .order-shell>.order-stack{width:100%}
+.booking-cinematic .order-hero{width:100%;padding:10px 4px 0}
+.booking-cinematic .order-title{font-size:27px}
+.booking-cinema{position:relative;top:auto;width:100%;height:205px;min-height:0;border-radius:22px;scroll-margin-top:80px}
+.cinema-heading{top:24px;right:18px;left:auto;width:46%}
+.cinema-chapter{font-size:8px;letter-spacing:.02em;margin-bottom:10px}
+.cinema-heading h2{font-size:23px;margin-bottom:8px;line-height:1.2}
+.cinema-heading p{font-size:10px;line-height:1.65;max-width:160px}
+.cinema-stage{inset:0 49% 18px 0}
+.cinema-foot{bottom:12px;right:18px;left:18px;font-size:8px}
+.cinema-five-dots{gap:3px}.cinema-five-dots i{width:4px;height:4px}
+.cinema-package{left:3%;top:10%;width:90%;height:75%}
+.cinema-platform{left:9%;width:82%;height:21%;bottom:21%}
+.cinema-label{left:24%;top:15%;width:72%;padding:10px;gap:6px;border-radius:10px}
+.label-brand{font-size:11px}.cinema-label small{font-size:7px}.cinema-label strong{font-size:12px}.label-bars{height:14px;margin:0}
+.cinema-world{inset:0 -12%}.cinema-route-label{padding:5px 7px;max-width:68%;border-radius:8px}.cinema-route-label small{font-size:7px}.cinema-route-label strong{font-size:8px}
+.route-origin{bottom:20%;right:-5%}.route-destination{top:9%;left:0}
+.cinema-time{right:0;left:3%;bottom:13%;padding:9px;gap:8px;border-radius:12px}.cinema-clock{width:32px;height:32px}.cinema-clock::after{top:13px;left:13px;width:4px;height:4px}.cinema-clock i{left:15px;top:6px;height:10px}.cinema-clock b{left:15px;top:9px;height:7px}.cinema-time small{font-size:7px}.cinema-time strong{font-size:15px}.cinema-time div>span{font-size:7px;margin-top:2px}
+.cinema-ticket{right:1%;left:8%;top:7%;padding:10px;gap:6px;border-radius:12px}.ticket-heading{font-size:8px;padding-bottom:6px}.cinema-ticket small{font-size:7px}.cinema-ticket strong{font-size:8px}.cinema-ticket>div{gap:6px}.ticket-status{padding:5px;font-size:7px;border-radius:6px}
+.booking-cinema[data-scene="5"] .cinema-package{top:61%;left:-8%}
+.booking-cinematic .order-progress{top:74px}
+.booking-cinematic #booking-form[data-flow-screen="3"] .booking-panels,.booking-cinematic #booking-form[data-flow-screen="4"] .booking-panels{grid-template-columns:1fr}
+}
+@media(max-width:360px){.cinema-heading h2{font-size:20px}.cinema-heading p{font-size:9px}.booking-cinema{height:190px}.cinema-foot{font-size:7px}.cinema-chapter{font-size:7px}}
+@media(prefers-reduced-motion:reduce){.booking-cinema *{transition:none!important;animation:none!important}.booking-cinematic .booking-step.is-entering{animation:none!important}}
+html.eden-a11y-motion .booking-cinema *,html.eden-a11y-motion .booking-cinematic .booking-step{transition:none!important;animation:none!important}
+@media(min-width:901px){
+.booking-cinematic .order-shell>.order-stack{min-height:calc(100svh - 40px)}
+.booking-cinema{height:calc(100svh - 220px);min-height:420px;max-height:720px}
+.booking-cinematic .order-hero{padding-top:8px}
+.booking-cinematic .order-title{margin-bottom:4px;line-height:1.25}
+.booking-cinematic .order-slogan{margin-top:5px}
+.booking-cinematic .booking-step[data-step="1"]{padding:24px}
+.booking-cinematic .booking-step[data-step="1"] .step-heading{margin-bottom:14px}
+.booking-cinematic .package-art{height:125px}
+.booking-cinematic .package-choices .choice-copy p{min-height:36px}
+}
+@media(max-width:700px){
+.booking-cinematic .booking-cinema{height:165px}
+.cinema-heading{top:16px}
+.cinema-heading h2{font-size:21px}
+.cinema-chapter{margin-bottom:7px}
+.cinema-heading p{font-size:9px}
+.cinema-foot{bottom:9px;font-size:7px}
+.booking-cinematic .order-shell>.order-stack{gap:12px}
+.booking-cinematic .order-progress{padding:8px 10px}
+.booking-cinematic .progress-meta{margin-bottom:7px;font-size:10px}
+.booking-cinematic .step-dot{min-height:57px;gap:3px}
+.booking-cinematic .step-dot span{width:25px;height:25px;font-size:11px}
+.booking-cinematic .step-dot::before{top:12px}
+.cinema-ticket{padding:8px;gap:4px;top:2%}
+.cinema-label{top:5%;gap:4px;padding:8px}
+.cinema-label small:last-child{display:none}
+}
+
+@media(max-width:700px) and (max-height:700px){
+.booking-cinematic .booking-cinema{height:130px}
+.cinema-heading{top:12px}
+.cinema-heading h2{font-size:18px;margin-bottom:5px}
+.cinema-heading p{font-size:9px;line-height:1.4}
+.cinema-chapter{margin-bottom:5px}
+.cinema-foot{display:none}
+.cinema-stage{bottom:0}
+.booking-cinematic #flow-summary>summary{min-height:32px}
+.booking-cinematic .booking-step{padding:18px}
+.booking-cinematic .step-heading{margin-bottom:12px}
+.booking-cinematic .step-heading h2{font-size:20px}
+.booking-cinematic .step-heading p{font-size:12px;line-height:1.5}
+}
+/* Service pictures explain the choice; the original radios and rate hooks remain. */
+.booking-light #booking-form[data-flow-screen="4"] .service-grid .choice-surface{min-height:130px;padding:12px 14px;gap:12px;overflow:hidden;background:linear-gradient(120deg,#fff 35%,#f5f0fa)}
+.booking-light .service-grid .choice-copy{flex:1;min-width:0}
+.booking-light .service-art{position:relative;display:block;flex:0 0 108px;width:108px;height:108px;border-radius:20px;background:radial-gradient(ellipse at center,#e8def480,transparent 72%)}
+.service-art img{display:block;width:100%;height:100%;object-fit:contain;transition:transform .25s ease;filter:drop-shadow(0 5px 5px #5b2a860c)}
+.service-selected{position:absolute;bottom:0;left:0;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#5b2a86;color:#fff;border:2px solid white;font-size:12px;opacity:0;transform:scale(.6);transition:opacity .2s,transform .2s}
+.booking-light #booking-form .service-grid input:checked+.choice-surface{background:linear-gradient(120deg,#faf6fe,#eee3f7);border-color:#6a3a8c;box-shadow:0 0 0 1px #6a3a8c}
+.service-grid input:checked+.choice-surface .service-art img{transform:translateY(-3px) scale(1.05)}
+.service-grid input:checked+.choice-surface .service-selected{opacity:1;transform:scale(1)}
+.service-grid input:disabled+.choice-surface .service-art{filter:grayscale(.75);opacity:.5}
+.booking-light .courier-note{display:grid;grid-template-columns:120px minmax(0,1fr);align-items:center;gap:16px;padding:18px;border:1px solid #e5d9ed;border-radius:20px;background:linear-gradient(145deg,#f5eefb,#fff 75%)}
+.courier-note-art{width:120px;height:145px;object-fit:contain}
+.booking-light .courier-note label{font-weight:700;font-size:16px;line-height:1.6}
+.booking-light .courier-note label small{display:block;font-weight:400;font-size:12px}
+.booking-light .courier-note textarea{background:#fff!important;min-height:108px;resize:vertical;line-height:1.7}
+@media(max-width:600px){
+.booking-light #booking-form[data-flow-screen="4"] .service-grid .choice-surface{min-height:124px;padding:10px 12px;gap:8px}
+.booking-light .service-art{flex-basis:100px;width:100px;height:100px}
+.booking-light .courier-note{grid-template-columns:88px minmax(0,1fr);gap:10px;padding:14px}
+.courier-note-art{width:88px;height:94px}
+.booking-light .courier-note .order-field{display:contents}
+.booking-light .courier-note textarea{grid-column:1/-1;width:100%}
+}
+@media(prefers-reduced-motion:reduce){.service-art img,.service-selected{transition:none}}
+html.eden-a11y-motion .service-art img,html.eden-a11y-motion .service-selected{transition:none}
+.booking-cinema[data-scene="4"] .cinema-stage{overflow:hidden;border-radius:20px}
+@media(min-width:901px){
+.booking-cinematic #booking-form[data-flow-screen="4"] .booking-panels{grid-template-columns:1fr}
+.booking-light #booking-form[data-flow-screen="4"] .service-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.booking-light #booking-form[data-flow-screen="4"] .service-grid .choice-surface{height:100%;min-height:260px;flex-direction:column;text-align:center;justify-content:flex-start;padding:12px;gap:8px}
+.booking-light .service-grid .service-art{order:-1;flex:0 0 104px;height:104px;width:112px}
+.booking-light .service-grid .choice-copy{display:flex;flex-direction:column;width:100%}
+.booking-light .service-grid .choice-price{margin-top:auto;padding-top:8px}
+}

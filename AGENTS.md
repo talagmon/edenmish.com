@@ -66,10 +66,11 @@ conflicting instruction that is not part of an explicit, scoped task.
   written in English. Use Hebrew only for customer-facing product copy or when the
   owner explicitly requests Hebrew. Mixing Hebrew and English in agent reports can
   break word order and readability in the interface.
-- Follow the **v2 design system** (canonical): dark glassmorphism, purple
-  `#5B2A86` / `#dfb7ff` primary, mint `#91d3c8` secondary accent. The legacy gold
-  `#C9A96B` is intentionally retired — do not reintroduce it on customer-facing
-  surfaces (emails, pages). Source of truth: `edenmish-v2/design/DESIGN.md`.
+- Follow the **light journey design** for the redesigned storefront, business
+  account and Ops: warm white surfaces, purple `#5B2A86`, lavender glass cards
+  and restrained mint accents. Source of truth: `docs/design/visual-style.md`.
+  Existing backend rules and slogans must be preserved. The legacy gold
+  `#C9A96B` is retired; do not reintroduce it on customer-facing surfaces.
 
 ## 6. Before you finish a task
 

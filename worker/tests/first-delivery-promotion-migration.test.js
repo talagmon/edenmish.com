@@ -1,4 +1,4 @@
-import { afterEach, test } from 'node:test';
+import { beforeEach, afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
@@ -23,6 +23,12 @@ const productionWorkflow = readFileSync(
   new URL('../../.github/workflows/production-deploy.yml', import.meta.url),
   'utf8',
 );
+
+// These scenarios exercise eligibility while the launch promotion was active.
+// Keep their clock independent of the day CI runs; expiry has explicit boundary tests.
+beforeEach((t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-07-27T07:00:00Z') });
+});
 
 const openDatabases = [];
 afterEach(() => {

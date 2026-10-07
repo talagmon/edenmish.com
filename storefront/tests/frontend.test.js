@@ -480,7 +480,7 @@ describe('Frontend: SEO foundations', () => {
     for (const proof of ['חיסכון כולל ₪25', 'חיסכון כולל ₪250', 'חיסכון מוערך ₪65', 'חיסכון מוערך ₪115', 'חיסכון מוערך ₪308']) {
       assertContains(html, proof, `${proof} breakdown`);
     }
-    for (const art of ['business-trial.webp', 'business-wallet.webp', 'business-silver.webp', 'business-gold.webp', 'business-platinum.webp']) {
+    for (const art of ['package-small-3d.webp', 'package-medium-3d.webp', 'service-eco-3d.webp', 'service-standard-3d.webp', 'service-flash-3d.webp']) {
       assertContains(html, art, `${art} plan artwork`);
       assert.ok(existsSync(join(PUB, 'assets', art)), `${art} not found in public assets`);
     }
@@ -542,71 +542,28 @@ describe('Frontend: SEO foundations', () => {
     }
   });
 
-  test('Homepage ships the responsive glass presentation without changing customer destinations', () => {
+  test('Homepage preserves customer destinations and slogans in the light scooter presentation', () => {
     const html = readPage('index.html');
-    const styles = readFileSync(join(process.cwd(), 'src', 'styles.css'), 'utf8');
-    for (const hook of [
-      'class="home-page ',
-      'class="home-header ',
-      'class="home-hero ',
-      'class="home-hero-backdrop ',
-      'class="home-live-card ',
-      'class="home-process ',
-      'home-service-areas',
-      'home-benefits',
-      'home-story',
-      'home-final-cta',
-    ]) {
-      assertContains(html, hook, `${hook} presentation hook`);
-    }
     for (const destination of ['href="/booking.html"', 'href="/track.html"', 'href="/about.html"', 'href="/cancel.html"']) {
       assertContains(html, destination, `${destination} customer destination`);
     }
-    for (const deliveryState of ['התקבלה', 'אושר', 'לאיסוף', 'למסירה', 'נמסר']) {
-      assertContains(html, deliveryState, `${deliveryState} live-delivery state`);
-    }
-    assertContains(html, '<strong>09:30</strong>', 'morning delivery example time');
-    assert.ok(!html.includes('<strong>23:18</strong>'), 'late-night example time is retired');
-    assertContains(html, 'class="home-footer-brand', 'brighter footer brand hook');
-    assertContains(html, 'src="/assets/edenmish-home-hero-neon.webp"', 'motorcycle courier hero artwork with neon route trail');
-    assert.ok(existsSync(join(PUB, 'assets', 'edenmish-home-hero-neon.webp')), 'neon motorcycle hero artwork not found');
-    assertContains(html, 'src="/assets/edenmish-city-orbit.webp"', 'service-area orbital map artwork');
-    assert.ok(existsSync(join(PUB, 'assets', 'edenmish-city-orbit.webp')), 'service-area orbital artwork not found');
-    assert.ok(existsSync(join(PUB, 'assets', 'service-areas.js')), 'service-area interaction script not found');
-    assertContains(styles, '.home-page {', 'homepage-only skin scope');
-    assertContains(styles, '@media (max-width: 767px)', 'mobile presentation breakpoint');
-    assertContains(styles, '.home-process-step:not(:last-child)::after', 'connected journey presentation');
-    assert.deepEqual(
-      [...html.matchAll(/class="home-benefit-number" aria-hidden="true">([123])<\/span>/g)].map((match) => match[1]),
-      ['1', '2', '3'],
-      'homepage benefits should use ordered numeric markers',
-    );
-    assert.equal(
-      [...html.matchAll(/class="home-slogan-signature(?: home-slogan-signature--center)?"/g)].length,
-      2,
-      'homepage should use slogan signatures at two conversion moments',
-    );
     for (const slogan of [
       'המשלוח בידיים בטוחות',
       'תזמינו בדקה. תשכחו מהדאגה.',
       'רואים הכול. סומכים על הכול.',
       'מהזמנה עד מסירה',
       'אתם בשליטה',
-      'הזמנה ראשונה, 10% פחות. שירות שיגרום לכם לחזור.',
-    ]) {
-      assertContains(html, slogan, `${slogan} homepage slogan`);
+      'שירות שיגרום לכם לחזור.',
+    ]) assertContains(html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' '), slogan, `${slogan} homepage slogan`);
+    assert.ok(!html.includes('10%'), 'expired homepage discount is removed');
+    assert.ok(!html.includes('מתעדכן עכשיו'), 'decorative story must not masquerade as a live delivery');
+    for (const asset of ['eden-scooter-hero.webp', 'eden-tayelet-branded.webp', 'eden-tayelet-branded.mp4', 'home-journey.js']) {
+      assert.ok(existsSync(join(PUB, 'assets', asset)), `${asset} is available`);
     }
-    assertContains(html, 'class="home-slogan-band"', 'process-to-service slogan transition');
-    assertContains(html, 'class="home-live-slogan"', 'live-tracking slogan');
-    assertContains(html, 'class="home-benefits-slogan"', 'benefits slogan');
-    assertContains(styles, '.home-slogan-signature {', 'slogan signature styling');
-    assertContains(styles, '.home-slogan-band {', 'process slogan styling');
-    assertContains(styles, '.home-benefit-number {', 'numeric benefit marker styling');
-    assertContains(styles, '.home-footer-brand {', 'brighter footer brand styling');
-    assertContains(styles, 'color: #f8fafc;', 'white footer brand color');
-    assertContains(styles, '@media (min-width: 768px) and (max-width: 1023px)', 'tablet navigation breakpoint');
-    assertContains(styles, '.home-nav > nav {\n      gap: 18px;', 'tablet navigation spacing');
-    assertContains(styles, 'backdrop-filter: blur(24px) saturate(150%);', 'layered glass navigation');
+    assertContains(readPage('track.html'), 'poster="/assets/eden-tayelet-branded.webp"', 'tracking film fallback');
+    assertContains(html, 'id="journey-film"', 'pinned scooter journey');
+    assertContains(readPage('track.html'), 'id="tracking-motion"', 'tracking film motion control');
+    assertContains(html, 'src="/assets/tal-sunflower.png"', 'current sunflower footer logo');
   });
 
   test('Customer journeys carry the slogan system and the About page ships the selected contact concept', () => {
@@ -628,7 +585,7 @@ describe('Frontend: SEO foundations', () => {
 
     for (const hook of [
       'class="about-founder-hero ',
-      'class="about-story-video ',
+      'class="about-process-story"',
       'class="about-contact-console ',
       'class="about-contact-panel"',
       'class="about-area-panel"',
@@ -637,8 +594,7 @@ describe('Frontend: SEO foundations', () => {
       'class="about-team"',
       'class="eden-about-sunflower"',
       'src="/assets/eden-arieli-portrait.webp"',
-      'src="/assets/edenmish-city-orbit.webp"',
-      'src="/assets/edenmish-v0.mp4"',
+      'src="/assets/eden-service-area-light.webp"',
     ]) {
       assertContains(about, hook, `${hook} About-page presentation hook`);
     }
@@ -700,7 +656,7 @@ describe('Frontend: SEO foundations', () => {
     assertContains(about, articleUrl, 'about-page article link');
     assertContains(about, securityArticleUrl, 'about-page security article link');
     assertContains(about, 'איך אנחנו שומרים על המידע שלכם', 'about-page security article label');
-    assertContains(about, 'טל אגמון כתב', 'about-page author credit');
+    assertContains(about, 'class="about-sunflower-mark"', 'about-page sunflower credit');
     assertContains(securityArticle, '<link rel="canonical" href="https://edenmish.com/blog/edenmish-information-security"', 'security article canonical URL');
     assertContains(securityArticle, 'https://github.com/usestrix/strix', 'Strix project credit');
     assertContains(securityArticle, technicalReviewUrl, 'technical security review link');
@@ -709,7 +665,7 @@ describe('Frontend: SEO foundations', () => {
     assert.ok(!homepage.includes('Sol'), 'homepage must not present the AI model as a public co-author');
     assert.ok(!about.includes('Sol'), 'about page must not present the AI model as a public co-author');
     assert.ok(!homepage.includes('הצטרפו למאות עסקים'), 'homepage must not claim hundreds of customers during launch');
-    assertContains(homepage, '10% הנחה על המשלוח הראשון ללקוחות חדשים', 'specific launch-stage CTA');
+    assertContains(homepage, 'התחילו משלוח חדש', 'evergreen booking CTA');
   });
 });
 
@@ -1015,20 +971,51 @@ describe('Frontend: Stylesheet + fonts', () => {
 describe('Frontend: Booking form', () => {
   const html = readPage('booking.html');
 
-  test('Uses a seven-stage progressive RTL order flow without removing the canonical fields', () => {
+  test('Groups seven validation sections into five screens without removing canonical fields', () => {
     assertContains(html, 'id="booking-stepper"', 'guided order stepper');
-    assert.equal((html.match(/class="booking-step order-layer/g) || []).length, 7, 'exactly seven guided stages should render');
+    assert.equal((html.match(/class="booking-step order-layer/g) || []).length, 7, 'all seven canonical field sections remain');
     assertContains(html, 'data-step="1"', 'package-size stage');
     assertContains(html, 'data-step="7"', 'review stage');
-    assertContains(html, 'שלב 1 מתוך 7', 'RTL progress status');
+    assertContains(html, 'שלב 1 מתוך 5', 'RTL progress status');
     assertContains(html, 'id="flow-next"', 'step continuation action');
     assertContains(html, 'id="flow-back"', 'step back action');
     assertContains(html, 'validateFlowStep', 'per-stage validation');
-    assertContains(html, 'showFlowStep(currentStep+1)', 'progressive reveal');
-    assert.equal((html.match(/<details class="access-details" open>/g) || []).length, 1, 'only drop-off access details should open by default');
+    assertContains(html, 'validateFlowGroup(index)', 'all grouped fields validated');
+    assert.equal((html.match(/data-step-target="/g) || []).length, 5);
+    assert.equal((html.match(/<details class="access-details" open>/g) || []).length, 0, 'optional access details start collapsed');
     assertContains(html, 'width:min(calc(100% - (2 * var(--order-gutter))),960px)', 'shared responsive action width');
     assertContains(html, '.order-shell{width:min(100%,960px);margin-inline:auto}', 'shared centered content width');
     assertContains(html, 'direction:rtl', 'RTL step rail');
+  });
+
+  function groupedFlow(start, invalidStep=0) {
+    const definitions=html.slice(html.indexOf('const FLOW_STEPS = ['),html.indexOf('const flowNext='));
+    const transitions=html.slice(html.indexOf('function validateFlowGroup('),html.indexOf('if(flowNext)flowNext.addEventListener'));
+    const context={currentStep:start,checked:[],shown:[],invalidStep};
+    runInNewContext(definitions+`
+      function validateFlowStep(step){checked.push(step);return step!==invalidStep;}
+      function showFlowStep(step){shown.push(step);currentStep=step;}
+    `+transitions,context);
+    return context;
+  }
+  test('Merged route validates both addresses before advancing',()=>{
+    const flow=groupedFlow(3);flow.advanceFlow();
+    assert.deepEqual(flow.checked,[3,4]);assert.deepEqual(flow.shown,[5]);
+    const missing=groupedFlow(3,4);missing.advanceFlow();assert.deepEqual(missing.shown,[]);
+  });
+  test('Merged service screen cannot skip schedule validation',()=>{
+    const flow=groupedFlow(5,6);flow.advanceFlow();
+    assert.deepEqual(flow.checked,[5,6]);assert.deepEqual(flow.shown,[]);
+  });
+  test('Review rechecks earlier answers and returns to the invalid group',()=>{
+    const flow=groupedFlow(5,4);flow.advanceFlow();assert.deepEqual(flow.shown,[3]);
+    const valid=groupedFlow(5);valid.advanceFlow();assert.deepEqual(valid.shown,[7]);
+    assert.deepEqual(valid.checked,[5,6,1,2,3,4,5,6]);
+  });
+  test('Back follows merged screen boundaries',()=>{
+    const flow=groupedFlow(7);
+    flow.previousFlow();flow.previousFlow();flow.previousFlow();flow.previousFlow();
+    assert.deepEqual(flow.shown,[5,3,2,1]);
   });
 
   test('Has size selector (Small/Medium)', () => {
@@ -1779,11 +1766,11 @@ describe('Frontend: Mobile nav', () => {
 });
 
 describe('Frontend: first-delivery launch promotion', () => {
-  test('homepage promise states the discount, eligibility, and inclusive Israel-time deadline', () => {
+  test('homepage retires the expired promotion and keeps the booking entry', () => {
     const html = readPage('index.html');
-    assertContains(html, 'הזמנה ראשונה, 10% פחות. שירות שיגרום לכם לחזור.', 'specific launch slogan');
-    assertContains(html, '31.08.2026 בשעה 23:59:59 לפי שעון ישראל', 'unambiguous customer deadline');
-    assertContains(html, 'href="/terms.html#first-delivery-promotion"', 'promotion terms link');
+    assert.ok(!html.includes('first-delivery-promotion'), 'no expired promotion CTA');
+    assert.ok(!html.includes('31.08.2026'), 'no expired promotion date');
+    assertContains(html, 'href="/booking.html"', 'booking entry remains');
   });
 
   test('terms explicitly cover private and authenticated business eligibility', () => {

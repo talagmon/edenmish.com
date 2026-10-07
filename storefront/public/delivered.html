@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html class="dark" dir="rtl" lang="he">
+<html class="" dir="rtl" lang="he">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
@@ -24,8 +24,11 @@
   .delivery-app { padding-top: 100px; }
   @media (max-width: 767px) { .delivery-app { padding-top: 82px; } }
 </style>
+<link rel="stylesheet" href="/assets/eden-light.css?v=20261008-nav"/>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/assets/journey-theme.css"/>
 </head>
-<body class="bg-background text-on-surface antialiased min-h-screen">
+<body class="eden-light bg-background text-on-surface antialiased min-h-screen">
 <header data-eden-site-nav></header>
 <div id="app" class="delivery-app max-w-[600px] mx-auto p-gutter-mobile md:p-gutter-desktop">
   <div id="state-loading" class="py-stack-lg text-center text-on-surface-variant">
@@ -34,7 +37,7 @@
   </div>
 </div>
 <script src="/assets/api-origin.js"></script>
-<script src="/assets/mobile-nav.js" defer></script>
+<script src="/assets/mobile-nav.js?v=20261008-nav" defer></script>
 <script>
 const API = window.EDEN_API.find;
 const WHATSAPP = "972534058498";
@@ -257,8 +260,7 @@ function renderFooter(){
       '<a class="text-label-sm text-on-surface-variant hover:text-primary underline" href="/track.html">מעקב משלוח</a>'+
     '</div>'+
     '<div class="flex items-center justify-center gap-2 mt-3 opacity-60">'+
-      '<a href="https://sixelementsaltiora.com" target="_blank" rel="noopener"><img src="/assets/se-footer.png" class="w-7 h-7 rounded-full" alt="Six Elements Altiora"></a>'+
-      '<span class="text-label-sm">פותח על ידי <a href="https://sixelementsaltiora.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Six Elements Altiora</a> · <a href="https://talagmon.com" target="_blank" rel="noopener" class="hover:text-secondary underline">Tal Agmon</a></span>'+
+      '<a href="https://sixelementsaltiora.com" target="_blank" rel="noopener"><img src="/assets/tal-sunflower.png" width="56" height="56" loading="lazy" decoding="async" style="width:56px;height:56px;object-fit:contain" alt="הלוגו של טל אגמון"></a>'+
       '<span class="vstamp" style="font-family:ui-monospace,monospace;font-size:11px;opacity:.55;direction:ltr">v0.28.0(293096)</span>'+
     '</div>'+
   '</footer>';
