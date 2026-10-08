@@ -69,6 +69,7 @@ jobs:
             echo "  wrangler d1 execute edenmish --remote --file=./migrations/034_business_batch_mappings.sql"
             echo "  wrangler d1 execute edenmish --remote --file=./migrations/037_driver_push_devices.sql"
             echo "  wrangler d1 execute edenmish --remote --file=./migrations/038_business_delivery_exceptions.sql"
+            echo "  wrangler d1 execute edenmish --remote --file=./migrations/039_whatsapp_booking.sql"
             echo ""
             echo "See worker/MIGRATIONS.md for verification queries."
             exit 1
@@ -120,6 +121,7 @@ jobs:
           cd worker
           npm ci
           node scripts/validate-driver-schema.mjs --database edenmish --config wrangler.toml
+          node scripts/validate-booking-schema.mjs --database edenmish --config wrangler.toml
           SECRET_LIST=$(npx wrangler secret list)
           if ! grep -q '"name": "DRIVER_ONE_TIME_CODE"' <<< "$SECRET_LIST"; then
             echo "::error::Production Worker secret DRIVER_ONE_TIME_CODE is missing. Configure it before enabling the driver API."

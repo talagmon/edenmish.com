@@ -99,6 +99,13 @@ and gated by environment approval.
 - runs the full Worker test suite;
 - renders `worker/wrangler.staging.toml` with the staging D1 database ID from
   the GitHub `staging` environment;
+- rejects a production DB binding, duplicate/misplaced safety settings, and
+  automatic driver dispatch or WhatsApp booking/send/model activation; these
+  flags stay `off` in the standard staging workflow. An operator pilot needs a
+  separately reviewed configuration, not a CI override;
+- applies migration 039 only when its source column and all objects are absent,
+  then verifies the complete column/table/index definitions. Partial or altered
+  schemas block deployment. Storage-ready is on only after this prerequisite;
 - performs a read-only remote D1 schema-readiness check for driver migrations
   014–016 and stops before deployment when a required table, column, or index
   is missing;
@@ -113,6 +120,11 @@ and gated by environment approval.
 
 It never binds the production `edenmish` D1 database and does not receive
 production Shopify, payment, email, or webhook credentials.
+
+Production deployment additionally runs the read-only booking schema check before
+Wrangler deploy. Migration 039 remains a separately approved manual production
+operation: `cd worker && wrangler d1 execute edenmish --remote --file=./migrations/039_whatsapp_booking.sql`.
+Neither schema check reads order/customer rows or logs provider diagnostics.
 
 **Environment:** `staging`.
 

@@ -9,10 +9,10 @@ this separate-number plan. Account owners must separately approve any number
 purchase, WhatsApp enrollment, permissions, secrets, sender/webhook setup or send.
 No production configuration is enabled by this change.
 
-The parent verified an active upgraded EdenMish Twilio account, but no owned
-numbers, WhatsApp senders or Messaging Services. This is readiness context, not
-authorization to purchase or activate anything. Recheck live readiness before
-setup; do not copy account identifiers or credentials into this public repository.
+The parent verified enrollment of the dedicated sender and its Online status.
+Booking routing and activation remain separate gates. Recheck live readiness
+before setup; keep account identifiers, credentials and private readiness
+evidence outside this public repository.
 
 Initial scope: private customers, standard service, small/medium packages, a
 supported Israeli route and a future pickup within 30 days. Email remains required
@@ -187,7 +187,10 @@ retention/disclosure review and issue #216 evidence before activation.
 
 ## Configuration and exact activation sequence (operator reference; not executed)
 
-1. Review/merge to `develop`; independently review account/number enrollment.
+1. Review the release workflow checks before merging to `develop`, which triggers
+   staging deployment. The workflow applies 039 only when wholly absent, verifies
+   its full schema, and enforces dispatch/booking/send/model flags off. A partial
+   migration stops deployment for inspection. Independently review enrollment.
    Choose a dedicated sender in the EdenMish account, preserving the public number.
    Confirm the sender is WhatsApp-enabled: purchasing an SMS number alone is not enough.
 2. Confirm migrations through 038 (including any separately merged 035/036 work).

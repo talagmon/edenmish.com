@@ -138,9 +138,62 @@ response handling follows the [structured outputs guide](https://developers.open
 caching and regional processing require review under the
 [data controls policy](https://developers.openai.com/api/docs/guides/your-data).
 
-These bound work per request; they are not measured token use, latency, cost or a
-verified spending cap. Provider budgets, concurrency limits and observability need
-review before any billable traffic.
+These bound production work per request; the production adapter has no aggregate
+spending cap. Provider budgets and observability still need review before customer
+traffic. The separate local synthetic runner below enforces its own run budget.
+
+## Bounded synthetic evaluation runner (not executed live)
+
+From `worker`, `node scripts/evaluate-booking-model.mjs` (or `--dry-run`) prints
+only the fixed checked-in corpus plan. It performs no network calls and does not
+read credentials. There is no customer-input or alternate-corpus file argument.
+
+Only after explicit approval of synthetic data transfer, the dedicated credential
+destination and the spend ceiling, run:
+
+```sh
+node scripts/evaluate-booking-model.mjs \
+  --execute-approved-synthetic yes \
+  --budget-usd 1 \
+  --pricing-reviewed-on YYYY-MM-DD \
+  --ledger /approved/private/location/booking-eval.jsonl
+```
+
+Supply only `WHATSAPP_BOOKING_OPENAI_API_KEY` through the approved secure process;
+the generic key is never used. Replace the pricing date with today's UTC date
+only after verifying the published tariff is still covered by the code's bound.
+The command does not grant permission or enable any Worker flags. Never put the
+key on the command line. No credential/configuration changes are automated.
+
+- Maximum $1 of API usage per approved run, 30 requests, concurrency one, no
+  retries, Standard service tier forced. The fixed corpus currently has 17
+  non-language-control cases. Corpus/contract changes need review before use.
+- Before each request, an exclusive 0600 ledger records and fsyncs a **$0.30
+  reservation**. This covers the full documented 1,050,000 input-token limit plus
+  1,024 output tokens at the higher cache-write tariff, long-context multipliers
+  and 10% regional premium ($0.289595 maximum, rounded upward). This avoids treating
+  character counts as exact tokens. The 48KB cap also bounds payload size.
+- Only a bounded response with the exact model, Standard tier and internally
+  consistent integer usage can settle the reservation to a conservative charge.
+  All input is charged at the higher tariff, ignoring cache discounts. Successful
+  small requests permit the remaining corpus within the same budget.
+- Errors, timeouts, malformed/missing usage, unknown model/tier or ledger errors
+  keep the full reservation and stop the run. At least $0.30 must remain before
+  dispatch. An uncertain call is never refunded or retried automatically.
+- Existing ledger paths are refused, including after a crash. A new path/run
+  requires new authorization; do not rename/delete a ledger to reset a budget.
+  This is a per-run guard, not an account-wide billing limit, tax cap, or control
+  over other processes sharing the credential. No billing settings are changed.
+- Ledger contains only reservation/usage numbers. The report contains case IDs,
+  match/mismatch/fallback/human-review outcomes and latency. No messages, answers,
+  credentials, headers, provider errors or identifiers are logged. Failed and
+  adversarial cases require human review. `qualityApproved` stays false.
+
+The calculation uses the [published Luna tariff](https://developers.openai.com/api/docs/models/gpt-6-luna)
+reviewed 2026-10-08. Tests inject mock fetch; neither tests nor the default CLI
+consume model spend. This runner tests the same proposal validator and transport,
+not payment or provider-message delivery. Existing deterministic controls and
+mocked end-to-end booking/payment tests remain separate gates.
 
 ## Tests and remaining gates
 

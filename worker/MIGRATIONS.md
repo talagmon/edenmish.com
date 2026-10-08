@@ -1153,3 +1153,12 @@ Confirm `source_channel` defaults to `website`, all four tables and `checkout_st
 `WHATSAPP_BOOKING_STORAGE_READY=on` for retention. Keep booking/intake/send flags off
 until the new privacy and dedicated-Twilio-number activation gates in
 `../docs/WHATSAPP_BOOKING.md` are approved. This task did not run remote migrations.
+
+The deployment preflight `node scripts/validate-booking-schema.mjs --database
+edenmish --config wrangler.toml` checks schema metadata only, including full table
+and index definitions. Production never applies migrations automatically.
+Staging uses `--database edenmish-staging --config wrangler.staging.generated.toml
+--apply-staging`: it applies 039 only when wholly absent and checks again afterward.
+Any partial, malformed or structurally different schema blocks deployment instead
+of retrying the one-time ALTER. Equivalent but differently written definitions
+also require operator review; this conservative check is intentional.

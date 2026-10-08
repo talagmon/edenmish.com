@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { validateStagingConfig } from './staging-safety.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const source = join(root, 'wrangler.staging.toml');
@@ -12,5 +13,8 @@ if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data
 }
 
 const template = readFileSync(source, 'utf8');
-writeFileSync(target, template.replace('__STAGING_D1_DATABASE_ID__', databaseId));
+const rendered = template.replace('__STAGING_D1_DATABASE_ID__', databaseId);
+const errors = validateStagingConfig(rendered, readFileSync(join(root, 'wrangler.toml'), 'utf8'));
+if (errors.length) throw new Error(errors.join(' '));
+writeFileSync(target, rendered);
 console.log('Rendered wrangler.staging.generated.toml');

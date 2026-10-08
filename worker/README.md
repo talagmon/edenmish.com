@@ -374,3 +374,10 @@ model, privacy, evaluation and spend gates, all off/absent. It requires the scop
 `WHATSAPP_BOOKING_OPENAI_API_KEY` Worker secret and never falls back to generic
 `OPENAI_API_KEY`. Parent-owned new-key provisioning, live evaluation, data-sharing
 review and deployment/activation remain outstanding.
+
+Release preflight: production runs `node scripts/validate-booking-schema.mjs
+--database edenmish --config wrangler.toml` read-only before deployment. Staging
+applies 039 only when wholly absent, validates it afterward, and refuses dispatch
+or booking/send/model activation in its standard rendered config. The synthetic
+model runner defaults to dry-run; approved spend requires explicit arguments and
+the durable budget ledger documented in `../docs/WHATSAPP_BOOKING_MODEL.md`.
