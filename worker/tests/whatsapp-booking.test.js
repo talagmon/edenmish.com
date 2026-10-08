@@ -612,3 +612,44 @@ test('pilot address cap surrounds each actual Places API request, not just conve
   assert.equal(env.DB.sqlite.prepare("SELECT count FROM rate_limits WHERE key = 'wa-pilot:synthetic-pilot-one:address'").get().count, 10);
   assert.equal(env.DB.sqlite.prepare('SELECT COUNT(*) n FROM orders').get().n, 0);
 });
+
+test('pilot expiry boundary blocks the second send after first crosses deadline', async t => {
+  const deadline = NOW + 60 * 60 * 1000;
+  t.mock.timers.enable({ apis: ['Date'], now: deadline - 1000 });
+  const env = { ...pilotEnvironment(database()), WHATSAPP_BOOKING_SEND_ENABLED: 'on' };
+  await processBookingEvent(env, { id: 'boundary-start', at: deadline - 2000, phone, text: 'hello' }, services(), deadline - 2000);
+  const row = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_replies').get();
+  const cols = Object.keys(row);
+  env.DB.sqlite.prepare(`INSERT INTO whatsapp_booking_replies (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`).run(...cols.map(k => k === 'id' ? row.id + '-second' : row[k]));
+  let sends = 0;
+  await sendBookingReplies(env, async () => {
+    sends++;
+    t.mock.timers.setTime(deadline + 1);
+    return Response.json({sid:'SM' + String(sends).repeat(32)});
+  });
+  assert.equal(sends, 1, 'no second provider request may start after pilot expiry');
+});
+
+
+test('pilot expiry during quota reservation blocks the provider request without refunding the reservation', async t => {
+  const deadline = NOW + 60 * 60 * 1000;
+  t.mock.timers.enable({ apis: ['Date'], now: deadline - 1000 });
+  const env = { ...pilotEnvironment(database()), WHATSAPP_BOOKING_SEND_ENABLED: 'on' };
+  await processBookingEvent(env, { id: 'reservation-boundary', at: deadline - 2000, phone, text: 'hello' }, services(), deadline - 2000);
+  const prepare = env.DB.prepare.bind(env.DB);
+  env.DB.prepare = sql => {
+    const stmt = prepare(sql);
+    if (sql.startsWith('INSERT INTO rate_limits')) {
+      const run = stmt.run.bind(stmt);
+      stmt.run = async () => { const result = await run(); t.mock.timers.setTime(deadline); return result; };
+    }
+    return stmt;
+  };
+  let sends = 0;
+  await sendBookingReplies(env, async () => { sends++; return Response.json({sid:'SM' + '1'.repeat(32)}); });
+  assert.equal(sends, 0);
+  assert.equal(env.DB.sqlite.prepare("SELECT count FROM rate_limits WHERE key = 'wa-pilot:synthetic-pilot-one:outbound'").get().count, 1);
+  const row = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get();
+  assert.equal(row.phase, 'handoff'); assert.equal(row.lock_id, null);
+  assert.equal(env.DB.sqlite.prepare('SELECT state FROM whatsapp_booking_replies').get().state, 'failed');
+});

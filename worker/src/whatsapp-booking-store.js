@@ -167,8 +167,16 @@ export async function processBookingEvent(env, event, services, now = Date.now()
   }
 }
 
-export async function sendBookingReplies(env, fetchImpl = globalThis.fetch, now = Date.now()) {
+export async function sendBookingReplies(env, fetchImpl = globalThis.fetch, clock = Date.now) {
+  // Numeric timestamps remain supported by deterministic callers. Production
+  // reads the live clock again after every awaited reservation/database call.
+  const readTime = typeof clock === 'function' ? clock : () => clock;
+  const now = readTime();
   if (!bookingEnabled(env, now) || env.WHATSAPP_BOOKING_SEND_ENABLED !== 'on') return;
+  const sendFetch = (...args) => {
+    if (!bookingEnabled(env, readTime()) || env.WHATSAPP_BOOKING_SEND_ENABLED !== 'on') throw new Error('booking_send_disabled');
+    return fetchImpl(...args);
+  };
   const DB = env.DB;
   if (env.WHATSAPP_BOOKING_PROVIDER === 'twilio') await reconcileTwilioBookingReceipts(env);
   const rows = await DB.prepare(`SELECT r.*, c.recipient, c.last_customer_at, c.state_json FROM whatsapp_booking_replies r JOIN whatsapp_booking_conversations c ON c.id = r.conversation_id WHERE c.provider = ? AND r.state = 'pending' AND c.phase != 'creating' AND (c.phase != 'handoff' OR r.kind = 'handoff_ack') AND c.lock_id IS NULL ORDER BY r.created_at, r.id LIMIT 20`).bind(env.WHATSAPP_BOOKING_PROVIDER).all();
@@ -182,7 +190,7 @@ export async function sendBookingReplies(env, fetchImpl = globalThis.fetch, now 
         continue;
       }
       if (!changes(await DB.prepare(`UPDATE whatsapp_booking_replies SET state = 'sending' WHERE id = ? AND state = 'pending'`).bind(row.id).run())) continue;
-      if (conversationOnlyPilot(env) && (!JSON.parse(row.state_json).conversation_only || !await reservePilotOperation(env, 'outbound', now))) {
+      if (conversationOnlyPilot(env) && (!JSON.parse(row.state_json).conversation_only || !await reservePilotOperation(env, 'outbound', readTime()))) {
         await DB.batch([
           DB.prepare(`UPDATE whatsapp_booking_replies SET state = 'cancelled', body = NULL WHERE id = ?`).bind(row.id),
           DB.prepare(`UPDATE whatsapp_booking_conversations SET phase = 'handoff', state_json = json_set(state_json, '$.phase', 'handoff') WHERE id = ? AND lock_id = ?`).bind(row.conversation_id, lease),
@@ -192,9 +200,9 @@ export async function sendBookingReplies(env, fetchImpl = globalThis.fetch, now 
       let providerRef = null;
       try {
         if (env.WHATSAPP_BOOKING_PROVIDER === 'twilio') {
-          providerRef = await sendTwilioBookingReply(env, row.recipient, row.body, fetchImpl);
+          providerRef = await sendTwilioBookingReply(env, row.recipient, row.body, sendFetch);
         } else if (env.WHATSAPP_TOKEN) {
-          const response = await fetchImpl(`https://graph.facebook.com/${WHATSAPP_GRAPH_API_VERSION}/${env.WHATSAPP_PHONE_ID}/messages`, {
+          const response = await sendFetch(`https://graph.facebook.com/${WHATSAPP_GRAPH_API_VERSION}/${env.WHATSAPP_PHONE_ID}/messages`, {
             method: 'POST', signal: AbortSignal.timeout(10_000),
             headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ messaging_product: 'whatsapp', to: row.recipient.replace(/^\+/, ''), type: 'text', text: { preview_url: false, body: row.body } }),

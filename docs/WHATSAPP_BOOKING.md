@@ -26,6 +26,11 @@ Set an approved `WHATSAPP_BOOKING_PILOT_ID` (8–64 lowercase letters/digits/hyp
 and `WHATSAPP_BOOKING_PILOT_EXPIRES_AT` ISO timestamp, at most 24 hours ahead.
 Use a one-hour window for the supervised test. Standard staging config selects
 this mode but leaves booking and sends disabled, with no pilot identity/expiry.
+Expiry is checked in the Worker immediately before each provider request, after
+awaited quota/database work, as well as at intake and batch entry. It does not
+depend on the operator's computer. A request already submitted before the deadline
+cannot be recalled and may be delivered later. Supervision must still disable the
+booking/send flags and clear the sender's incoming callback at the end.
 
 Atomic, nonrefundable D1 reservations under the existing `rate_limits` table cap
 each pilot ID at **29 new processed inbound turns, 30 outbound attempts, and 10
