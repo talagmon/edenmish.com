@@ -367,3 +367,7 @@ not change Eden's existing public number/app. Account setup, credentials, migrat
 deployment and live sends remain separate operator approvals. See
 [`WHATSAPP_BOOKING.md`](../docs/WHATSAPP_BOOKING.md) for the full activation,
 controlled-test, human-takeover and recovery procedure.
+
+Optional model-assisted booking is documented in `../docs/WHATSAPP_BOOKING_MODEL.md`.
+Only a provider-neutral offline fixture boundary is implemented; the OpenAI client
+is pending the credential decision and later live evaluation/privacy approvals.

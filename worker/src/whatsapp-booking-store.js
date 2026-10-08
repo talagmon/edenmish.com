@@ -1,3 +1,5 @@
+import { proposeBookingTurn } from './whatsapp-booking-model.js';
+import { HANDOFF_EN } from './whatsapp-booking-copy.js';
 import { sendTwilioBookingReply, reconcileTwilioBookingReceipts } from './whatsapp-booking-twilio.js';
 import { advanceBooking, bookingEnabled, newBooking, isBookingHandoff, HANDOFF, SESSION_WINDOW } from './whatsapp-booking.js';
 import { normalizeIlPhone } from './validate.js';
@@ -82,9 +84,15 @@ export async function processBookingEvent(env, event, services, now = Date.now()
     } else if (state.phase === 'handoff') {
       outcome = 'paused';
     } else if (isBookingHandoff(event.text || '')) {
-      state.phase = 'handoff'; reply = HANDOFF; outcome = 'customer_takeover';
+      state.phase = 'handoff'; reply = state.language === 'en' ? HANDOFF_EN : HANDOFF; outcome = 'customer_takeover';
     } else if (event.at < row.last_event_at) {
       outcome = 'stale';
+      // Late field changes remain ignored. A distinct late message asking for
+      // a person must still pause; only that intent is actionable here.
+      const proposal = await proposeBookingTurn(services.conversationModel, state, event.text || '', now);
+      if (proposal?.intent === 'handoff') {
+        state.phase = 'handoff'; reply = state.language === 'en' ? HANDOFF_EN : HANDOFF; outcome = 'customer_takeover';
+      }
     } else if (event.at === row.last_event_at && row.last_event_at > 0) {
       state.phase = 'handoff'; reply = HANDOFF; outcome = 'ambiguous_order';
     } else {
@@ -99,6 +107,7 @@ export async function processBookingEvent(env, event, services, now = Date.now()
           order: () => services.order(row.order_token),
         }, { phone: event.phone, now });
         state = result.state; reply = result.reply;
+        if (['offline_model_proposal', 'offline_model_fallback'].includes(result.interpretation)) outcome = result.interpretation;
         if (result.create) {
           if (env.WHATSAPP_BOOKING_PROVIDER === 'twilio') await reconcileTwilioBookingReceipts(env, null, { id: row.id, token: lease });
           const active = await DB.prepare('SELECT phase FROM whatsapp_booking_conversations WHERE id = ? AND lock_id = ?').bind(row.id, lease).first();
@@ -123,7 +132,7 @@ export async function processBookingEvent(env, event, services, now = Date.now()
             reply = `המחיר השתנה לפני יצירת ההזמנה. לא נוצר חיוב. לאישור הכתובות וקבלת הצעה חדשה כתבו כתובות ${state.revision}.`;
           } else if (!resultOrder.error && canonical?.payment_status === 'link_sent' && canonical.payment_url) {
             state.phase = 'booked';
-            reply = `ההזמנה נוצרה וממתינה לתשלום. תשלום רק בקישור המאובטח:\n${canonical.payment_url}\nפרטי המעקב יישלחו באימייל לאחר אימות התשלום. אין לשלוח פרטי כרטיס בצ׳אט.`;
+            reply = state.language === 'en' ? `Your order is awaiting payment through this secure link:\n${canonical.payment_url}\nTracking details will be sent by email after payment verification; never send card details in chat.` : `ההזמנה נוצרה וממתינה לתשלום. תשלום רק בקישור המאובטח:\n${canonical.payment_url}\nפרטי המעקב יישלחו באימייל לאחר אימות התשלום. אין לשלוח פרטי כרטיס בצ׳אט.`;
           } else {
             state.phase = 'handoff'; reply = HANDOFF; outcome = 'checkout_requires_review';
           }

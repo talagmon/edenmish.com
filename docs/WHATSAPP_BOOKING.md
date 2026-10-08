@@ -62,13 +62,17 @@ existing coupon engine. No phone match authorizes a business account.
    payment state; details remain in email/tracking.
 
 This is bounded text understanding, not a general natural-language agent. The
-assistant neither retains raw chat logs nor sends customer text to an LLM. See the
+baseline neither retains raw chat logs nor sends customer text to an LLM. An
+[optional offline interpretation boundary](WHATSAPP_BOOKING_MODEL.md) supports
+synthetic model proposals; no live model is wired or enabled. See the
 [test-generated mocked conversation](WHATSAPP_BOOKING_EXAMPLE.md) for the actual
 customer flow, authoritative fixture price and payment-claim behavior.
 
 ## Architecture and delivery semantics
 
 - `whatsapp-booking.js`: transport-independent state machine and field validation.
+- `whatsapp-booking-model.js` / `whatsapp-booking-copy.js`: optional offline proposal
+  validation and reviewed concise copy, with deterministic language controls.
 - `whatsapp-booking-text.js`: bounded Hebrew sentence extraction; all extracted
   values pass the same field, address, schedule and price checks as guided answers.
 - `whatsapp-booking-store.js`: D1 conversations, hashed event deduplication,
