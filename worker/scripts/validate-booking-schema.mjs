@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { resolve, basename } from 'node:path';
-import { pathToFileURL, fileURLToPath } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import { assertStagingConfig } from './staging-safety.mjs';
 
 const migration = new URL('../migrations/039_whatsapp_booking.sql', import.meta.url);
@@ -61,7 +61,9 @@ async function main() {
   };
   const status = await ensureBookingSchema({ allowApply,
     query: async () => run(['--command', BOOKING_SCHEMA_SQL])[0]?.results?.[0],
-    apply: async () => run(['--file', fileURLToPath(migration)]),
+    // D1 --file uses the import path and prefixes JSON with upload progress.
+    // This small schema-only migration fits command mode's structured results.
+    apply: async () => run(['--command', readFileSync(migration, 'utf8')]),
   });
   console.log(`WhatsApp booking schema 039: ${status}.`);
 }
