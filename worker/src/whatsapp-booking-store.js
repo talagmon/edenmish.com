@@ -1,5 +1,5 @@
-import { sendTwilioBookingReply } from './whatsapp-booking-twilio.js';
-import { advanceBooking, bookingEnabled, newBooking, HANDOFF, SESSION_WINDOW } from './whatsapp-booking.js';
+import { sendTwilioBookingReply, reconcileTwilioBookingReceipts } from './whatsapp-booking-twilio.js';
+import { advanceBooking, bookingEnabled, newBooking, isBookingHandoff, HANDOFF, SESSION_WINDOW } from './whatsapp-booking.js';
 import { normalizeIlPhone } from './validate.js';
 import { WHATSAPP_GRAPH_API_VERSION } from './whatsapp.js';
 
@@ -68,6 +68,10 @@ export async function processBookingEvent(env, event, services, now = Date.now()
   try {
     // Check again after acquiring the conversation lease.
     if (await DB.prepare('SELECT event_key FROM whatsapp_booking_events WHERE event_key = ?').bind(eventKey).first()) return { duplicate: true };
+    if (env.WHATSAPP_BOOKING_PROVIDER === 'twilio') {
+      await reconcileTwilioBookingReceipts(env, null, { id: row.id, token: lease });
+      row = await DB.prepare('SELECT * FROM whatsapp_booking_conversations WHERE id = ?').bind(row.id).first();
+    }
     let state = JSON.parse(row.state_json);
     let reply = null;
     let outcome = 'processed';
@@ -75,12 +79,14 @@ export async function processBookingEvent(env, event, services, now = Date.now()
     // A manual reply is a takeover even if delivered late. Never resume from chat.
     if (event.echo) {
       state.phase = 'handoff'; outcome = 'manual_takeover';
+    } else if (state.phase === 'handoff') {
+      outcome = 'paused';
+    } else if (isBookingHandoff(event.text || '')) {
+      state.phase = 'handoff'; reply = HANDOFF; outcome = 'customer_takeover';
     } else if (event.at < row.last_event_at) {
       outcome = 'stale';
     } else if (event.at === row.last_event_at && row.last_event_at > 0) {
       state.phase = 'handoff'; reply = HANDOFF; outcome = 'ambiguous_order';
-    } else if (state.phase === 'handoff') {
-      outcome = 'paused';
     } else {
       const count = await DB.prepare('SELECT COUNT(*) AS n FROM whatsapp_booking_events WHERE conversation_id = ? AND created_at > ?').bind(row.id, now - SESSION_WINDOW).first();
       if (Number(count?.n) >= 100 || now - row.created_at > 2 * SESSION_WINDOW) {
@@ -94,8 +100,11 @@ export async function processBookingEvent(env, event, services, now = Date.now()
         }, { phone: event.phone, now });
         state = result.state; reply = result.reply;
         if (result.create) {
+          if (env.WHATSAPP_BOOKING_PROVIDER === 'twilio') await reconcileTwilioBookingReceipts(env, null, { id: row.id, token: lease });
+          const active = await DB.prepare('SELECT phase FROM whatsapp_booking_conversations WHERE id = ? AND lock_id = ?').bind(row.id, lease).first();
+          if (!active || active.phase === 'handoff') return { processed: true, phase: 'handoff' };
           // Durable intent precedes the only side-effecting canonical order call.
-          const intent = await DB.prepare(`UPDATE whatsapp_booking_conversations SET state_json = ?, phase = 'creating', updated_at = ? WHERE id = ? AND lock_id = ?`).bind(JSON.stringify(state), now, row.id, lease).run();
+          const intent = await DB.prepare(`UPDATE whatsapp_booking_conversations SET state_json = ?, phase = 'creating', checkout_started_at = ?, updated_at = ? WHERE id = ? AND lock_id = ?`).bind(JSON.stringify(state), now, now, row.id, lease).run();
           if (!changes(intent)) return { processed: true, phase: 'handoff' };
           let resultOrder;
           try {
@@ -107,6 +116,7 @@ export async function processBookingEvent(env, event, services, now = Date.now()
           const canonical = await services.order(row.order_token);
           orderId = canonical?.id || resultOrder.order_id || null;
           if (resultOrder.error === 'whatsapp_quote_changed' && !canonical) {
+            await DB.prepare('UPDATE whatsapp_booking_conversations SET checkout_started_at = NULL WHERE id = ? AND lock_id = ?').bind(row.id, lease).run();
             state.phase = 'collect'; state.quote = null; delete state.terms_accepted_at;
             // Preserve the data; an explicit address review triggers a fresh quote.
             state.phase = 'address_review'; state.revision++;
@@ -145,11 +155,13 @@ export async function processBookingEvent(env, event, services, now = Date.now()
 export async function sendBookingReplies(env, fetchImpl = globalThis.fetch, now = Date.now()) {
   if (!bookingEnabled(env) || env.WHATSAPP_BOOKING_SEND_ENABLED !== 'on') return;
   const DB = env.DB;
+  if (env.WHATSAPP_BOOKING_PROVIDER === 'twilio') await reconcileTwilioBookingReceipts(env);
   const rows = await DB.prepare(`SELECT r.*, c.recipient, c.last_customer_at FROM whatsapp_booking_replies r JOIN whatsapp_booking_conversations c ON c.id = r.conversation_id WHERE c.provider = ? AND r.state = 'pending' AND c.phase != 'creating' AND (c.phase != 'handoff' OR r.kind = 'handoff_ack') AND c.lock_id IS NULL ORDER BY r.created_at, r.id LIMIT 20`).bind(env.WHATSAPP_BOOKING_PROVIDER).all();
   for (const row of rows.results || []) {
     const lease = crypto.randomUUID();
     if (!changes(await DB.prepare(`UPDATE whatsapp_booking_conversations SET lock_id = ?, lock_at = ? WHERE id = ? AND lock_id IS NULL AND phase != 'creating' AND (phase != 'handoff' OR ? = 'handoff_ack')`).bind(lease, now, row.conversation_id, row.kind).run())) continue;
     try {
+      if (env.WHATSAPP_BOOKING_PROVIDER === 'twilio') await reconcileTwilioBookingReceipts(env, null, { id: row.conversation_id, token: lease });
       if (now - row.last_customer_at >= SESSION_WINDOW || !row.recipient) {
         await DB.prepare(`UPDATE whatsapp_booking_replies SET state = 'expired', body = NULL WHERE id = ?`).bind(row.id).run();
         continue;
@@ -172,7 +184,13 @@ export async function sendBookingReplies(env, fetchImpl = globalThis.fetch, now 
       await DB.prepare('UPDATE whatsapp_booking_replies SET state = ?, provider_ref = ?, body = NULL WHERE id = ?').bind(providerRef ? 'sent' : 'failed', providerRef, row.id).run();
       if (!providerRef) await DB.prepare(`UPDATE whatsapp_booking_conversations SET phase = 'handoff', state_json = json_set(state_json, '$.phase', 'handoff') WHERE id = ? AND lock_id = ?`).bind(row.conversation_id, lease).run();
     } finally {
-      await DB.prepare('UPDATE whatsapp_booking_conversations SET lock_id = NULL, lock_at = NULL WHERE id = ? AND lock_id = ?').bind(row.conversation_id, lease).run();
+      // Apply a callback that beat the POST response while still holding the
+      // lease. No dispatcher or Confirm can enter the release/reconcile gap.
+      try {
+        if (env.WHATSAPP_BOOKING_PROVIDER === 'twilio') await reconcileTwilioBookingReceipts(env, null, { id: row.conversation_id, token: lease });
+      } finally {
+        await DB.prepare('UPDATE whatsapp_booking_conversations SET lock_id = NULL, lock_at = NULL WHERE id = ? AND lock_id = ?').bind(row.conversation_id, lease).run();
+      }
     }
   }
 }
@@ -199,20 +217,22 @@ export async function cleanupBookings(env, now = Date.now()) {
     DB.prepare(`UPDATE whatsapp_booking_conversations SET phase = 'handoff', state_json = '{"phase":"handoff","data":{}}', recipient = NULL WHERE created_at < ? AND phase != 'closed'`).bind(now - 2 * SESSION_WINDOW),
     DB.prepare('UPDATE whatsapp_booking_replies SET body = NULL, state = CASE WHEN state = \'pending\' THEN \'expired\' ELSE state END WHERE created_at < ?').bind(now - SESSION_WINDOW),
     DB.prepare('DELETE FROM whatsapp_booking_replies WHERE created_at < ?').bind(now - 7 * SESSION_WINDOW),
+    DB.prepare('DELETE FROM whatsapp_booking_receipts WHERE created_at < ?').bind(now - 7 * SESSION_WINDOW),
     DB.prepare('DELETE FROM whatsapp_booking_events WHERE created_at < ?').bind(now - 8 * SESSION_WINDOW),
-    DB.prepare(`DELETE FROM whatsapp_booking_conversations WHERE created_at < ? AND NOT EXISTS (SELECT 1 FROM whatsapp_booking_replies r WHERE r.conversation_id = whatsapp_booking_conversations.id)`).bind(now - 30 * SESSION_WINDOW),
+    DB.prepare(`DELETE FROM whatsapp_booking_conversations WHERE created_at < ? AND (checkout_started_at IS NULL OR EXISTS (SELECT 1 FROM orders o WHERE o.token = whatsapp_booking_conversations.order_token AND o.payment_status = 'paid')) AND NOT EXISTS (SELECT 1 FROM whatsapp_booking_replies r WHERE r.conversation_id = whatsapp_booking_conversations.id)`).bind(now - 30 * SESSION_WINDOW),
   ]);
+  if (env.WHATSAPP_BOOKING_PROVIDER === 'twilio') await reconcileTwilioBookingReceipts(env);
 }
 
 // Closing is an authenticated operator action, never a chat command. An unpaid
-// checkout must be reconciled/cancelled first so a restart cannot create a second
-// payable invoice for the same unresolved booking.
+// checkout remains blocked unless canonically paid. D1 cancellation does NOT
+// prove an external invoice was voided; even an attempt with no D1 order blocks.
 export async function closeBooking(DB, id, now = Date.now()) {
   const row = await DB.prepare('SELECT * FROM whatsapp_booking_conversations WHERE id = ?').bind(id).first();
   if (!row) return { status: 404 };
   if (row.phase !== 'handoff' || row.lock_id) return { status: 409 };
   const order = await DB.prepare('SELECT payment_status, status FROM orders WHERE token = ?').bind(row.order_token).first();
-  if (order && order.payment_status !== 'paid' && order.status !== 'cancelled') return { status: 409 };
+  if ((order || row.checkout_started_at) && order?.payment_status !== 'paid') return { status: 409 };
   const result = await DB.prepare(`UPDATE whatsapp_booking_conversations SET phase = 'closed', state_json = '{"phase":"closed","data":{}}', recipient = NULL, sender_key = sender_key || ':' || id, updated_at = ? WHERE id = ? AND phase = 'handoff' AND lock_id IS NULL`).bind(now, id).run();
   if (!changes(result)) return { status: 409 };
   await DB.prepare(`UPDATE whatsapp_booking_replies SET state = 'cancelled', body = NULL WHERE conversation_id = ? AND state = 'pending'`).bind(id).run();

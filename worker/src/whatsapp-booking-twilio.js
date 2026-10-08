@@ -87,25 +87,43 @@ export async function applyTwilioBookingStatus(req, env) {
   const form = new URLSearchParams(raw);
   if (!await verifyTwilioBookingSignature(env.TWILIO_BOOKING_WEBHOOK_URL + '/status', form, req.headers.get('X-Twilio-Signature'), env.TWILIO_AUTH_TOKEN)) return 401;
   if (form.get('AccountSid') !== env.TWILIO_ACCOUNT_SID || !MESSAGE_SID.test(form.get('MessageSid') || '')) return 400;
-  const row = await env.DB.prepare('SELECT id, conversation_id, state FROM whatsapp_booking_replies WHERE provider_ref = ?').bind(form.get('MessageSid')).first();
-  if (!row) return 200;
-  const status = form.get('MessageStatus');
-  if (['failed', 'undelivered', 'canceled'].includes(status)) {
-    if (['delivered', 'read'].includes(row.state)) return 200;
-    const lease = crypto.randomUUID();
-    const locked = await env.DB.prepare('UPDATE whatsapp_booking_conversations SET lock_id = ?, lock_at = ? WHERE id = ? AND lock_id IS NULL').bind(lease, Date.now(), row.conversation_id).run();
-    if (!locked?.meta?.changes) return 503;
-    try {
-      await env.DB.batch([
-      env.DB.prepare("UPDATE whatsapp_booking_replies SET state = 'failed', body = NULL WHERE id = ? AND state NOT IN ('delivered', 'read')").bind(row.id),
-      env.DB.prepare("UPDATE whatsapp_booking_conversations SET phase = 'handoff', state_json = json_set(state_json, '$.phase', 'handoff') WHERE id = ? AND phase != 'closed' AND EXISTS (SELECT 1 FROM whatsapp_booking_replies WHERE id = ? AND state = 'failed')").bind(row.conversation_id, row.id),
-      env.DB.prepare("UPDATE whatsapp_booking_replies SET state = 'cancelled', body = NULL WHERE conversation_id = ? AND state = 'pending' AND EXISTS (SELECT 1 FROM whatsapp_booking_replies WHERE id = ? AND state = 'failed')").bind(row.conversation_id, row.id),
-      ]);
-    } finally {
-      await env.DB.prepare('UPDATE whatsapp_booking_conversations SET lock_id = NULL, lock_at = NULL WHERE id = ? AND lock_id = ?').bind(row.conversation_id, lease).run();
-    }
-  } else if (['delivered', 'read'].includes(status)) {
-    await env.DB.prepare("UPDATE whatsapp_booking_replies SET state = ? WHERE id = ? AND state IN ('sent', 'failed', 'delivered')").bind(status, row.id).run();
-  }
+  const rank = { failed: 1, undelivered: 1, canceled: 1, delivered: 2, read: 3 }[form.get('MessageStatus')];
+  if (!rank) return 200;
+  // A signed receipt may beat the outbound POST response. Store only the SID and
+  // monotonic status, never callback body/recipient/error content. Acknowledge
+  // after persistence; a lease conflict is replayed locally, not silently lost.
+  await env.DB.prepare(`INSERT INTO whatsapp_booking_receipts (provider_ref, rank, created_at) VALUES (?, ?, ?)
+    ON CONFLICT(provider_ref) DO UPDATE SET rank = MAX(rank, excluded.rank)`).bind(form.get('MessageSid'), rank, Date.now()).run();
+  await reconcileTwilioBookingReceipts(env, form.get('MessageSid'));
   return 200;
+}
+
+export async function reconcileTwilioBookingReceipts(env, providerRef = null, heldLease = null) {
+  const DB = env.DB;
+  const rows = await DB.prepare(`SELECT s.provider_ref, s.rank, r.id, r.conversation_id FROM whatsapp_booking_receipts s
+    JOIN whatsapp_booking_replies r ON r.provider_ref = s.provider_ref
+    WHERE s.rank > s.applied_rank AND (? IS NULL OR s.provider_ref = ?) AND (? IS NULL OR r.conversation_id = ?) LIMIT 100`).bind(providerRef, providerRef, heldLease?.id || null, heldLease?.id || null).all();
+  for (const receipt of rows.results || []) {
+    const lease = heldLease?.token || crypto.randomUUID();
+    if (heldLease) {
+      if (!await DB.prepare('SELECT id FROM whatsapp_booking_conversations WHERE id = ? AND lock_id = ?').bind(receipt.conversation_id, lease).first()) continue;
+    } else {
+      const locked = await DB.prepare('UPDATE whatsapp_booking_conversations SET lock_id = ?, lock_at = ? WHERE id = ? AND lock_id IS NULL').bind(lease, Date.now(), receipt.conversation_id).run();
+      if (!locked?.meta?.changes) continue;
+    }
+    try {
+      // Re-read after the lease: a newer success may supersede a queued failure.
+      const current = await DB.prepare('SELECT rank, applied_rank FROM whatsapp_booking_receipts WHERE provider_ref = ?').bind(receipt.provider_ref).first();
+      if (!current || current.rank <= current.applied_rank) continue;
+      const statements = current.rank === 1 ? [
+        DB.prepare("UPDATE whatsapp_booking_replies SET state = 'failed', body = NULL WHERE id = ? AND state NOT IN ('delivered', 'read')").bind(receipt.id),
+        DB.prepare("UPDATE whatsapp_booking_conversations SET phase = 'handoff', state_json = json_set(state_json, '$.phase', 'handoff') WHERE id = ? AND phase != 'closed' AND EXISTS (SELECT 1 FROM whatsapp_booking_replies WHERE id = ? AND state = 'failed')").bind(receipt.conversation_id, receipt.id),
+        DB.prepare("UPDATE whatsapp_booking_replies SET state = 'cancelled', body = NULL WHERE conversation_id = ? AND state = 'pending' AND EXISTS (SELECT 1 FROM whatsapp_booking_replies WHERE id = ? AND state = 'failed')").bind(receipt.conversation_id, receipt.id),
+      ] : [DB.prepare("UPDATE whatsapp_booking_replies SET state = ? WHERE id = ? AND state IN ('sent', 'failed', 'delivered')").bind(current.rank === 3 ? 'read' : 'delivered', receipt.id)];
+      statements.push(DB.prepare('UPDATE whatsapp_booking_receipts SET applied_rank = MAX(applied_rank, ?) WHERE provider_ref = ?').bind(current.rank, receipt.provider_ref));
+      await DB.batch(statements);
+    } finally {
+      if (!heldLease) await DB.prepare('UPDATE whatsapp_booking_conversations SET lock_id = NULL, lock_at = NULL WHERE id = ? AND lock_id = ?').bind(receipt.conversation_id, lease).run();
+    }
+  }
 }

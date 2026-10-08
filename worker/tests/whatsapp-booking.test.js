@@ -1,12 +1,12 @@
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { createHmac } from 'node:crypto';
 import worker from '../src/index.js';
 import { advanceBooking, newBooking, parseSchedule, QUOTE_TTL, SESSION_WINDOW } from '../src/whatsapp-booking.js';
-import { processBookingEvent, splitBookingReply, extractBookingEvents, sendBookingReplies, pauseBooking, cleanupBookings } from '../src/whatsapp-booking-store.js';
-import { verifyTwilioBookingSignature, readTwilioBookingEvent, sendTwilioBookingReply } from '../src/whatsapp-booking-twilio.js';
+import { processBookingEvent, splitBookingReply, extractBookingEvents, sendBookingReplies, pauseBooking, closeBooking, cleanupBookings } from '../src/whatsapp-booking-store.js';
+import { verifyTwilioBookingSignature, readTwilioBookingEvent, sendTwilioBookingReply, applyTwilioBookingStatus, reconcileTwilioBookingReceipts } from '../src/whatsapp-booking-twilio.js';
 import { startDriverShift } from '../src/driver-dispatch.js';
 import { makeSession } from '../src/integrations.js';
 
@@ -109,7 +109,7 @@ test('D1 duplicates, out-of-order events, manual echoes and operator pause', asy
   await processBookingEvent(env, first, svc, NOW);
   assert.equal((await processBookingEvent(env, first, svc, NOW)).duplicate, true);
   await processBookingEvent(env, { ...first, id: 'old', at: NOW - 1000, text: 'נציג' }, svc, NOW);
-  let row = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get(); assert.equal(row.phase, 'collect');
+  let row = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get(); assert.equal(row.phase, 'handoff');
   await processBookingEvent(env, { ...first, id: 'echo', at: NOW - 2000, echo: true }, svc, NOW);
   row = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get(); assert.equal(row.phase, 'handoff');
   assert.equal(env.DB.sqlite.prepare("SELECT COUNT(*) n FROM whatsapp_booking_replies WHERE state = 'pending'").get().n, 0);
@@ -264,7 +264,7 @@ test('migration upgrades the pre-release schema and preserves website order defa
   sqlite.exec(readFileSync(new globalThis.URL('../migrations/039_whatsapp_booking.sql', import.meta.url), 'utf8'));
   sqlite.prepare('INSERT INTO orders (token, created_at) VALUES (?, ?)').run('existing-fixture', NOW);
   assert.equal(sqlite.prepare('SELECT source_channel FROM orders').get().source_channel, 'website');
-  for (const table of ['whatsapp_booking_conversations', 'whatsapp_booking_events', 'whatsapp_booking_replies']) assert.ok(sqlite.prepare('SELECT name FROM sqlite_master WHERE name = ?').get(table));
+  for (const table of ['whatsapp_booking_conversations', 'whatsapp_booking_events', 'whatsapp_booking_replies', 'whatsapp_booking_receipts']) assert.ok(sqlite.prepare('SELECT name FROM sqlite_master WHERE name = ?').get(table));
 });
 
 test('operator pause is authenticated and CSRF guarded; explicit close allows a fresh draft', async () => {
@@ -350,4 +350,159 @@ test('public callers cannot spoof channel source, reserved token or wallet autho
   assert.equal((await worker.fetch(post({ ...body, use_wallet: true }), env)).status, 401);
   assert.equal((await worker.fetch(post(body), env)).status, 200);
   const order = env.DB.sqlite.prepare('SELECT token, source_channel FROM orders').get(); assert.notEqual(order.token, 'spoofed'); assert.equal(order.source_channel, 'website');
+});
+
+test('natural Hebrew sentence extracts several fields; ambiguous wording cannot authorize an old quote', async () => {
+  const initial = (await advanceBooking(newBooking(), 'מתחילים', services(), { phone, now: NOW })).state;
+  const sentence = 'שלום, אני רוצה לשלוח חבילה קטנה מדיזנגוף 10, תל אביב לביאליק 2, רמת גן מחר בשעה 11, שמי יעל כהן, האימייל שלי yael@example.com';
+  const result = await advanceBooking(initial, sentence, services(), { phone, now: NOW });
+  assert.equal(result.state.data.size, 'small'); assert.equal(result.state.data.pickup, 'דיזנגוף 10, תל אביב');
+  assert.equal(result.state.data.dropoff, 'ביאליק 2, רמת גן'); assert.equal(result.state.data.schedule, '2026-10-09 11:00');
+  assert.equal(result.state.data.name, 'יעל כהן'); assert.equal(result.state.data.email, 'yael@example.com');
+  const masculine = await advanceBooking(initial, 'משלוח קטן מדיזנגוף 10, תל אביב לביאליק 2, רמת גן מחר בשעה 11', services(), { phone, now: NOW });
+  assert.equal(masculine.state.data.size, 'small'); assert.equal(masculine.state.data.pickup, 'דיזנגוף 10, תל אביב');
+  assert.match(result.reply, /פרטי גישה ואיש קשר באיסוף/); assert.equal(result.create, undefined);
+  for (const text of ['לא קטן, בינוני', 'חבילה קטנה או בינונית', 'חבילה קטנה מחר בבוקר', sentence + ' אבל רק אחרי שתתקשרו', 'קטן, מחר בשעה 11 או היום בשעה 12', 'שמי דנה ואני רוצה לשלוח חבילה גדולה']) {
+    const state = await reviewed(); const ambiguous = await advanceBooking(state, text, services(), { phone, now: NOW });
+    assert.match(ambiguous.reply, /בוודאות/); assert.equal(ambiguous.state.quote, null);
+    assert.equal((await advanceBooking(ambiguous.state, `אישור ${state.revision}`, services(), { phone, now: NOW })).create, undefined);
+  }
+});
+
+test('natural times use Israel calendar and existing eligibility; no vague or fractional hour guesses', async () => {
+  const start = (await advanceBooking(newBooking(), 'מתחילים', services(), { phone, now: NOW })).state;
+  const nearMidnight = Date.parse('2026-10-08T21:30:00Z'); // Already Friday in Israel.
+  const closedDay = await advanceBooking(start, 'חבילה קטנה מחר בשעה 11', services(), { phone, now: nearMidnight });
+  assert.equal(closedDay.state.data.schedule, undefined); assert.match(closedDay.reply, /המועד אינו זמין/);
+  for (const text of ['חבילה קטנה היום בשעה 09', 'חבילה קטנה מחר בשעה 11:30', 'חבילה קטנה 2026-11-30 בשעה 11']) {
+    const result = await advanceBooking(start, text, services(), { phone, now: NOW });
+    assert.equal(result.state.data.schedule, undefined); assert.match(result.reply, /המועד אינו זמין/);
+  }
+});
+
+test('delivery failure arriving before POST response is durable and pauses before next multipart send', async () => {
+  const env = environment(database()); env.WHATSAPP_BOOKING_SEND_ENABLED = 'on';
+  await processBookingEvent(env, { id: 'one', at: NOW, phone, text: 'מתחילים' }, services(), NOW);
+  const row = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get();
+  env.DB.sqlite.prepare('INSERT INTO whatsapp_booking_replies (id, conversation_id, body, created_at) VALUES (?, ?, ?, ?)').run('second-part', row.id, 'second', NOW + 1);
+  const sid = 'SM' + '4'.repeat(32); let sends = 0;
+  await sendBookingReplies(env, async () => {
+    sends++;
+    const form = new URLSearchParams({ AccountSid: SID, MessageSid: sid, MessageStatus: 'failed', ErrorMessage: 'DO NOT STORE ME' });
+    const req = new Request(URL + '/status', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Twilio-Signature': sign(form, URL + '/status') }, body: form.toString() });
+    assert.equal(await applyTwilioBookingStatus(req, env), 200);
+    assert.equal(env.DB.sqlite.prepare('SELECT applied_rank FROM whatsapp_booking_receipts').get().applied_rank, 0);
+    return Response.json({ sid });
+  }, NOW);
+  assert.equal(sends, 1); assert.equal(env.DB.sqlite.prepare('SELECT phase FROM whatsapp_booking_conversations').get().phase, 'handoff');
+  assert.equal(env.DB.sqlite.prepare('SELECT state FROM whatsapp_booking_replies WHERE provider_ref = ?').get(sid).state, 'failed');
+  assert.equal(env.DB.sqlite.prepare('SELECT state FROM whatsapp_booking_replies WHERE id = ?').get('second-part').state, 'cancelled');
+  const receipt = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_receipts').get(); assert.equal(receipt.applied_rank, 1); assert.equal(JSON.stringify(receipt).includes('DO NOT STORE'), false);
+  await reconcileTwilioBookingReceipts(env); assert.equal(env.DB.sqlite.prepare('SELECT applied_rank FROM whatsapp_booking_receipts').get().applied_rank, 1);
+});
+
+test('cancelled or missing canonical order never releases an uncertain checkout, including after retention', async () => {
+  const env = environment(database()); const svc = services();
+  await processBookingEvent(env, { id: 'start', at: NOW, phone, text: 'מתחילים' }, svc, NOW);
+  const state = await reviewed(); env.DB.sqlite.prepare('UPDATE whatsapp_booking_conversations SET phase = ?, state_json = ?').run(state.phase, JSON.stringify(state));
+  await processBookingEvent(env, { id: 'confirm', at: NOW + 1000, phone, text: `אישור ${state.revision}` }, svc, NOW + 1000);
+  const row = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get(); assert.ok(row.checkout_started_at);
+  assert.equal((await closeBooking(env.DB, row.id, NOW)).status, 409, 'no D1 order is not evidence of no provider effect');
+  env.DB.sqlite.prepare("INSERT INTO orders (token, created_at, status, payment_status) VALUES (?, ?, 'cancelled', 'checkout_failed')").run(row.order_token, NOW);
+  assert.equal((await closeBooking(env.DB, row.id, NOW)).status, 409, 'local cancellation does not void a Shopify invoice');
+  await cleanupBookings(env, NOW + 31 * SESSION_WINDOW);
+  assert.equal(env.DB.sqlite.prepare('SELECT recipient FROM whatsapp_booking_conversations').get().recipient, null);
+  assert.equal((await closeBooking(env.DB, row.id, NOW + 31 * SESSION_WINDOW)).status, 409);
+  await processBookingEvent(env, { id: 'later', at: NOW + 31 * SESSION_WINDOW, phone, text: 'מתחילים' }, svc, NOW + 31 * SESSION_WINDOW);
+  assert.equal(env.DB.sqlite.prepare('SELECT COUNT(*) n FROM whatsapp_booking_conversations').get().n, 1);
+  env.DB.sqlite.prepare("UPDATE orders SET payment_status = 'paid'").run();
+  assert.equal((await closeBooking(env.DB, row.id, NOW + 31 * SESSION_WINDOW)).status, 200);
+});
+
+test('delayed human request dominates ordering; same-second follow-up stays paused without repeated acknowledgement', async () => {
+  const env = environment(database()); const svc = services();
+  await processBookingEvent(env, { id: 'latest', at: NOW, phone, text: 'מתחילים' }, svc, NOW);
+  await processBookingEvent(env, { id: 'earlier', at: NOW - 1000, phone, text: 'אני רוצה נציג בבקשה' }, svc, NOW);
+  assert.equal(env.DB.sqlite.prepare('SELECT phase FROM whatsapp_booking_conversations').get().phase, 'handoff');
+  const replies = env.DB.sqlite.prepare('SELECT COUNT(*) n FROM whatsapp_booking_replies').get().n;
+  await processBookingEvent(env, { id: 'same-second', at: NOW, phone, text: 'קטן' }, svc, NOW);
+  assert.equal(env.DB.sqlite.prepare('SELECT COUNT(*) n FROM whatsapp_booking_replies').get().n, replies);
+  assert.equal(env.DB.sqlite.prepare("SELECT outcome FROM whatsapp_booking_events ORDER BY rowid DESC").get().outcome, 'paused');
+});
+
+test('mocked natural conversation reaches one canonical invoice and pauses on human takeover', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: NOW + 60_000 });
+  const env = { ...environment(database()), GOOGLE_PLACES_SERVER_KEY: 'mock', SHOPIFY_SHOP: 'mock.myshopify.com', SHOPIFY_ADMIN_TOKEN: 'mock' };
+  const net = installNetworkFixtures(env); const transcript = [];
+  async function say(text) {
+    assert.equal((await net.inbound(text)).response.status, 200);
+    const replies = env.DB.sqlite.prepare("SELECT body FROM whatsapp_booking_replies WHERE state = 'pending' ORDER BY id").all();
+    transcript.push(`**Customer:** ${text}\n\n**Assistant:**\n\n${replies.map(r => r.body).join('\n\n') || '(Automation paused; no reply.)'}`);
+  }
+  for (const text of ['שלום, אפשר להזמין משלוח?', 'מתחילים', 'אני רוצה לשלוח חבילה קטנה מדיזנגוף 10, תל אביב לביאליק 2, רמת גן מחר בשעה 11, שמי יעל כהן, האימייל שלי yael@example.com', 'קומה 2, דירה 4', 'אין', 'ספר']) await say(text);
+  let row = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get(); assert.equal(row.phase, 'address_review');
+  assert.match(transcript.at(-1), /איסוף: דיזנגוף 10, תל אביב/); assert.match(transcript.at(-1), /מסירה: ביאליק 2, רמת גן/);
+  await say(`כתובות ${JSON.parse(row.state_json).revision}`);
+  row = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get(); assert.equal(row.phase, 'review');
+  await say(`אישור ${JSON.parse(row.state_json).revision}`); await say('שילמתי');
+  const order = env.DB.sqlite.prepare('SELECT * FROM orders').get(); assert.equal(order.payment_status, 'link_sent');
+  assert.equal(order.email, 'yael@example.com'); assert.equal(order.name, 'יעל כהן'); assert.equal(order.source_channel, 'whatsapp');
+  assert.equal(order.when_date, '2026-10-09'); assert.equal(net.counts.charges, 1); assert.equal(net.counts.sends, 0);
+  await say('אני רוצה נציג'); await say('אפשר להמשיך?');
+  assert.equal(env.DB.sqlite.prepare('SELECT phase FROM whatsapp_booking_conversations').get().phase, 'handoff');
+  if (process.env.BOOKING_TRANSCRIPT_PATH) writeFileSync(process.env.BOOKING_TRANSCRIPT_PATH,
+    '# Mocked WhatsApp booking example\n\nGenerated by the SQLite-backed integration test `mocked natural conversation reaches one canonical invoice and pauses on human takeover`. Fixed test clock: 2026-10-08 11:01 Israel. Synthetic customer, mocked Places and Shopify; no external sends or charges. The displayed invoice URL is a fixture.\n\n' + transcript.join('\n\n---\n\n') + '\n\nVerified: one canonical private WhatsApp order, one mocked invoice call, zero real sends, email retained, chat payment claim did not mark paid, automation stopped on handoff. Provider-paid reconciliation and driver routing are tested separately.\n');
+});
+
+test('concurrent dispatch cannot send another part between send lease release and failure reconciliation', async () => {
+  const env = environment(database()); env.WHATSAPP_BOOKING_SEND_ENABLED = 'on';
+  await processBookingEvent(env, { id: 'one', at: NOW, phone, text: 'מתחילים' }, services(), NOW);
+  const row = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get();
+  env.DB.sqlite.prepare('INSERT INTO whatsapp_booking_replies (id, conversation_id, body, created_at) VALUES (?, ?, ?, ?)').run('second-part', row.id, 'second', NOW + 1);
+  let snapshotReady, resumeSnapshot; const ready = new Promise(resolve => { snapshotReady = resolve; });
+  const resume = new Promise(resolve => { resumeSnapshot = resolve; });
+  const prepare = env.DB.prepare.bind(env.DB); let capture = true, releaseHook = false, dispatcherB;
+  env.DB.prepare = (sql) => {
+    const stmt = prepare(sql);
+    if (sql.startsWith('SELECT r.*, c.recipient') && capture) {
+      capture = false; const all = stmt.all.bind(stmt);
+      stmt.all = async () => { const rows = await all(); snapshotReady(); await resume; return rows; };
+    }
+    if (sql.startsWith('UPDATE whatsapp_booking_conversations SET lock_id = NULL')) {
+      const run = stmt.run.bind(stmt);
+      stmt.run = async () => { const result = await run(); if (releaseHook) { releaseHook = false; resumeSnapshot(); await dispatcherB; } return result; };
+    }
+    return stmt;
+  };
+  const sends = [];
+  dispatcherB = sendBookingReplies(env, async () => { sends.push('B'); return Response.json({ sid: 'SM' + '6'.repeat(32) }); }, NOW);
+  await ready; releaseHook = true;
+  await sendBookingReplies(env, async () => {
+    sends.push('A'); const sid = 'SM' + '5'.repeat(32);
+    const form = new URLSearchParams({ AccountSid: SID, MessageSid: sid, MessageStatus: 'failed' });
+    await applyTwilioBookingStatus(new Request(URL + '/status', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Twilio-Signature': sign(form, URL + '/status') }, body: form.toString() }), env);
+    return Response.json({ sid });
+  }, NOW);
+  await dispatcherB; assert.deepEqual(sends, ['A']);
+  assert.equal(env.DB.sqlite.prepare('SELECT phase FROM whatsapp_booking_conversations').get().phase, 'handoff');
+});
+
+test('failure receipt arriving during quote recheck blocks checkout under the same lease', async () => {
+  const env = environment(database()); const svc = services(); let creates = 0;
+  await processBookingEvent(env, { id: 'start', at: NOW, phone, text: 'מתחילים' }, svc, NOW);
+  const state = await reviewed(); env.DB.sqlite.prepare('UPDATE whatsapp_booking_conversations SET phase = ?, state_json = ?').run(state.phase, JSON.stringify(state));
+  const sid = 'SM' + '7'.repeat(32);
+  env.DB.sqlite.prepare("UPDATE whatsapp_booking_replies SET state = 'sent', body = NULL, provider_ref = ?").run(sid);
+  svc.quote = async () => { env.DB.sqlite.prepare('INSERT INTO whatsapp_booking_receipts (provider_ref, rank, created_at) VALUES (?, 1, ?)').run(sid, NOW); return quote; };
+  svc.create = async () => { creates++; return {}; };
+  await processBookingEvent(env, { id: 'confirm', at: NOW + 1000, phone, text: `אישור ${state.revision}` }, svc, NOW + 1000);
+  assert.equal(creates, 0); assert.equal(env.DB.sqlite.prepare('SELECT phase FROM whatsapp_booking_conversations').get().phase, 'handoff');
+});
+
+test('guided names, notes and access details retain size/date words as free text', async () => {
+  for (const [field, text] of [['notes', 'ספר קטן'], ['notes', 'חבילה קטנה'], ['name', 'יעל קטן'], ['pickup_detail', 'שער קטן ליד הכניסה'], ['dropoff_detail', 'איש הקשר: יעל קטן, קומה 2']]) {
+    const state = await reviewed(); state.phase = 'collect'; delete state.data[field];
+    const result = await advanceBooking(state, text, services(), { phone, now: NOW });
+    assert.equal(result.state.data[field], text); assert.equal(result.state.data.size, 'small'); assert.equal(result.state.phase, 'review');
+  }
 });

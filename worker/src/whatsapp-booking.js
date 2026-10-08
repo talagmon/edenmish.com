@@ -1,5 +1,6 @@
 // Bounded, transport-independent private booking conversation. No LLM, chat log,
 // payment assertion, wallet authorization, or provider side effects live here.
+import { extractBookingText } from './whatsapp-booking-text.js';
 import { normalizeIlPhone, scheduleError } from './validate.js';
 import { validateEmailAddress } from './email-validation.js';
 import { zoneOf } from './pricing.js';
@@ -23,6 +24,7 @@ const QUESTIONS = {
 };
 const missing = (data) => FIELDS.find((field) => data[field] == null);
 const command = (text) => text.trim().toLowerCase();
+export const isBookingHandoff = (text) => /^(?:(?:אני רוצה|אני צריך|אני צריכה|אפשר|בבקשה)\s+)?(נציג|אדם|עזרה|human|stop|עצור|ביטול)(?:\s+בבקשה)?[.!]?$/.test(command(text));
 export function newBooking() { return { phase: 'consent', data: { service: 'standard', customer_type: 'private' }, revision: 0 }; }
 export function bookingEnabled(env) {
   return env.WHATSAPP_BOOKING_STORAGE_READY === 'on'
@@ -63,16 +65,20 @@ function orderInput(data, phone) {
   const { schedule, ...rest } = data;
   return { ...rest, phone: normalizeIlPhone(phone), package: data.size === 'small' ? 'רגיל · קטן' : 'רגיל · בינוני', phone_delivery_link_opt_in: false };
 }
+function displayAddress(data, key) {
+  const city = data[key + '_city'];
+  return city && !data[key].endsWith(city) ? `${data[key]}, ${city}` : data[key];
+}
 function summary(state, phone) {
   const d = state.data;
   const q = state.quote;
-  return `סיכום משלוח רגיל ללקוח פרטי\nגודל: ${d.size === 'small' ? 'קטן' : 'בינוני'}\nאיסוף: ${d.pickup}\nפרטי איסוף: ${d.pickup_detail}\nמסירה: ${d.dropoff}\nפרטי מסירה: ${d.dropoff_detail}\nמועד: ${d.when_text}\nשם: ${d.name}\nטלפון: ${normalizeIlPhone(phone)}\nאימייל: ${d.email}\nהערות: ${d.notes}\nמחיר סופי: ₪${q.price} (ILS)${q.discount_amount ? `, כולל הנחה ₪${q.discount_amount}` : ''}\nההצעה תקפה ל-10 דקות ונבדקת שוב באישור.\nבאישור אתם מאשרים את התקנון, הפרטיות והביטול:\nhttps://edenmish.com/terms.html\nhttps://edenmish.com/privacy.html\nhttps://edenmish.com/refund.html\nלאישור כתבו: אישור ${state.revision}\nלשינוי: עריכה\nלטיפול אנושי: נציג`;
+  return `סיכום משלוח רגיל ללקוח פרטי\nגודל: ${d.size === 'small' ? 'קטן' : 'בינוני'}\nאיסוף: ${displayAddress(d, 'pickup')}\nפרטי איסוף: ${d.pickup_detail}\nמסירה: ${displayAddress(d, 'dropoff')}\nפרטי מסירה: ${d.dropoff_detail}\nמועד: ${d.when_text}\nשם: ${d.name}\nטלפון: ${normalizeIlPhone(phone)}\nאימייל: ${d.email}\nהערות: ${d.notes}\nמחיר סופי: ₪${q.price} (ILS)${q.discount_amount ? `, כולל הנחה ₪${q.discount_amount}` : ''}\nההצעה תקפה ל-10 דקות ונבדקת שוב באישור.\nבאישור אתם מאשרים את התקנון, הפרטיות והביטול:\nhttps://edenmish.com/terms.html\nhttps://edenmish.com/privacy.html\nhttps://edenmish.com/refund.html\nלאישור כתבו: אישור ${state.revision}\nלשינוי: עריכה\nלטיפול אנושי: נציג`;
 }
 export async function advanceBooking(current, text, services, { phone, now = Date.now() } = {}) {
   const state = structuredClone(current);
   const c = command(text);
   if (state.phase === 'handoff') return { state, reply: null };
-  if (/^(נציג|אדם|עזרה|human|stop|עצור|ביטול)$/.test(c)) {
+  if (isBookingHandoff(text)) {
     state.phase = 'handoff'; return { state, reply: HANDOFF };
   }
   if (state.phase === 'consent') {
@@ -118,10 +124,23 @@ export async function advanceBooking(current, text, services, { phone, now = Dat
       return null;
     });
     const labelled = entries.every(Boolean) && entries.length > 0;
-    if (!labelled && state.phase !== 'collect') return { state, reply: state.phase === 'review' ? summary(state, phone) : `לאישור הכתובות כתבו כתובות ${state.revision}, לשינוי כתבו עריכה, או נציג.` };
     const field = missing(state.data);
-    if (!labelled && !field) return { state, reply: 'כתבו שם שדה ונקודתיים לשינוי, או נציג.' };
-    for (const [key, value] of labelled ? entries : [[field, text.trim()]]) {
+    const candidate = labelled ? null : extractBookingText(text, now);
+    // Names, access details and notes are ordinary free-text answers. A size
+    // adjective or a date inside them must not silently become another edit.
+    const freeText = ['name', 'pickup_detail', 'dropoff_detail', 'notes'].includes(field);
+    const explicitName = field === 'name' && /^(שמי|קוראים לי)\s/u.test(text.trim());
+    const fullRoute = candidate?.entries?.some(([key]) => key === 'pickup');
+    const natural = !freeText || explicitName || fullRoute ? candidate : null;
+    if (natural?.clarification) {
+      state.phase = 'collect'; state.quote = null; state.address_confirmed = false;
+      delete state.terms_accepted_at;
+      return { state, reply: natural.clarification };
+    }
+    const supplied = labelled ? entries : natural?.entries;
+    if (!supplied && state.phase !== 'collect') return { state, reply: state.phase === 'review' ? summary(state, phone) : `לאישור הכתובות כתבו כתובות ${state.revision}, לשינוי כתבו עריכה, או נציג.` };
+    if (!supplied && !field) return { state, reply: 'כתבו שם שדה ונקודתיים לשינוי, או נציג.' };
+    for (const [key, value] of supplied || [[field, text.trim()]]) {
       // Any attempted edit invalidates consent to the old summary, even if the
       // replacement is invalid/ambiguous. Never let an old Confirm book old data.
       state.quote = null; state.phase = 'collect';
@@ -160,7 +179,7 @@ export async function advanceBooking(current, text, services, { phone, now = Dat
   if (field) return { state, reply: QUESTIONS[field] };
   if (!state.address_confirmed) {
     state.phase = 'address_review'; state.revision++;
-    return { state, reply: `זיהיתי את הכתובות:\nאיסוף: ${state.data.pickup}\nמסירה: ${state.data.dropoff}\nלאישור כתבו כתובות ${state.revision}. לשינוי כתבו עריכה או נציג.` };
+    return { state, reply: `זיהיתי את הכתובות:\nאיסוף: ${displayAddress(state.data, 'pickup')}\nמסירה: ${displayAddress(state.data, 'dropoff')}\nלאישור כתבו כתובות ${state.revision}. לשינוי כתבו עריכה או נציג.` };
   }
   const quote = await services.quote(orderInput(state.data, phone));
   if (!quote || quote.review || !Number.isFinite(quote.price)) { state.phase = 'handoff'; return { state, reply: HANDOFF }; }

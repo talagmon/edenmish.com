@@ -1128,7 +1128,8 @@ Do not run these until they exist and have been validated on a dev DB.
 ## 039 — WhatsApp booking drafts and channel source
 
 Adds `orders.source_channel` (defaults to `website`) and isolated conversation,
-event-deduplication and reply-outbox tables. Contains no seed PII or credentials.
+event-deduplication, reply-outbox and sanitized delivery-receipt tables, plus a
+durable checkout-attempt safety timestamp. Contains no seed PII or credentials.
 Apply **after merge and before deploying the Worker**, even if booking stays off.
 Migration 039 must be applied once; check the column before rerunning an interrupted
 migration. Coordinate separately developed 035/036 changes without renumbering them.
@@ -1143,11 +1144,12 @@ Verification (read only):
 ```sql
 PRAGMA table_info(orders);
 SELECT name FROM sqlite_master WHERE type='table'
-AND name IN ('whatsapp_booking_conversations','whatsapp_booking_events','whatsapp_booking_replies');
+AND name IN ('whatsapp_booking_conversations','whatsapp_booking_events','whatsapp_booking_replies','whatsapp_booking_receipts');
+PRAGMA table_info(whatsapp_booking_conversations);
 SELECT source_channel, COUNT(*) FROM orders GROUP BY source_channel;
 ```
 
-Confirm `source_channel` defaults to `website`, all three tables exist, and enable
+Confirm `source_channel` defaults to `website`, all four tables and `checkout_started_at` exist, and enable
 `WHATSAPP_BOOKING_STORAGE_READY=on` for retention. Keep booking/intake/send flags off
 until the new privacy and dedicated-Twilio-number activation gates in
 `../docs/WHATSAPP_BOOKING.md` are approved. This task did not run remote migrations.

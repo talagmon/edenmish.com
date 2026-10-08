@@ -698,6 +698,7 @@ CREATE TABLE IF NOT EXISTS whatsapp_booking_conversations (
   confirmed_at INTEGER,
   confirmed_revision INTEGER,
   confirmed_price INTEGER,
+  checkout_started_at INTEGER,
   lock_id TEXT,
   lock_at INTEGER,
   created_at INTEGER NOT NULL,
@@ -722,3 +723,11 @@ CREATE INDEX IF NOT EXISTS whatsapp_booking_replies_pending ON whatsapp_booking_
 CREATE INDEX IF NOT EXISTS whatsapp_booking_events_expiry ON whatsapp_booking_events(created_at);
 
 CREATE UNIQUE INDEX IF NOT EXISTS whatsapp_booking_reply_provider ON whatsapp_booking_replies(provider_ref) WHERE provider_ref IS NOT NULL;
+
+-- Sanitized signed delivery receipts survive callback-before-send-response races.
+CREATE TABLE IF NOT EXISTS whatsapp_booking_receipts (
+  provider_ref TEXT PRIMARY KEY,
+  rank INTEGER NOT NULL,
+  applied_rank INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);

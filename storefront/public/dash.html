@@ -356,7 +356,7 @@ async function showWhatsAppBookings(){
       var heading=document.createElement("h3");heading.textContent=(labels[row.phase]||row.phase)+(row.order_id?" · הזמנה #"+row.order_id:"");card.appendChild(heading);
       var contact=document.createElement("p");contact.textContent=row.recipient||"פרטי השיחה נמחקו";contact.dir="ltr";card.appendChild(contact);
       var data={};try{data=JSON.parse(row.state_json).data||{};}catch(e){}
-      var fields={name:"שם",email:"אימייל",pickup:"איסוף",pickup_detail:"פרטי איסוף",dropoff:"מסירה",dropoff_detail:"פרטי מסירה",when_text:"מועד",notes:"הערות"};
+      var fields={name:"שם",email:"אימייל",pickup:"איסוף",pickup_city:"עיר איסוף",pickup_detail:"פרטי איסוף",dropoff:"מסירה",dropoff_city:"עיר מסירה",dropoff_detail:"פרטי מסירה",when_text:"מועד",notes:"הערות"};
       Object.keys(fields).forEach(function(key){if(data[key]){var line=document.createElement("p");line.textContent=fields[key]+": "+data[key];card.appendChild(line);}});
       if(row.phase!=="closed"){
         var action=document.createElement("button");action.className="text-secondary p-3";
@@ -365,7 +365,7 @@ async function showWhatsAppBookings(){
           action.disabled=true;
           try{
             var res=await api("/api/ops/whatsapp/bookings/"+encodeURIComponent(row.id)+"/"+(row.phase==="handoff"?"close":"pause"),{method:"POST",body:"{}"});
-            if(!res.ok){action.disabled=false;return showTransientError("לא בוצע שינוי. ייתכן שתהליך מתבצע כרגע או שקישור תשלום דורש בירור. בדקו את ההזמנה ונסו שוב.");}
+            if(!res.ok){action.disabled=false;return showTransientError("לא בוצע שינוי. ייתכן שתהליך פעיל או שניסיון תשלום דורש בירור. ביטול ההזמנה במערכת אינו מבטל קישור תשלום. בדקו את ההזמנה.");}
             await showWhatsAppBookings();
           }catch(e){action.disabled=false;showTransientError("לא ניתן לאשר שהפעולה הושלמה. רעננו לפני פעולה נוספת.");}
         };card.appendChild(action);

@@ -29,10 +29,17 @@ existing coupon engine. No phone match authorizes a business account.
    house number plus city, pickup date/hour, name, email, access/contact details
    at both ends, and notes. The WhatsApp sender is the booking phone. Alternate
    stop contacts can be supplied in access details, as in the existing website.
-3. Replies can be ordinary answers to the current question or multiple labelled
-   lines (`איסוף: דיזנגוף 10, תל אביב`, `מסירה: ביאליק 2, רמת גן`, `גודל: קטן`).
-   Relative dates and uncertain intent trigger clarification instead of guessing.
-   The date prompt uses `YYYY-MM-DD HH:00` in Israel time.
+3. Replies can be ordinary answers, multiple labelled lines (`איסוף: דיזנגוף 10,
+   תל אביב`), or bounded Hebrew sentences supplying several fields together. For
+   example, `חבילה קטנה מדיזנגוף 10, תל אביב לביאליק 2, רמת גן מחר בשעה 11`
+   supplies size, both addresses and time. `שמי יעל כהן` and an email can be in the
+   same message. Today/tomorrow use the Israel calendar and require an exact whole
+   hour; the existing eligibility rules still apply. Vague times, alternatives,
+   negation and unexplained remaining instructions prompt clarification. This
+   grammar does not interpret arbitrary prose, voice/media or English sentences.
+   Guided name/access/notes answers retain their text even when it contains size
+   or date words. Explicit labelled fields remain available for names/addresses
+   outside the grammar.
 4. The existing Google Places business-address resolver supplies normalized
    addresses and coordinates. Ambiguity asks for a more exact address; unavailable
    validation never invents coordinates. Unsupported areas hand off. Both
@@ -55,11 +62,15 @@ existing coupon engine. No phone match authorizes a business account.
    payment state; details remain in email/tracking.
 
 This is bounded text understanding, not a general natural-language agent. The
-assistant neither retains raw chat logs nor sends customer text to an LLM.
+assistant neither retains raw chat logs nor sends customer text to an LLM. See the
+[test-generated mocked conversation](WHATSAPP_BOOKING_EXAMPLE.md) for the actual
+customer flow, authoritative fixture price and payment-claim behavior.
 
 ## Architecture and delivery semantics
 
 - `whatsapp-booking.js`: transport-independent state machine and field validation.
+- `whatsapp-booking-text.js`: bounded Hebrew sentence extraction; all extracted
+  values pass the same field, address, schedule and price checks as guided answers.
 - `whatsapp-booking-store.js`: D1 conversations, hashed event deduplication,
   per-conversation compare-and-set leases, reply outbox, takeover and retention.
 - `whatsapp-booking-twilio.js`: exact public-URL HMAC-SHA1 verification, strict
@@ -79,7 +90,9 @@ assistant neither retains raw chat logs nor sends customer text to an LLM.
 
 Inbound acknowledgements follow durable processing. A busy conversation returns
 503 for provider retry; duplicate event IDs do not advance or resend prompts.
-Strictly older messages are ignored. Distinct messages with the same provider
+Strictly older ordinary messages are ignored; customer stop/human requests and
+manual echoes always pause, even when delivered late. Already paused conversations
+do not emit repeat acknowledgements for same-second follow-ups. Distinct messages with the same provider
 second are ambiguous and pause for review rather than applying unordered edits.
 Twilio's webhook has no authoritative creation time, so the adapter reads that
 message's Twilio resource after signature validation. Only its metadata is used;
@@ -87,7 +100,8 @@ its body is not retained. The original creation time bounds replay and the 24-ho
 customer-service window. Configure provider retries and verify timeout behavior
 with the controlled sender before launch.
 
-Before checkout the draft is durably marked `creating`. A process crash, uncertain
+Before checkout the draft is durably marked `creating` and `checkout_started_at`
+is recorded independently of disposable draft content. A process crash, uncertain
 provider acceptance, or expired two-minute lease moves to human review; it never
 automatically repeats the charge. Operators can find an order through the stored
 reserved token even if the reverse `order_id` update was interrupted. Do not use an
@@ -98,8 +112,11 @@ Replies use a durable outbox and a separate send gate. Long summaries are split
 on line boundaries into numbered parts under Twilio’s 1,600-character limit; no
 fields or totals are silently truncated. A send is claimed before
 network activity. Ambiguous sends pause instead of retrying an unknown acceptance.
-Signed delivered/read events never regress to failed; transport failure pauses
-future automation. Outbox bodies are cleared after dispatch, failure or supersession.
+Signed delivery receipts are durably stored as SID/status rank only, including
+callbacks arriving before the send response. Pending receipts are applied while
+holding the conversation lease before another send or checkout, and replayed by
+cron. Signed delivered/read events never regress to failed; transport failure
+pauses future automation without resuming after a later success. Outbox bodies are cleared after dispatch, failure or supersession.
 No messages are sent after the 24-hour window. No template is created or submitted
 by this release. Any future outside-window messaging requires a separate approved
 content-template and privacy flow.
@@ -117,12 +134,16 @@ No new bearer credential is stored in the browser.
   Twilio inbox; arbitrary outside-inbox manual sends do not supply Meta app echoes.
 - **Close** only after resolving a handoff. This erases its draft/contact fields
   and permits a fresh conversation on the next inbound message. It does not cancel
-  an order. If a canonical order exists, it must be paid or cancelled before close.
-  An ambiguous unpersisted Shopify draft must be reconciled first even if D1 has
-  no order, because absence of a reverse link is not proof of no provider effect.
+  an order. Close is allowed only if no checkout was attempted/no order exists,
+  or the canonical order is paid. **D1 cancellation is insufficient:** it does not
+  void a Shopify invoice. Missing D1 data after an attempt is also insufficient.
+  Unpaid or uncertain attempts remain blocked (HTTP 409), including after draft
+  retention. This release has no provider-void/reconciliation override. An audited,
+  provider-verified recovery workflow must be reviewed before adding one; do not
+  delete the safety record or mark an order paid to bypass the restriction.
 - No customer phrase resumes a handoff. One unresolved automated booking per
   sender is intentional in this first release. Start another through operator
-  pause/close after the previous order is paid/cancelled.
+  pause/close after the previous order is paid, or close an unsubmitted draft.
 
 Endpoints (all Ops-authenticated; mutations additionally require the trusted
 Origin or existing `X-Ops` authentication):
@@ -144,9 +165,13 @@ are never intentionally persisted or logged. Probable card-number strings are
 rejected before field storage. Do not enable request-body logging at the edge.
 
 Structured draft/contact data expires after 48 hours; unsent reply bodies expire
-by 24 hours. Outbox metadata lasts seven days, event tombstones eight days,
-conversation metadata (including consent/confirmation timestamps, revision and
-reviewed amount) thirty days. Canonical orders follow the existing order retention.
+by 24 hours. Outbox/receipt metadata lasts seven days and event tombstones eight
+days. Conversation metadata (including consent/confirmation timestamps, revision
+and reviewed amount) normally lasts thirty days. **Unresolved checkout attempts
+retain their HMAC sender key, reserved token and safety metadata beyond thirty days**
+until canonical payment is verified; draft/contact PII still expires at 48 hours.
+This exception prevents retention from reopening an uncertain payable invoice and
+requires explicit privacy approval. Canonical orders follow existing order retention.
 Cleanup runs on the existing cron even after booking/sends are turned off, as long
 as the storage-ready flag remains on. It runs at cron time, not at exact expiry.
 Closing a conversation immediately removes draft/contact data.
@@ -171,7 +196,9 @@ retention/disclosure review and issue #216 evidence before activation.
    tables exist and keep it on for retention even during channel shutdown.
 4. Complete privacy/terms/retention evidence; assign a monitored Ops handoff owner.
    Confirm existing payment reconciliation, email delivery, Google Places and
-   driver activation are ready in the target environment.
+   driver activation are ready in the target environment. Accept the conservative
+   unpaid-checkout restart restriction and define an escalated recovery owner; any
+   future provider-verified void override requires separate implementation/review.
 5. Configure secrets through the approved secret manager (never command arguments,
    git or chat): `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `SESSION_SECRET`, existing
    `GOOGLE_PLACES_SERVER_KEY`, Shopify and email secrets. Never reuse live payment
@@ -214,7 +241,17 @@ Existing canonical orders still reconcile through the normal payment pipeline.
 invalid edits, unsupported areas, price/expiry, duplicates/out-of-order/busy/crash
 paths, original Twilio timestamp/signature/allowlist checks, single canonical order
 and invoice, failed checkout, amount/currency reconciliation, operator auth/CSRF,
-retention and delivery failures. No tests send real messages or payments.
+retention and delivery failures, including early callbacks with concurrent
+dispatchers, failed delivery during quote confirmation, delayed human requests,
+and cancelled/unpersisted checkout restart prevention. Natural extraction tests
+cover multi-field sentences, Israel date boundaries and ambiguous instructions.
+No tests send real messages or payments.
+
+Independent review identified and reproduced the callback, takeover and restart
+defects; regression tests now cover each, including the concurrent-dispatch race.
+Real Twilio callback URL normalization/retries, D1 multi-isolate behavior, actual
+email delivery and live provider timeout recovery still need controlled staging
+verification. Local mock success does not clear these activation gates.
 
 Provider references: [Twilio request security](https://www.twilio.com/docs/usage/security),
 [Twilio Message resource](https://www.twilio.com/docs/messaging/api/message-resource).
