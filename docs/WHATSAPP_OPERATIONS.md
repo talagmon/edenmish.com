@@ -154,3 +154,12 @@ If unexpected messages, consent violations, or credential exposure are suspected
 3. Confirm new attempts are skipped rather than sent.
 4. Preserve sanitized notification audit metadata.
 5. Follow the privacy incident procedure in `PRIVACY_COMPLIANCE.md`.
+
+## Incoming booking adapter (disabled)
+
+The separate customer-initiated booking release is documented in
+[`WHATSAPP_BOOKING.md`](WHATSAPP_BOOKING.md). It selects a dedicated Twilio sender;
+Eden's existing public WhatsApp number/app remain unchanged. Its structured PII,
+quote summary and payment-link replies require **new explicit privacy/activation
+review**; the template-only approvals above do not enable that broader boundary.
+Neither booking nor sending is enabled by this implementation.

@@ -351,3 +351,19 @@ wrangler deploy
 - [ ] Confirm per-order notification history appears in ops.
 - [ ] If WhatsApp Cloud API is enabled, complete the consent and controlled
       delivery matrix in `../docs/WHATSAPP_OPERATIONS.md`.
+
+### WhatsApp booking release deployment prerequisite
+
+Before deploying the WhatsApp booking Worker, apply migration
+`039_whatsapp_booking.sql` after merge (see `MIGRATIONS.md` for the exact command
+and schema verification). Its `source_channel` default is also used by website
+orders, so migration is required even while booking is disabled.
+
+Set `WHATSAPP_BOOKING_STORAGE_READY=on` only after migration; leave it on during
+channel shutdown so retention continues. Intake additionally needs explicit
+booking, privacy and provider configuration; sends have a separate switch.
+The selected launch uses a **separate dedicated Twilio WhatsApp number** and does
+not change Eden's existing public number/app. Account setup, credentials, migration,
+deployment and live sends remain separate operator approvals. See
+[`WHATSAPP_BOOKING.md`](../docs/WHATSAPP_BOOKING.md) for the full activation,
+controlled-test, human-takeover and recovery procedure.

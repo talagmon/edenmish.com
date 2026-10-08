@@ -1,3 +1,9 @@
+import { readTwilioBookingEvent, applyTwilioBookingStatus } from './whatsapp-booking-twilio.js';
+import { bookingEnabled, resolveBookingAddress, QUOTE_TTL } from './whatsapp-booking.js';
+import { extractBookingEvents, processBookingEvent, sendBookingReplies, pauseBooking, closeBooking, cleanupBookings } from './whatsapp-booking-store.js';
+
+// Object-identity capability: no public header/body can enable channel privileges.
+const bookingRequests = new WeakMap();
 import {
   createOrder,
   getOrderByToken,
@@ -595,8 +601,34 @@ function isTrustedOpsMutationOrigin(req, env) {
   }
 }
 
-export default {
+function bookingServices(env, ctx) {
+  return {
+    resolveAddress: (text) => resolveBookingAddress(text, env),
+    order: (token) => getOrderByToken(env.DB, token),
+    quote: async (input) => {
+      const quote = await authoritativeQuote(env, input);
+      if (quote.review) return quote;
+      const automatic = await findAutomaticCoupon(env.DB, quote.price, couponIdentity(input, null));
+      return {
+        ...quote, price: automatic.valid ? automatic.price : quote.price,
+        discount_amount: automatic.valid ? automatic.discountAmount : 0,
+        discount_code: automatic.valid ? automatic.code : null, currency: 'ILS',
+      };
+    },
+    create: async ({ input, expectedPrice, quoteAt }, identity) => {
+      const request = new Request('https://find.edenmish.com/api/orders', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+      });
+      bookingRequests.set(request, { ...identity, expectedPrice, quoteAt });
+      return (await worker.fetch(request, env, ctx)).json();
+    },
+  };
+}
+
+const worker = {
   async fetch(req, env, ctx) {
+    const booking = bookingRequests.get(req);
+    bookingRequests.delete(req);
     const url = new URL(req.url);
     // Wrangler's local HTTPS certificate is self-signed. TEST_MODE may use
     // loopback HTTP for browser QA; every non-test environment stays HTTPS-only.
@@ -1271,6 +1303,10 @@ export default {
     }
 
     if (path === '/api/orders' && req.method === 'POST') {
+      if (booking) {
+        const existing = await getOrderByToken(env.DB, booking.token);
+        if (existing) return json({ order_id: existing.id, payment_url: existing.payment_url, price: existing.price, idempotent: true });
+      }
       // Business batches can legitimately create up to 100 delivery orders. A
       // validated account session gets an account-scoped ceiling while public
       // requests retain the much tighter anti-abuse limits.
@@ -1279,7 +1315,7 @@ export default {
         const isBusiness = !!preAuthenticatedBusinessSession;
         const k = isBusiness
           ? `business:${preAuthenticatedBusinessSession.account_id}`
-          : await anonKey(env, clientIp(req));
+          : booking ? `whatsapp:${booking.token}` : await anonKey(env, clientIp(req));
         const r10 = await incrRateLimit(env.DB, (isBusiness ? 'ordbiz:' : 'ord:') + k, 10 * 60 * 1000);
         if (r10.count > (isBusiness ? 200 : 5)) { console.log('order_rate_limited', { window: '10m', business: isBusiness }); return json({ error: 'rate_limited' }, 429, { ...cors, 'Retry-After': '600' }); }
         const rd = await incrRateLimit(env.DB, (isBusiness ? 'ordbizd:' : 'ordd:') + k, 24 * 60 * 60 * 1000);
@@ -1469,6 +1505,10 @@ export default {
         }, 409, cors);
       }
 
+      if (booking && (isReview || Date.now() - booking.quoteAt >= QUOTE_TTL
+        || Number(coupon ? coupon.price : pr.price) !== booking.expectedPrice)) {
+        return json({ error: 'whatsapp_quote_changed' }, 409, cors);
+      }
       let promotionClaim = null;
       let promotionClaimCreated = false;
       if (coupon && coupon.eligibilityRule === 'first_delivery') {
@@ -1628,7 +1668,7 @@ export default {
           payment_method: businessSession ? 'wallet' : null,
           email_verified: businessSession ? 1 : 0,
           ...discountFields
-        });
+        }, booking ? { token: booking.token, source: 'whatsapp' } : {});
       } catch (error) {
         if (walletReservation) {
           // The unique wallet_reservation_id index serializes concurrent retries.
@@ -1723,7 +1763,7 @@ export default {
         }
       }
 
-      const testMode = (env.TEST_MODE === '1' || env.TEST_MODE === 'true')
+      const testMode = !booking && (env.TEST_MODE === '1' || env.TEST_MODE === 'true')
         && url.searchParams.get('test') === '1';
       let analyticsClaimRegistered = false;
 
@@ -2371,7 +2411,7 @@ export default {
       });
       return json({
         orders,
-        integrations: { shopify_webhooks: shopifyWebhookRegistrar.status() },
+        integrations: { shopify_webhooks: shopifyWebhookRegistrar.status(), whatsapp_booking: bookingEnabled(env) },
       });
     }
 
@@ -2693,6 +2733,44 @@ export default {
       return json({ ok: true, coupon: c });
     }
 
+    // Authenticated operator queue. No phone lookup grants business/wallet access.
+    if (path === '/api/ops/whatsapp/bookings' && req.method === 'GET') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      if (!bookingEnabled(env)) return json({ disabled: true, bookings: [] });
+      const rows = await env.DB.prepare(`SELECT c.id, c.phase, COALESCE(c.order_id, o.id) AS order_id, c.recipient,
+        c.state_json, c.created_at, c.updated_at, c.consent_at, c.confirmed_at, c.confirmed_revision, c.confirmed_price
+        FROM whatsapp_booking_conversations c LEFT JOIN orders o ON o.token = c.order_token
+        ORDER BY CASE WHEN c.phase = 'handoff' THEN 0 ELSE 1 END, c.updated_at DESC LIMIT 100`).all();
+      return json({ bookings: rows.results || [] });
+    }
+    const bookingPause = /^\/api\/ops\/whatsapp\/bookings\/([a-f0-9-]{36})\/(pause|close)$/.exec(path);
+    if (bookingPause && req.method === 'POST') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      if (!isTrustedOpsMutationOrigin(req, env)) return json({ error: 'untrusted_origin' }, 403);
+      if (!bookingEnabled(env)) return json({ error: 'disabled' }, 404);
+      const result = await (bookingPause[2] === 'close' ? closeBooking : pauseBooking)(env.DB, bookingPause[1]);
+      return json({ ok: result.status === 200, ...(result.status === 409 ? { error: 'in_flight_or_checkout_requires_review' } : {}) }, result.status);
+    }
+
+    if (path === '/webhooks/twilio/booking/status' && req.method === 'POST') {
+      if (env.WHATSAPP_BOOKING_STORAGE_READY !== 'on') return json({ error: 'disabled' }, 503);
+      const status = await applyTwilioBookingStatus(req, env);
+      return json({ received: status === 200 }, status);
+    }
+
+    // Separate dedicated Twilio booking number; never shares inbound marketing routes.
+    if (path === '/webhooks/twilio/booking' && req.method === 'POST') {
+      if (!bookingEnabled(env) || env.WHATSAPP_BOOKING_PROVIDER !== 'twilio') return json({ error: 'disabled' }, 503);
+      const parsed = await readTwilioBookingEvent(req, env);
+      if (parsed.status !== 200) return json({ error: 'booking_webhook_rejected' }, parsed.status);
+      if (parsed.event) {
+        const result = await processBookingEvent(env, parsed.event, bookingServices(env, ctx));
+        if (result.busy) return json({ error: 'booking_busy' }, 503);
+        await sendBookingReplies(env);
+      }
+      return new Response('<Response/>', { headers: { 'Content-Type': 'text/xml', 'Cache-Control': 'no-store' } });
+    }
+
     // ---- WhatsApp Cloud API verification and delivery receipts ----
     if (path === '/webhooks/whatsapp' && req.method === 'GET') {
       const challenge = verifyWhatsAppWebhookChallenge(env, url);
@@ -2734,6 +2812,14 @@ export default {
         const result = await applyWhatsAppDeliveryReceipt(env.DB, receipt);
         if (result.matched) matched += 1;
         if (result.updated) updated += 1;
+      }
+      if (bookingEnabled(env) && env.WHATSAPP_BOOKING_PROVIDER === 'meta') {
+        for (const event of extractBookingEvents(payload, env.WHATSAPP_PHONE_ID)) {
+          const result = await processBookingEvent(env, event, bookingServices(env, ctx));
+          if (result.busy) return json({ error: 'booking_busy' }, 503);
+        }
+        // Await durable processing before acknowledging. Sending has a separate gate.
+        await sendBookingReplies(env);
       }
       return json({ received: true, matched, updated });
     }
@@ -2980,6 +3066,7 @@ export default {
     const heldPackageAndRouteTask = runHeldPackageAutoReturn(env.DB)
       .then(() => refreshActiveDriverRoute(env, event.scheduledTime || Date.now()));
     const tasks = [
+      cleanupBookings(env).then(() => sendBookingReplies(env)),
       processDeliveryNotificationOutbox(env),
       heldPackageAndRouteTask,
     ];
@@ -2996,3 +3083,5 @@ export default {
     }));
   }
 };
+
+export default worker;

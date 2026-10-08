@@ -1,0 +1,111 @@
+// Dedicated Twilio WhatsApp booking sender. Independent of proactive link/marketing
+// work in the other checkout; reuse the same account secret names and allowlist.
+import { normalizeIlPhone } from './validate.js';
+import { SESSION_WINDOW } from './whatsapp-booking.js';
+const SID = /^AC[0-9a-f]{32}$/i;
+const MESSAGE_SID = /^SM[0-9a-f]{32}$/i;
+const FROM = /^whatsapp:\+[1-9]\d{7,14}$/;
+export function twilioBookingConfigured(env) {
+  return SID.test(env.TWILIO_ACCOUNT_SID || '') && !!env.TWILIO_AUTH_TOKEN
+    && FROM.test(env.TWILIO_BOOKING_FROM || '')
+    && env.TWILIO_BOOKING_FROM.replace(/\D/g, '') !== String(env.WHATSAPP_NUMBER || '972534058498').replace(/\D/g, '');
+}
+export function bookingRecipientAllowed(env, recipient) {
+  if (env.TWILIO_RECIPIENT_POLICY === 'open') return true;
+  return env.TWILIO_RECIPIENT_POLICY === 'allowlist'
+    && String(env.TWILIO_RECIPIENT_ALLOWLIST || '').split(',').map((v) => v.trim()).includes(recipient);
+}
+const auth = (env) => `Basic ${btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`)}`;
+export async function verifyTwilioBookingSignature(url, form, signature, secret) {
+  if (!secret || !/^[A-Za-z0-9+/]{27}=$/.test(signature || '')) return false;
+  let payload = url;
+  for (const key of [...new Set(form.keys())].sort()) {
+    // Reject duplicate parameters: no ambiguity between signing and parser semantics.
+    if (form.getAll(key).length !== 1) return false;
+    payload += key + form.get(key);
+  }
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+  const expected = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload)))));
+  let difference = expected.length ^ signature.length;
+  for (let index = 0; index < expected.length; index++) difference |= expected.charCodeAt(index) ^ signature.charCodeAt(index);
+  return difference === 0;
+}
+export async function readTwilioBookingEvent(req, env, fetchImpl = globalThis.fetch, now = Date.now()) {
+  if (!twilioBookingConfigured(env)) return { status: 503 };
+  let publicUrl;
+  try {
+    publicUrl = new URL(env.TWILIO_BOOKING_WEBHOOK_URL);
+    if (publicUrl.protocol !== 'https:' || publicUrl.pathname !== '/webhooks/twilio/booking' || publicUrl.username || publicUrl.password || publicUrl.hash || publicUrl.search) return { status: 503 };
+  } catch { return { status: 503 }; }
+  if (!req.headers.get('content-type')?.startsWith('application/x-www-form-urlencoded')) return { status: 415 };
+  if (Number(req.headers.get('content-length')) > 32 * 1024) return { status: 413 };
+  const raw = await req.text();
+  if (new TextEncoder().encode(raw).length > 32 * 1024) return { status: 413 };
+  const form = new URLSearchParams(raw);
+  if (!await verifyTwilioBookingSignature(publicUrl.href, form, req.headers.get('X-Twilio-Signature'), env.TWILIO_AUTH_TOKEN)) return { status: 401 };
+  const id = form.get('MessageSid');
+  const from = form.get('From');
+  const phone = FROM.test(from || '') ? normalizeIlPhone(from.slice(9)) : null;
+  if (form.get('AccountSid') !== env.TWILIO_ACCOUNT_SID || form.get('To') !== env.TWILIO_BOOKING_FROM || !MESSAGE_SID.test(id || '') || !phone) return { status: 400 };
+  if (!bookingRecipientAllowed(env, phone)) return { status: 403 };
+  // Twilio's form webhook has no trusted creation timestamp. Fetch just this
+  // signed message resource to enforce replay age, ordering and the 24h window.
+  let message;
+  try {
+    const response = await fetchImpl(`https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages/${id}.json`, {
+      headers: { Authorization: auth(env) }, signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) return { status: 503 };
+    message = await response.json();
+  } catch { return { status: 503 }; }
+  const at = Date.parse(message.date_created);
+  if (message.sid !== id || message.account_sid !== env.TWILIO_ACCOUNT_SID || message.direction !== 'inbound' || message.from !== from || message.to !== env.TWILIO_BOOKING_FROM || !Number.isFinite(at)) return { status: 400 };
+  if (at <= now - SESSION_WINDOW || at > now + 60_000) return { status: 200, event: null };
+  const body = form.get('Body') || '';
+  return { status: 200, event: { id, phone, at, echo: false, text: form.get('NumMedia') === '0' && body.length <= 2000 ? body : null } };
+}
+export async function sendTwilioBookingReply(env, recipient, body, fetchImpl = globalThis.fetch) {
+  if (!twilioBookingConfigured(env) || !bookingRecipientAllowed(env, recipient) || !body || body.length > 1600) return null;
+  try {
+    const response = await fetchImpl(`https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages.json`, {
+      method: 'POST', signal: AbortSignal.timeout(10_000),
+      headers: { Authorization: auth(env), 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ From: env.TWILIO_BOOKING_FROM, To: `whatsapp:${recipient}`, Body: body, StatusCallback: env.TWILIO_BOOKING_WEBHOOK_URL + '/status' }).toString(),
+    });
+    const data = await response.json();
+    return response.ok && MESSAGE_SID.test(data?.sid || '') ? data.sid : null;
+  } catch { return null; }
+}
+
+// Delivery callbacks carry no payment authority. They only update transport state.
+export async function applyTwilioBookingStatus(req, env) {
+  if (!twilioBookingConfigured(env) || !env.TWILIO_BOOKING_WEBHOOK_URL) return 503;
+  if (!req.headers.get('content-type')?.startsWith('application/x-www-form-urlencoded')) return 415;
+  if (Number(req.headers.get('content-length')) > 32 * 1024) return 413;
+  const raw = await req.text();
+  if (new TextEncoder().encode(raw).length > 32 * 1024) return 413;
+  const form = new URLSearchParams(raw);
+  if (!await verifyTwilioBookingSignature(env.TWILIO_BOOKING_WEBHOOK_URL + '/status', form, req.headers.get('X-Twilio-Signature'), env.TWILIO_AUTH_TOKEN)) return 401;
+  if (form.get('AccountSid') !== env.TWILIO_ACCOUNT_SID || !MESSAGE_SID.test(form.get('MessageSid') || '')) return 400;
+  const row = await env.DB.prepare('SELECT id, conversation_id, state FROM whatsapp_booking_replies WHERE provider_ref = ?').bind(form.get('MessageSid')).first();
+  if (!row) return 200;
+  const status = form.get('MessageStatus');
+  if (['failed', 'undelivered', 'canceled'].includes(status)) {
+    if (['delivered', 'read'].includes(row.state)) return 200;
+    const lease = crypto.randomUUID();
+    const locked = await env.DB.prepare('UPDATE whatsapp_booking_conversations SET lock_id = ?, lock_at = ? WHERE id = ? AND lock_id IS NULL').bind(lease, Date.now(), row.conversation_id).run();
+    if (!locked?.meta?.changes) return 503;
+    try {
+      await env.DB.batch([
+      env.DB.prepare("UPDATE whatsapp_booking_replies SET state = 'failed', body = NULL WHERE id = ? AND state NOT IN ('delivered', 'read')").bind(row.id),
+      env.DB.prepare("UPDATE whatsapp_booking_conversations SET phase = 'handoff', state_json = json_set(state_json, '$.phase', 'handoff') WHERE id = ? AND phase != 'closed' AND EXISTS (SELECT 1 FROM whatsapp_booking_replies WHERE id = ? AND state = 'failed')").bind(row.conversation_id, row.id),
+      env.DB.prepare("UPDATE whatsapp_booking_replies SET state = 'cancelled', body = NULL WHERE conversation_id = ? AND state = 'pending' AND EXISTS (SELECT 1 FROM whatsapp_booking_replies WHERE id = ? AND state = 'failed')").bind(row.conversation_id, row.id),
+      ]);
+    } finally {
+      await env.DB.prepare('UPDATE whatsapp_booking_conversations SET lock_id = NULL, lock_at = NULL WHERE id = ? AND lock_id = ?').bind(row.conversation_id, lease).run();
+    }
+  } else if (['delivered', 'read'].includes(status)) {
+    await env.DB.prepare("UPDATE whatsapp_booking_replies SET state = ? WHERE id = ? AND state IN ('sent', 'failed', 'delivered')").bind(status, row.id).run();
+  }
+  return 200;
+}
