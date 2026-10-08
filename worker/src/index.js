@@ -1,6 +1,7 @@
 import { readTwilioBookingEvent, applyTwilioBookingStatus } from './whatsapp-booking-twilio.js';
 import { bookingEnabled, resolveBookingAddress, QUOTE_TTL } from './whatsapp-booking.js';
 import { conversationOnlyPilot, reservePilotOperation } from './whatsapp-booking-pilot.js';
+import { bookingPilotOpsPage } from './whatsapp-booking-ops.js';
 import { createOpenAIBookingModel } from './whatsapp-booking-openai.js';
 import { extractBookingEvents, processBookingEvent, sendBookingReplies, pauseBooking, closeBooking, cleanupBookings } from './whatsapp-booking-store.js';
 
@@ -652,6 +653,9 @@ const worker = {
     const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...cors, ...extra } });
 
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
+
+    const pilotOps = bookingPilotOpsPage(req, env);
+    if (pilotOps) return pilotOps;
 
     if (path === '/health' && req.method === 'GET') {
       return json({ ok: true, service: 'edenmish-worker' });

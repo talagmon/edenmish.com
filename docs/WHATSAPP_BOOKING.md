@@ -45,6 +45,12 @@ specific pilot approval. Use fictitious contact details, a reserved example emai
 and public test addresses. No OpenAI key or payment credentials are needed for
 this mode. Full checkout remains separately gated by the payment sandbox.
 
+The same-origin staging control page at `https://ops-staging.edenmish.com/pilot-ops`
+uses the existing HttpOnly Ops login and booking list/Pause APIs. It is only
+available on the staging host in conversation-only mode; it does not expose order
+actions. This lets operators stop the pilot before the feature dashboard reaches
+the shared staging storefront, without weakening SameSite cookie protections.
+
 Stop with authenticated Ops Pause while the pilot is active, then turn sends and
 booking off and clear the sender's incoming callback. A request already in flight
 cannot be recalled. Expiry blocks new requests even if flags remain on. Preserve
