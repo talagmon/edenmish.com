@@ -6,6 +6,14 @@ const address = `([א-תA-Za-z'׳״" .-]{2,70}?\\s+\\d{1,5}[א-תa-z]?)\\s*,?\\s
 const clarification = 'לא הצלחתי להבין את כל הפרטים בוודאות. כתבו פרטים מדויקים בלי חלופות, למשל: חבילה קטנה מדיזנגוף 10, תל אביב לביאליק 2, רמת גן מחר בשעה 11. אפשר גם שם שדה ונקודתיים, או נציג.';
 
 export function extractBookingText(text, now) {
+  // Keep each route span intact for the shared map resolver. Recipient is a
+  // delivery contact, never silently substituted for the booking customer's name.
+  const englishRoute = /^from\s+(.+?\d[א-תa-z]?)\s+to\s+(.+?\d[א-תa-z]?)(?:\s+(?:to|for)\s+([a-z][a-z '-]{0,79}))?[.!]?$/i.exec(text.trim());
+  if (englishRoute) return { entries: [['pickup', englishRoute[1]], ['dropoff', englishRoute[2]], ...(englishRoute[3] ? [['dropoff_detail', `Recipient: ${englishRoute[3]}`]] : [])] };
+  // Narrow item inference; mixed/large/heavy descriptions require clarification.
+  // These proposed fields are still shown in the final confirmation summary.
+  if (/^(?:(?:i (?:need|want) to send|send)\s+)?(?:(?:my|an?|the)\s+)?(?:keys?|envelop(?:e)?s?)(?:\s+(?:and|or)\s+(?:(?:my|an?|the)\s+)?(?:keys?|envelop(?:e)?s?))*[.!]?$/i.test(text.trim())
+    || /^(?:(?:אני (?:צריך|צריכה|רוצה) לשלוח|לשלוח)\s+)?(?:מפתחות|מפתח|מעטפה|מעטפות)(?:\s+שלי)?[.!]?$/u.test(text.trim())) return { entries: [['size', 'small'], ['notes', text.trim()]] };
   let remaining = text.trim().replace(/^משלוח\s+(?=מ[א-ת])/u, '');
   const entries = [];
   let ambiguous = false;

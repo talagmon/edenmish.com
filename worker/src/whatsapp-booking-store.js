@@ -1,7 +1,7 @@
 import { proposeBookingTurn } from './whatsapp-booking-model.js';
 import { HANDOFF_EN } from './whatsapp-booking-copy.js';
 import { sendTwilioBookingReply, reconcileTwilioBookingReceipts } from './whatsapp-booking-twilio.js';
-import { advanceBooking, bookingEnabled, newBooking, isBookingHandoff, HANDOFF, SESSION_WINDOW } from './whatsapp-booking.js';
+import { advanceBooking, withBookingMenu, bookingEnabled, newBooking, isBookingHandoff, HANDOFF, SESSION_WINDOW } from './whatsapp-booking.js';
 import { normalizeIlPhone } from './validate.js';
 import { WHATSAPP_GRAPH_API_VERSION } from './whatsapp.js';
 import { conversationOnlyPilot, reservePilotOperation, pilotComplete } from './whatsapp-booking-pilot.js';
@@ -135,7 +135,9 @@ export async function processBookingEvent(env, event, services, now = Date.now()
             state.phase = 'collect'; state.quote = null; delete state.terms_accepted_at;
             // Preserve the data; an explicit address review triggers a fresh quote.
             state.phase = 'address_review'; state.revision++;
-            reply = `המחיר השתנה לפני יצירת ההזמנה. לא נוצר חיוב. לאישור הכתובות וקבלת הצעה חדשה כתבו כתובות ${state.revision}.`;
+            reply = withBookingMenu({ state, reply: state.language === 'en'
+              ? 'The price changed before order creation. No charge was created. Confirm the addresses again to get a fresh quote.'
+              : 'המחיר השתנה לפני יצירת ההזמנה. לא נוצר חיוב. אשרו שוב את הכתובות לקבלת הצעה חדשה.' }, now).reply;
           } else if (!resultOrder.error && canonical?.payment_status === 'link_sent' && canonical.payment_url) {
             state.phase = 'booked';
             reply = state.language === 'en' ? `Your order is awaiting payment through this secure link:\n${canonical.payment_url}\nTracking details will be sent by email after payment verification; never send card details in chat.` : `ההזמנה נוצרה וממתינה לתשלום. תשלום רק בקישור המאובטח:\n${canonical.payment_url}\nפרטי המעקב יישלחו באימייל לאחר אימות התשלום. אין לשלוח פרטי כרטיס בצ׳אט.`;

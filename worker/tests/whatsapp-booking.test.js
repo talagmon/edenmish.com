@@ -345,6 +345,11 @@ test('canonical creation rejects a price race after confirmation recheck, before
   assert.equal(env.DB.sqlite.prepare('SELECT COUNT(*) n FROM orders').get().n, 0); assert.equal(net.counts.charges, 0);
   const changed = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get(); assert.equal(changed.phase, 'address_review');
   assert.equal(changed.confirmed_at, null);
+  assert.equal(JSON.parse(changed.state_json).menu.kind, 'address_review');
+  await net.inbound('1');
+  const refreshed = JSON.parse(env.DB.sqlite.prepare('SELECT state_json FROM whatsapp_booking_conversations').get().state_json);
+  assert.equal(refreshed.phase, 'review'); assert.equal(refreshed.quote.price, 85);
+  assert.equal(net.counts.charges, 0);
 });
 
 test('public callers cannot spoof channel source, reserved token or wallet authorization', async () => {

@@ -5,9 +5,10 @@ import { bookingLanguage, bookingSay, bookingQuestion, bookingFact, isBookingLan
 import { extractBookingText } from './whatsapp-booking-text.js';
 import { normalizeIlPhone, scheduleError } from './validate.js';
 import { validateEmailAddress } from './email-validation.js';
-import { zoneOf } from './pricing.js';
+import { zoneOf, GUSH_DAN } from './pricing.js';
 import { validateBusinessBatchAddresses } from './business-address.js';
 import { bookingPilotReady, pilotNotice, pilotComplete } from './whatsapp-booking-pilot.js';
+import { israelDay, pickupPreference, pickupSlotChoices } from './whatsapp-booking-slots.js';
 
 export const QUOTE_TTL = 10 * 60 * 1000;
 export const SESSION_WINDOW = 24 * 60 * 60 * 1000;
@@ -18,7 +19,7 @@ const QUESTIONS = {
   size: 'מה גודל הפריט? קטן (מעטפה או פריט קטן) או בינוני (עד קופסת נעליים ועד 5 ק״ג). השירות כאן הוא משלוח רגיל ללקוח פרטי. בקשה אחרת? כתבו נציג.',
   pickup: 'מה כתובת האיסוף? רחוב ומספר בית, עיר. לדוגמה: דיזנגוף 10, תל אביב',
   dropoff: 'מה כתובת המסירה? רחוב ומספר בית, עיר.',
-  schedule: 'מתי לאסוף? כתבו תאריך ושעה מדויקים, למשל 2026-10-11 11:00 (שעון ישראל).',
+  schedule: 'מתי תרצו איסוף? אפשר לכתוב היום, מחר בבוקר או תאריך אחר (שעון ישראל).',
   name: 'מה השם המלא של המזמין/ה?',
   email: 'מה כתובת האימייל לקבלת קישור המעקב וקוד האימות?',
   pickup_detail: 'פרטי גישה ואיש קשר באיסוף: קומה, דירה, שם וטלפון אם שונים משלכם. אם אין, כתבו אין.',
@@ -26,6 +27,7 @@ const QUESTIONS = {
   notes: 'תיאור קצר של הפריט והערות למשלוח (בלי מידע רגיש). אם אין, כתבו אין.',
 };
 const missing = (data) => FIELDS.find((field) => data[field] == null);
+const activeField = state => state.editing_field || missing(state.data);
 const command = (text) => text.trim().toLowerCase();
 export const isBookingHandoff = (text) => /^(?:(?:can i |i want to |please )?(?:speak|talk) to (?:a )?(?:human|person|agent)|(?:please )?(?:human|stop|cancel)(?: please)?|(?:אני רוצה|אפשר) לדבר עם נציג)[.!?]?$/i.test(command(text)) || /^(?:(?:אני רוצה|אני צריך|אני צריכה|אפשר|בבקשה)\s+)?(נציג|אדם|עזרה|human|stop|עצור|ביטול)(?:\s+בבקשה)?[.!]?$/.test(command(text));
 export function newBooking() { return { phase: 'consent', data: { service: 'standard', customer_type: 'private' }, revision: 0 }; }
@@ -38,12 +40,26 @@ export function bookingEnabled(env, now = Date.now()) {
 }
 
 export function parseAddress(text) {
-  const match = /^(.{2,100}?)\s+(\d{1,5}[א-תa-z]?)\s*,\s*(.{2,100})$/iu.exec(text.trim());
-  return match ? { delivery_street: match[1], delivery_house_number: match[2], delivery_city: match[3], errors: [], corrections: [] } : null;
+  const aliases = { 'tel aviv': 'תל אביב', 'tel aviv yafo': 'תל אביב-יפו', 'ramat gan': 'רמת גן' };
+  const input = text.trim().replace(/\s+/g, ' ');
+  const cityNames = [...GUSH_DAN, ...Object.keys(aliases)].sort((a,b)=>b.length-a.length);
+  for (const city of cityNames) {
+    if (!input.toLowerCase().startsWith(city.toLowerCase() + ' ') && !input.toLowerCase().startsWith(city.toLowerCase() + ',')) continue;
+    const rest = input.slice(city.length).replace(/^[,\s]+/, '');
+    const parts = /^(.{2,100}?)\s+(\d{1,5}[א-תa-z]?)$/iu.exec(rest);
+    if (parts) return { delivery_street: parts[1], delivery_house_number: parts[2], delivery_city: aliases[city] || city, errors: [], corrections: [] };
+  }
+  const match = /^(.{2,100}?)\s+(\d{1,5}[א-תa-z]?)(?:\s*,\s*|\s+)(.{2,100})$/iu.exec(input);
+  return match ? { delivery_street: match[1], delivery_house_number: match[2], delivery_city: aliases[match[3].toLowerCase()] || match[3], errors: [], corrections: [] } : null;
 }
 
 export function parseSchedule(text, now = Date.now()) {
-  const match = /^(\d{4}-\d{2}-\d{2})\s+(\d{1,2})(?::00)?$/.exec(text.trim());
+  // Accept explicit Israeli day/month/year input as well as the canonical ISO
+  // form. Never infer a missing year or discard nonzero minutes/time ranges.
+  const input = text.trim().replace(/\s+/g, ' ').replace(/^(\d{1,2})([/.])(\d{1,2})\2(\d{4})(?=\s)/,
+    (_, day, separator, month, year) => `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`)
+    .replace(/ (?:at|בשעה|ב-?)\s*/i, ' ');
+  const match = /^(\d{4}-\d{2}-\d{2})\s+(\d{1,2})(?::00)?$/.exec(input);
   if (!match) return null;
   const date = new Date(match[1] + 'T00:00:00Z');
   if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== match[1]) return null;
@@ -58,8 +74,8 @@ export async function resolveBookingAddress(text, env, { fetchImpl } = {}) {
   const row = parseAddress(text);
   if (!row) return { error: 'format' };
   if (!zoneOf(row.delivery_city)) return { error: 'out_of_zone' };
-  await validateBusinessBatchAddresses([row], { apiKey: env.GOOGLE_PLACES_SERVER_KEY, fetchImpl });
-  if (row.errors.length) return { error: row.errors[0] };
+  await validateBusinessBatchAddresses([row], { apiKey: env.GOOGLE_PLACES_SERVER_KEY, fetchImpl, offerSuggestions: true });
+  if (row.errors.length) return { error: row.errors[0], ...(row.address_candidates?.length ? { candidates: row.address_candidates.filter(candidate=>zoneOf(candidate.city)) } : {}) };
   if (!zoneOf(row.delivery_city)) return { error: 'out_of_zone' };
   return { address: row.delivery_address, city: row.delivery_city, lat: row.delivery_lat, lng: row.delivery_lng };
 }
@@ -78,12 +94,10 @@ function summary(state, phone) {
   if (state.conversation_only) {
     const normal = summary({ ...state, conversation_only: false }, phone);
     const beforeTerms = normal.split(state.language === 'en' ? 'Confirmation accepts' : 'באישור אתם מאשרים')[0];
-    return `${pilotNotice(state.language)}\n${beforeTerms}` + (state.language === 'en'
-      ? `Finish test: confirm ${state.revision}\nChange: edit\nPause: human`
-      : `לסיום הבדיקה: אישור ${state.revision}\nלשינוי: עריכה\nלעצירה: נציג`);
+    return `${pilotNotice(state.language)}\n${beforeTerms}`;
   }
-  if (state.language === 'en') return `Standard private delivery summary\nSize: ${d.size === 'small' ? 'small' : 'medium'}\nPickup: ${displayAddress(d, 'pickup')}\nPickup details: ${d.pickup_detail}\nDelivery: ${displayAddress(d, 'dropoff')}\nDelivery details: ${d.dropoff_detail}\nWhen: ${d.schedule} · Israel time\nName: ${d.name}\nPhone: ${normalizeIlPhone(phone)}\nEmail: ${d.email}\nNotes: ${d.notes}\nFinal price: ₪${q.price} (ILS)${q.discount_amount ? `, including ₪${q.discount_amount} discount` : ''}\nValid for 10 minutes and checked again when you confirm.\nConfirmation accepts the terms, privacy and cancellation policies:\nhttps://edenmish.com/terms.html\nhttps://edenmish.com/privacy.html\nhttps://edenmish.com/refund.html\nConfirm: confirm ${state.revision}\nChange: edit\nAsk for a person: human`;
-  return `סיכום משלוח רגיל ללקוח פרטי\nגודל: ${d.size === 'small' ? 'קטן' : 'בינוני'}\nאיסוף: ${displayAddress(d, 'pickup')}\nפרטי איסוף: ${d.pickup_detail}\nמסירה: ${displayAddress(d, 'dropoff')}\nפרטי מסירה: ${d.dropoff_detail}\nמועד: ${d.when_text}\nשם: ${d.name}\nטלפון: ${normalizeIlPhone(phone)}\nאימייל: ${d.email}\nהערות: ${d.notes}\nמחיר סופי: ₪${q.price} (ILS)${q.discount_amount ? `, כולל הנחה ₪${q.discount_amount}` : ''}\nההצעה תקפה ל-10 דקות ונבדקת שוב באישור.\nבאישור אתם מאשרים את התקנון, הפרטיות והביטול:\nhttps://edenmish.com/terms.html\nhttps://edenmish.com/privacy.html\nhttps://edenmish.com/refund.html\nלאישור כתבו: אישור ${state.revision}\nלשינוי: עריכה\nלטיפול אנושי: נציג`;
+  if (state.language === 'en') return `Standard private delivery summary\nSize: ${d.size === 'small' ? 'small' : 'medium'}\nPickup: ${displayAddress(d, 'pickup')}\nPickup details: ${d.pickup_detail}\nDelivery: ${displayAddress(d, 'dropoff')}\nDelivery details: ${d.dropoff_detail}\nWhen: ${d.schedule} · Israel time\nName: ${d.name}\nPhone: ${normalizeIlPhone(phone)}\nEmail: ${d.email}\nNotes: ${d.notes}\nFinal price: ₪${q.price} (ILS)${q.discount_amount ? `, including ₪${q.discount_amount} discount` : ''}\nValid for 10 minutes and checked again when you confirm.\nConfirmation accepts the terms, privacy and cancellation policies:\nhttps://edenmish.com/terms.html\nhttps://edenmish.com/privacy.html\nhttps://edenmish.com/refund.html`;
+  return `סיכום משלוח רגיל ללקוח פרטי\nגודל: ${d.size === 'small' ? 'קטן' : 'בינוני'}\nאיסוף: ${displayAddress(d, 'pickup')}\nפרטי איסוף: ${d.pickup_detail}\nמסירה: ${displayAddress(d, 'dropoff')}\nפרטי מסירה: ${d.dropoff_detail}\nמועד: ${d.when_text}\nשם: ${d.name}\nטלפון: ${normalizeIlPhone(phone)}\nאימייל: ${d.email}\nהערות: ${d.notes}\nמחיר סופי: ₪${q.price} (ILS)${q.discount_amount ? `, כולל הנחה ₪${q.discount_amount}` : ''}\nההצעה תקפה ל-10 דקות ונבדקת שוב באישור.\nבאישור אתם מאשרים את התקנון, הפרטיות והביטול:\nhttps://edenmish.com/terms.html\nhttps://edenmish.com/privacy.html\nhttps://edenmish.com/refund.html`;
 }
 async function advanceBookingCore(current, text, services, { phone, now = Date.now() } = {}) {
   const state = structuredClone(current);
@@ -108,8 +122,9 @@ async function advanceBookingCore(current, text, services, { phone, now = Date.n
   }
   if (state.phase === 'creating') { state.phase = 'handoff'; return { state, reply: HANDOFF }; }
   if (/^(עריכה|edit)$/.test(c)) {
-    state.phase = 'collect'; state.quote = null; state.address_confirmed = false;
-    return { state, reply: `מה לשנות? כתבו שם שדה ונקודתיים, למשל איסוף: דיזנגוף 10, תל אביב\nשדות: ${Object.values(LABELS).join(', ')}` };
+    state.phase = 'collect'; state.quote = null; state.address_confirmed = false; state.edit_menu = true;
+    delete state.editing_field; delete state.pending_address; delete state.terms_accepted_at;
+    return { state, reply: bookingSay(state, 'מה תרצו לשנות?', 'What would you like to change?') };
   }
   if (state.phase === 'address_review' && (c === `כתובות ${state.revision}` || c === `addresses ${state.revision}`)) {
     state.address_confirmed = true;
@@ -139,7 +154,7 @@ async function advanceBookingCore(current, text, services, { phone, now = Date.n
       return null;
     });
     const labelled = entries.every(Boolean) && entries.length > 0;
-    const field = missing(state.data);
+    const field = activeField(state);
     const candidate = labelled ? null : extractBookingText(text, now);
     // Names, access details and notes are ordinary free-text answers. A size
     // adjective or a date inside them must not silently become another edit.
@@ -153,9 +168,10 @@ async function advanceBookingCore(current, text, services, { phone, now = Date.n
       return { state, reply: natural.clarification };
     }
     const supplied = labelled ? entries : natural?.entries;
-    if (!supplied && state.phase !== 'collect') return { state, reply: state.phase === 'review' ? summary(state, phone) : `לאישור הכתובות כתבו כתובות ${state.revision}, לשינוי כתבו עריכה, או נציג.` };
+    if (!supplied && state.phase !== 'collect') return { state, reply: state.phase === 'review' ? summary(state, phone) : bookingSay(state, 'בדקו את הכתובות בסיכום ובחרו אפשרות.', 'Check the addresses in the summary and choose an option.') };
     if (!supplied && !field) return { state, reply: 'כתבו שם שדה ונקודתיים לשינוי, או נציג.' };
-    for (const [key, value] of supplied || [[field, text.trim()]]) {
+    const updates = supplied || [[field, text.trim()]];
+    for (const [index, [key, value]] of updates.entries()) {
       // Any attempted edit invalidates consent to the old summary, even if the
       // replacement is invalid/ambiguous. Never let an old Confirm book old data.
       state.quote = null; state.phase = 'collect';
@@ -174,11 +190,21 @@ async function advanceBookingCore(current, text, services, { phone, now = Date.n
         if (!validated.valid) return { state, reply: 'כתובת האימייל אינה תקינה. ' + QUESTIONS.email };
         state.data.email = validated.email;
       } else if (key === 'schedule') {
+        const preference = pickupPreference(value, now);
+        if (preference) {
+          state.schedule_preference = preference; state.editing_field = 'schedule'; delete state.edit_menu;
+          for (const key of ['when_date', 'when_hour', 'when_text']) delete state.data[key];
+          continue;
+        }
         const schedule = parseSchedule(value, now);
         if (!schedule) return { state, reply: 'המועד אינו זמין. בחרו מועד עתידי בשעות הפעילות, עד 30 יום קדימה. ' + QUESTIONS.schedule };
         Object.assign(state.data, schedule, { schedule: value });
       } else if (['pickup', 'dropoff'].includes(key)) {
         const resolved = await services.resolveAddress(value);
+        if (resolved.error && resolved.candidates?.length) {
+          state.phase = 'address_choice'; state.pending_address = { field: key, candidates: resolved.candidates.slice(0,3), remaining: updates.slice(index + 1) };
+          return { state, reply: bookingSay(state, 'מצאתי כתובות אפשריות. איזו נכונה?', 'I found possible addresses. Which is correct?') };
+        }
         if (resolved.error === 'out_of_zone') { state.phase = 'handoff'; return { state, reply: 'הכתובת מחוץ לאזור השירות האוטומטי. ' + HANDOFF }; }
         if (resolved.error) return { state, reply: 'לא הצלחתי לזהות כתובת יחידה בוודאות. בדקו רחוב, מספר בית ועיר, או כתבו נציג.\n' + QUESTIONS[key] };
         Object.assign(state.data, { [key]: resolved.address, [key + '_city']: resolved.city, [key + '_lat']: resolved.lat, [key + '_lng']: resolved.lng });
@@ -187,14 +213,20 @@ async function advanceBookingCore(current, text, services, { phone, now = Date.n
         if (key === 'name' && value.length > 120) return { state, reply: QUESTIONS.name };
         state.data[key] = value;
       }
+      if (state.editing_field === key) delete state.editing_field;
+      delete state.edit_menu;
       state.quote = null; state.phase = 'collect';
     }
   }
-  const field = missing(state.data);
+  return continueBookingCollection(state, services, { phone, now });
+}
+
+async function continueBookingCollection(state, services, { phone, now = Date.now() }) {
+  const field = activeField(state);
   if (field) return { state, reply: QUESTIONS[field] };
   if (!state.address_confirmed) {
     state.phase = 'address_review'; state.revision++;
-    return { state, reply: state.language === 'en' ? `Please check the addresses:\nPickup: ${displayAddress(state.data, 'pickup')}\nDelivery: ${displayAddress(state.data, 'dropoff')}\nReply addresses ${state.revision} to confirm, edit to change, or human.` : `זיהיתי את הכתובות:\nאיסוף: ${displayAddress(state.data, 'pickup')}\nמסירה: ${displayAddress(state.data, 'dropoff')}\nלאישור כתבו כתובות ${state.revision}. לשינוי כתבו עריכה או נציג.` };
+    return { state, reply: state.language === 'en' ? `Please check the addresses:\nPickup: ${displayAddress(state.data, 'pickup')}\nDelivery: ${displayAddress(state.data, 'dropoff')}` : `זיהיתי את הכתובות:\nאיסוף: ${displayAddress(state.data, 'pickup')}\nמסירה: ${displayAddress(state.data, 'dropoff')}` };
   }
   const quote = await services.quote(orderInput(state.data, phone));
   if (!quote || quote.review || !Number.isFinite(quote.price)) { state.phase = 'handoff'; return { state, reply: HANDOFF }; }
@@ -203,15 +235,15 @@ async function advanceBookingCore(current, text, services, { phone, now = Date.n
 }
 
 function nextBookingPrompt(state) {
-  const field = missing(state.data);
+  const field = activeField(state);
   if (field) return bookingQuestion(state, field);
-  if (state.phase === 'address_review') return bookingSay(state, `לאישור הכתובות כתבו כתובות ${state.revision}, או עריכה לשינוי.`, `Reply addresses ${state.revision} to confirm the addresses, or edit to change them.`);
-  if (state.phase === 'review') return bookingSay(state, `לאישור הסיכום כתבו אישור ${state.revision}, או עריכה לשינוי.`, `Reply confirm ${state.revision} to accept the summary, or edit to change it.`);
+  if (state.phase === 'address_review') return bookingSay(state, 'בדקו את הכתובות שמופיעות למעלה.', 'Please check the addresses shown above.');
+  if (state.phase === 'review') return bookingSay(state, 'בדקו את הפרטים והמחיר בסיכום.', 'Please check the details and price in the summary.');
   return bookingSay(state, 'איזה פרט לשנות? אפשר לכתוב שם שדה ונקודתיים, או נציג.', 'Which detail should change? Use a field label, or ask for a person.');
 }
 const literalAnswer = (state, text) => {
   if (state.phase !== 'collect') return false;
-  const field = missing(state.data); const value = text.trim();
+  const field = activeField(state); const value = text.trim();
   return (field === 'size' && /^(קטן|קטנה|בינוני|בינונית|small|medium)$/i.test(value))
     || (field === 'email' && validateEmailAddress(value).valid)
     || (field === 'schedule' && /^\d{4}-\d{2}-\d{2}\s+\d{1,2}(?::00)?$/.test(value))
@@ -229,7 +261,30 @@ async function advanceBookingInternal(current, text, services, options = {}) {
   if (hasSensitiveBookingText(text) && state.phase !== 'handoff') return { state, reply: bookingSay(state,
     'אין לשלוח פרטי כרטיס, מספרי מסמכים או סודות. התשלום בקישור מאובטח בלבד.',
     'Please do not send card numbers, documents or secrets. Payment uses the secure link only.') };
+  if (state.phase === 'address_choice' && !isBookingHandoff(text) && !/^(edit|עריכה)$/i.test(text.trim())) return { state, reply: bookingSay(state, 'בחרו את מספר הכתובת המתאימה, או בקשו נציג.', 'Choose the matching address number, or ask for a person.') };
+  if (['collect', 'address_review', 'review'].includes(state.phase)
+    && /\b(?:business account|use (?:my |the )?wallet|pay (?:with|from) (?:my |the )?wallet|another order|multiple orders|flash delivery)\b|חשבון עסקי|ארנק עסקי|הזמנה נוספת|שתי הזמנות/u.test(text.toLowerCase())) {
+    state.phase = 'handoff';
+    return { state, reply: bookingSay(state, HANDOFF, HANDOFF_EN) };
+  }
   if (isBookingLanguageRequest(text) && ['collect', 'address_review', 'review'].includes(state.phase)) return { state, reply: bookingSay(state, 'בשמחה. ', 'Happy to help. ') + nextBookingPrompt(state) };
+  // Dayparts are requests for suggestions, never permission to choose a slot.
+  const preference = pickupPreference(text, now);
+  if (preference && ['collect', 'address_review', 'review'].includes(state.phase)) {
+    state.phase = 'collect'; state.quote = null; state.editing_field = 'schedule'; state.schedule_preference = preference;
+    delete state.terms_accepted_at; delete state.edit_menu; delete state.data.schedule;
+    for (const key of ['when_date', 'when_hour', 'when_text']) delete state.data[key];
+    return { state, reply: bookingSay(state, 'בשמחה — בחרו מועד שמתאים לכם.', 'Of course — choose a time that suits you.') };
+  }
+  // Without a model, questions must not be stored as a name or delivery note.
+  // Only reviewed business facts are answered; unrelated questions get a redirect.
+  if (!services.conversationModel && ['collect', 'address_review', 'review'].includes(state.phase)
+    && /[?？]|^(?:who|what|why|how|where|when|can you|could you|tell me|write me|explain|מי|מה|למה|איך|כמה|איפה|האם|מתי|ספר לי|תכתוב לי)\b|^(?:מי|מה|למה|איך|כמה|איפה|האם|מתי|ספר לי|תכתוב לי)\s/iu.test(text.trim())) {
+    const topic = /מחיר|עלות|price|cost|pricing/i.test(text) ? 'pricing' : /שעות|hours/i.test(text) ? 'hours'
+      : /תשלום|payment|pay\b/i.test(text) ? 'payment' : /מעקב|tracking/i.test(text) ? 'tracking' : /פרטיות|privacy/i.test(text) ? 'privacy' : null;
+    const answer = topic ? bookingFact(state, topic) : bookingSay(state, 'אני כאן לעזור במשלוחי EdenMish. נמשיך עם פרטי המשלוח.', 'I’m here to help with EdenMish deliveries. Let’s continue with your booking.');
+    return { state, reply: answer + ' ' + nextBookingPrompt(state) };
+  }
   let result; let interpretation = null;
   if (!modelBypass(state, text)) {
     const proposal = await proposeBookingTurn(services.conversationModel, state, text, now);
@@ -284,12 +339,82 @@ async function advanceBookingInternal(current, text, services, options = {}) {
 
 export async function advanceBooking(current, text, services, options = {}) {
   const state = structuredClone(current);
+  const now = options.now ?? Date.now();
   if (options.conversationOnly) state.conversation_only = true;
   if (state.conversation_only && ['creating', 'booked'].includes(state.phase)) {
     state.phase = 'handoff';
     return { state, reply: pilotComplete(state.language) };
   }
+  // A number is an action only when that exact menu was presented for this
+  // phase/revision. Confirmation still passes through quote revalidation and
+  // the durable event/order idempotency path; the interpreter cannot confirm.
+  const menu = state.menu;
+  const confirmation = ['review', 'address_review'].includes(state.phase) && /^(?:k|ok|okay|conf|confirm|כן|אוקיי|מאשר|מאשרת)[.!]?$/i.test(text.trim());
+  const choice = confirmation ? 1 : /^\d{1,2}$/.test(text.trim()) ? Number(text.trim()) : null;
+  if (menu && menu.phase === state.phase && menu.revision === state.revision && choice != null) {
+    if (menu.kind === 'review' || menu.kind === 'address_review') {
+      text = ({ 1: `${menu.kind === 'review' ? 'confirm' : 'addresses'} ${menu.revision}`, 2: 'edit', 3: 'human' })[choice] || text;
+    } else if (menu.kind === 'consent') text = ({ 1: 'start', 2: 'human' })[choice] || text;
+    else if (menu.kind === 'size' && activeField(state) === 'size') text = ({ 1: 'small', 2: 'medium', 3: 'human' })[choice] || text;
+    else if (menu.kind === 'schedule' && activeField(state) === 'schedule') text = menu.slots?.[choice - 1] || (choice === 4 ? 'human' : text);
+    else if (menu.kind === 'address_choice' && state.pending_address) {
+      const {field,candidates,remaining=[]} = state.pending_address;
+      const selected = candidates[choice-1];
+      if (selected) {
+        Object.assign(state.data, { [field]:selected.address, [field+'_city']:selected.city, [field+'_lat']:selected.lat, [field+'_lng']:selected.lng });
+        state.phase='collect'; state.quote=null; state.address_confirmed=false;
+        delete state.pending_address;
+        if (state.editing_field === field) delete state.editing_field;
+        const result = remaining.length
+          ? await advanceBookingCore(state, remaining.map(([key,value]) => `${LABELS[key]}: ${value}`).join('\n'), services, {...options,now})
+          : await continueBookingCollection(state,services,{...options,now});
+        return withBookingMenu(result,now);
+      }
+      if (choice===candidates.length+1) text='human';
+    }
+    else if (menu.kind === 'edit' && state.edit_menu) {
+      if (choice === 10) text = 'human';
+      else if (FIELDS[choice - 1]) {
+        state.editing_field = FIELDS[choice - 1]; delete state.edit_menu;
+        return withBookingMenu({ state, reply: bookingQuestion(state, state.editing_field) }, now);
+      }
+    }
+  }
   const result = await advanceBookingInternal(state, text, services, options);
   if (state.conversation_only && result.state.phase === 'consent' && result.reply) result.reply = pilotNotice(result.state.language) + '\n' + result.reply;
+  return withBookingMenu(result, now);
+}
+
+export function withBookingMenu(result, now) {
+  const state = result.state;
+  delete state.menu;
+  if (!result.reply || ['handoff', 'creating', 'booked', 'closed'].includes(state.phase)) return result;
+  let kind = state.phase, copy, slots;
+  const say = (he, en) => bookingSay(state, he, en);
+  if (['review', 'address_review'].includes(kind)) {
+    copy = say('1. אישור\n2. שינוי פרטים\n3. נציג', '1. Confirm\n2. Modify details\n3. Human help');
+    if (kind === 'review' && state.conversation_only) copy = say('1. אישור לסיום הבדיקה\n2. שינוי פרטים\n3. נציג', '1. Confirm and finish test\n2. Modify details\n3. Human help');
+  } else if (kind === 'address_choice' && state.pending_address) {
+    copy = state.pending_address.candidates.map((candidate,i)=>`${i+1}. ${candidate.address}`).join('\n')
+      + `\n${state.pending_address.candidates.length+1}. ` + say('נציג','Human help');
+  } else if (kind === 'consent') copy = say('1. מסכימ/ה, מתחילים\n2. נציג', '1. I agree, start\n2. Human help');
+  else if (kind === 'collect' && state.edit_menu) {
+    kind = 'edit';
+    const en = ['Item size', 'Pickup address', 'Delivery address', 'Pickup time', 'Name', 'Email', 'Pickup details', 'Delivery details', 'Notes'];
+    copy = FIELDS.map((field, i) => `${i + 1}. ${say(LABELS[field], en[i])}`).join('\n') + '\n10. ' + say('נציג', 'Human help');
+  } else if (kind === 'collect' && activeField(state) === 'size') {
+    kind = 'size'; copy = say('1. קטן\n2. בינוני\n3. נציג', '1. Small\n2. Medium\n3. Human help');
+  } else if (kind === 'collect' && activeField(state) === 'schedule') {
+    kind = 'schedule';
+    const suggestions = pickupSlotChoices(state.schedule_preference || { date: israelDay(now), period: 'any' }, now);
+    slots = suggestions.slots;
+    copy = say('אפשר לבחור שעה מוצעת (שעון ישראל), או לכתוב מועד אחר:', 'Choose a suggested time (Israel time), or type another date and time:') + '\n'
+      + slots.map((slot, i) => `${i + 1}. ${slot}`).join('\n') + '\n4. ' + say('נציג', 'Human help');
+    if (suggestions.alternateDay) copy = say('לא נשאר חלון מתאים ביום שביקשתם. הנה היום המתאים הבא:\n', 'No suitable window remains on the requested day. Here is the next suitable day:\n') + copy;
+  }
+  if (copy) {
+    state.menu = { kind, phase: state.phase, revision: state.revision, ...(slots ? { slots } : {}) };
+    result.reply += '\n\n' + copy + '\n' + say('אפשר להשיב במספר.', 'You can reply with the number.');
+  }
   return result;
 }
