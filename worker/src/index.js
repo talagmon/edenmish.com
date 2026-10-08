@@ -1,5 +1,6 @@
 import { readTwilioBookingEvent, applyTwilioBookingStatus } from './whatsapp-booking-twilio.js';
 import { bookingEnabled, resolveBookingAddress, QUOTE_TTL } from './whatsapp-booking.js';
+import { createOpenAIBookingModel } from './whatsapp-booking-openai.js';
 import { extractBookingEvents, processBookingEvent, sendBookingReplies, pauseBooking, closeBooking, cleanupBookings } from './whatsapp-booking-store.js';
 
 // Object-identity capability: no public header/body can enable channel privileges.
@@ -603,6 +604,7 @@ function isTrustedOpsMutationOrigin(req, env) {
 
 function bookingServices(env, ctx) {
   return {
+    conversationModel: bookingEnabled(env) ? createOpenAIBookingModel(env) : undefined,
     resolveAddress: (text) => resolveBookingAddress(text, env),
     order: (token) => getOrderByToken(env.DB, token),
     quote: async (input) => {

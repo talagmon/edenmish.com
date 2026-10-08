@@ -107,7 +107,7 @@ export async function processBookingEvent(env, event, services, now = Date.now()
           order: () => services.order(row.order_token),
         }, { phone: event.phone, now });
         state = result.state; reply = result.reply;
-        if (['offline_model_proposal', 'offline_model_fallback'].includes(result.interpretation)) outcome = result.interpretation;
+        if (['model_proposal', 'model_fallback'].includes(result.interpretation)) outcome = result.interpretation;
         if (result.create) {
           if (env.WHATSAPP_BOOKING_PROVIDER === 'twilio') await reconcileTwilioBookingReceipts(env, null, { id: row.id, token: lease });
           const active = await DB.prepare('SELECT phase FROM whatsapp_booking_conversations WHERE id = ? AND lock_id = ?').bind(row.id, lease).first();

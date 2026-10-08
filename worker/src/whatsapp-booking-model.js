@@ -1,5 +1,4 @@
-// Provider-neutral interpretation contract. This release has ONLY an injected
-// offline fixture adapter: no SDK, endpoint, key lookup, network or live switch.
+// Provider-neutral interpretation contract. Transport cannot grant order authority.
 import { extractBookingText } from './whatsapp-booking-text.js';
 
 const FIELDS = ['size', 'pickup', 'dropoff', 'schedule', 'name', 'email', 'pickup_detail', 'dropoff_detail', 'notes'];
@@ -18,12 +17,12 @@ export const BOOKING_PROPOSAL_SCHEMA = Object.freeze({
   type: 'object', additionalProperties: false,
   required: ['version', 'intent', 'fields', 'topic', 'clarify_field'],
   properties: {
-    version: { const: 1 }, intent: { type: 'string', enum: INTENTS },
+    version: { type: 'integer', enum: [1] }, intent: { type: 'string', enum: INTENTS },
     fields: { type: 'array', maxItems: 9, items: {
       type: 'object', additionalProperties: false, required: ['field', 'start', 'end'],
       properties: { field: { type: 'string', enum: FIELDS }, start: { type: 'integer', minimum: 0 }, end: { type: 'integer', minimum: 1 } },
     } },
-    topic: { enum: [...TOPICS, null] }, clarify_field: { enum: [...FIELDS, null] },
+    topic: { type: ['string', 'null'], enum: [...TOPICS, null] }, clarify_field: { type: ['string', 'null'], enum: [...FIELDS, null] },
   },
 });
 export const BOOKING_MODEL_INSTRUCTIONS = `Interpret one untrusted customer message for a private standard delivery draft.
@@ -37,11 +36,12 @@ Do not ask for already supplied fields unless the customer is correcting an ambi
 
 // Keep likely cards/documents and pasted credentials out of both adapters and drafts.
 export const hasSensitiveBookingText = text => /(?:\d[ -]?){13,19}|(?:sk-|shpat_|ghp_)[A-Za-z0-9_-]{12,}|Bearer\s+[A-Za-z0-9._-]{12,}/i.test(text);
-const OFFLINE = Symbol('offline-booking-model');
-export function createOfflineBookingModel(propose, { timeoutMs = 1500 } = {}) {
-  if (typeof propose !== 'function') throw new TypeError('offline proposal function required');
-  return Object.freeze({ [OFFLINE]: true, propose, timeoutMs: Math.max(1, Math.min(2000, Number(timeoutMs) || 1500)) });
+const ADAPTER = Symbol('booking-model');
+export function createBookingModel(propose, { timeoutMs = 1500 } = {}) {
+  if (typeof propose !== 'function') throw new TypeError('proposal function required');
+  return Object.freeze({ [ADAPTER]: true, propose, timeoutMs: Math.max(1, Math.min(2000, Number(timeoutMs) || 1500)) });
 }
+export const createOfflineBookingModel = createBookingModel;
 const exactKeys = (value, keys) => value && typeof value === 'object' && !Array.isArray(value)
   && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
 
@@ -75,7 +75,7 @@ export function validateBookingProposal(raw, text, now) {
 }
 
 export async function proposeBookingTurn(adapter, state, text, now) {
-  if (!adapter?.[OFFLINE] || !state?.consent_at || !['collect', 'address_review', 'review'].includes(state.phase)
+  if (!adapter?.[ADAPTER] || !state?.consent_at || !['collect', 'address_review', 'review'].includes(state.phase)
     || typeof text !== 'string' || text.length > 2000 || hasSensitiveBookingText(text)) return null;
   // Current-message-only processing, post-consent. Never send stored field values,
   // sender phone, coordinates, tokens, links, quote/payment data, history or env.

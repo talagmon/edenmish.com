@@ -1,21 +1,33 @@
-# Focused booking interpretation — offline boundary
+# Focused booking interpretation — gated Luna adapter
 
-## Current delivery and selected next step
+## Current delivery and selected model
 
-The user selected GPT-6 Luna for a later OpenAI adapter. This commit remains
-**provider-neutral and offline-only**: no provider client, SDK, URL, credential
-lookup, billing setup or production model switch exists. The production
-`bookingServices` factory supplies no `conversationModel`.
+The user selected GPT-6 Luna and a **new separate EdenMish credential**. The parent
+owns secure creation and approved storage. This implementation never looks up or
+reuses the unrelated runtime `OPENAI_API_KEY`; no real key was read or used here.
+No live API request or customer-data transfer has occurred.
 
-An injected `createOfflineBookingModel(propose)` exercises the optional boundary
-inside the same booking state machine. It is a test facility, not proof that an
-arbitrary callback cannot perform network I/O. All included callbacks are synthetic.
+`whatsapp-booking-openai.js` implements a small Responses API transport behind the
+provider-neutral proposal contract. The production factory first requires existing
+booking activation, then all of these exact settings:
 
-OpenAI-specific implementation is paused at the credential decision: reuse an
-existing runtime credential versus create a separate approved credential. A
-presence/format check found a runtime key; its value was not exposed or used.
-Account ownership, model access and spending authority have not been verified.
-No real customer message has been sent to any model.
+| Setting | Required value |
+|---|---|
+| `WHATSAPP_BOOKING_MODEL_ENABLED` | `on` |
+| `WHATSAPP_BOOKING_MODEL_PRIVACY_APPROVED` | `on` after data-sharing review |
+| `WHATSAPP_BOOKING_MODEL_EVAL_APPROVED` | `on` after synthetic evaluation |
+| `WHATSAPP_BOOKING_MODEL_SPEND_APPROVED` | `on` after budget approval |
+| `WHATSAPP_BOOKING_MODEL` | `gpt-6-luna` |
+| `WHATSAPP_BOOKING_OPENAI_API_KEY` | separately approved EdenMish Worker secret |
+
+All flags remain absent/off. Missing gates or scoped key return no adapter and
+leave bounded deterministic booking available. A local key stored by the parent
+as `OPENAI_API_KEY` is not automatically consumed; any later Worker-secret mapping
+requires the parent-approved destination and activation procedure. No secret is
+placed in source, Wrangler config or Git.
+
+The factory accepts an injected fetch for mocks. `createOfflineBookingModel` remains
+a synthetic test facility; a callback is not a sandbox against network access.
 
 ## Conversation contract
 
@@ -72,7 +84,8 @@ Models select intent and fact topic; reviewed backend copy phrases the response.
 This deliberately avoids trying to validate arbitrary promises after generation.
 Real interpretation/phrasing quality requires synthetic live evaluation and Hebrew
 human review. Design reference: [official OpenAI structured outputs documentation](https://developers.openai.com/api/docs/guides/structured-outputs).
-No OpenAI client is included in this commit.
+The client accepts only a completed assistant message containing one JSON text block.
+Refusal, tool calls, extra messages, incomplete output and malformed content fail closed.
 
 ## Exact minimum input and retention
 
@@ -94,7 +107,7 @@ classifier for every sensitive thing someone might send.
 
 Requests, raw responses, chat, provider errors and prompt traces are not logged or
 retained. Only validated fields enter the existing 48-hour draft retention; language
-is part of that draft. Bounded `offline_model_proposal`/`offline_model_fallback`
+is part of that draft. Bounded `model_proposal`/`model_fallback`
 event outcomes use the existing eight-day retention. No hidden reasoning or provider
 request IDs are saved. Canonical-order and unresolved-checkout retention is unchanged.
 
@@ -105,15 +118,25 @@ request IDs are saved. Canonical-order and unresolved-checkout retention is unch
 - Consent, confirmation/edit/address controls, labelled fields, literal size/date/
   email answers, simple “none” answers, language switches, payment-status replies
   and paused conversations bypass interpretation.
-- Default timeout is 1,500 ms, capped at 2,000 ms for this offline contract. Adapters
-  receive an abort signal; late results cannot mutate the draft. A future real
-  adapter must honor cancellation and have separately verified timeout behavior.
+- Default timeout is 1,500 ms, capped at 2,000 ms by the contract. The OpenAI
+  transport receives the abort signal; late results cannot mutate the draft.
+  Mock tests verify abort propagation; actual latency is not yet measured.
+- Fixed `https://api.openai.com/v1/responses`, redirects rejected, `gpt-6-luna`,
+  `reasoning.effort: none`, strict JSON schema, `max_output_tokens: 1024`,
+  `store: false`, no tools/history/background mode. Response body capped at 32 KiB.
 - No automatic retry or escalation to another model/provider.
 - Malformed output, exception or timeout falls back to bounded parsing where safe.
   Questions/corrections must not become names or notes. Failure during summary or
   address review revokes old confirmation and requests clarification.
 - Existing event limits, order tokens, checkout-attempt protection, payment
   reconciliation and activation/send gates are unchanged.
+
+The official [Luna model documentation](https://developers.openai.com/api/docs/models/gpt-6-luna)
+confirms the model ID, reasoning setting and structured-output support. Request and
+response handling follows the [structured outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs).
+`store: false` does **not** establish zero retention. Provider abuse monitoring,
+caching and regional processing require review under the
+[data controls policy](https://developers.openai.com/api/docs/guides/your-data).
 
 These bound work per request; they are not measured token use, latency, cost or a
 verified spending cap. Provider budgets, concurrency limits and observability need
@@ -130,17 +153,16 @@ canonical payment/Ops/driver tests remain applicable.
 
 Before live use:
 
-1. Resolve reuse-versus-new credential selection through the parent and approved
-   secure setup. Do not silently reuse the runtime key or change billing.
-2. Verify exact GPT-6 Luna API/model parameters, structured-output support, account
-   access and current cost; implement the configurable OpenAI transport behind this
-   contract after the credential gate.
+1. Complete the parent-owned secure creation and approved storage of the new
+   EdenMish credential. Do not reuse the existing runtime key or change billing.
+2. Verify account access and budget for Luna. The documented API contract is
+   implemented, but availability for the selected account has not been tested.
 3. Approve the precise current-message sharing boundary, privacy disclosure and
    provider retention/training/logging and cross-border processing settings.
 4. Authorize a bounded synthetic evaluation budget; measure extraction quality,
    Hebrew clarity, schema/refusal/incomplete-response failures, timeout rate,
    latency and token use. Mock tests do not establish these.
-5. Independently review the real adapter and gates, then run controlled staging
+5. Complete independent review of the adapter and gates, then run controlled staging
    with the approved Twilio sender and sandbox payment/email pipeline.
 6. Obtain separate deployment/activation approval. All flags remain off/absent;
    model selection does not authorize customer data transfer or launch.

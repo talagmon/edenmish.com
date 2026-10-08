@@ -116,13 +116,14 @@ test('timeouts and failures fall back without awaiting late output, leaking erro
   assert.equal((await advanceBooking(await reviewed(), 'אפשר לשנות את הכתובת?', svc, opts)).state.quote, null);
 });
 
-test('provider-neutral boundary accepts JSON text, rejects unbranded/live adapters and remains absent from production factory', async () => {
+test('provider-neutral boundary accepts JSON text, rejects unbranded adapters and production factory retains the booking gate', async () => {
   let calls = 0; const state = await initial();
   assert.equal(await proposeBookingTurn({ propose: () => { calls++; } }, state, 'קטן', NOW), null); assert.equal(calls, 0);
   const adapter = createOfflineBookingModel(async input => JSON.stringify(proposal(input.customer_message, { size: 'קטן' })));
   assert.equal((await proposeBookingTurn(adapter, state, 'קטן', NOW)).entries[0][1], 'קטן');
   const source = readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
-  assert.doesNotMatch(source, /conversationModel|createOfflineBookingModel|OPENAI_API_KEY|XAI_API_KEY/);
+  assert.match(source, /conversationModel: bookingEnabled\(env\) \? createOpenAIBookingModel\(env\) : undefined/);
+  assert.doesNotMatch(source, /createOfflineBookingModel|OPENAI_API_KEY|XAI_API_KEY/);
 });
 
 test('exact current summary confirmation bypasses model; expiry and price change still require another confirmation', async () => {
@@ -148,7 +149,7 @@ test('D1 retry dedup precedes model and late updates remain ignored; only struct
   assert.equal(calls, 2, 'distinct late text is checked only for human intent');
   const row = DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get();
   assert.equal(JSON.parse(row.state_json).data.size, 'small'); assert.ok(!row.state_json.includes('CURRENT-MESSAGE-CANARY'));
-  assert.equal(DB.sqlite.prepare("SELECT COUNT(*) n FROM whatsapp_booking_events WHERE outcome = 'offline_model_proposal'").get().n, 1);
+  assert.equal(DB.sqlite.prepare("SELECT COUNT(*) n FROM whatsapp_booking_events WHERE outcome = 'model_proposal'").get().n, 1);
 });
 
 test('failed free-text correction without a question mark revokes an old summary before fallback', async () => {

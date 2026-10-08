@@ -369,5 +369,8 @@ deployment and live sends remain separate operator approvals. See
 controlled-test, human-takeover and recovery procedure.
 
 Optional model-assisted booking is documented in `../docs/WHATSAPP_BOOKING_MODEL.md`.
-Only a provider-neutral offline fixture boundary is implemented; the OpenAI client
-is pending the credential decision and later live evaluation/privacy approvals.
+A GPT-6 Luna Responses adapter is implemented and mock-tested behind separate
+model, privacy, evaluation and spend gates, all off/absent. It requires the scoped
+`WHATSAPP_BOOKING_OPENAI_API_KEY` Worker secret and never falls back to generic
+`OPENAI_API_KEY`. Parent-owned new-key provisioning, live evaluation, data-sharing
+review and deployment/activation remain outstanding.

@@ -1,4 +1,4 @@
-// Transport-independent booking authority. Optional offline interpretation proposes
+// Transport-independent booking authority. Optional bounded interpretation proposes
 // fields only; validation, confirmation and state transitions remain deterministic.
 import { proposeBookingTurn, hasSensitiveBookingText } from './whatsapp-booking-model.js';
 import { bookingLanguage, bookingSay, bookingQuestion, bookingFact, isBookingLanguageRequest, HANDOFF_EN } from './whatsapp-booking-copy.js';
@@ -209,8 +209,7 @@ const modelBypass = (state, text) => literalAnswer(state, text) || !['collect', 
   || isBookingHandoff(text) || /^(?:עריכה|edit|(?:אישור|כתובות|confirm|addresses)\s+\d+)$/i.test(text.trim())
   || text.split('\n').every(line => Object.values(LABELS).some(label => line.startsWith(label + ':')));
 
-// The production service factory supplies no conversationModel. Only explicit
-// offline fixture injection can exercise this optional boundary in this release.
+// Interpretation is optional and separately gated; canonical validation stays here.
 export async function advanceBooking(current, text, services, options = {}) {
   const state = structuredClone(current);
   state.language = bookingLanguage(state.language, text);
@@ -223,7 +222,7 @@ export async function advanceBooking(current, text, services, options = {}) {
   if (!modelBypass(state, text)) {
     const proposal = await proposeBookingTurn(services.conversationModel, state, text, now);
     if (proposal) {
-      interpretation = 'offline_model_proposal';
+      interpretation = 'model_proposal';
       if (['handoff', 'other_order', 'unsupported'].includes(proposal.intent)) {
         state.phase = 'handoff';
         return { state, interpretation, reply: bookingSay(state, HANDOFF, HANDOFF_EN) };
@@ -251,7 +250,7 @@ export async function advanceBooking(current, text, services, options = {}) {
         }
       }
     } else if (services.conversationModel) {
-      interpretation = 'offline_model_fallback';
+      interpretation = 'model_fallback';
       const wasReview = ['review', 'address_review'].includes(state.phase);
       if (['review', 'address_review'].includes(state.phase)) {
         state.phase = 'collect'; state.quote = null; state.address_confirmed = false; delete state.terms_accepted_at;
