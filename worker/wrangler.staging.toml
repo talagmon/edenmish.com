@@ -26,6 +26,7 @@ AUTO_DRIVER_DISPATCH = "off"
 WHATSAPP_BOOKING_ENABLED = "off"
 WHATSAPP_BOOKING_SEND_ENABLED = "off"
 WHATSAPP_BOOKING_MODEL_ENABLED = "off"
+WHATSAPP_BOOKING_MODE = "conversation_only" # requires an approved single-recipient, expiring pilot
 WHATSAPP_BOOKING_STORAGE_READY = "on" # deploy workflow verifies 039 first
 APNS_ALLOWED_TOPICS = "com.edenmish.edendriver.nativebeta"
 ROUTE_OPTIMIZATION_PROVIDER = "google"

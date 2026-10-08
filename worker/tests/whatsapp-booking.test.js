@@ -9,6 +9,8 @@ import { processBookingEvent, splitBookingReply, extractBookingEvents, sendBooki
 import { verifyTwilioBookingSignature, readTwilioBookingEvent, sendTwilioBookingReply, applyTwilioBookingStatus, reconcileTwilioBookingReceipts } from '../src/whatsapp-booking-twilio.js';
 import { startDriverShift } from '../src/driver-dispatch.js';
 import { makeSession } from '../src/integrations.js';
+import { bookingPilotReady, reservePilotOperation } from '../src/whatsapp-booking-pilot.js';
+import { runRetentionCleanup } from '../src/db.js';
 
 const NOW = Date.parse('2026-10-08T08:00:00Z');
 const phone = '+972541234567';
@@ -30,6 +32,9 @@ const environment = (DB) => ({ DB, SESSION_SECRET: 'local-test-secret', WHATSAPP
 const quote = { price: 50, review: false, currency: 'ILS', discount_amount: 0 };
 const services = () => ({ quote: async () => quote, resolveAddress: async (text) => ({ address: text, city: text.split(', ')[1], lat: 32.08, lng: 34.78 }), order: async () => null, create: async () => { throw new Error('unexpected create'); } });
 const details = ['קטן', 'דיזנגוף 10, תל אביב', 'ביאליק 2, רמת גן', '2026-10-11 11:00', 'Test Person', 'test@example.com', 'אין', 'אין', 'ספר'];
+const pilotEnvironment = DB => ({ ...environment(DB), BOOKING_URL: 'https://staging.edenmish.com',
+  WHATSAPP_BOOKING_MODE: 'conversation_only', WHATSAPP_BOOKING_MODEL_ENABLED: 'off', AUTO_DRIVER_DISPATCH: 'off',
+  WHATSAPP_BOOKING_PILOT_ID: 'synthetic-pilot-one', WHATSAPP_BOOKING_PILOT_EXPIRES_AT: new Date(NOW + 60 * 60 * 1000).toISOString() });
 async function reviewed(svc = services()) {
   let state = newBooking();
   for (const text of ['מתחילים', ...details]) state = (await advanceBooking(state, text, svc, { phone, now: NOW })).state;
@@ -505,4 +510,105 @@ test('guided names, notes and access details retain size/date words as free text
     const result = await advanceBooking(state, text, services(), { phone, now: NOW });
     assert.equal(result.state.data[field], text); assert.equal(result.state.data.size, 'small'); assert.equal(result.state.phase, 'review');
   }
+});
+
+test('conversation pilot collects, quotes, edits and ends without orders, invoice, email or driver work', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: NOW + 60_000 });
+  const env = { ...pilotEnvironment(database()), GOOGLE_PLACES_SERVER_KEY: 'mock', WHATSAPP_BOOKING_SEND_ENABLED: 'on' };
+  const net = installNetworkFixtures(env);
+  const messages = []; const fixtureFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    if (String(url).endsWith('/Messages.json')) {
+      messages.push(new URLSearchParams(options.body).get('Body'));
+      return Response.json({ sid: 'SM' + messages.length.toString(16).padStart(32, '0') });
+    }
+    return fixtureFetch(url, options);
+  };
+  const row = await fullReview(env, net);
+  assert.match(messages[0], /בדיקה בלבד/);
+  assert.match(messages.at(-1), /לסיום הבדיקה/);
+  assert.doesNotMatch(messages.at(-1), /באישור אתם מאשרים/);
+  await net.inbound('גודל: בינוני');
+  const edited = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get();
+  assert.equal(edited.phase, 'review');
+  const confirmed = await net.inbound(`אישור ${JSON.parse(edited.state_json).revision}`);
+  assert.equal(confirmed.response.status, 200);
+  assert.match(messages.at(-1), /בדיקת השיחה הסתיימה/);
+  const sends = messages.length;
+  await net.inbound('אישור 99'); await net.inbound('שילמתי');
+  assert.equal(messages.length, sends, 'completion pauses all follow-ups');
+  const final = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get();
+  assert.equal(final.phase, 'handoff'); assert.equal(final.checkout_started_at, null); assert.equal(final.order_id, null);
+  assert.equal(final.confirmed_at, null); assert.equal(net.counts.charges, 0); assert.equal(net.counts.emails, 0);
+  for (const table of ['orders', 'payments', 'driver_route_stops']) assert.equal(env.DB.sqlite.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n, 0);
+  assert.ok(row.id);
+});
+
+test('pilot configuration fails closed on expiry, production, model activation or recipient expansion', () => {
+  const env = pilotEnvironment(database());
+  assert.equal(bookingPilotReady(env, NOW), true);
+  for (const update of [{ BOOKING_URL: 'https://edenmish.com' }, { AUTO_DRIVER_DISPATCH: 'on' },
+    { WHATSAPP_BOOKING_MODEL_ENABLED: 'on' }, { TWILIO_RECIPIENT_POLICY: 'open' },
+    { TWILIO_RECIPIENT_ALLOWLIST: phone + ',+972549999999' }, { WHATSAPP_BOOKING_PILOT_ID: '' },
+    { WHATSAPP_BOOKING_PILOT_EXPIRES_AT: new Date(NOW).toISOString() },
+    { WHATSAPP_BOOKING_PILOT_EXPIRES_AT: new Date(NOW + 2 * SESSION_WINDOW).toISOString() },
+    { WHATSAPP_BOOKING_MODE: 'typo' }]) assert.equal(bookingPilotReady({ ...env, ...update }, NOW), false);
+});
+
+test('pilot atomic quotas persist across concurrency, draft closure and retention; expired pilot cannot reserve', async () => {
+  const env = pilotEnvironment(database());
+  const reserved = await Promise.all(Array.from({ length: 40 }, () => reservePilotOperation(env, 'outbound', NOW)));
+  assert.equal(reserved.filter(Boolean).length, 30);
+  assert.equal(await reservePilotOperation(env, 'outbound', NOW), false);
+  assert.equal(await reservePilotOperation(env, 'unknown', NOW), false);
+  for (let i = 0; i < 10; i++) assert.equal(await reservePilotOperation(env, 'address', NOW), true);
+  assert.equal(await reservePilotOperation(env, 'address', NOW), false);
+  await runRetentionCleanup(env.DB, NOW + 40 * SESSION_WINDOW);
+  assert.equal(env.DB.sqlite.prepare("SELECT count FROM rate_limits WHERE key = 'wa-pilot:synthetic-pilot-one:outbound'").get().count, 30);
+  assert.equal(await reservePilotOperation(env, 'inbound', NOW + SESSION_WINDOW), false);
+});
+
+test('pilot outgoing cap blocks external sends and cancels legacy payment replies', async () => {
+  const env = { ...pilotEnvironment(database()), WHATSAPP_BOOKING_SEND_ENABLED: 'on' };
+  await processBookingEvent(env, { id: 'pilot-start', at: NOW, phone, text: 'hello' }, services(), NOW);
+  for (let i = 0; i < 30; i++) await reservePilotOperation(env, 'outbound', NOW);
+  let sends = 0;
+  await sendBookingReplies(env, async () => { sends++; throw new Error('forbidden'); }, NOW + 1);
+  assert.equal(sends, 0);
+  let row = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get();
+  assert.equal(row.phase, 'handoff');
+  assert.equal(await closeBooking(env.DB, row.id, NOW + 2).then(x => x.status), 200);
+  assert.equal(await reservePilotOperation(env, 'outbound', NOW + 3), false);
+
+  const legacy = { ...env, WHATSAPP_BOOKING_MODE: undefined };
+  await processBookingEvent(legacy, { id: 'legacy', at: NOW + 5000, phone, text: 'hello' }, services(), NOW + 5000);
+  await sendBookingReplies(env, async () => { sends++; }, NOW + 6000);
+  assert.equal(sends, 0, 'pending pre-pilot replies cannot escape the guard');
+});
+
+test('pilot inbound cap stops further processing and historical booked draft cannot expose a payment link', async () => {
+  const env = pilotEnvironment(database());
+  for (let i = 0; i < 29; i++) assert.equal(await reservePilotOperation(env, 'inbound', NOW), true);
+  const result = await processBookingEvent(env, { id: 'over-limit', at: NOW, phone, text: 'hello' }, services(), NOW);
+  assert.equal(result.phase, 'handoff');
+  assert.equal(env.DB.sqlite.prepare('SELECT COUNT(*) n FROM whatsapp_booking_replies').get().n, 0);
+  const booked = await advanceBooking({ phase: 'booked', data: {}, language: 'en' }, 'paid', {
+    order: () => { assert.fail('legacy order lookup forbidden'); },
+  }, { phone, now: NOW, conversationOnly: true });
+  assert.equal(booked.state.phase, 'handoff'); assert.match(booked.reply, /No order or payment link/);
+});
+
+test('pilot address cap surrounds each actual Places API request, not just conversation turns', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: NOW + 60_000 });
+  const env = { ...pilotEnvironment(database()), GOOGLE_PLACES_SERVER_KEY: 'mock' };
+  const net = installNetworkFixtures(env); let mapsCalls = 0; const fixtureFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    if (String(url).includes('places.googleapis.com')) mapsCalls++;
+    return fixtureFetch(url, options);
+  };
+  await net.inbound('hello'); await net.inbound('מתחילים');
+  for (let i = 0; i < 12; i++) await net.inbound('איסוף: דיזנגוף 10, תל אביב');
+  assert.equal(mapsCalls, 10);
+  assert.equal(env.DB.sqlite.prepare("SELECT count FROM rate_limits WHERE key = 'wa-pilot:synthetic-pilot-one:address'").get().count, 10);
+  assert.equal(env.DB.sqlite.prepare('SELECT COUNT(*) n FROM orders').get().n, 0);
 });

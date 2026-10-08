@@ -4,6 +4,7 @@ import { sendTwilioBookingReply, reconcileTwilioBookingReceipts } from './whatsa
 import { advanceBooking, bookingEnabled, newBooking, isBookingHandoff, HANDOFF, SESSION_WINDOW } from './whatsapp-booking.js';
 import { normalizeIlPhone } from './validate.js';
 import { WHATSAPP_GRAPH_API_VERSION } from './whatsapp.js';
+import { conversationOnlyPilot, reservePilotOperation, pilotComplete } from './whatsapp-booking-pilot.js';
 
 const LOCK_TIMEOUT = 2 * 60 * 1000;
 const changes = (result) => Number(result?.meta?.changes || 0);
@@ -46,7 +47,7 @@ export function extractBookingEvents(payload, phoneId, now = Date.now()) {
 }
 
 export async function processBookingEvent(env, event, services, now = Date.now()) {
-  if (!bookingEnabled(env)) return { disabled: true };
+  if (!bookingEnabled(env, now)) return { disabled: true };
   const DB = env.DB;
   const senderKey = await digest(env.SESSION_SECRET, 'wa-sender:' + env.WHATSAPP_BOOKING_PROVIDER + ':' + event.phone);
   const eventKey = await digest(env.SESSION_SECRET, 'wa-event:' + env.WHATSAPP_BOOKING_PROVIDER + ':' + event.id);
@@ -75,6 +76,7 @@ export async function processBookingEvent(env, event, services, now = Date.now()
       row = await DB.prepare('SELECT * FROM whatsapp_booking_conversations WHERE id = ?').bind(row.id).first();
     }
     let state = JSON.parse(row.state_json);
+    if (conversationOnlyPilot(env)) state.conversation_only = true;
     let reply = null;
     let outcome = 'processed';
     let orderId = row.order_id;
@@ -95,6 +97,8 @@ export async function processBookingEvent(env, event, services, now = Date.now()
       }
     } else if (event.at === row.last_event_at && row.last_event_at > 0) {
       state.phase = 'handoff'; reply = HANDOFF; outcome = 'ambiguous_order';
+    } else if (!await reservePilotOperation(env, 'inbound', now)) {
+      state.phase = 'handoff'; outcome = 'pilot_limit';
     } else {
       const count = await DB.prepare('SELECT COUNT(*) AS n FROM whatsapp_booking_events WHERE conversation_id = ? AND created_at > ?').bind(row.id, now - SESSION_WINDOW).first();
       if (Number(count?.n) >= 100 || now - row.created_at > 2 * SESSION_WINDOW) {
@@ -105,10 +109,12 @@ export async function processBookingEvent(env, event, services, now = Date.now()
         const result = await advanceBooking(state, event.text, {
           ...services,
           order: () => services.order(row.order_token),
-        }, { phone: event.phone, now });
+        }, { phone: event.phone, now, conversationOnly: conversationOnlyPilot(env) });
         state = result.state; reply = result.reply;
         if (['model_proposal', 'model_fallback'].includes(result.interpretation)) outcome = result.interpretation;
-        if (result.create) {
+        if (result.create && (conversationOnlyPilot(env) || state.conversation_only)) {
+          state.phase = 'handoff'; reply = pilotComplete(state.language); outcome = 'pilot_complete';
+        } else if (result.create) {
           if (env.WHATSAPP_BOOKING_PROVIDER === 'twilio') await reconcileTwilioBookingReceipts(env, null, { id: row.id, token: lease });
           const active = await DB.prepare('SELECT phase FROM whatsapp_booking_conversations WHERE id = ? AND lock_id = ?').bind(row.id, lease).first();
           if (!active || active.phase === 'handoff') return { processed: true, phase: 'handoff' };
@@ -162,10 +168,10 @@ export async function processBookingEvent(env, event, services, now = Date.now()
 }
 
 export async function sendBookingReplies(env, fetchImpl = globalThis.fetch, now = Date.now()) {
-  if (!bookingEnabled(env) || env.WHATSAPP_BOOKING_SEND_ENABLED !== 'on') return;
+  if (!bookingEnabled(env, now) || env.WHATSAPP_BOOKING_SEND_ENABLED !== 'on') return;
   const DB = env.DB;
   if (env.WHATSAPP_BOOKING_PROVIDER === 'twilio') await reconcileTwilioBookingReceipts(env);
-  const rows = await DB.prepare(`SELECT r.*, c.recipient, c.last_customer_at FROM whatsapp_booking_replies r JOIN whatsapp_booking_conversations c ON c.id = r.conversation_id WHERE c.provider = ? AND r.state = 'pending' AND c.phase != 'creating' AND (c.phase != 'handoff' OR r.kind = 'handoff_ack') AND c.lock_id IS NULL ORDER BY r.created_at, r.id LIMIT 20`).bind(env.WHATSAPP_BOOKING_PROVIDER).all();
+  const rows = await DB.prepare(`SELECT r.*, c.recipient, c.last_customer_at, c.state_json FROM whatsapp_booking_replies r JOIN whatsapp_booking_conversations c ON c.id = r.conversation_id WHERE c.provider = ? AND r.state = 'pending' AND c.phase != 'creating' AND (c.phase != 'handoff' OR r.kind = 'handoff_ack') AND c.lock_id IS NULL ORDER BY r.created_at, r.id LIMIT 20`).bind(env.WHATSAPP_BOOKING_PROVIDER).all();
   for (const row of rows.results || []) {
     const lease = crypto.randomUUID();
     if (!changes(await DB.prepare(`UPDATE whatsapp_booking_conversations SET lock_id = ?, lock_at = ? WHERE id = ? AND lock_id IS NULL AND phase != 'creating' AND (phase != 'handoff' OR ? = 'handoff_ack')`).bind(lease, now, row.conversation_id, row.kind).run())) continue;
@@ -176,6 +182,13 @@ export async function sendBookingReplies(env, fetchImpl = globalThis.fetch, now 
         continue;
       }
       if (!changes(await DB.prepare(`UPDATE whatsapp_booking_replies SET state = 'sending' WHERE id = ? AND state = 'pending'`).bind(row.id).run())) continue;
+      if (conversationOnlyPilot(env) && (!JSON.parse(row.state_json).conversation_only || !await reservePilotOperation(env, 'outbound', now))) {
+        await DB.batch([
+          DB.prepare(`UPDATE whatsapp_booking_replies SET state = 'cancelled', body = NULL WHERE id = ?`).bind(row.id),
+          DB.prepare(`UPDATE whatsapp_booking_conversations SET phase = 'handoff', state_json = json_set(state_json, '$.phase', 'handoff') WHERE id = ? AND lock_id = ?`).bind(row.conversation_id, lease),
+        ]);
+        continue;
+      }
       let providerRef = null;
       try {
         if (env.WHATSAPP_BOOKING_PROVIDER === 'twilio') {

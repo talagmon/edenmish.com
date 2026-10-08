@@ -369,6 +369,10 @@ deployment and live sends remain separate operator approvals. See
 controlled-test, human-takeover and recovery procedure.
 
 Optional model-assisted booking is documented in `../docs/WHATSAPP_BOOKING_MODEL.md`.
+For a conversation-only staging pilot without payment credentials, see
+`../docs/WHATSAPP_BOOKING.md#conversation-only-staging-pilot`. The mode blocks
+checkout, requires a single recipient and expiry, and durably caps outbound and
+Google Places attempts. Staging defaults to this mode with all activation flags off.
 A GPT-6 Luna Responses adapter is implemented and mock-tested behind separate
 model, privacy, evaluation and spend gates, all off/absent. It requires the scoped
 `WHATSAPP_BOOKING_OPENAI_API_KEY` Worker secret and never falls back to generic

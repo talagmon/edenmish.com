@@ -7,6 +7,7 @@ import { normalizeIlPhone, scheduleError } from './validate.js';
 import { validateEmailAddress } from './email-validation.js';
 import { zoneOf } from './pricing.js';
 import { validateBusinessBatchAddresses } from './business-address.js';
+import { bookingPilotReady, pilotNotice, pilotComplete } from './whatsapp-booking-pilot.js';
 
 export const QUOTE_TTL = 10 * 60 * 1000;
 export const SESSION_WINDOW = 24 * 60 * 60 * 1000;
@@ -28,8 +29,8 @@ const missing = (data) => FIELDS.find((field) => data[field] == null);
 const command = (text) => text.trim().toLowerCase();
 export const isBookingHandoff = (text) => /^(?:(?:can i |i want to |please )?(?:speak|talk) to (?:a )?(?:human|person|agent)|(?:please )?(?:human|stop|cancel)(?: please)?|(?:אני רוצה|אפשר) לדבר עם נציג)[.!?]?$/i.test(command(text)) || /^(?:(?:אני רוצה|אני צריך|אני צריכה|אפשר|בבקשה)\s+)?(נציג|אדם|עזרה|human|stop|עצור|ביטול)(?:\s+בבקשה)?[.!]?$/.test(command(text));
 export function newBooking() { return { phase: 'consent', data: { service: 'standard', customer_type: 'private' }, revision: 0 }; }
-export function bookingEnabled(env) {
-  return env.WHATSAPP_BOOKING_STORAGE_READY === 'on'
+export function bookingEnabled(env, now = Date.now()) {
+  return bookingPilotReady(env, now) && env.WHATSAPP_BOOKING_STORAGE_READY === 'on'
     && env.WHATSAPP_BOOKING_ENABLED === 'on'
     && env.WHATSAPP_BOOKING_PRIVACY_APPROVED === 'on'
     && !!env.SESSION_SECRET
@@ -53,11 +54,11 @@ export function parseSchedule(text, now = Date.now()) {
   return { when_date: match[1], when_hour: hour, when_text: `${match[1]} ${String(hour).padStart(2, '0')}:00 · שעון ישראל` };
 }
 
-export async function resolveBookingAddress(text, env) {
+export async function resolveBookingAddress(text, env, { fetchImpl } = {}) {
   const row = parseAddress(text);
   if (!row) return { error: 'format' };
   if (!zoneOf(row.delivery_city)) return { error: 'out_of_zone' };
-  await validateBusinessBatchAddresses([row], { apiKey: env.GOOGLE_PLACES_SERVER_KEY });
+  await validateBusinessBatchAddresses([row], { apiKey: env.GOOGLE_PLACES_SERVER_KEY, fetchImpl });
   if (row.errors.length) return { error: row.errors[0] };
   if (!zoneOf(row.delivery_city)) return { error: 'out_of_zone' };
   return { address: row.delivery_address, city: row.delivery_city, lat: row.delivery_lat, lng: row.delivery_lng };
@@ -74,6 +75,13 @@ function displayAddress(data, key) {
 function summary(state, phone) {
   const d = state.data;
   const q = state.quote;
+  if (state.conversation_only) {
+    const normal = summary({ ...state, conversation_only: false }, phone);
+    const beforeTerms = normal.split(state.language === 'en' ? 'Confirmation accepts' : 'באישור אתם מאשרים')[0];
+    return `${pilotNotice(state.language)}\n${beforeTerms}` + (state.language === 'en'
+      ? `Finish test: confirm ${state.revision}\nChange: edit\nPause: human`
+      : `לסיום הבדיקה: אישור ${state.revision}\nלשינוי: עריכה\nלעצירה: נציג`);
+  }
   if (state.language === 'en') return `Standard private delivery summary\nSize: ${d.size === 'small' ? 'small' : 'medium'}\nPickup: ${displayAddress(d, 'pickup')}\nPickup details: ${d.pickup_detail}\nDelivery: ${displayAddress(d, 'dropoff')}\nDelivery details: ${d.dropoff_detail}\nWhen: ${d.schedule} · Israel time\nName: ${d.name}\nPhone: ${normalizeIlPhone(phone)}\nEmail: ${d.email}\nNotes: ${d.notes}\nFinal price: ₪${q.price} (ILS)${q.discount_amount ? `, including ₪${q.discount_amount} discount` : ''}\nValid for 10 minutes and checked again when you confirm.\nConfirmation accepts the terms, privacy and cancellation policies:\nhttps://edenmish.com/terms.html\nhttps://edenmish.com/privacy.html\nhttps://edenmish.com/refund.html\nConfirm: confirm ${state.revision}\nChange: edit\nAsk for a person: human`;
   return `סיכום משלוח רגיל ללקוח פרטי\nגודל: ${d.size === 'small' ? 'קטן' : 'בינוני'}\nאיסוף: ${displayAddress(d, 'pickup')}\nפרטי איסוף: ${d.pickup_detail}\nמסירה: ${displayAddress(d, 'dropoff')}\nפרטי מסירה: ${d.dropoff_detail}\nמועד: ${d.when_text}\nשם: ${d.name}\nטלפון: ${normalizeIlPhone(phone)}\nאימייל: ${d.email}\nהערות: ${d.notes}\nמחיר סופי: ₪${q.price} (ILS)${q.discount_amount ? `, כולל הנחה ₪${q.discount_amount}` : ''}\nההצעה תקפה ל-10 דקות ונבדקת שוב באישור.\nבאישור אתם מאשרים את התקנון, הפרטיות והביטול:\nhttps://edenmish.com/terms.html\nhttps://edenmish.com/privacy.html\nhttps://edenmish.com/refund.html\nלאישור כתבו: אישור ${state.revision}\nלשינוי: עריכה\nלטיפול אנושי: נציג`;
 }
@@ -116,6 +124,10 @@ async function advanceBookingCore(current, text, services, { phone, now = Date.n
     if (now - state.quote.at >= QUOTE_TTL || JSON.stringify(quote) !== JSON.stringify(state.quote.value)) {
       state.revision++; state.quote = { ...quote, at: now, value: quote };
       return { state, reply: bookingSay(state, 'ההצעה עודכנה. נדרש אישור חדש.\n', 'The quote has been refreshed; please confirm the new summary.\n') + summary(state, phone) };
+    }
+    if (state.conversation_only) {
+      state.phase = 'handoff'; delete state.terms_accepted_at;
+      return { state, reply: pilotComplete(state.language) };
     }
     state.phase = 'creating'; state.terms_accepted_at = now;
     return { state, create: { input, expectedPrice: quote.price, quoteAt: state.quote.at }, reply: null };
@@ -210,7 +222,7 @@ const modelBypass = (state, text) => literalAnswer(state, text) || !['collect', 
   || text.split('\n').every(line => Object.values(LABELS).some(label => line.startsWith(label + ':')));
 
 // Interpretation is optional and separately gated; canonical validation stays here.
-export async function advanceBooking(current, text, services, options = {}) {
+async function advanceBookingInternal(current, text, services, options = {}) {
   const state = structuredClone(current);
   state.language = bookingLanguage(state.language, text);
   const now = options.now ?? Date.now();
@@ -265,7 +277,19 @@ export async function advanceBooking(current, text, services, options = {}) {
   if (question && (services.conversationModel || state.language === 'en')) result.reply = bookingQuestion(result.state, question);
   if (state.language === 'en' && result.reply && result.state.phase === 'collect' && /[א-ת]/u.test(result.reply)) result.reply = 'Please check that detail. ' + nextBookingPrompt(result.state);
   if (state.language === 'en' && result.reply && result.state.phase === 'address_review' && /^(לאישור)/u.test(result.reply)) result.reply = nextBookingPrompt(result.state);
-  if (result.state.phase === 'handoff' && result.reply && state.language === 'en') result.reply = HANDOFF_EN;
+  if (result.state.phase === 'handoff' && result.reply && state.language === 'en' && result.reply !== pilotComplete('en')) result.reply = HANDOFF_EN;
   if (interpretation) result.interpretation = interpretation;
+  return result;
+}
+
+export async function advanceBooking(current, text, services, options = {}) {
+  const state = structuredClone(current);
+  if (options.conversationOnly) state.conversation_only = true;
+  if (state.conversation_only && ['creating', 'booked'].includes(state.phase)) {
+    state.phase = 'handoff';
+    return { state, reply: pilotComplete(state.language) };
+  }
+  const result = await advanceBookingInternal(state, text, services, options);
+  if (state.conversation_only && result.state.phase === 'consent' && result.reply) result.reply = pilotNotice(result.state.language) + '\n' + result.reply;
   return result;
 }

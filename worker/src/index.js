@@ -1,5 +1,6 @@
 import { readTwilioBookingEvent, applyTwilioBookingStatus } from './whatsapp-booking-twilio.js';
 import { bookingEnabled, resolveBookingAddress, QUOTE_TTL } from './whatsapp-booking.js';
+import { conversationOnlyPilot, reservePilotOperation } from './whatsapp-booking-pilot.js';
 import { createOpenAIBookingModel } from './whatsapp-booking-openai.js';
 import { extractBookingEvents, processBookingEvent, sendBookingReplies, pauseBooking, closeBooking, cleanupBookings } from './whatsapp-booking-store.js';
 
@@ -604,8 +605,11 @@ function isTrustedOpsMutationOrigin(req, env) {
 
 function bookingServices(env, ctx) {
   return {
-    conversationModel: bookingEnabled(env) ? createOpenAIBookingModel(env) : undefined,
-    resolveAddress: (text) => resolveBookingAddress(text, env),
+    conversationModel: bookingEnabled(env) && !conversationOnlyPilot(env) ? createOpenAIBookingModel(env) : undefined,
+    resolveAddress: (text) => resolveBookingAddress(text, env, { fetchImpl: async (...args) => {
+      if (!await reservePilotOperation(env, 'address')) throw new Error('pilot_address_limit');
+      return fetch(...args);
+    } }),
     order: (token) => getOrderByToken(env.DB, token),
     quote: async (input) => {
       const quote = await authoritativeQuote(env, input);
@@ -618,6 +622,7 @@ function bookingServices(env, ctx) {
       };
     },
     create: async ({ input, expectedPrice, quoteAt }, identity) => {
+      if (conversationOnlyPilot(env)) return { error: 'conversation_only_pilot' };
       const request = new Request('https://find.edenmish.com/api/orders', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
       });

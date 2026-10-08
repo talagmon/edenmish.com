@@ -9,6 +9,48 @@ this separate-number plan. Account owners must separately approve any number
 purchase, WhatsApp enrollment, permissions, secrets, sender/webhook setup or send.
 No production configuration is enabled by this change.
 
+## Conversation-only staging pilot
+
+`WHATSAPP_BOOKING_MODE=conversation_only` permits a smaller pilot without Shopify
+credentials. Collection, normalized-address review, server pricing, edits and
+handoff work normally. The welcome/summary identify a test. Confirming a current
+summary ends the test and pauses automation **before** creating an order,
+accepting terms, sending email, creating a payment link or assigning a driver.
+This does not test checkout, payment reconciliation, OTP delivery or model quality.
+The model must stay off; bounded text parsing and guided answers are available.
+
+The pilot fails closed unless `BOOKING_URL=https://staging.edenmish.com`, provider
+is Twilio, `AUTO_DRIVER_DISPATCH=off`, `WHATSAPP_BOOKING_MODEL_ENABLED=off`, and
+the recipient policy is `allowlist` with exactly one normalized Israeli number.
+Set an approved `WHATSAPP_BOOKING_PILOT_ID` (8–64 lowercase letters/digits/hyphens)
+and `WHATSAPP_BOOKING_PILOT_EXPIRES_AT` ISO timestamp, at most 24 hours ahead.
+Use a one-hour window for the supervised test. Standard staging config selects
+this mode but leaves booking and sends disabled, with no pilot identity/expiry.
+
+Atomic, nonrefundable D1 reservations under the existing `rate_limits` table cap
+each pilot ID at **29 new processed inbound turns, 30 outbound attempts, and 10
+Google Places API requests**, including resolver fallbacks. The already received
+manual test is the first of the planned 30 inbound messages. Every summary part
+counts separately. Counters contain only the pilot ID, category, count and times;
+they persist across draft closure, retention and redeployment. Do not delete them,
+change the ID or extend the deadline to reuse the same spend approval. No new
+migration is needed. Exhaustion pauses processing/sending; uncertain sends retain
+their reservation. Pending replies from a draft predating pilot mode are blocked.
+
+These application limits cannot prevent Twilio billing for unsolicited or
+unallowlisted incoming messages, and do not constitute an account-wide dollar cap.
+Keep the sender unpublished and stop further tester messages when the pilot ends.
+Actual sends, Google address lookups and credential installation require the
+specific pilot approval. Use fictitious contact details, a reserved example email,
+and public test addresses. No OpenAI key or payment credentials are needed for
+this mode. Full checkout remains separately gated by the payment sandbox.
+
+Stop with authenticated Ops Pause while the pilot is active, then turn sends and
+booking off and clear the sender's incoming callback. A request already in flight
+cannot be recalled. Expiry blocks new requests even if flags remain on. Preserve
+the reservation counters and use the normal draft-retention rules; do not roll
+back to checkout-capable code while pilot routing or activation remains enabled.
+
 The parent verified enrollment of the dedicated sender and its Online status.
 Booking routing and activation remain separate gates. Recheck live readiness
 before setup; keep account identifiers, credentials and private readiness
