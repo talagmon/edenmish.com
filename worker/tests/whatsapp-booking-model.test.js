@@ -122,7 +122,7 @@ test('provider-neutral boundary accepts JSON text, rejects unbranded adapters an
   const adapter = createOfflineBookingModel(async input => JSON.stringify(proposal(input.customer_message, { size: 'קטן' })));
   assert.equal((await proposeBookingTurn(adapter, state, 'קטן', NOW)).entries[0][1], 'קטן');
   const source = readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
-  assert.match(source, /conversationModel: bookingEnabled\(env\) && !conversationOnlyPilot\(env\) \? createOpenAIBookingModel\(env\) : undefined/);
+  assert.match(source, /conversationModel: bookingEnabled\(env\) && \(!conversationOnlyPilot\(env\) \|\| lunaPilot\(env\)\) \? createOpenAIBookingModel\(env\) : undefined/);
   assert.doesNotMatch(source, /createOfflineBookingModel|OPENAI_API_KEY|XAI_API_KEY/);
 });
 

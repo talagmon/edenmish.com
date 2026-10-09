@@ -102,7 +102,7 @@ Database name: `edenmish`. Binding: `DB`.
 ### Schema and migrations
 
 `schema.sql` is the **fresh-DB source of truth** — it defines every current table.
-The numbered migrations (`003`–`038`) add tables/columns that were introduced after the
+The numbered migrations (`003`–`040`) add tables/columns that were introduced after the
 initial schema. Tables are idempotent (`CREATE TABLE IF NOT EXISTS`); `ALTER TABLE …
 ADD COLUMN` migrations (`006`–`010`, `015`, `016`, `024`–`026`, and `033`) must run only on
 DBs that predate their columns.
@@ -376,8 +376,8 @@ Google Places attempts. Staging defaults to this mode with all activation flags 
 A GPT-6 Luna Responses adapter is implemented and mock-tested behind separate
 model, privacy, evaluation and spend gates, all off/absent. It requires the scoped
 `WHATSAPP_BOOKING_OPENAI_API_KEY` Worker secret and never falls back to generic
-`OPENAI_API_KEY`. Parent-owned new-key provisioning, live evaluation, data-sharing
-review and deployment/activation remain outstanding.
+`OPENAI_API_KEY`. Approved installation of the existing dedicated EdenMish key,
+live readiness evaluation and deployment/activation remain outstanding.
 
 Release preflight: production runs `node scripts/validate-booking-schema.mjs
 --database edenmish --config wrangler.toml` read-only before deployment. Staging
@@ -385,3 +385,12 @@ applies 039 only when wholly absent, validates it afterward, and refuses dispatc
 or booking/send/model activation in its standard rendered config. The synthetic
 model runner defaults to dry-run; approved spend requires explicit arguments and
 the durable budget ledger documented in `../docs/WHATSAPP_BOOKING_MODEL.md`.
+
+The explicit `luna-v1` conversation-only profile additionally requires migration
+`040_whatsapp_luna_pilot_budget.sql` before enabling its readiness probes or live
+pilot. It is staging-only; normal disabled deployments do not read its tables.
+After merge, apply the production migration before any future feature depending
+on these tables (exact command in `MIGRATIONS.md`). Never enable the staging pilot
+in production. The standard staging workflow neither applies 040 nor enables this
+profile. See [`WHATSAPP_LUNA_PILOT.md`](../docs/WHATSAPP_LUNA_PILOT.md) for the fixed
+quotas, shared readiness/live budget, schema verification and activation sequence.

@@ -87,10 +87,11 @@ the current bounded adapter timeout is not evidence of acceptable live latency.
 - Review the exact current-message data transfer to OpenAI, privacy notice,
   retention and spending cap; provide secrets through the existing hidden flow.
   Never put keys or real customer data in the repo/report.
-- Implement and review a separately bounded model-enabled conversation-only pilot.
-  **The current `bookingPilotReady` deliberately rejects MODEL on.** Do not simply
-  switch that flag or remove this check. Keep staging-only binding, one recipient,
-  expiry, durable message/address/model quotas, and zero checkout/dispatch writes.
+- Review the implemented [bounded Luna pilot](WHATSAPP_LUNA_PILOT.md). The legacy
+  profile still rejects MODEL on; the new explicit `luna-v1` profile requires
+  migration 040, immutable identity/window, serialized model spending and durable
+  message/address limits. Its fixed readiness probes run with booking/sending off
+  and consume the same forthcoming pilot budget. No activation is implied.
 - Deploy only the reviewed staging version under explicit activation authority,
   verify authenticated operator pause, configure the incoming callback, start a
   new expressly approved window and supervise shutdown. Do not reset/reuse the

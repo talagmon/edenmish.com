@@ -1,3 +1,5 @@
+import { runLunaPilotReadiness } from './whatsapp-pilot-readiness.js';
+import { lunaPilot } from './whatsapp-pilot-budget.js';
 import { readTwilioBookingEvent, applyTwilioBookingStatus } from './whatsapp-booking-twilio.js';
 import { bookingEnabled, resolveBookingAddress, QUOTE_TTL } from './whatsapp-booking.js';
 import { conversationOnlyPilot, reservePilotOperation } from './whatsapp-booking-pilot.js';
@@ -606,9 +608,10 @@ function isTrustedOpsMutationOrigin(req, env) {
 
 function bookingServices(env, ctx) {
   return {
-    conversationModel: bookingEnabled(env) && !conversationOnlyPilot(env) ? createOpenAIBookingModel(env) : undefined,
+    conversationModel: bookingEnabled(env) && (!conversationOnlyPilot(env) || lunaPilot(env)) ? createOpenAIBookingModel(env) : undefined,
     resolveAddress: (text) => resolveBookingAddress(text, env, { fetchImpl: async (...args) => {
       if (!await reservePilotOperation(env, 'address')) throw new Error('pilot_address_limit');
+      if (conversationOnlyPilot(env) && !bookingEnabled(env)) throw new Error('pilot_expired');
       return fetch(...args);
     } }),
     order: (token) => getOrderByToken(env.DB, token),
@@ -2742,6 +2745,20 @@ const worker = {
       const c = await deleteCoupon(env.DB, code);
       if (!c) return json({ error: 'not found' }, 404);
       return json({ ok: true, coupon: c });
+    }
+
+    // Fixed synthetic readiness only, while booking/send/model remain OFF.
+    // Explicit readiness authorization and its own short deadline are required.
+    if (path === '/api/ops/whatsapp/pilot/readiness' && req.method === 'POST') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      if (!isTrustedOpsMutationOrigin(req, env)) return json({ error: 'untrusted_origin' }, 403);
+      let input;
+      try { input = await req.json(); } catch { return json({ error: 'invalid_request' }, 400); }
+      if (!input || typeof input.case_id !== 'string' || Object.keys(input).length !== 1) return json({ error: 'invalid_request' }, 400);
+      try {
+        const result = await runLunaPilotReadiness(env, input.case_id);
+        return json(result.report, result.status);
+      } catch { return json({ error: 'readiness_unconfirmed_no_retry' }, 503); }
     }
 
     // Authenticated operator queue. No phone lookup grants business/wallet access.

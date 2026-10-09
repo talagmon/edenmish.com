@@ -112,3 +112,61 @@ test('fixed corpus runner uses mocked adapter only and reports sanitized results
     assert.equal(report.results[0].outcome, 'mismatch'); assert.doesNotMatch(JSON.stringify(report), /sk-|customer_message|דיזנגוף/);
   });
 });
+
+test('HTTP, transport, invalid JSON and usage failures retain safe distinct evidence without provider text', async () => {
+  const cases = [
+    ...[400, 401, 403, 404, 429, 500].map(status => ({
+      factory: () => new Response('secret-provider-body', { status, headers: { 'x-request-id': 'secret-header' } }),
+      reason: 'http_error', phase: 'response', status,
+    })),
+    { factory: () => { throw new Error('secret-provider-error'); }, reason: 'transport_failure', phase: 'transport', status: null },
+    { factory: () => new Response('secret-invalid-json'), reason: 'invalid_response', phase: 'response_json', status: 200 },
+    { factory: () => result({ usage: null }), reason: 'usage_unverified', phase: 'usage_verification', status: 200 },
+  ];
+  for (const item of cases) {
+    let calls = 0;
+    await withBudget({ fetchImpl: async () => { calls++; return item.factory(); } }, async (budget, path) => {
+      await assert.rejects(budget.fetch(endpoint, init()));
+      const snapshot = budget.snapshot();
+      assert.equal(snapshot.stopped, item.reason);
+      assert.equal(snapshot.failure.phase, item.phase);
+      assert.equal(snapshot.failure.httpStatus, item.status);
+      assert.equal(snapshot.failure.aborted, false);
+      assert.ok(Number.isInteger(snapshot.failure.elapsedMs));
+      assert.equal(snapshot.chargedMicros, EVAL_LIMITS.reserveMicros);
+      await assert.rejects(budget.fetch(endpoint, init()));
+      assert.equal(calls, 1);
+      const ledger = readFileSync(path, 'utf8');
+      assert.doesNotMatch(ledger + JSON.stringify(snapshot), /secret-|Bearer|sk-|Authorization|customer_message/);
+      assert.equal(ledger.trim().split('\n').map(JSON.parse).filter(x => x.type === 'failure').length, 1);
+      assert.equal(budget.snapshot().failure.reason, item.reason, 'later refusals preserve the original failure');
+    });
+  }
+});
+
+test('configured model deadline records abort before fallback snapshot, with no retry or refund', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let requestStarted;
+  const started = new Promise(resolve => { requestStarted = resolve; });
+  let calls = 0;
+  await withBudget({ fetchImpl: async (_url, request) => {
+    calls++; requestStarted();
+    return new Promise((_resolve, reject) => request.signal.addEventListener('abort', () => reject(new Error('private-abort-detail')), { once: true }));
+  } }, async (budget, path) => {
+    const pending = runSyntheticEvaluation({ key: 'sk-synthetic-test-only', budget });
+    await started;
+    t.mock.timers.tick(1499);
+    assert.equal(budget.snapshot().stopped, null);
+    t.mock.timers.tick(1);
+    const report = await pending;
+    assert.equal(calls, 1);
+    assert.equal(report.results.length, 1);
+    assert.equal(report.results[0].outcome, 'fallback');
+    assert.equal(report.budget.stopped, 'request_aborted');
+    assert.equal(report.budget.failure.aborted, true);
+    assert.equal(report.budget.failure.phase, 'transport');
+    assert.equal(report.budget.failure.httpStatus, null);
+    assert.equal(report.budget.chargedMicros, EVAL_LIMITS.reserveMicros);
+    assert.doesNotMatch(readFileSync(path, 'utf8'), /private-abort|sk-|Bearer/);
+  });
+});

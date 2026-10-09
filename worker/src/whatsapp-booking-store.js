@@ -1,3 +1,4 @@
+import { lunaPilot } from './whatsapp-pilot-budget.js';
 import { proposeBookingTurn } from './whatsapp-booking-model.js';
 import { HANDOFF_EN } from './whatsapp-booking-copy.js';
 import { sendTwilioBookingReply, reconcileTwilioBookingReceipts } from './whatsapp-booking-twilio.js';
@@ -49,10 +50,12 @@ export function extractBookingEvents(payload, phoneId, now = Date.now()) {
 export async function processBookingEvent(env, event, services, now = Date.now()) {
   if (!bookingEnabled(env, now)) return { disabled: true };
   const DB = env.DB;
-  const senderKey = await digest(env.SESSION_SECRET, 'wa-sender:' + env.WHATSAPP_BOOKING_PROVIDER + ':' + event.phone);
+  const pilotScope = lunaPilot(env) ? ':' + env.WHATSAPP_BOOKING_PILOT_ID : '';
+  const senderKey = await digest(env.SESSION_SECRET, 'wa-sender:' + env.WHATSAPP_BOOKING_PROVIDER + ':' + event.phone + pilotScope);
   const eventKey = await digest(env.SESSION_SECRET, 'wa-event:' + env.WHATSAPP_BOOKING_PROVIDER + ':' + event.id);
   if (await DB.prepare('SELECT event_key FROM whatsapp_booking_events WHERE event_key = ?').bind(eventKey).first()) return { duplicate: true };
   const initial = newBooking();
+  if (lunaPilot(env)) initial.pilot_id = env.WHATSAPP_BOOKING_PILOT_ID;
   await DB.prepare(`INSERT OR IGNORE INTO whatsapp_booking_conversations
     (id, sender_key, recipient, state_json, phase, order_token, created_at, updated_at, provider)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), senderKey, event.phone, JSON.stringify(initial), initial.phase, crypto.randomUUID().replace(/-/g, '').slice(0, 22), now, now, env.WHATSAPP_BOOKING_PROVIDER).run();
@@ -112,6 +115,9 @@ export async function processBookingEvent(env, event, services, now = Date.now()
         }, { phone: event.phone, now, conversationOnly: conversationOnlyPilot(env) });
         state = result.state; reply = result.reply;
         if (['model_proposal', 'model_fallback'].includes(result.interpretation)) outcome = result.interpretation;
+        if (lunaPilot(env) && result.interpretation === 'model_fallback') {
+          state.phase = 'handoff'; reply = state.language === 'en' ? HANDOFF_EN : HANDOFF;
+        }
         if (result.create && (conversationOnlyPilot(env) || state.conversation_only)) {
           state.phase = 'handoff'; reply = pilotComplete(state.language); outcome = 'pilot_complete';
         } else if (result.create) {
@@ -192,7 +198,9 @@ export async function sendBookingReplies(env, fetchImpl = globalThis.fetch, cloc
         continue;
       }
       if (!changes(await DB.prepare(`UPDATE whatsapp_booking_replies SET state = 'sending' WHERE id = ? AND state = 'pending'`).bind(row.id).run())) continue;
-      if (conversationOnlyPilot(env) && (!JSON.parse(row.state_json).conversation_only || !await reservePilotOperation(env, 'outbound', readTime()))) {
+      if (conversationOnlyPilot(env) && (!JSON.parse(row.state_json).conversation_only
+        || (lunaPilot(env) && JSON.parse(row.state_json).pilot_id !== env.WHATSAPP_BOOKING_PILOT_ID)
+        || !await reservePilotOperation(env, 'outbound', readTime()))) {
         await DB.batch([
           DB.prepare(`UPDATE whatsapp_booking_replies SET state = 'cancelled', body = NULL WHERE id = ?`).bind(row.id),
           DB.prepare(`UPDATE whatsapp_booking_conversations SET phase = 'handoff', state_json = json_set(state_json, '$.phase', 'handoff') WHERE id = ? AND lock_id = ?`).bind(row.conversation_id, lease),

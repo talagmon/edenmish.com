@@ -79,3 +79,24 @@ test('no consent, paused conversation or sensitive content never reaches OpenAI'
   assert.equal(await proposeBookingTurn(adapter, state, '4111 1111 1111 1111', Date.now()), null);
   assert.equal(calls, 0);
 });
+
+test('safe diagnostics distinguish envelope, refusal, JSON and proposal rejection without storing raw text',async()=>{
+ const badSpan={...proposal,fields:[{field:'size',start:900,end:999}]};
+ const badEnvelope=envelope(proposal);badEnvelope.output.push({...badEnvelope.output[0]});
+ const refusal=envelope(proposal);refusal.output[0].content=[{type:'refusal',refusal:'private user content'}];
+ const invalidJSON=envelope(proposal);invalidJSON.output[0].content[0].text='private malformed proposal';
+ const cases=[
+  [()=>new Response('secret provider body',{status:401}),'http_error'],
+  [()=>new Response('secret provider JSON'),'response_json'],
+  [()=>response(badEnvelope),'response_envelope'],[()=>response(refusal),'refusal'],
+  [()=>response(invalidJSON),'proposal_json'],[()=>response(envelope(badSpan)),'proposal_schema'],
+ ];
+ for(const [factory,expected] of cases){
+  const diagnostics=[];
+  const model=createOpenAIBookingModel(env,{fetchImpl:async()=>factory(),onDiagnostic:entry=>diagnostics.push(entry)});
+  assert.equal(await proposeBookingTurn(model,state,text,Date.now()),null);
+  assert.equal(diagnostics[0].outcome,expected);
+  assert.deepEqual(Object.keys(diagnostics[0]).sort(),['elapsedMs','httpStatus','outcome']);
+  assert.doesNotMatch(JSON.stringify(diagnostics),/secret|private|sk-|קטנה/);
+ }
+});

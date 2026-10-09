@@ -24,7 +24,7 @@ export function createEvaluationBudget({ ledgerPath, budgetMicros, maxRequests =
     || !Number.isSafeInteger(maxRequests) || maxRequests < 1 || maxRequests > EVAL_LIMITS.requests
     || typeof fetchImpl !== 'function') throw new Error('Invalid evaluation limits.');
   const fd = openSync(ledgerPath, 'wx', 0o600);
-  let charged = 0; let requests = 0; let busy = false; let stopped = null; let closed = false;
+  let charged = 0; let requests = 0; let busy = false; let stopped = null; let closed = false; let failure = null;
   const record = entry => { writeFileSync(fd, JSON.stringify(entry) + '\n'); fsyncSync(fd); };
   try {
     record({ type: 'start', model: 'gpt-6-luna', budgetMicros, maxRequests, pricingDate: EVAL_LIMITS.pricingDate });
@@ -32,7 +32,8 @@ export function createEvaluationBudget({ ledgerPath, budgetMicros, maxRequests =
     try { fsyncSync(directory); } finally { closeSync(directory); }
   }
   catch (error) { closeSync(fd); throw error; }
-  const snapshot = () => ({ requests, chargedMicros: charged, remainingMicros: budgetMicros - charged, busy, stopped });
+  const snapshot = () => ({ requests, chargedMicros: charged, remainingMicros: budgetMicros - charged, busy, stopped,
+    ...(failure ? { failure: { ...failure } } : {}) });
   const refuse = reason => { stopped ||= reason; throw new Error('Synthetic evaluation stopped.'); };
   return {
     snapshot,
@@ -46,17 +47,36 @@ export function createEvaluationBudget({ ledgerPath, budgetMicros, maxRequests =
       if (url !== 'https://api.openai.com/v1/responses' || init.method !== 'POST' || init.redirect !== 'error'
         || !init.signal || init.signal.aborted || Buffer.byteLength(init.body) > EVAL_LIMITS.requestBytes
         || body.model !== 'gpt-6-luna' || body.store !== false || body.reasoning?.effort !== 'none'
+        || (body.service_tier !== undefined && body.service_tier !== 'default')
         || body.max_output_tokens !== EVAL_LIMITS.outputTokens
-        || Object.keys(body).some(key => !['model', 'store', 'reasoning', 'max_output_tokens', 'instructions', 'input', 'text'].includes(key))) return refuse('invalid_request');
+        || Object.keys(body).some(key => !['model', 'store', 'reasoning', 'max_output_tokens', 'instructions', 'input', 'text', 'service_tier'].includes(key))) return refuse('invalid_request');
       busy = true;
+      const started = performance.now();
+      let phase = 'ledger_reserve'; let httpStatus = null;
+      const captureFailure = reason => {
+        stopped ||= reason;
+        if (failure) return;
+        // Fixed labels and numeric metadata only. Never retain exception text,
+        // response bodies, request IDs/headers, credentials or request payloads.
+        failure = { reason: stopped, phase, httpStatus, aborted: init.signal.aborted,
+          elapsedMs: Math.round(performance.now() - started) };
+        if (!closed) { try { record({ type: 'failure', sequence: requests, ...failure }); } catch { /* Keep reservation. */ } }
+      };
+      const onAbort = () => captureFailure('request_aborted');
       try {
         const sequence = requests + 1;
         record({ type: 'reserve', sequence, micros: EVAL_LIMITS.reserveMicros });
         requests = sequence; charged += EVAL_LIMITS.reserveMicros;
+        phase = 'transport';
+        init.signal.addEventListener('abort', onAbort, { once: true });
+        if (init.signal.aborted) { onAbort(); return refuse('request_aborted'); }
         // Pin Standard instead of an account's automatic priority/fast setting.
         const response = await fetchImpl(url, { ...init, body: JSON.stringify({ ...body, service_tier: 'default' }) });
+        httpStatus = response.status;
+        phase = 'response';
         if (!response.ok || !response.body || init.signal.aborted) {
-          await response.body?.cancel(); return refuse('provider_failure');
+          captureFailure(init.signal.aborted ? 'request_aborted' : !response.ok ? 'http_error' : 'missing_response_body');
+          await response.body?.cancel(); return refuse(stopped);
         }
         const reader = response.body.getReader(); const chunks = []; let size = 0;
         try {
@@ -68,19 +88,22 @@ export function createEvaluationBudget({ ledgerPath, budgetMicros, maxRequests =
             chunks.push(Buffer.from(value));
           }
         } finally { reader.releaseLock(); }
+        phase = 'response_json';
         const bytes = Buffer.concat(chunks); let result;
         try { result = JSON.parse(bytes.toString('utf8')); } catch { return refuse('invalid_response'); }
+        phase = 'usage_verification';
         const cost = usageUpperCost(result.usage);
         if (closed || init.signal.aborted || result.model !== 'gpt-6-luna' || result.service_tier !== 'default'
           || cost === null || cost > EVAL_LIMITS.reserveMicros) return refuse('usage_unverified');
+        phase = 'ledger_settle';
         record({ type: 'settle', sequence, micros: cost, inputTokens: result.usage.input_tokens, outputTokens: result.usage.output_tokens });
         charged -= EVAL_LIMITS.reserveMicros - cost;
         return new Response(bytes, { status: response.status, headers: { 'Content-Type': 'application/json' } });
       } catch {
         // Never copy provider errors, headers, responses or credentials to logs.
-        stopped ||= 'transport_or_ledger_failure';
+        captureFailure(init.signal.aborted ? 'request_aborted' : phase.startsWith('ledger_') ? 'ledger_failure' : 'transport_failure');
         throw new Error('Synthetic evaluation stopped.');
-      } finally { busy = false; }
+      } finally { init.signal.removeEventListener('abort', onAbort); busy = false; }
     },
   };
 }

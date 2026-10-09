@@ -403,6 +403,12 @@ export async function validateBusinessBatchAddresses(rows, options = {}) {
             places,
           );
           if (!textResolution.error) return textResolution;
+          // A booking can ask the user to select already map-backed candidates;
+          // avoid spending on autocomplete/details before that explicit choice.
+          if (options.offerSuggestions) {
+            const candidates = businessAddressSuggestions(row.delivery_house_number, row.delivery_city, places);
+            if (candidates.length) return { ...textResolution, candidates };
+          }
           const predictions = await autocompletePlaces(
             row.delivery_street,
             row.delivery_house_number,

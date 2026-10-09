@@ -658,3 +658,57 @@ test('pilot expiry during quota reservation blocks the provider request without 
   assert.equal(row.phase, 'handoff'); assert.equal(row.lock_id, null);
   assert.equal(env.DB.sqlite.prepare('SELECT state FROM whatsapp_booking_replies').get().state, 'failed');
 });
+
+test('Luna pilot follows signed WhatsApp flow with one budget and never reaches order/payment/dispatch',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:NOW+60000});
+ const env={...pilotEnvironment(database()),GOOGLE_PLACES_SERVER_KEY:'mock',WHATSAPP_BOOKING_SEND_ENABLED:'on',
+ WHATSAPP_BOOKING_PILOT_PROFILE:'luna-v1',WHATSAPP_BOOKING_PILOT_BUDGET_READY:'on',
+ WHATSAPP_BOOKING_PILOT_ID:'edenmish-luna-integration-one',WHATSAPP_BOOKING_PILOT_STARTED_AT:new Date(NOW).toISOString(),
+ WHATSAPP_BOOKING_MODEL_ENABLED:'on',WHATSAPP_BOOKING_MODEL:'gpt-6-luna',WHATSAPP_BOOKING_OPENAI_API_KEY:'sk-synthetic-test-only',
+ WHATSAPP_BOOKING_MODEL_PRIVACY_APPROVED:'on',WHATSAPP_BOOKING_MODEL_SPEND_APPROVED:'on',WHATSAPP_BOOKING_MODEL_EVAL_APPROVED:'on'};
+ const net=installNetworkFixtures(env);const fallback=globalThis.fetch;let modelCalls=0,sends=0;
+ globalThis.fetch=async(url,init)=>{
+  if(String(url).endsWith('/Messages.json'))return Response.json({sid:'SM'+(++sends).toString(16).padStart(32,'0')});
+  if(String(url)==='https://api.openai.com/v1/responses'){
+   modelCalls++;const input=JSON.parse(JSON.parse(init.body).input[0].content);const field=input.context.missing_fields[0];
+   const proposal={version:1,intent:'update',fields:[{field,start:0,end:input.customer_message.length}],topic:null,clarify_field:null};
+   return Response.json({status:'completed',model:'gpt-6-luna',service_tier:'default',usage:{input_tokens:1000,output_tokens:100,total_tokens:1100},
+    output:[{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:JSON.stringify(proposal)}]}]});
+  }
+  return fallback(url,init);
+ };
+ await fullReview(env,net);const before=modelCalls;assert.ok(before>=4);
+ const confirmed=await net.inbound('1');
+ assert.equal((await worker.fetch(request('1',confirmed.id).req,env)).status,200);
+ await net.inbound('hello again');assert.equal(modelCalls,before);
+ assert.equal(env.DB.sqlite.prepare('SELECT phase FROM whatsapp_booking_conversations').get().phase,'handoff');
+ for(const table of ['orders','payments','driver_route_stops'])assert.equal(env.DB.sqlite.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n,0);
+ assert.equal(net.counts.charges,0);assert.equal(net.counts.emails,0);
+ assert.equal(env.DB.sqlite.prepare('SELECT attempts FROM whatsapp_pilot_budgets').get().attempts,before);
+});
+
+test('readiness HTTP route requires Ops authentication, trusted origin and explicitly disabled pilot gates',async()=>{
+ const env=pilotEnvironment(database());const url='https://ops-staging.edenmish.com/api/ops/whatsapp/pilot/readiness';
+ const requestFor=headers=>new Request(url,{method:'POST',headers:{'Content-Type':'application/json',...headers},body:JSON.stringify({case_id:'small_item'})});
+ assert.equal((await worker.fetch(requestFor({}),env)).status,401);
+ const session=await makeSession(env);
+ assert.equal((await worker.fetch(requestFor({Cookie:`ops_sess=${session}`,Origin:'https://untrusted.invalid'}),env)).status,403);
+ assert.equal((await worker.fetch(requestFor({'X-Ops':session}),env)).status,404);
+});
+
+test('new Luna pilot isolates its draft and cannot dispatch a previous pilot reply',async()=>{
+ const db=database();const old=pilotEnvironment(db);
+ await processBookingEvent(old,{id:'prior-pilot-message',at:NOW,phone,text:'hello'},services(),NOW);
+ const previous=db.sqlite.prepare('SELECT id,state_json FROM whatsapp_booking_conversations').get();
+ const env={...old,WHATSAPP_BOOKING_PILOT_PROFILE:'luna-v1',WHATSAPP_BOOKING_PILOT_BUDGET_READY:'on',
+ WHATSAPP_BOOKING_SEND_ENABLED:'on',WHATSAPP_BOOKING_PILOT_ID:'edenmish-luna-second-pilot',WHATSAPP_BOOKING_PILOT_STARTED_AT:new Date(NOW).toISOString(),
+ WHATSAPP_BOOKING_OPENAI_API_KEY:'sk-synthetic-test-only',
+ WHATSAPP_BOOKING_MODEL_ENABLED:'on',WHATSAPP_BOOKING_MODEL:'gpt-6-luna',WHATSAPP_BOOKING_MODEL_PRIVACY_APPROVED:'on',
+ WHATSAPP_BOOKING_MODEL_SPEND_APPROVED:'on',WHATSAPP_BOOKING_MODEL_EVAL_APPROVED:'on'};
+ await processBookingEvent(env,{id:'new-pilot-message',at:NOW+1000,phone,text:'hello'},services(),NOW+1000);
+ assert.equal(db.sqlite.prepare('SELECT COUNT(*) n FROM whatsapp_booking_conversations').get().n,2);
+ let sends=0;await sendBookingReplies(env,async()=>{sends++;return Response.json({sid:'SM'+'7'.repeat(32)});},NOW+2000);
+ assert.equal(sends,1);
+ assert.equal(db.sqlite.prepare('SELECT state FROM whatsapp_booking_replies WHERE conversation_id=?').get(previous.id).state,'cancelled');
+ assert.equal(JSON.parse(db.sqlite.prepare('SELECT state_json FROM whatsapp_booking_conversations WHERE id=?').get(previous.id).state_json).pilot_id,undefined);
+});

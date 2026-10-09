@@ -1162,3 +1162,42 @@ Staging uses `--database edenmish-staging --config wrangler.staging.generated.to
 Any partial, malformed or structurally different schema blocks deployment instead
 of retrying the one-time ALTER. Equivalent but differently written definitions
 also require operator review; this conservative check is intentional.
+
+## 040 — Bounded Luna staging-pilot ledger
+
+Adds `whatsapp_pilot_budgets` and `whatsapp_pilot_model_attempts` plus their lookup
+index. Stores immutable pilot bindings/window, serialized request reservations,
+conservative spend, safe outcomes and token counts. No chat bodies, phone numbers
+or credentials are stored. Rows survive retention cleanup and migration replay;
+never reset them to obtain more allowance.
+
+Required before enabling `luna-v1` readiness/live mode. Ordinary deployments with
+that profile absent do not use these tables. Apply only to the approved environment.
+Production command after merge, before a future dependent feature deploy:
+
+```bash
+cd worker
+wrangler d1 execute edenmish --remote --file=./migrations/040_whatsapp_luna_pilot_budget.sql
+```
+
+For the separately authorized staging pilot:
+
+```bash
+cd worker
+wrangler d1 execute edenmish-staging --remote --config <staging-config> --file=./migrations/040_whatsapp_luna_pilot_budget.sql
+node scripts/validate-luna-pilot-schema.mjs --config <staging-config>
+```
+
+Read-only verification query:
+
+```sql
+SELECT name,sql FROM sqlite_master WHERE name IN
+('whatsapp_pilot_budgets','whatsapp_pilot_model_attempts','whatsapp_pilot_model_attempts_pilot');
+SELECT COUNT(*) FROM whatsapp_pilot_budgets;
+SELECT COUNT(*) FROM whatsapp_pilot_model_attempts;
+```
+
+The validator checks exact full table/index definitions, including budget limits;
+missing/partial/weakened definitions block readiness. It never applies migrations.
+Only set `WHATSAPP_BOOKING_PILOT_BUDGET_READY=on` after verification. No remote 040
+migration, deployment or activation was performed as part of this implementation.

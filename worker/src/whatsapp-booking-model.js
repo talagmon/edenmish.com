@@ -41,7 +41,7 @@ export const hasSensitiveBookingText = text => /(?:\d[ -]?){13,19}|(?:sk-|shpat_
 const ADAPTER = Symbol('booking-model');
 export function createBookingModel(propose, { timeoutMs = 1500 } = {}) {
   if (typeof propose !== 'function') throw new TypeError('proposal function required');
-  return Object.freeze({ [ADAPTER]: true, propose, timeoutMs: Math.max(1, Math.min(2000, Number(timeoutMs) || 1500)) });
+  return Object.freeze({ [ADAPTER]: true, propose, timeoutMs: Math.max(1, Math.min(10000, Number(timeoutMs) || 1500)) });
 }
 export const createOfflineBookingModel = createBookingModel;
 const exactKeys = (value, keys) => value && typeof value === 'object' && !Array.isArray(value)

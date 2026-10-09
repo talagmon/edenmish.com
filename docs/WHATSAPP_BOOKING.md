@@ -315,3 +315,8 @@ verification. Local mock success does not clear these activation gates.
 
 Provider references: [Twilio request security](https://www.twilio.com/docs/usage/security),
 [Twilio Message resource](https://www.twilio.com/docs/messaging/api/message-resource).
+
+For the separately approved GPT-6 Luna conversation rehearsal, see
+[`WHATSAPP_LUNA_PILOT.md`](WHATSAPP_LUNA_PILOT.md). That explicit profile adds
+migration 040 and persistent model spending/expiry controls. The default
+conversation-only configuration continues to reject model enablement.

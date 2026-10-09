@@ -20,16 +20,19 @@ function expectedProposal(item) {
   return validateBookingProposal(raw, item.text, now);
 }
 
-export async function runSyntheticEvaluation({ key, budget, onResult = () => {} }) {
+async function runCases({ key, budget, onResult = () => {} }, diagnostic = false) {
   if (!/^sk-[A-Za-z0-9_-]{12,}$/.test(key || '')) throw new Error('Dedicated evaluation credential required.');
   const adapter = createOpenAIBookingModel({ WHATSAPP_BOOKING_MODEL_ENABLED: 'on', WHATSAPP_BOOKING_MODEL_PRIVACY_APPROVED: 'on',
     WHATSAPP_BOOKING_MODEL_EVAL_APPROVED: 'on', WHATSAPP_BOOKING_MODEL_SPEND_APPROVED: 'on',
     WHATSAPP_BOOKING_MODEL: 'gpt-6-luna', WHATSAPP_BOOKING_OPENAI_API_KEY: key }, { fetchImpl: budget.fetch });
+  // This copy exists only in the explicit one-case diagnostic entry point.
+  // The Worker adapter remains frozen at its normal 1,500 ms deadline.
+  const evaluationAdapter = diagnostic ? Object.freeze({ ...adapter, timeoutMs: 10_000 }) : adapter;
   const results = [];
-  for (const item of cases) {
+  for (const item of diagnostic ? cases.slice(0, 1) : cases) {
     if (budget.snapshot().stopped || budget.snapshot().busy) break;
     const started = performance.now();
-    const proposal = await proposeBookingTurn(adapter, { phase: item.reviewed ? 'review' : 'collect', consent_at: 1, data: {}, language: 'he' }, item.text, now);
+    const proposal = await proposeBookingTurn(evaluationAdapter, { phase: item.reviewed ? 'review' : 'collect', consent_at: 1, data: {}, language: 'he' }, item.text, now);
     const expected = expectedProposal(item);
     const outcome = !proposal ? 'fallback' : !expected ? 'human_review' : comparable(proposal) === comparable(expected) ? 'match' : 'mismatch';
     const result = { id: item.id, outcome, latencyMs: Math.round(performance.now() - started) };
@@ -37,6 +40,9 @@ export async function runSyntheticEvaluation({ key, budget, onResult = () => {} 
   }
   return { results, budget: budget.snapshot(), qualityApproved: false };
 }
+
+export const runSyntheticEvaluation = options => runCases(options);
+export const runSingleDiagnosticEvaluation = options => runCases(options, true);
 
 export async function evaluationMain(args, env, log = console.log) {
   if (!args.length || (args.length === 1 && args[0] === '--dry-run')) { log(JSON.stringify(evaluationPlan())); return; }

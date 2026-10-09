@@ -1,8 +1,11 @@
+import { lunaPilot, lunaPilotCanRun, ensureLunaPilotBudget, LUNA_PILOT_LIMITS } from './whatsapp-pilot-budget.js';
 // Staging-only conversation pilot. Counts contain no phone, chat or credential.
 export const conversationOnlyPilot = env => env.WHATSAPP_BOOKING_MODE === 'conversation_only';
 export function bookingPilotReady(env, now = Date.now()) {
   if (env.WHATSAPP_BOOKING_MODE == null || env.WHATSAPP_BOOKING_MODE === 'full') return true;
   if (!conversationOnlyPilot(env)) return false;
+  if (lunaPilot(env)) return lunaPilotCanRun(env, now);
+  if (env.WHATSAPP_BOOKING_PILOT_PROFILE) return false;
   const expires = Date.parse(env.WHATSAPP_BOOKING_PILOT_EXPIRES_AT || '');
   return env.BOOKING_URL === 'https://staging.edenmish.com'
     && env.WHATSAPP_BOOKING_PROVIDER === 'twilio'
@@ -17,7 +20,10 @@ export async function reservePilotOperation(env, kind, now = Date.now()) {
   if (!conversationOnlyPilot(env)) return true;
   if (!bookingPilotReady(env, now)) return false;
   // The already received manual test counts as the first of 30 inbound messages.
-  const limit = { inbound: 29, outbound: 30, address: 10 }[kind];
+  const isLuna = lunaPilot(env);
+  if (isLuna && !await ensureLunaPilotBudget(env, now, false, kind === 'outbound')) return false;
+  const limit = (isLuna ? LUNA_PILOT_LIMITS : { inbound: 29, outbound: 30, address: 10 })[kind];
+  if (!['inbound','outbound','address'].includes(kind)) return false;
   if (!limit) return false;
   // Never refund uncertain attempts; closing drafts/redeploying cannot reset it.
   // Long-lived lock excludes these tiny non-PII counters from rate-limit cleanup.

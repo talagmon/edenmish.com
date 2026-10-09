@@ -265,3 +265,13 @@ test('optional map choices retain house/city/country/coordinate safeguards and a
   assert.equal(candidates[0].address,'בני משה 16, תל אביב-יפו');
   assert.ok(candidates.every(candidate=>candidate.address.includes('16, תל אביב')));
 });
+
+test('booking candidates from text search avoid extra provider calls and remain explicit choices',async()=>{
+ let requests=0;
+ const row={delivery_street:'bni mosh',delivery_house_number:'16',delivery_city:'תל אביב',errors:[],corrections:[]};
+ await validateBusinessBatchAddresses([row],{apiKey:'synthetic',offerSuggestions:true,fetchImpl:async()=>{
+  requests++;return Response.json({places:[place({route:'בני משה',number:'16'})]});
+ }});
+ assert.equal(requests,1);assert.ok(row.errors.length);assert.equal(row.delivery_address,undefined);
+ assert.equal(row.address_candidates[0].address,'בני משה 16, תל אביב-יפו');
+});
