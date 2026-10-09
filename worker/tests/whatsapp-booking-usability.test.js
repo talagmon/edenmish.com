@@ -104,3 +104,36 @@ test('address suggestions never auto-select and a human request discards automat
  const paused=await advanceBooking(state,'2',svc,opts); assert.equal(paused.state.phase,'handoff');
  assert.equal((await advanceBooking(paused.state,'1',svc,opts)).reply,null);
 });
+
+test('bare morning asks for a day before proposing slots, and numbered day choice preserves morning',async()=>{
+ for(const text of ['בבוקר','in the morning']){
+  let state=(await advanceBooking(newBooking(),'start',services(),opts)).state;
+  const asked=await advanceBooking(state,text,services(),opts);
+  assert.equal(asked.state.menu.kind,'schedule_day');assert.equal(asked.state.schedule_preference.date,null);
+  assert.equal(asked.state.data.when_date,undefined);assert.equal(asked.state.data.when_hour,undefined);assert.equal(asked.create,undefined);
+  assert.deepEqual(pickupSlotChoices(asked.state.schedule_preference,now).slots,[]);
+  const day=await advanceBooking(asked.state,'2',services(),opts);
+  assert.equal(day.state.schedule_preference.period,'morning');assert.equal(day.state.menu.kind,'schedule');
+  assert.deepEqual(day.state.menu.slots,['2026-10-09 08:00','2026-10-09 09:00','2026-10-09 10:00']);
+  assert.equal(day.state.data.when_hour,undefined);
+  const chosen=await advanceBooking(day.state,'2',services(),opts);
+  assert.equal(chosen.state.data.when_date,'2026-10-09');assert.equal(chosen.state.data.when_hour,9);assert.equal(chosen.create,undefined);
+ }
+});
+test('bare morning refines the known date, invalidates the quote and requires a new numbered slot choice',async()=>{
+ const state=await review();assert.equal(state.data.when_date,'2026-10-11');
+ const result=await advanceBooking(state,'בבוקר',services(),opts);
+ assert.equal(result.state.schedule_preference.date,'2026-10-11');assert.equal(result.state.quote,null);
+ assert.equal(result.state.terms_accepted_at,undefined);assert.equal(result.state.data.when_hour,undefined);
+ assert.deepEqual(result.state.menu.slots,['2026-10-11 09:00','2026-10-11 10:00','2026-10-11 11:00']);
+ const chosen=await advanceBooking(result.state,'1',services(),opts);
+ assert.equal(chosen.state.data.when_date,'2026-10-11');assert.equal(chosen.state.data.when_hour,9);assert.equal(chosen.create,undefined);
+});
+test('day clarification supports another date and handoff; closed day suggestions never select automatically',async()=>{
+ const state=(await advanceBooking(newBooking(),'start',services(),opts)).state;
+ const asked=await advanceBooking(state,'בבוקר',services(),opts);
+ const dated=await advanceBooking(asked.state,'2026-10-10',services(),opts);
+ assert.equal(dated.state.schedule_preference.date,'2026-10-10');assert.equal(dated.state.schedule_preference.period,'morning');
+ assert.equal(dated.state.menu.slots[0],'2026-10-11 09:00');assert.match(dated.reply,/היום המתאים הבא/);assert.equal(dated.state.data.when_date,undefined);
+ assert.equal((await advanceBooking(asked.state,'3',services(),opts)).state.phase,'handoff');
+});

@@ -1238,3 +1238,41 @@ Only after exact schema verification set `WHATSAPP_BOOKING_CONTINUATION_SCHEMA_R
 The validator rejects missing/partial/weakened definitions and never repairs them.
 Migration replay cannot reset a grant. No remote migration, issuance or activation
 was performed. See `docs/WHATSAPP_CONTINUATION_GRANT.md`.
+
+## 042 — One approved follow-on after an unused expired continuation
+
+Adds separate v2 grant/operation tables and four guards. Requires 040 and 041.
+The original grant and operations remain untouched. Issuance requires the v1
+window to have expired with zero spend, zero counters, no operations and no
+uncertainty/lock. Once linked, database triggers freeze that predecessor.
+This deliberately does not support migrating spent grants or arbitrary renewals.
+Original $0.30 historical holds and the same $0.50 cushion are carried once;
+the $2 original-run cap and $0.50 original model pool remain enforced.
+
+Exact future production prerequisite, only after merge and separate authorization:
+
+```bash
+cd worker
+wrangler d1 execute edenmish --remote --file=./migrations/042_whatsapp_continuation_followon.sql
+```
+
+For the approved staging test preparation:
+
+```bash
+cd worker
+wrangler d1 execute edenmish-staging --remote --config <staging-config> --file=./migrations/042_whatsapp_continuation_followon.sql
+node scripts/validate-continuation-followon-schema.mjs --config <staging-config>
+```
+
+Read-only verification (the validator checks exact definitions including triggers):
+
+```sql
+SELECT name,sql FROM sqlite_master WHERE name LIKE 'whatsapp_continuation_followon_%' OR name LIKE 'whatsapp_followon_%';
+SELECT id,pilot_id,version,starts_at,expires_at,historical_micros,fee_cushion_micros,
+spent_micros,model_micros,inbound,outbound,address,model,lock_id,stopped_reason
+FROM whatsapp_continuation_followon_grants;
+```
+
+Set `WHATSAPP_BOOKING_CONTINUATION_FOLLOWON_SCHEMA_READY=on` only after validation.
+Use version `2` and the SAME original pilot ID with suffix `:quote-v2-handset-2`.
+Do not alter/reissue the old window, change the pilot ID, or release old holds.

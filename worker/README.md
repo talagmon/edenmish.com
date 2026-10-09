@@ -402,3 +402,11 @@ Apply only missing migrations after approval, before its versioned flags are set
 (see `MIGRATIONS.md` for exact commands). Default configs do not enable/issue it.
 Original stopped records/holds remain unchanged; OFF-state Ops issuance and
 activation are separate actions. See `../docs/WHATSAPP_CONTINUATION_GRANT.md`.
+
+
+The separately approved second conversation-only window additionally requires
+`042_whatsapp_continuation_followon.sql` before deploying a configuration selecting
+version 2. Verify with `node scripts/validate-continuation-followon-schema.mjs
+--config <staging-config>`. See `MIGRATIONS.md` for the exact commands and guards.
+After merge, apply missing migrations before any separately authorized production
+deployment; this change does not authorize production deployment or activation.

@@ -2780,7 +2780,7 @@ const worker = {
       if (!isTrustedOpsMutationOrigin(req, env)) return json({ error: 'untrusted_origin' }, 403);
       let input;
       try { input=await req.json(); } catch { return json({error:'invalid_request'},400); }
-      if (!input || Object.keys(input).sort().join(',')!=='grant_id,version' || input.version!==1
+      if (!input || Object.keys(input).sort().join(',')!=='grant_id,version' || ![1,2].includes(input.version) || input.version!==Number(env.WHATSAPP_BOOKING_CONTINUATION_VERSION)
         || input.grant_id!==env.WHATSAPP_BOOKING_CONTINUATION_ID) return json({error:'invalid_request'},400);
       try { const issued=await issueContinuationGrant(env); return json({issued},issued?201:409); }
       catch { return json({error:'grant_unconfirmed_no_retry'},503); }

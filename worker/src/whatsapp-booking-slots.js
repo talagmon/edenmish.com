@@ -3,8 +3,15 @@ import { scheduleError } from './validate.js';
 export function israelDay(now) {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
 }
-export function pickupPreference(text, now) {
+export function pickupPreference(text, now, knownDate = null) {
   const value = text.trim().toLowerCase().replace(/\s+/g, ' ');
+  const daypart = /^(?:in the )?(morning|afternoon|evening|בבוקר|בצהריים|אחר הצהריים|בערב)$/.exec(value);
+  if (daypart) {
+    const period = /morning|בבוקר/.test(daypart[1]) ? 'morning' : /afternoon|צהריים/.test(daypart[1]) ? 'afternoon' : 'evening';
+    // Preserve an explicitly supplied date; a missing date remains a question.
+    const suppliedDate = knownDate && pickupPreference(knownDate, now);
+    return { date: suppliedDate?.date || null, period };
+  }
   const m = /^(today|tomorrow|tommorrow|היום|מחר|\d{4}-\d{2}-\d{2}|\d{1,2}[/.]\d{1,2}[/.]\d{4})(?:\s+(?:in the\s+)?(morning|afternoon|evening|בבוקר|בצהריים|אחר הצהריים|בערב))?$/.exec(value);
   if (!m) return null;
   let date = m[1];
@@ -16,6 +23,7 @@ export function pickupPreference(text, now) {
   return { date, period };
 }
 export function pickupSlotChoices(preference, now) {
+  if (!preference?.date) return { slots: [], alternateDay: false };
   const today = israelDay(now);
   const localTime = new Intl.DateTimeFormat('en-GB', { timeZone:'Asia/Jerusalem', hour:'2-digit', minute:'2-digit', hourCycle:'h23' }).format(now);
   const [hour, minute] = localTime.split(':').map(Number);

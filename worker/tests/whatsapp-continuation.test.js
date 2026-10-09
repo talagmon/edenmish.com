@@ -160,7 +160,7 @@ test('OFF-state operator page offers one explicit grant action, with no auto iss
  const html=await bookingPilotOpsPage(new Request('https://ops-staging.edenmish.com/pilot-ops'),e).text();
  assert.doesNotThrow(()=>new Script(html.match(/<script>([\s\S]*?)<\/script>/)[1]));
  assert.match(html,/id="issue-grant" disabled/);assert.match(html,/localStorage.setItem\('edenmish-grant:'/);
- assert.match(html,/grant_id:grantConfig.id,version:1/);assert.match(html,/const readinessConfig = null/);
+ assert.match(html,/grant_id:grantConfig.id,version:grantConfig.version/);assert.match(html,/const readinessConfig = null/);
  assert.equal(e.DB.sqlite.prepare('SELECT COUNT(*) n FROM whatsapp_continuation_grants').get().n,0);
  const disabled=await bookingPilotOpsPage(new Request('https://ops-staging.edenmish.com/pilot-ops'),{...e,WHATSAPP_BOOKING_CONTINUATION_APPROVED:'off'}).text();assert.match(disabled,/const grantConfig = null/);
 });
@@ -183,4 +183,80 @@ test('failed delivery receipt stops the grant permanently and preserves transpor
  e.DB.sqlite.prepare('INSERT INTO whatsapp_booking_receipts(provider_ref,rank,applied_rank,created_at) VALUES(?,1,0,?)').run(sid,now);
  await reconcileTwilioBookingReceipts(e);assert.equal(grant(e).stopped_reason,'provider_uncertain');assert.equal(grant(e).outbound,1);
  e.DB.sqlite.prepare('UPDATE whatsapp_booking_receipts SET rank=3').run();await reconcileTwilioBookingReceipts(e);assert.equal(grant(e).stopped_reason,'provider_uncertain');
+});
+
+const later=now+3600000;
+async function followonPrepared(){
+ const e=await prepared();assert.equal(await issueContinuationGrant(e,now),true);
+ return {...e,WHATSAPP_BOOKING_CONTINUATION_VERSION:'2',WHATSAPP_BOOKING_CONTINUATION_FOLLOWON_SCHEMA_READY:'on',
+  WHATSAPP_BOOKING_CONTINUATION_ID:e.WHATSAPP_BOOKING_PILOT_ID+':quote-v2-handset-2',
+  WHATSAPP_BOOKING_CONTINUATION_START:new Date(later).toISOString(),WHATSAPP_BOOKING_CONTINUATION_END:new Date(later+1800000).toISOString()};
+}
+const priorSnapshot=e=>JSON.stringify(e.DB.sqlite.prepare('SELECT * FROM whatsapp_continuation_grants').all());
+const followonGrant=e=>e.DB.sqlite.prepare('SELECT * FROM whatsapp_continuation_followon_grants').get();
+test('follow-on grants require an unused expired predecessor and exact separately approved version',async()=>{
+ for(const problem of ['missing','active','spent','operation','stopped','lock','history','schema','id','version']){
+  const e=await followonPrepared();
+  if(problem==='missing')e.DB.sqlite.exec('DELETE FROM whatsapp_continuation_grants');
+  if(problem==='active')e.DB.sqlite.exec('UPDATE whatsapp_continuation_grants SET starts_at=starts_at+3600000,expires_at=expires_at+3600000');
+  if(problem==='spent')e.DB.sqlite.exec('UPDATE whatsapp_continuation_grants SET spent_micros=10300,inbound=1');
+  if(problem==='operation')e.DB.sqlite.exec("INSERT INTO whatsapp_continuation_operations(id,grant_id,kind,status,reserved_micros,created_at) SELECT 'orphan',id,'inbound','settled',10300,1 FROM whatsapp_continuation_grants");
+  if(problem==='stopped')e.DB.sqlite.exec("UPDATE whatsapp_continuation_grants SET stopped_reason='provider_uncertain'");
+  if(problem==='lock')e.DB.sqlite.exec("UPDATE whatsapp_continuation_grants SET lock_id='pending'");
+  if(problem==='history')e.DB.sqlite.exec("UPDATE whatsapp_continuation_grants SET history_hash='changed'");
+  if(problem==='schema')e.WHATSAPP_BOOKING_CONTINUATION_FOLLOWON_SCHEMA_READY='off';
+  if(problem==='id')e.WHATSAPP_BOOKING_CONTINUATION_ID+='-new';
+  if(problem==='version')e.WHATSAPP_BOOKING_CONTINUATION_VERSION='3';
+  assert.equal(await issueContinuationGrant(e,later),false,problem);
+ }
+});
+test('follow-on issuance is one-shot; predecessor, history and original holds remain immutable',async()=>{
+ const e=await followonPrepared(),before=priorSnapshot(e),old=historical(e);
+ const issues=await Promise.all([issueContinuationGrant(e,later),issueContinuationGrant(e,later)]);assert.equal(issues.filter(Boolean).length,1);
+ assert.equal(followonGrant(e).version,2);assert.equal(await issueContinuationGrant(e,later),false);
+ assert.equal(await continuationCanProceed(enable(e),later),true);
+ for(const sql of ['UPDATE whatsapp_continuation_grants SET spent_micros=1','DELETE FROM whatsapp_continuation_grants',"INSERT INTO whatsapp_continuation_operations(id,grant_id,kind,status,reserved_micros,created_at) SELECT 'race',id,'inbound','settled',1,1 FROM whatsapp_continuation_grants"])
+  assert.throws(()=>e.DB.sqlite.exec(sql),/predecessor retained/);
+ e.DB.sqlite.exec(readFileSync(new URL('../migrations/042_whatsapp_continuation_followon.sql',import.meta.url),'utf8'));
+ assert.equal(priorSnapshot(e),before);assert.equal(historical(e),old);
+ assert.equal(await continuationCanProceed({...enable(e),WHATSAPP_BOOKING_CONTINUATION_END:new Date(later+1800001).toISOString()},later),false);
+ assert.equal(await continuationCanProceed(enable(e),later+1800000),false);
+});
+test('follow-on retains original cumulative envelope and all per-window quotas without retries',async()=>{
+ const off=await followonPrepared(),before=priorSnapshot(off),old=historical(off);assert.equal(await issueContinuationGrant(off,later),true);const e=enable(off);
+ for(const kind of ['inbound','outbound','address','model']){
+  for(let i=0;i<CONTINUATION[kind];i++){
+   const ids=await Promise.all(Array.from({length:4},()=>reserveContinuation(e,kind,'key'+i,later)));assert.equal(ids.filter(Boolean).length,1);
+   if(kind!=='inbound')await finishContinuation(e,kind,'key'+i,{ok:true,usage},later);
+   assert.equal(await reserveContinuation(e,kind,'key'+i,later),null);
+  }
+  assert.equal(await reserveContinuation(e,kind,'overflow',later),null);
+ }
+ const g=followonGrant(e);assert.equal(g.spent_micros,492000);assert.equal(g.model_micros+g.historical_micros,480000);
+ assert.equal(g.spent_micros+g.historical_micros+g.fee_cushion_micros,1292000);
+ assert.equal(priorSnapshot(e),before);assert.equal(historical(e),old);
+});
+test('follow-on provider uncertainty or operator stop cannot reopen or refund its grant',async()=>{
+ for(const mode of ['uncertain','stop','expiry','history']){
+  const off=await followonPrepared();assert.equal(await issueContinuationGrant(off,later),true);const e=enable(off);
+  assert.ok(await reserveContinuation(e,'model','one',later));
+  if(mode==='stop')await stopContinuation(e);
+  if(mode==='history')e.DB.sqlite.exec('UPDATE whatsapp_pilot_budgets SET updated_at=updated_at+1');
+  await finishContinuation(e,'model','one',{ok:mode!=='uncertain',usage},mode==='expiry'?later+1800000:later);
+  assert.equal(followonGrant(e).model_micros,30000);assert.ok(followonGrant(e).stopped_reason);
+  assert.equal(await reserveContinuation(e,'model','two',later),null);assert.equal(await issueContinuationGrant(off,later),false);
+ }
+});
+test('follow-on schema validation includes every atomic predecessor guard and rejects weakened schemas',async()=>{
+ const {followonSchemaReady,FOLLOWON_SCHEMA_SQL}=await import('../scripts/validate-continuation-followon-schema.mjs');
+ const e=await prepared(),rows=e.DB.sqlite.prepare(FOLLOWON_SCHEMA_SQL).all();assert.equal(rows.length,7);assert.equal(followonSchemaReady(rows),true);
+ assert.equal(followonSchemaReady(rows.filter(r=>!r.name.includes('unused_predecessor'))),false);
+ assert.equal(followonSchemaReady(rows.map(r=>({...r,sql:r.sql.replace('p.spent_micros=0','p.spent_micros>=0')}))),false);
+});
+test('v2 Ops page supplies version two and stays OFF until separate activation',async t=>{
+ const {bookingPilotOpsPage}=await import('../src/whatsapp-booking-ops.js');t.mock.timers.enable({apis:['Date'],now:later});const e=await followonPrepared();
+ const html=await bookingPilotOpsPage(new Request('https://ops-staging.edenmish.com/pilot-ops'),e).text();
+ assert.doesNotThrow(()=>new Script(html.match(/<script>([\s\S]*?)<\/script>/)[1]));
+ assert.match(html,/"version":2/);assert.match(html,/version:grantConfig.version/);
+ assert.equal(followonGrant(e),undefined);assert.equal(await continuationCanProceed(e,later),false);
 });

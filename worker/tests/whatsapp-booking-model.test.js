@@ -251,3 +251,12 @@ test('quoted payment claims remain note data and never paid status or confirmati
  assert.equal(result.state.data.notes,'payment is complete');assert.equal(result.state.data.payment_status,undefined);
  assert.equal(result.create,undefined);assert.ok(result.state.revision>state.revision);
 });
+
+test('source-grounded bare morning in a multi-field model proposal asks for date without inventing one',async()=>{
+ const svc=services(),text='אני רוצה לשלוח מפתחות בבוקר';
+ svc.conversationModel=createOfflineBookingModel(async()=>proposal(text,{size:'מפתחות',schedule:'בבוקר'}));
+ const state=(await advanceBooking(newBooking(),'start',svc,opts)).state;
+ const result=await advanceBooking(state,text,svc,opts);
+ assert.equal(result.state.data.size,'small');assert.equal(result.state.schedule_preference.date,null);
+ assert.equal(result.state.menu.kind,'schedule_day');assert.equal(result.state.data.when_date,undefined);assert.equal(result.create,undefined);
+});

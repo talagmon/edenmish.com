@@ -11,7 +11,7 @@ export function bookingPilotOpsPage(req, env) {
   const readiness = attemptId && env.WHATSAPP_BOOKING_READINESS_CASE === 'small_item' && lunaPilotCanRun(env, Date.now(), true)
     ? { caseId: 'small_item', id: attemptId,
       expiresAt: Date.parse(env.WHATSAPP_BOOKING_READINESS_EXPIRES_AT) } : null;
-  const grant = continuationIssuable(env) ? {id:env.WHATSAPP_BOOKING_CONTINUATION_ID,startsAt:Date.parse(env.WHATSAPP_BOOKING_CONTINUATION_START)} : null;
+  const grant = continuationIssuable(env) ? {id:env.WHATSAPP_BOOKING_CONTINUATION_ID,version:Number(env.WHATSAPP_BOOKING_CONTINUATION_VERSION),startsAt:Date.parse(env.WHATSAPP_BOOKING_CONTINUATION_START)} : null;
   return new Response(`<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>EdenMish — בקרת בדיקת WhatsApp</title>
 <style>body{font-family:system-ui;background:#faf8fc;color:#302938;max-width:700px;margin:32px auto;padding:20px}section,article{background:white;border:1px solid #ded4e9;border-radius:18px;padding:20px;margin:16px 0}button,input{font:inherit;padding:12px;border-radius:12px;border:1px solid #5b2a86}button{background:#5b2a86;color:white;cursor:pointer}button:disabled{opacity:.5}p{line-height:1.6}#status{white-space:pre-wrap}</style></head><body>
@@ -82,7 +82,7 @@ $('issue-grant').onclick=async()=>{
   try { localStorage.setItem('edenmish-grant:'+grantConfig.id,'sent'); } catch { $('issue-grant').disabled=true;return; }
   $('issue-grant').disabled=true;
   try {
-    const r=await api('whatsapp/pilot/continuation/grant',{grant_id:grantConfig.id,version:1});
+    const r=await api('whatsapp/pilot/continuation/grant',{grant_id:grantConfig.id,version:grantConfig.version});
     $('grant-status').textContent=r.status===201?'ההרשאה נרשמה. ההודעות עדיין כבויות.':'הפעולה לא אומתה. אין לנסות שוב; נדרשת בדיקת הרישום.';
   } catch { $('grant-status').textContent='התוצאה אינה ודאית. אין לנסות שוב; נדרשת בדיקת הרישום.'; }
 };

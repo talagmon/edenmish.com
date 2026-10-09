@@ -29,6 +29,12 @@ const QUESTIONS = {
 const missing = (data) => FIELDS.find((field) => data[field] == null);
 const activeField = state => state.editing_field || missing(state.data);
 const command = (text) => text.trim().toLowerCase();
+function schedulingPreference(state, text, now) {
+  const pending = state.schedule_preference;
+  const preference = pickupPreference(text, now, state.data.when_date || pending?.date);
+  if (preference && preference.period === 'any' && pending?.date === null) preference.period = pending.period;
+  return preference;
+}
 export const isBookingHandoff = (text) => /^(?:(?:can i |i want to |please )?(?:speak|talk) to (?:a )?(?:human|person|agent)|(?:please )?(?:human|stop|cancel)(?: please)?|(?:אני רוצה|אפשר) לדבר עם נציג)[.!?]?$/i.test(command(text)) || /^(?:(?:אני רוצה|אני צריך|אני צריכה|אפשר|בבקשה)\s+)?(נציג|אדם|עזרה|human|stop|עצור|ביטול)(?:\s+בבקשה)?[.!]?$/.test(command(text));
 export function newBooking() { return { phase: 'consent', data: { service: 'standard', customer_type: 'private' }, revision: 0 }; }
 export function bookingEnabled(env, now = Date.now()) {
@@ -190,7 +196,7 @@ async function advanceBookingCore(current, text, services, { phone, now = Date.n
         if (!validated.valid) return { state, reply: 'כתובת האימייל אינה תקינה. ' + QUESTIONS.email };
         state.data.email = validated.email;
       } else if (key === 'schedule') {
-        const preference = pickupPreference(value, now);
+        const preference = schedulingPreference(state, value, now);
         if (preference) {
           state.schedule_preference = preference; state.editing_field = 'schedule'; delete state.edit_menu;
           for (const key of ['when_date', 'when_hour', 'when_text']) delete state.data[key];
@@ -199,6 +205,7 @@ async function advanceBookingCore(current, text, services, { phone, now = Date.n
         const schedule = parseSchedule(value, now);
         if (!schedule) return { state, reply: 'המועד אינו זמין. בחרו מועד עתידי בשעות הפעילות, עד 30 יום קדימה. ' + QUESTIONS.schedule };
         Object.assign(state.data, schedule, { schedule: value });
+        delete state.schedule_preference;
       } else if (['pickup', 'dropoff'].includes(key)) {
         const resolved = await services.resolveAddress(value);
         if (resolved.error && resolved.candidates?.length) {
@@ -269,7 +276,7 @@ async function advanceBookingInternal(current, text, services, options = {}) {
   }
   if (isBookingLanguageRequest(text) && ['collect', 'address_review', 'review'].includes(state.phase)) return { state, reply: bookingSay(state, 'בשמחה. ', 'Happy to help. ') + nextBookingPrompt(state) };
   // Dayparts are requests for suggestions, never permission to choose a slot.
-  const preference = pickupPreference(text, now);
+  const preference = schedulingPreference(state, text, now);
   if (preference && ['collect', 'address_review', 'review'].includes(state.phase)) {
     state.phase = 'collect'; state.quote = null; state.editing_field = 'schedule'; state.schedule_preference = preference;
     delete state.terms_accepted_at; delete state.edit_menu; delete state.data.schedule;
@@ -356,6 +363,7 @@ export async function advanceBooking(current, text, services, options = {}) {
       text = ({ 1: `${menu.kind === 'review' ? 'confirm' : 'addresses'} ${menu.revision}`, 2: 'edit', 3: 'human' })[choice] || text;
     } else if (menu.kind === 'consent') text = ({ 1: 'start', 2: 'human' })[choice] || text;
     else if (menu.kind === 'size' && activeField(state) === 'size') text = ({ 1: 'small', 2: 'medium', 3: 'human' })[choice] || text;
+    else if (menu.kind === 'schedule_day' && activeField(state) === 'schedule') text = ({1:'today',2:'tomorrow',3:'human'})[choice] || text;
     else if (menu.kind === 'schedule' && activeField(state) === 'schedule') text = menu.slots?.[choice - 1] || (choice === 4 ? 'human' : text);
     else if (menu.kind === 'address_choice' && state.pending_address) {
       const {field,candidates,remaining=[]} = state.pending_address;
@@ -404,6 +412,10 @@ export function withBookingMenu(result, now) {
     copy = FIELDS.map((field, i) => `${i + 1}. ${say(LABELS[field], en[i])}`).join('\n') + '\n10. ' + say('נציג', 'Human help');
   } else if (kind === 'collect' && activeField(state) === 'size') {
     kind = 'size'; copy = say('1. קטן\n2. בינוני\n3. נציג', '1. Small\n2. Medium\n3. Human help');
+  } else if (kind === 'collect' && activeField(state) === 'schedule' && state.schedule_preference?.date === null) {
+    kind = 'schedule_day';
+    result.reply = say('באיזה יום תרצו איסוף? אפשר לבחור או לכתוב תאריך אחר.', 'Which day would you like pickup? Choose below or type another date.');
+    copy = say('1. היום\n2. מחר\n3. נציג', '1. Today\n2. Tomorrow\n3. Human help');
   } else if (kind === 'collect' && activeField(state) === 'schedule') {
     kind = 'schedule';
     const suggestions = pickupSlotChoices(state.schedule_preference || { date: israelDay(now), period: 'any' }, now);
