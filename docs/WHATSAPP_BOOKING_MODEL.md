@@ -129,7 +129,10 @@ request IDs are saved. Canonical-order and unresolved-checkout retention is unch
   diagnostic returned in about 4.1 seconds but still failed interpretation; that
   does not establish acceptable latency or quality. The pilot needs live checks.
 - Fixed `https://api.openai.com/v1/responses`, redirects rejected, `gpt-6-luna`,
-  `service_tier: default`, `reasoning.effort: none`, strict JSON schema,
+  with Worker-compatible `redirect: manual` and non-2xx rejection. Workers rejects
+  `redirect: error` before transport; local workerd tests cover the actual adapter
+  and ensure count/generation redirects never forward credentials.
+  Requests also pin `service_tier: default`, `reasoning.effort: none`, strict JSON schema,
   `max_output_tokens: 1024`,
   `store: false`, no tools/history/background mode. Response body capped at 32 KiB. The selected staging readiness case also counts
   the exact input first, caps it at 4,096 tokens and output at 512, and retains a

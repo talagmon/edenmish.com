@@ -44,7 +44,7 @@ export function createEvaluationBudget({ ledgerPath, budgetMicros, maxRequests =
       if (charged + EVAL_LIMITS.reserveMicros > budgetMicros) return refuse('budget_limit');
       let body;
       try { body = JSON.parse(init.body); } catch { return refuse('invalid_request'); }
-      if (url !== 'https://api.openai.com/v1/responses' || init.method !== 'POST' || init.redirect !== 'error'
+      if (url !== 'https://api.openai.com/v1/responses' || init.method !== 'POST' || init.redirect !== 'manual'
         || !init.signal || init.signal.aborted || Buffer.byteLength(init.body) > EVAL_LIMITS.requestBytes
         || body.model !== 'gpt-6-luna' || body.store !== false || body.reasoning?.effort !== 'none'
         || (body.service_tier !== undefined && body.service_tier !== 'default')

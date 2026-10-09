@@ -7,7 +7,7 @@ import { createEvaluationBudget, usageUpperCost, EVAL_LIMITS } from '../scripts/
 import { evaluationMain, runSyntheticEvaluation } from '../scripts/evaluate-booking-model.mjs';
 
 const endpoint = 'https://api.openai.com/v1/responses';
-const init = () => ({ method: 'POST', redirect: 'error', signal: new AbortController().signal,
+const init = () => ({ method: 'POST', redirect: 'manual', signal: new AbortController().signal,
   headers: { Authorization: 'Bearer sk-synthetic-test-only' },
   body: JSON.stringify({ model: 'gpt-6-luna', store: false, reasoning: { effort: 'none' }, max_output_tokens: 1024,
     instructions: 'synthetic', input: [{ role: 'user', content: 'synthetic' }], text: {} }) });

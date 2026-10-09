@@ -85,7 +85,9 @@ export function createOpenAIBookingModel(env, { fetchImpl = globalThis.fetch, re
         // generation. No byte-to-token estimate, history, tools or hidden context.
         const countBody = JSON.stringify({ model: payload.model, instructions: payload.instructions,
           input: payload.input, reasoning: payload.reasoning, text: payload.text });
-        const counted = await fetchImpl(`${ENDPOINT}/input_tokens`, { method: 'POST', redirect: 'error', signal,
+        // Workers supports manual/follow, not redirect:error. Manual plus the
+        // !ok check rejects redirects without forwarding credentials elsewhere.
+        const counted = await fetchImpl(`${ENDPOINT}/input_tokens`, { method: 'POST', redirect: 'manual', signal,
           headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: countBody });
         httpStatus = counted.status;
         if (!counted.ok) { await counted.body?.cancel(); throw failure('input_token_count'); }
@@ -98,7 +100,7 @@ export function createOpenAIBookingModel(env, { fetchImpl = globalThis.fetch, re
         if (signal.aborted) throw failure('timeout');
         if (!lunaPilotCanRun(env, clock(), true)) throw failure('expired');
       }
-      const response = await fetchImpl(ENDPOINT, { method: 'POST', redirect: 'error', signal,
+      const response = await fetchImpl(ENDPOINT, { method: 'POST', redirect: 'manual', signal,
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body });
       httpStatus = response.status;
       if (!response.ok) {

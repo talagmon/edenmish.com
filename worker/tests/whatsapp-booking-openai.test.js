@@ -29,7 +29,7 @@ test('Luna request is current-message-only, structured, bounded and cannot follo
   let calls = 0;
   const result = await run(async (url, init) => {
     calls++; assert.equal(url, 'https://api.openai.com/v1/responses');
-    assert.equal(init.method, 'POST'); assert.equal(init.redirect, 'error'); assert.ok(init.signal);
+    assert.equal(init.method, 'POST'); assert.equal(init.redirect, 'manual'); assert.ok(init.signal);
     assert.equal(init.headers.Authorization, 'Bearer sk-synthetic-test-only');
     const body = JSON.parse(init.body);
     assert.equal(body.model, 'gpt-6-luna'); assert.equal(body.store, false);
