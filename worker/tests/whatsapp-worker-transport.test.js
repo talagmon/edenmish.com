@@ -13,10 +13,11 @@ const bundle = await build({stdin:{contents:`import {runLunaPilotReadiness} from
  export default {async fetch(request,env){const path=new URL(request.url).pathname;
  if(path==='/quotes')return Response.json(quoteCases.map(item=>({id:item.id,entries:validateBookingProposal(item.proposal,item.text,Date.parse('2026-10-09T06:00:00Z'))?.entries??null})));
  if(path==='/second')env={...env,WHATSAPP_BOOKING_READINESS_ATTEMPT:'2',WHATSAPP_BOOKING_READINESS_ADDITIONAL_APPROVED:'on'};
+ if(path==='/third')env={...env,WHATSAPP_BOOKING_READINESS_ATTEMPT:'3',WHATSAPP_BOOKING_READINESS_QUOTE_V2_APPROVED:'on'};
  const options=path==='/legacy'?{fetchImpl:(url,init)=>fetch(url,{...init,redirect:'error'})}:{};
  return Response.json(await runLunaPilotReadiness(env,'small_item',options));}};`,
  resolveDir:fileURLToPath(new URL('../src',import.meta.url))},bundle:true,write:false,format:'esm',platform:'browser'});
-async function runtime(t, redirectAt=null) {
+async function runtime(t, redirectAt=null, mismatchSecond=false) {
  const seen=[];
  const mf=new Miniflare({modules:true,compatibilityDate:'2024-11-01',script:bundle.outputFiles[0].text,d1Databases:['DB'],
   bindings:{BOOKING_URL:'https://staging.edenmish.com',WHATSAPP_BOOKING_MODE:'conversation_only',
@@ -32,7 +33,9 @@ async function runtime(t, redirectAt=null) {
    if(url.hostname!=='api.openai.com')return new Response('Redirect must never be followed',{status:400});
    if(url.pathname===redirectAt)return new Response('',{status:302,headers:{Location:'https://redirect.invalid/never-send'}});
    if(url.pathname==='/v1/responses/input_tokens')return Response.json({object:'response.input_tokens',input_tokens:1000});
-   const proposal={version:2,intent:'update',fields:[{field:'size',quote:'keys'}],topic:null,clarify_field:null};
+   const proposal=mismatchSecond && seen.length===2
+    ? {version:2,intent:'question',fields:[],topic:'pricing',clarify_field:null}
+    : {version:2,intent:'update',fields:[{field:'size',quote:'keys'}],topic:null,clarify_field:null};
    return Response.json({model:'gpt-6-luna',service_tier:'default',status:'completed',usage:{input_tokens:1000,output_tokens:100,total_tokens:1100},
     output:[{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:JSON.stringify(proposal)}]}]});
   }});
@@ -77,4 +80,18 @@ test('real workerd validates the complete offline Unicode/grounding corpus witho
  assert.deepEqual(await r.invoke('/quotes'),cases.map(item=>({id:item.id,entries:item.expected_entries})));
  assert.equal(r.seen.length,0);
  const row=await r.db.prepare('SELECT COUNT(*) n FROM whatsapp_pilot_model_attempts').first();assert.equal(row.n,0);
+});
+
+test('real workerd third quote check preserves both failures and cannot replay a provider request',async t=>{
+ const r=await runtime(t,null,true);
+ assert.equal((await r.invoke('/legacy')).report.outcome,'transport_failure');
+ assert.equal((await r.invoke('/second')).report.outcome,'readiness_mismatch');
+ const prior=(await r.db.prepare('SELECT * FROM whatsapp_pilot_model_attempts ORDER BY id').all()).results;
+ assert.equal(prior.length,2);
+ const third=await r.invoke('/third');assert.equal(third.report.passed,true);assert.equal(r.seen.length,4);
+ const after=(await r.db.prepare('SELECT * FROM whatsapp_pilot_model_attempts ORDER BY id').all()).results;
+ assert.deepEqual(after.slice(0,2),prior);assert.equal(after[2].id,prior[0].id+':3');
+ assert.deepEqual(await r.db.prepare('SELECT attempts,charged_micros,stopped_reason,started_at,expires_at,lock_id FROM whatsapp_pilot_budgets').first(),
+  {attempts:3,charged_micros:300000,stopped_reason:'transport_failure',started_at:null,expires_at:null,lock_id:null});
+ assert.equal((await r.invoke('/third')).report.replay,true);assert.equal(r.seen.length,4);
 });

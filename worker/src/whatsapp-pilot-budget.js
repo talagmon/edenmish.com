@@ -10,14 +10,15 @@ const reservationFor = (env, id) => id.startsWith(`${env.WHATSAPP_BOOKING_PILOT_
 export const lunaPilot = env => env.WHATSAPP_BOOKING_MODE === 'conversation_only'
   && env.WHATSAPP_BOOKING_PILOT_PROFILE === 'luna-v1';
 
-// One separately approved follow-up only; never a rolling retry number.
+// Enumerated, separately approved checks only; never a rolling retry number.
 export function readinessAttemptId(env, caseId) {
   if (!/^[a-z_]{3,40}$/.test(caseId || '')) return null;
   const base = `${env.WHATSAPP_BOOKING_PILOT_ID}:readiness:${caseId}`;
   const attempt = env.WHATSAPP_BOOKING_READINESS_ATTEMPT || '1';
   if (attempt === '1') return base;
-  return attempt === '2' && caseId === 'small_item'
-    && env.WHATSAPP_BOOKING_READINESS_ADDITIONAL_APPROVED === 'on' ? base + ':2' : null;
+  if (caseId !== 'small_item') return null;
+  if (attempt === '2' && env.WHATSAPP_BOOKING_READINESS_ADDITIONAL_APPROVED === 'on') return base + ':2';
+  return attempt === '3' && env.WHATSAPP_BOOKING_READINESS_QUOTE_V2_APPROVED === 'on' ? base + ':3' : null;
 }
 
 export function lunaPilotConfiguration(env) {
@@ -82,7 +83,9 @@ export async function ensureLunaPilotBudget(env, now = Date.now(), readiness = f
 export async function reserveLunaPilotModel(env, now = Date.now(), readiness = false, readinessCase = null) {
   const followup = readiness && env.WHATSAPP_BOOKING_READINESS_ATTEMPT === '2'
     && env.WHATSAPP_BOOKING_READINESS_ADDITIONAL_APPROVED === 'on' && readinessCase === 'small_item';
-  const row = await ensureLunaPilotBudget(env, now, readiness, followup);
+  const quoteCheck = readiness && env.WHATSAPP_BOOKING_READINESS_ATTEMPT === '3'
+    && env.WHATSAPP_BOOKING_READINESS_QUOTE_V2_APPROVED === 'on' && readinessCase === 'small_item';
+  const row = await ensureLunaPilotBudget(env, now, readiness, followup || quoteCheck);
   if (!row) return null;
   if (readinessCase !== null && (!readiness || !/^[a-z_]{3,40}$/.test(readinessCase))) return null;
   const id = readiness ? (readinessCase ? readinessAttemptId(env, readinessCase)
@@ -96,11 +99,19 @@ export async function reserveLunaPilotModel(env, now = Date.now(), readiness = f
       AND ((?=0 AND stopped_reason IS NULL) OR (?=1 AND stopped_reason='transport_failure'
         AND attempts=1 AND charged_micros=? AND started_at IS NULL AND expires_at IS NULL
         AND EXISTS (SELECT 1 FROM whatsapp_pilot_model_attempts WHERE id=? AND pilot_id=?
-          AND status='uncertain' AND outcome='transport_failure' AND charged_micros=?)))
+          AND status='uncertain' AND outcome='transport_failure' AND charged_micros=?))
+        OR (?=1 AND stopped_reason='transport_failure'
+          AND attempts=2 AND charged_micros=? AND started_at IS NULL AND expires_at IS NULL
+          AND EXISTS (SELECT 1 FROM whatsapp_pilot_model_attempts WHERE id=? AND pilot_id=?
+            AND status='uncertain' AND outcome='transport_failure' AND charged_micros=?)
+          AND EXISTS (SELECT 1 FROM whatsapp_pilot_model_attempts WHERE id=? AND pilot_id=?
+            AND status='uncertain' AND outcome='readiness_mismatch' AND charged_micros=?)))
       AND attempts < ? AND charged_micros <= ?
       AND NOT EXISTS (SELECT 1 FROM whatsapp_pilot_model_attempts WHERE id=?)`)
-      .bind(reserve,id,now,row.pilot_id,row.binding_hash,Number(followup),Number(followup),LUNA_READINESS_LIMITS.reserveMicros,
-        firstId,row.pilot_id,LUNA_READINESS_LIMITS.reserveMicros,LUNA_PILOT_LIMITS.model,LUNA_PILOT_LIMITS.modelMicros-reserve,id),
+      .bind(reserve,id,now,row.pilot_id,row.binding_hash,Number(followup || quoteCheck),Number(followup),LUNA_READINESS_LIMITS.reserveMicros,
+        firstId,row.pilot_id,LUNA_READINESS_LIMITS.reserveMicros,Number(quoteCheck),2*LUNA_READINESS_LIMITS.reserveMicros,
+        firstId,row.pilot_id,LUNA_READINESS_LIMITS.reserveMicros,firstId+':2',row.pilot_id,LUNA_READINESS_LIMITS.reserveMicros,
+        LUNA_PILOT_LIMITS.model,LUNA_PILOT_LIMITS.modelMicros-reserve,id),
     env.DB.prepare(`INSERT OR IGNORE INTO whatsapp_pilot_model_attempts (id,pilot_id,status,charged_micros,created_at,readiness_case)
       SELECT ?,pilot_id,'pending',?,?,? FROM whatsapp_pilot_budgets WHERE pilot_id=? AND lock_id=?`)
       .bind(id,reserve,now,readinessCase,row.pilot_id,id),

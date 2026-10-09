@@ -233,3 +233,22 @@ No migration, deployment, key installation, new provider request or ledger reset
 is part of this change. Both past records and the $0.20 retained total stay intact.
 The 80-case offline corpus establishes validator/runtime behavior only. A later
 live check requires separate authorization and must not reuse a consumed attempt.
+
+## Separately approved quote-contract readiness check
+
+A new operator approval may select only `small_item` attempt `3` with
+`WHATSAPP_BOOKING_READINESS_QUOTE_V2_APPROVED=on`. This is an enumerated third
+check, not a retry counter: attempt 4 is unsupported. Existing first and second
+browser IDs are rejected. The atomic reservation requires the original uncertain
+`transport_failure` and `readiness_mismatch` records, each retaining $0.10,
+exactly two budget attempts/$0.20, no lease and no customer-pilot window. It adds
+one $0.10 reservation without editing either historical row or clearing the
+stopped reason. Replay returns the saved result without provider traffic.
+
+The approved staging configuration must set a new readiness deadline at most
+one hour ahead. Booking, sends, model automation and driver dispatch stay off.
+The temporary existing key is submitted only by the user at the hidden prompt;
+no permissions or billing settings change. After the single check (or expiry),
+disable readiness and its quote-v2 approval and remove the active key binding.
+The tighter $0.50 model pool is unchanged within the approved $2 overall cap;
+no prior reservation is refunded. A passing check does not start a pilot.

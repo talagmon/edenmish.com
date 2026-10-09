@@ -343,3 +343,54 @@ test('observed offset payload and quoted pronoun fail closed; exact keys quote p
   await runLunaPilotReadiness(e,'small_item',options);assert.equal(calls,2,'no replay can retry the provider');
  }
 });
+
+test('quote-v2 check is one separately approved third attempt preserving both uncertain records',async()=>{
+ const {validReadinessRequest,runLunaPilotReadiness}=await import('../src/whatsapp-pilot-readiness.js');
+ const e={...env(),WHATSAPP_BOOKING_ENABLED:'off',WHATSAPP_BOOKING_SEND_ENABLED:'off',WHATSAPP_BOOKING_MODEL_ENABLED:'off',
+  WHATSAPP_BOOKING_PILOT_STARTED_AT:undefined,WHATSAPP_BOOKING_PILOT_EXPIRES_AT:undefined,
+  WHATSAPP_BOOKING_READINESS_APPROVED:'on',WHATSAPP_BOOKING_READINESS_CASE:'small_item',WHATSAPP_BOOKING_READINESS_EXPIRES_AT:new Date(now+3600000).toISOString()};
+ const first=await reserveLunaPilotModel(e,now,true,'small_item');
+ await finishLunaPilotModel(e,first,{outcome:'transport_failure'},now);
+ const secondEnv={...e,WHATSAPP_BOOKING_READINESS_ATTEMPT:'2',WHATSAPP_BOOKING_READINESS_ADDITIONAL_APPROVED:'on'};
+ const second=await reserveLunaPilotModel(secondEnv,now,true,'small_item');
+ await finishLunaPilotModel(e,second,{outcome:'readiness_mismatch'},now);
+ const prior=()=>e.DB.sqlite.prepare('SELECT * FROM whatsapp_pilot_model_attempts WHERE id IN (?,?) ORDER BY id').all(first,second);
+ const evidence=prior();
+ const third={...e,WHATSAPP_BOOKING_READINESS_ATTEMPT:'3',WHATSAPP_BOOKING_READINESS_QUOTE_V2_APPROVED:'on'};
+ for(const patch of [{WHATSAPP_BOOKING_READINESS_QUOTE_V2_APPROVED:'off'},{WHATSAPP_BOOKING_READINESS_ATTEMPT:'4'},
+  {WHATSAPP_BOOKING_READINESS_EXPIRES_AT:new Date(now).toISOString()},{WHATSAPP_BOOKING_ENABLED:'on'},
+  {WHATSAPP_BOOKING_SEND_ENABLED:'on'},{WHATSAPP_BOOKING_MODEL_ENABLED:'on'},{AUTO_DRIVER_DISPATCH:'on'},
+  {WHATSAPP_BOOKING_PILOT_STARTED_AT:new Date(now).toISOString()}])
+  assert.equal(await reserveLunaPilotModel({...third,...patch},now,true,'small_item'),null);
+ const id=first+':3';
+ assert.equal(validReadinessRequest(third,{case_id:'small_item',attempt_id:id}),true);
+ for(const stale of [undefined,first,second])assert.equal(validReadinessRequest(third,{case_id:'small_item',attempt_id:stale}),false);
+ assert.equal(await reserveLunaPilotModel(third,now,true,'relative_time'),null);
+ const ids=await Promise.all(Array.from({length:4},()=>reserveLunaPilotModel(third,now,true,'small_item')));
+ assert.deepEqual(ids.filter(Boolean),[id]);assert.equal(row(e).attempts,3);assert.equal(row(e).charged_micros,300000);
+ await finishLunaPilotModel(third,id,{outcome:'valid_proposal',usage,elapsedMs:1},now);
+ assert.deepEqual(prior(),evidence);assert.equal(row(e).stopped_reason,'transport_failure');
+ assert.equal(row(e).started_at,null);assert.equal(row(e).expires_at,null);assert.equal(row(e).charged_micros,300000);
+ const replay=await runLunaPilotReadiness(third,'small_item',{clock:()=>now,fetchImpl:()=>assert.fail('replay must not call provider')});
+ assert.equal(replay.report.replay,true);assert.equal(replay.report.passed,true);
+ assert.equal(await reserveLunaPilotModel(third,now,true,'small_item'),null);
+});
+test('quote-v2 approval cannot bypass missing, modified or successful prior attempt evidence',async()=>{
+ for(const tamper of ['missing_first','missing_second','first_outcome','second_outcome','first_amount','second_amount','total','attempts','lock','live_window']){
+  const e={...env(),WHATSAPP_BOOKING_ENABLED:'off',WHATSAPP_BOOKING_SEND_ENABLED:'off',WHATSAPP_BOOKING_MODEL_ENABLED:'off',
+   WHATSAPP_BOOKING_PILOT_STARTED_AT:undefined,WHATSAPP_BOOKING_PILOT_EXPIRES_AT:undefined,
+   WHATSAPP_BOOKING_READINESS_APPROVED:'on',WHATSAPP_BOOKING_READINESS_CASE:'small_item',WHATSAPP_BOOKING_READINESS_EXPIRES_AT:new Date(now+3600000).toISOString()};
+  const first=await reserveLunaPilotModel(e,now,true,'small_item');await finishLunaPilotModel(e,first,{outcome:'transport_failure'},now);
+  const second=await reserveLunaPilotModel({...e,WHATSAPP_BOOKING_READINESS_ATTEMPT:'2',WHATSAPP_BOOKING_READINESS_ADDITIONAL_APPROVED:'on'},now,true,'small_item');
+  await finishLunaPilotModel(e,second,{outcome:'readiness_mismatch'},now);
+  const db=e.DB.sqlite;
+  if(tamper.startsWith('missing_'))db.prepare('DELETE FROM whatsapp_pilot_model_attempts WHERE id=?').run(tamper==='missing_first'?first:second);
+  if(tamper.endsWith('_outcome'))db.prepare("UPDATE whatsapp_pilot_model_attempts SET outcome='valid_proposal',status='settled' WHERE id=?").run(tamper==='first_outcome'?first:second);
+  if(tamper.endsWith('_amount'))db.prepare('UPDATE whatsapp_pilot_model_attempts SET charged_micros=1 WHERE id=?').run(tamper==='first_amount'?first:second);
+  if(tamper==='total')db.exec('UPDATE whatsapp_pilot_budgets SET charged_micros=100000');
+  if(tamper==='attempts')db.exec('UPDATE whatsapp_pilot_budgets SET attempts=1');
+  if(tamper==='lock')db.exec("UPDATE whatsapp_pilot_budgets SET lock_id='other'");
+  if(tamper==='live_window')db.exec('UPDATE whatsapp_pilot_budgets SET started_at=1,expires_at=2');
+  assert.equal(await reserveLunaPilotModel({...e,WHATSAPP_BOOKING_READINESS_ATTEMPT:'3',WHATSAPP_BOOKING_READINESS_QUOTE_V2_APPROVED:'on'},now,true,'small_item'),null,tamper);
+ }
+});
