@@ -219,3 +219,17 @@ That fixture correction does not alter the actual readiness input or assertion.
 Further quality work should reduce reliance on model-calculated character
 positions, while retaining exact source grounding and customer confirmation.
 No additional provider call or key installation follows automatically.
+
+## Version 2 quote contract (offline only)
+
+The next reviewed source uses `{version:2, fields:[{field,quote}], ...}` with exact
+quoted evidence rather than calculated offsets. Old/mixed envelopes are rejected.
+The historical span analysis above describes the actual version1 run and remains
+unchanged; it is not evidence of a version2 live pass. New readiness tests reject
+that legacy payload and the quoted pronoun `my`, while accepting the uniquely
+grounded item quote `keys`. The readiness semantic predicate itself is unchanged.
+
+No migration, deployment, key installation, new provider request or ledger reset
+is part of this change. Both past records and the $0.20 retained total stay intact.
+The 80-case offline corpus establishes validator/runtime behavior only. A later
+live check requires separate authorization and must not reuse a consumed attempt.

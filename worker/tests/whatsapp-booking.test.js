@@ -671,7 +671,7 @@ test('Luna pilot follows signed WhatsApp flow with one budget and never reaches 
   if(String(url).endsWith('/Messages.json'))return Response.json({sid:'SM'+(++sends).toString(16).padStart(32,'0')});
   if(String(url)==='https://api.openai.com/v1/responses'){
    modelCalls++;const input=JSON.parse(JSON.parse(init.body).input[0].content);const field=input.context.missing_fields[0];
-   const proposal={version:1,intent:'update',fields:[{field,start:0,end:input.customer_message.length}],topic:null,clarify_field:null};
+   const proposal={version:2,intent:'update',fields:[{field,quote:input.customer_message}],topic:null,clarify_field:null};
    return Response.json({status:'completed',model:'gpt-6-luna',service_tier:'default',usage:{input_tokens:1000,output_tokens:100,total_tokens:1100},
     output:[{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:JSON.stringify(proposal)}]}]});
   }

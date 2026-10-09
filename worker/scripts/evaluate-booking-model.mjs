@@ -15,8 +15,8 @@ export const evaluationPlan = () => ({ mode: 'dry-run', model: 'gpt-6-luna', cas
 
 function expectedProposal(item) {
   if (item.invalid) return null; // adversarial cases need human semantic review
-  const raw = { version: 1, intent: item.intent, topic: item.topic || null, clarify_field: item.clarify_field || null,
-    fields: Object.entries(item.fields || {}).map(([field, value]) => ({ field, start: item.text.indexOf(value), end: item.text.indexOf(value) + value.length })) };
+  const raw = { version: 2, intent: item.intent, topic: item.topic || null, clarify_field: item.clarify_field || null,
+    fields: Object.entries(item.fields || {}).map(([field, value]) => ({ field, quote: value })) };
   return validateBookingProposal(raw, item.text, now);
 }
 

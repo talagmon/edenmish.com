@@ -30,7 +30,7 @@ of live model quality. The new UX remains local/draft until reviewed.
   followed by address/complete-summary review.
 - Edits revoke the quote/old summary consent. Backend quote revalidation remains
   mandatory; expiry or a price change requires fresh confirmation.
-- A model proposes exact text spans only. It cannot confirm, choose an address or
+- A version-2 model proposes exact source quotes only; absent, repeated, overlapping or mismatched typed evidence fails closed. It cannot confirm, choose an address or
   time, set a price, create/charge an order, report payment success, alter driver
   status, use a wallet, or access another customer's order.
 - Human takeover pauses automation. Business-wallet requests, other orders and
@@ -41,7 +41,7 @@ of live model quality. The new UX remains local/draft until reviewed.
 
 | Layer | Exercise | What it proves | Remaining limit |
 |---|---|---|---|
-| Local regression | Real conversation state machine, exact-span model fixtures, maps fixtures, canonical quotes/orders and SQLite-backed D1 adapter | Menus, confirmations, edits, retries, invalid inputs and downstream state invariants | Scripted model output is not live Luna quality; SQLite adapter is not remote D1 |
+| Local regression | Real conversation state machine, exact-quote model fixtures, maps fixtures, canonical quotes/orders and SQLite-backed D1 adapter | Menus, confirmations, edits, retries, invalid inputs and downstream state invariants | Scripted model output is not live Luna quality; SQLite adapter is not remote D1 |
 | Controlled WhatsApp conversation | Intended release model/prompt, real Twilio, real address lookup and canonical quote; stop at confirmed summary | Interpretation, address correction, response timing, copy and actual handset experience | No invoice, provider payment or driver execution is exercised |
 | Provider sandbox rehearsal | Isolated test order/invoice, provider's test checkout and signed provider callback; driver dispatch and customer sends off | External checkout/webhook contract and canonical reconciliation | Test mode does not prove a live financial transaction or physical delivery |
 
@@ -104,3 +104,8 @@ the current bounded adapter timeout is not evidence of acceptable live latency.
 - Production release still requires review of PR #306, migrations/config/privacy,
   provider verification and explicit production activation approval. No merge or
   production deployment is part of this change.
+
+The 80-case quote-contract corpus also runs inside workerd with all provider
+traffic mocked. This establishes source-grounding and runtime compatibility,
+not live extraction quality. Historical version1 offset responses remain negative
+regressions; do not edit past model evidence or spend records to match version2.

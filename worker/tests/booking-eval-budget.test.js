@@ -106,7 +106,7 @@ test('default CLI is network-free and does not even read credentials; unapproved
 });
 
 test('fixed corpus runner uses mocked adapter only and reports sanitized results without quality approval', async () => {
-  await withBudget({ maxRequests: 1, fetchImpl: async () => result({ status: 'completed', output: [{ type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: JSON.stringify({ version: 1, intent: 'off_topic', fields: [], topic: null, clarify_field: null }) }] }] }) }, async budget => {
+  await withBudget({ maxRequests: 1, fetchImpl: async () => result({ status: 'completed', output: [{ type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: JSON.stringify({ version: 2, intent: 'off_topic', fields: [], topic: null, clarify_field: null }) }] }] }) }, async budget => {
     const report = await runSyntheticEvaluation({ key: 'sk-synthetic-test-only', budget });
     assert.equal(report.budget.requests, 1); assert.equal(report.qualityApproved, false);
     assert.equal(report.results[0].outcome, 'mismatch'); assert.doesNotMatch(JSON.stringify(report), /sk-|customer_message|דיזנגוף/);

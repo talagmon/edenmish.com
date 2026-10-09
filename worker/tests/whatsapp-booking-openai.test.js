@@ -8,7 +8,7 @@ const env = { WHATSAPP_BOOKING_MODEL_ENABLED: 'on', WHATSAPP_BOOKING_MODEL_PRIVA
   WHATSAPP_BOOKING_MODEL: 'gpt-6-luna', WHATSAPP_BOOKING_OPENAI_API_KEY: 'sk-synthetic-test-only' };
 const state = { phase: 'collect', consent_at: 1, data: { email: 'stored-private@example.invalid', name: 'Stored Person' } };
 const text = 'יש לי חבילה קטנה';
-const proposal = { version: 1, intent: 'update', fields: [{ field: 'size', start: text.indexOf('קטנה'), end: text.length }], topic: null, clarify_field: null };
+const proposal = { version: 2, intent: 'update', fields: [{ field: 'size', quote: 'קטנה' }], topic: null, clarify_field: null };
 const envelope = value => ({ status: 'completed', error: null, incomplete_details: null,
   output: [{ type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: JSON.stringify(value) }] }] });
 const response = value => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });

@@ -308,7 +308,7 @@ async function advanceBookingInternal(current, text, services, options = {}) {
         return { state, interpretation, reply: intro + ' ' + nextBookingPrompt(state) };
       }
       if (proposal.intent === 'update') {
-        // Only verified evidence spans become field input. They cannot contain
+        // Only verified source quotes become field input. They cannot contain
         // newlines/commands; the core resolves addresses and rechecks every value.
         result = await advanceBookingCore(state, proposal.entries.map(([key, value]) => `${LABELS[key]}: ${value}`).join('\n'), services, options);
         if (proposal.topic && result.state.phase === 'collect') {

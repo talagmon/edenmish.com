@@ -66,15 +66,23 @@ a provider SDK or proprietary response envelope.
 
 | Property | Allowed content |
 |---|---|
-| `version` | Exactly `1` |
+| `version` | Exactly `2`; offset-based version 1 is rejected |
 | `intent` | update, question, clarify, handoff, other_order, unsupported, greeting, off_topic |
-| `fields` | Up to nine unique field names and exact UTF-16 start/end spans in the current message |
+| `fields` | Up to nine unique field names and verbatim `quote` strings from the current message, each at most 300 UTF-16 units |
 | `topic` | One approved service-fact ID or null |
 | `clarify_field` | One supported ambiguous booking field, otherwise null |
 
-Unknown keys, invented values, duplicate fields, invalid/fractional spans,
-control characters/newlines, unsupported intents and inconsistent shapes are
-rejected. There is no model-written reply, amount, availability, payment status,
+Unknown keys, invented quotes, duplicate fields, offset fields, malformed Unicode,
+control characters/newlines, unsupported intents and inconsistent shapes are rejected.
+Each raw quote must occur verbatim before trimming; its trimmed value must occur
+exactly once, including overlapping matches. Case/Unicode/whitespace folding is
+used only to reject lookalike repeated evidence, never to repair an absent quote.
+Grapheme and word boundaries prevent partial-character/word extraction. Existing
+Hebrew pickup/dropoff prefixes מ/ל are allowed only as a single attached role prefix.
+Cross-field ranges cannot overlap, except identical size/notes item evidence.
+Size must be recognized by the existing deterministic item parser, email by the
+canonical email validator, and schedule must be a recognized daypart or explicit
+time syntax. Obvious directly negated size evidence is rejected. There is no model-written reply, amount, availability, payment status,
 action, URL, tool invocation or arbitrary reason field.
 
 Values are copied from customer evidence, then pass existing field validation,
@@ -237,3 +245,36 @@ Before live use:
    with the approved Twilio sender and sandbox payment/email pipeline.
 6. Obtain separate deployment/activation approval. All flags remain off/absent;
    model selection does not authorize customer data transfer or launch.
+
+## Version 2 compatibility and offline evidence
+
+The wire proposal schema changed from `{field,start,end}` in version1 to
+`{field,quote}` in version2. Prompts, strict provider schema, runtime validation,
+mock adapters and evaluation fixtures switch together. Old or mixed envelopes
+fail closed; there is no offset repair, auto-upgrade or weaker fallback protocol.
+The established conversation fallback may independently parse the original
+customer message, but it never consumes rejected model fields, and readiness
+checks have no such fallback.
+
+No D1 migration or draft rewrite is needed: persisted drafts already contain
+canonical field values, not model envelopes/quotes. Existing deduplication,
+confirmation revisions, payment reconciliation, human takeover and pilot ledgers
+are unchanged. Do not reopen either historical attempt or reset its allowance.
+This change is local and in the draft PR only; it does not activate the model.
+
+The bounded 80-case corpus in `worker/tests/fixtures/whatsapp-booking-quotes.json`
+is tested in both Node and the actual workerd runtime without provider calls.
+It covers Hebrew/English, typos, Unicode graphemes/normalization, whitespace,
+repeated/overlapping evidence, hallucination, typed-field mismatches, negation,
+authority and compatibility. The observed version1 `[14,18)` result is rejected;
+version2 `quote:"my"` is also rejected for size, while `quote:"keys"` passes the
+unchanged small-item readiness assertion. Mocking the correct quote proves the
+validator/flow, not that Luna will produce it.
+
+Exact evidence is necessary, not sufficient, for semantic correctness. Free-text
+roles and negation beyond the narrow checks still require model judgment and
+customer review. Address resolution, service eligibility, date availability and
+pricing remain in their canonical backend checks. No offline corpus approves
+live model quality, latency, cost or release. A later explicitly approved,
+bounded live check must use fresh attempt authorization while retaining both
+existing attempts and the $0.20 hold. No new key is needed for offline work.

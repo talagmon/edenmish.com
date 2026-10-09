@@ -8,7 +8,10 @@ import { Miniflare } from 'miniflare';
 // Exercise actual Worker fetch semantics, not Node's more permissive Request.
 // ALL outbound traffic is intercepted in-process; no provider/key/network access.
 const bundle = await build({stdin:{contents:`import {runLunaPilotReadiness} from './whatsapp-pilot-readiness.js';
+ import {validateBookingProposal} from './whatsapp-booking-model.js';
+ import quoteCases from '../tests/fixtures/whatsapp-booking-quotes.json';
  export default {async fetch(request,env){const path=new URL(request.url).pathname;
+ if(path==='/quotes')return Response.json(quoteCases.map(item=>({id:item.id,entries:validateBookingProposal(item.proposal,item.text,Date.parse('2026-10-09T06:00:00Z'))?.entries??null})));
  if(path==='/second')env={...env,WHATSAPP_BOOKING_READINESS_ATTEMPT:'2',WHATSAPP_BOOKING_READINESS_ADDITIONAL_APPROVED:'on'};
  const options=path==='/legacy'?{fetchImpl:(url,init)=>fetch(url,{...init,redirect:'error'})}:{};
  return Response.json(await runLunaPilotReadiness(env,'small_item',options));}};`,
@@ -29,7 +32,7 @@ async function runtime(t, redirectAt=null) {
    if(url.hostname!=='api.openai.com')return new Response('Redirect must never be followed',{status:400});
    if(url.pathname===redirectAt)return new Response('',{status:302,headers:{Location:'https://redirect.invalid/never-send'}});
    if(url.pathname==='/v1/responses/input_tokens')return Response.json({object:'response.input_tokens',input_tokens:1000});
-   const proposal={version:1,intent:'update',fields:[{field:'size',start:18,end:22}],topic:null,clarify_field:null};
+   const proposal={version:2,intent:'update',fields:[{field:'size',quote:'keys'}],topic:null,clarify_field:null};
    return Response.json({model:'gpt-6-luna',service_tier:'default',status:'completed',usage:{input_tokens:1000,output_tokens:100,total_tokens:1100},
     output:[{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:JSON.stringify(proposal)}]}]});
   }});
@@ -66,4 +69,12 @@ test('real workerd approved second attempt retains failed first evidence and bot
  const row=await r.db.prepare('SELECT attempts,charged_micros,stopped_reason,started_at,expires_at FROM whatsapp_pilot_budgets').first();
  assert.deepEqual(row,{attempts:2,charged_micros:200000,stopped_reason:'transport_failure',started_at:null,expires_at:null});
  assert.equal((await r.invoke('/second')).report.replay,true);assert.equal(r.seen.length,2);
+});
+
+test('real workerd validates the complete offline Unicode/grounding corpus without provider calls',async t=>{
+ const r=await runtime(t);
+ const cases=JSON.parse(readFileSync(new URL('./fixtures/whatsapp-booking-quotes.json',import.meta.url),'utf8'));
+ assert.deepEqual(await r.invoke('/quotes'),cases.map(item=>({id:item.id,entries:item.expected_entries})));
+ assert.equal(r.seen.length,0);
+ const row=await r.db.prepare('SELECT COUNT(*) n FROM whatsapp_pilot_model_attempts').first();assert.equal(row.n,0);
 });

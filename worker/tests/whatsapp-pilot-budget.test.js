@@ -30,7 +30,7 @@ function env(DB=database()) {return {DB,BOOKING_URL:'https://staging.edenmish.co
  WHATSAPP_BOOKING_PILOT_EXPIRES_AT:new Date(now+3600000).toISOString()};}
 const state={phase:'collect',consent_at:1,data:{},language:'en'};
 const text='keys';
-const raw={version:1,intent:'update',fields:[{field:'size',start:0,end:4}],topic:null,clarify_field:null};
+const raw={version:2,intent:'update',fields:[{field:'size',quote:'keys'}],topic:null,clarify_field:null};
 const usage={input_tokens:1000,output_tokens:100,total_tokens:1100};
 const response=(changes={})=>Response.json({model:'gpt-6-luna',service_tier:'default',status:'completed',usage,
  output:[{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:JSON.stringify(raw)}]}],...changes});
@@ -144,7 +144,7 @@ test('readiness replay is nonbillable, fixed synthetic-only and consumes the for
   if(_url.endsWith('/input_tokens'))return Response.json({object:'response.input_tokens',input_tokens:1000});
   calls++;const message=JSON.parse(JSON.parse(init.body).input[0].content).customer_message;
   assert.equal(message,'I need to send my keys');
-  const data=await response().json();data.output[0].content[0].text=JSON.stringify({...raw,fields:[{field:'size',start:message.indexOf('keys'),end:message.length}]});return Response.json(data);
+  const data=await response().json();data.output[0].content[0].text=JSON.stringify({...raw,fields:[{field:'size',quote:'keys'}]});return Response.json(data);
  }};
  assert.equal((await runLunaPilotReadiness(e,'unknown',options)).status,404);
  const first=await runLunaPilotReadiness(e,'small_item',options);assert.equal(first.report.passed,true);
@@ -218,7 +218,7 @@ test('one explicitly selected readiness case counts exact payload before bounded
   assert.equal(body.max_output_tokens,512);assert.equal(body.service_tier,'default');assert.equal(body.store,false);
   for(const key of Object.keys(counted))assert.deepEqual(body[key],counted[key]);
   const message=JSON.parse(body.input[0].content).customer_message;
-  const result=await response().json();result.output[0].content[0].text=JSON.stringify({...raw,fields:[{field:'size',start:message.indexOf('keys'),end:message.length}]});return Response.json(result);
+  const result=await response().json();result.output[0].content[0].text=JSON.stringify({...raw,fields:[{field:'size',quote:'keys'}]});return Response.json(result);
  }};
  assert.equal((await runLunaPilotReadiness(e,'relative_time',options)).status,404);assert.equal(calls.length,0);
  const result=await runLunaPilotReadiness(e,'small_item',options);assert.equal(result.report.passed,true);
@@ -314,18 +314,20 @@ test('follow-up cannot be used before a first failed transport attempt or with s
  assert.equal(validReadinessRequest(e,{case_id:'small_item',attempt_id:id,extra:true}),false);
 });
 
-test('observed Luna span mismatch selects my, not keys; exact keys span passes unchanged readiness gate',async()=>{
+test('observed offset payload and quoted pronoun fail closed; exact keys quote passes the unchanged readiness gate',async()=>{
  const {runLunaPilotReadiness}=await import('../src/whatsapp-pilot-readiness.js');
  const {validateBookingProposal}=await import('../src/whatsapp-booking-model.js');
  const message='I need to send my keys';
  assert.equal(message.length,22);assert.equal(new TextEncoder().encode(message).length,22);assert.equal([...message].length,22);
  assert.equal(message.slice(14,18),' my ');assert.equal(message.slice(18,22),'keys');
- for(const [start,end,passes] of [[14,18,false],[18,22,true]]){
+ const legacy={version:1,intent:'update',fields:[{field:'size',start:14,end:18}],topic:null,clarify_field:null};
+ for(const [observed,passes] of [[legacy,false],[{...legacy,version:2,fields:[{field:'size',quote:'my'}]},false],
+  [{...legacy,version:2,fields:[{field:'size',quote:'keys'}]},true]]){
   const e={...env(),WHATSAPP_BOOKING_ENABLED:'off',WHATSAPP_BOOKING_SEND_ENABLED:'off',WHATSAPP_BOOKING_MODEL_ENABLED:'off',
    WHATSAPP_BOOKING_PILOT_STARTED_AT:undefined,WHATSAPP_BOOKING_PILOT_EXPIRES_AT:undefined,
    WHATSAPP_BOOKING_READINESS_APPROVED:'on',WHATSAPP_BOOKING_READINESS_CASE:'small_item',WHATSAPP_BOOKING_READINESS_EXPIRES_AT:new Date(now+3600000).toISOString()};
-  const observed={version:1,intent:'update',fields:[{field:'size',start,end}],topic:null,clarify_field:null};
-  assert.deepEqual(validateBookingProposal(observed,message,now).entries,[['size',passes?'small':'my']]);
+  const validated=validateBookingProposal(observed,message,now);
+  if(passes)assert.deepEqual(validated.entries,[['size','small']]);else assert.equal(validated,null);
   let calls=0;
   const options={clock:()=>now,fetchImpl:async url=>{
    calls++;
@@ -334,10 +336,10 @@ test('observed Luna span mismatch selects my, not keys; exact keys span passes u
    r.output[0].content[0].text=JSON.stringify(observed);return Response.json(r);
   }};
   const result=await runLunaPilotReadiness(e,'small_item',options);
-  assert.equal(result.report.passed,passes);assert.equal(result.report.diagnostic.synthetic.schema_valid,true);
-  assert.equal(result.report.outcome,passes?'valid_proposal':'readiness_mismatch');assert.equal(calls,2);
+  assert.equal(result.report.passed,passes);assert.equal(result.report.diagnostic.synthetic.schema_valid,passes);
+  assert.equal(result.report.outcome,passes?'valid_proposal':'proposal_schema');assert.equal(calls,2);
   assert.equal(row(e).charged_micros,100000);assert.equal(row(e).started_at,null);
-  assert.equal(row(e).stopped_reason,passes?null:'readiness_mismatch');
+  assert.equal(row(e).stopped_reason,passes?null:'proposal_schema');
   await runLunaPilotReadiness(e,'small_item',options);assert.equal(calls,2,'no replay can retry the provider');
  }
 });

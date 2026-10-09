@@ -8,8 +8,8 @@ import { runApprovedDiagnostic, readOriginalReservation } from '../scripts/diagn
 const original = '{"type":"start","model":"gpt-6-luna","budgetMicros":1000000,"maxRequests":30,"pricingDate":"2026-10-08"}\n{"type":"reserve","sequence":1,"micros":300000}\n';
 const corpus = JSON.parse(readFileSync(new URL('./fixtures/whatsapp-booking-model-evals.json', import.meta.url)));
 const item = corpus.find(x => x.id === 'compact_request');
-const proposal = { version: 1, intent: item.intent, topic: null, clarify_field: null,
-  fields: Object.entries(item.fields).map(([field, value]) => ({ field, start: item.text.indexOf(value), end: item.text.indexOf(value) + value.length })) };
+const proposal = { version: 2, intent: item.intent, topic: null, clarify_field: null,
+  fields: Object.entries(item.fields).map(([field, value]) => ({ field, quote: value })) };
 const goodResponse = () => Response.json({ model: 'gpt-6-luna', service_tier: 'default',
   usage: { input_tokens: 1000, output_tokens: 100, total_tokens: 1100 }, status: 'completed',
   output: [{ type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: JSON.stringify(proposal) }] }] });
