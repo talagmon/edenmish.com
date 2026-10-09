@@ -313,3 +313,31 @@ test('follow-up cannot be used before a first failed transport attempt or with s
  assert.equal(validReadinessRequest(e,{case_id:'small_item',attempt_id:id}),true);
  assert.equal(validReadinessRequest(e,{case_id:'small_item',attempt_id:id,extra:true}),false);
 });
+
+test('observed Luna span mismatch selects my, not keys; exact keys span passes unchanged readiness gate',async()=>{
+ const {runLunaPilotReadiness}=await import('../src/whatsapp-pilot-readiness.js');
+ const {validateBookingProposal}=await import('../src/whatsapp-booking-model.js');
+ const message='I need to send my keys';
+ assert.equal(message.length,22);assert.equal(new TextEncoder().encode(message).length,22);assert.equal([...message].length,22);
+ assert.equal(message.slice(14,18),' my ');assert.equal(message.slice(18,22),'keys');
+ for(const [start,end,passes] of [[14,18,false],[18,22,true]]){
+  const e={...env(),WHATSAPP_BOOKING_ENABLED:'off',WHATSAPP_BOOKING_SEND_ENABLED:'off',WHATSAPP_BOOKING_MODEL_ENABLED:'off',
+   WHATSAPP_BOOKING_PILOT_STARTED_AT:undefined,WHATSAPP_BOOKING_PILOT_EXPIRES_AT:undefined,
+   WHATSAPP_BOOKING_READINESS_APPROVED:'on',WHATSAPP_BOOKING_READINESS_CASE:'small_item',WHATSAPP_BOOKING_READINESS_EXPIRES_AT:new Date(now+3600000).toISOString()};
+  const observed={version:1,intent:'update',fields:[{field:'size',start,end}],topic:null,clarify_field:null};
+  assert.deepEqual(validateBookingProposal(observed,message,now).entries,[['size',passes?'small':'my']]);
+  let calls=0;
+  const options={clock:()=>now,fetchImpl:async url=>{
+   calls++;
+   if(url.endsWith('/input_tokens'))return Response.json({object:'response.input_tokens',input_tokens:714});
+   const r=await response().json();r.usage={input_tokens:714,output_tokens:44,total_tokens:758};
+   r.output[0].content[0].text=JSON.stringify(observed);return Response.json(r);
+  }};
+  const result=await runLunaPilotReadiness(e,'small_item',options);
+  assert.equal(result.report.passed,passes);assert.equal(result.report.diagnostic.synthetic.schema_valid,true);
+  assert.equal(result.report.outcome,passes?'valid_proposal':'readiness_mismatch');assert.equal(calls,2);
+  assert.equal(row(e).charged_micros,100000);assert.equal(row(e).started_at,null);
+  assert.equal(row(e).stopped_reason,passes?null:'readiness_mismatch');
+  await runLunaPilotReadiness(e,'small_item',options);assert.equal(calls,2,'no replay can retry the provider');
+ }
+});

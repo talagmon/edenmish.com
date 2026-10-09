@@ -29,7 +29,7 @@ async function runtime(t, redirectAt=null) {
    if(url.hostname!=='api.openai.com')return new Response('Redirect must never be followed',{status:400});
    if(url.pathname===redirectAt)return new Response('',{status:302,headers:{Location:'https://redirect.invalid/never-send'}});
    if(url.pathname==='/v1/responses/input_tokens')return Response.json({object:'response.input_tokens',input_tokens:1000});
-   const proposal={version:1,intent:'update',fields:[{field:'size',start:17,end:21}],topic:null,clarify_field:null};
+   const proposal={version:1,intent:'update',fields:[{field:'size',start:18,end:22}],topic:null,clarify_field:null};
    return Response.json({model:'gpt-6-luna',service_tier:'default',status:'completed',usage:{input_tokens:1000,output_tokens:100,total_tokens:1100},
     output:[{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:JSON.stringify(proposal)}]}]});
   }});

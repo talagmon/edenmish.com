@@ -201,3 +201,21 @@ the stopped reason. Total held becomes $0.20; there is no refund, ledger reset,
 automatic retry or third attempt. Even success leaves customer automation stopped.
 The UI uses the second ID for its lock and request; stale first-attempt requests
 are rejected. The existing deadline is not extended by this authorization.
+
+## Observed span error regression
+
+The approved second synthetic check completed at the provider but returned size
+span `[14,18)` for `I need to send my keys`. That substring is ` my `, which trims
+to `my`; `keys` is `[18,22)`. This ASCII input has identical UTF-16, code-point and
+UTF-8 positions, so the error is model extraction, not an encoding convention.
+Structural schema validity does not establish semantic validity. The unchanged
+readiness assertion correctly rejects this output and accepts the exact keys
+span in offline regression tests. Do not relabel the returned span or fall back
+to deterministic extraction to make a model-quality test pass.
+
+The independent workerd mock fixture now uses the exact full `keys` span (its
+previous `[17,21)` substring trimmed to `key` and happened to normalize as small).
+That fixture correction does not alter the actual readiness input or assertion.
+Further quality work should reduce reliance on model-calculated character
+positions, while retaining exact source grounding and customer confirmation.
+No additional provider call or key installation follows automatically.
