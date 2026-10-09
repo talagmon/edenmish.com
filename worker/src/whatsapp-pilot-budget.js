@@ -10,6 +10,16 @@ const reservationFor = (env, id) => id.startsWith(`${env.WHATSAPP_BOOKING_PILOT_
 export const lunaPilot = env => env.WHATSAPP_BOOKING_MODE === 'conversation_only'
   && env.WHATSAPP_BOOKING_PILOT_PROFILE === 'luna-v1';
 
+// One separately approved follow-up only; never a rolling retry number.
+export function readinessAttemptId(env, caseId) {
+  if (!/^[a-z_]{3,40}$/.test(caseId || '')) return null;
+  const base = `${env.WHATSAPP_BOOKING_PILOT_ID}:readiness:${caseId}`;
+  const attempt = env.WHATSAPP_BOOKING_READINESS_ATTEMPT || '1';
+  if (attempt === '1') return base;
+  return attempt === '2' && caseId === 'small_item'
+    && env.WHATSAPP_BOOKING_READINESS_ADDITIONAL_APPROVED === 'on' ? base + ':2' : null;
+}
+
 export function lunaPilotConfiguration(env) {
   return lunaPilot(env) && env.BOOKING_URL === 'https://staging.edenmish.com'
     && env.WHATSAPP_BOOKING_PROVIDER === 'twilio' && env.AUTO_DRIVER_DISPATCH === 'off'
@@ -70,17 +80,27 @@ export async function ensureLunaPilotBudget(env, now = Date.now(), readiness = f
   return row;
 }
 export async function reserveLunaPilotModel(env, now = Date.now(), readiness = false, readinessCase = null) {
-  const row = await ensureLunaPilotBudget(env, now, readiness);
+  const followup = readiness && env.WHATSAPP_BOOKING_READINESS_ATTEMPT === '2'
+    && env.WHATSAPP_BOOKING_READINESS_ADDITIONAL_APPROVED === 'on' && readinessCase === 'small_item';
+  const row = await ensureLunaPilotBudget(env, now, readiness, followup);
   if (!row) return null;
   if (readinessCase !== null && (!readiness || !/^[a-z_]{3,40}$/.test(readinessCase))) return null;
-  const id = readiness ? `${row.pilot_id}:readiness:${readinessCase || crypto.randomUUID()}` : crypto.randomUUID();
+  const id = readiness ? (readinessCase ? readinessAttemptId(env, readinessCase)
+    : env.WHATSAPP_BOOKING_READINESS_ATTEMPT ? null : `${row.pilot_id}:readiness:${crypto.randomUUID()}`) : crypto.randomUUID();
+  if (!id) return null;
   const reserve = reservationFor(env, id);
+  const firstId = `${row.pilot_id}:readiness:small_item`;
   const result = await env.DB.batch([
     env.DB.prepare(`UPDATE whatsapp_pilot_budgets SET attempts=attempts+1,charged_micros=charged_micros+?,lock_id=?,updated_at=?
-      WHERE pilot_id=? AND binding_hash=? AND lock_id IS NULL AND stopped_reason IS NULL
+      WHERE pilot_id=? AND binding_hash=? AND lock_id IS NULL
+      AND ((?=0 AND stopped_reason IS NULL) OR (?=1 AND stopped_reason='transport_failure'
+        AND attempts=1 AND charged_micros=? AND started_at IS NULL AND expires_at IS NULL
+        AND EXISTS (SELECT 1 FROM whatsapp_pilot_model_attempts WHERE id=? AND pilot_id=?
+          AND status='uncertain' AND outcome='transport_failure' AND charged_micros=?)))
       AND attempts < ? AND charged_micros <= ?
       AND NOT EXISTS (SELECT 1 FROM whatsapp_pilot_model_attempts WHERE id=?)`)
-      .bind(reserve,id,now,row.pilot_id,row.binding_hash,LUNA_PILOT_LIMITS.model,LUNA_PILOT_LIMITS.modelMicros-reserve,id),
+      .bind(reserve,id,now,row.pilot_id,row.binding_hash,Number(followup),Number(followup),LUNA_READINESS_LIMITS.reserveMicros,
+        firstId,row.pilot_id,LUNA_READINESS_LIMITS.reserveMicros,LUNA_PILOT_LIMITS.model,LUNA_PILOT_LIMITS.modelMicros-reserve,id),
     env.DB.prepare(`INSERT OR IGNORE INTO whatsapp_pilot_model_attempts (id,pilot_id,status,charged_micros,created_at,readiness_case)
       SELECT ?,pilot_id,'pending',?,?,? FROM whatsapp_pilot_budgets WHERE pilot_id=? AND lock_id=?`)
       .bind(id,reserve,now,readinessCase,row.pilot_id,id),
@@ -112,7 +132,7 @@ export async function finishLunaPilotModel(env, id, { outcome, usage, elapsedMs,
     env.DB.prepare(`UPDATE whatsapp_pilot_model_attempts SET status=?,charged_micros=?,input_tokens=?,output_tokens=?,outcome=?,elapsed_ms=?,http_status=?
       WHERE id=? AND pilot_id=? AND status='pending'`)
       .bind(valid?'settled':'uncertain',charge,valid?usage.input_tokens:null,valid?usage.output_tokens:null,outcome,elapsed,Number.isInteger(httpStatus) && httpStatus>=100 && httpStatus<=599 ? httpStatus : null,id,env.WHATSAPP_BOOKING_PILOT_ID),
-    env.DB.prepare(`UPDATE whatsapp_pilot_budgets SET charged_micros=charged_micros-?+?,lock_id=NULL,stopped_reason=?,updated_at=?
+    env.DB.prepare(`UPDATE whatsapp_pilot_budgets SET charged_micros=charged_micros-?+?,lock_id=NULL,stopped_reason=COALESCE(stopped_reason,?),updated_at=?
       WHERE pilot_id=? AND lock_id=?`)
       .bind(reserve,charge,valid?null:outcome,now,env.WHATSAPP_BOOKING_PILOT_ID,id),
   ]);

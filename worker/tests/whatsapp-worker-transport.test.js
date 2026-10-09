@@ -8,7 +8,10 @@ import { Miniflare } from 'miniflare';
 // Exercise actual Worker fetch semantics, not Node's more permissive Request.
 // ALL outbound traffic is intercepted in-process; no provider/key/network access.
 const bundle = await build({stdin:{contents:`import {runLunaPilotReadiness} from './whatsapp-pilot-readiness.js';
- export default {async fetch(request,env){return Response.json(await runLunaPilotReadiness(env,'small_item'));}};`,
+ export default {async fetch(request,env){const path=new URL(request.url).pathname;
+ if(path==='/second')env={...env,WHATSAPP_BOOKING_READINESS_ATTEMPT:'2',WHATSAPP_BOOKING_READINESS_ADDITIONAL_APPROVED:'on'};
+ const options=path==='/legacy'?{fetchImpl:(url,init)=>fetch(url,{...init,redirect:'error'})}:{};
+ return Response.json(await runLunaPilotReadiness(env,'small_item',options));}};`,
  resolveDir:fileURLToPath(new URL('../src',import.meta.url))},bundle:true,write:false,format:'esm',platform:'browser'});
 async function runtime(t, redirectAt=null) {
  const seen=[];
@@ -34,7 +37,7 @@ async function runtime(t, redirectAt=null) {
  const db=await mf.getD1Database('DB');
  const migration=readFileSync(new URL('../migrations/040_whatsapp_luna_pilot_budget.sql',import.meta.url),'utf8').replace(/--[^\n]*/g,'').replace(/\n/g,' ');
  await db.exec(migration);
- return {seen,db,invoke:async()=> (await mf.dispatchFetch('http://localhost/')).json()};
+ return {seen,db,invoke:async(path='/')=> (await mf.dispatchFetch('http://localhost'+path)).json()};
 }
 test('real workerd transport accepts bounded readiness request and durable replay sends nothing',async t=>{
  const r=await runtime(t);const first=await r.invoke();
@@ -53,4 +56,14 @@ test('real workerd never forwards authorization across a count or generation red
   assert.equal(row.attempts,1);assert.equal(row.charged_micros,100000);assert.ok(row.stopped_reason);
   await r.invoke();assert.equal(r.seen.length,path.endsWith('input_tokens')?1:2);
  }
+});
+
+test('real workerd approved second attempt retains failed first evidence and both allowances',async t=>{
+ const r=await runtime(t);const failed=await r.invoke('/legacy');assert.equal(failed.report.outcome,'transport_failure');assert.equal(r.seen.length,0);
+ const first=await r.db.prepare('SELECT * FROM whatsapp_pilot_model_attempts').first();
+ const second=await r.invoke('/second');assert.equal(second.report.passed,true);assert.equal(r.seen.length,2);
+ assert.deepEqual(await r.db.prepare('SELECT * FROM whatsapp_pilot_model_attempts WHERE id=?').bind(first.id).first(),first);
+ const row=await r.db.prepare('SELECT attempts,charged_micros,stopped_reason,started_at,expires_at FROM whatsapp_pilot_budgets').first();
+ assert.deepEqual(row,{attempts:2,charged_micros:200000,stopped_reason:'transport_failure',started_at:null,expires_at:null});
+ assert.equal((await r.invoke('/second')).report.replay,true);assert.equal(r.seen.length,2);
 });

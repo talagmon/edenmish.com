@@ -50,7 +50,7 @@ test('authenticated readiness UI waits for explicit click, submits fixed body on
  assert.equal(b.probes().length,0);assert.equal(b.element('run-readiness').disabled,false);
  await Promise.all([b.click(),b.click()]);await b.refresh();await b.click();
  assert.equal(b.probes().length,1);const request=b.probes()[0].options;
- assert.equal(request.method,'POST');assert.equal(request.credentials,'same-origin');assert.deepEqual(JSON.parse(request.body),{case_id:'small_item'});
+ assert.equal(request.method,'POST');assert.equal(request.credentials,'same-origin');assert.deepEqual(JSON.parse(request.body),{case_id:'small_item',attempt_id:'edenmish-luna-ui-tests:readiness:small_item'});
  assert.equal(request.headers.Authorization,undefined);assert.equal(b.element('run-readiness').disabled,true);
  const result=JSON.parse(b.element('readiness-result').textContent);assert.equal(result.passed,true);assert.equal(result.input_tokens,1000);
  assert.doesNotMatch(b.element('readiness-result').textContent,/secret provider|never-display|Authorization/);
@@ -88,4 +88,11 @@ test('provider failure, invalid JSON and unexpected replay cannot offer a retry 
 test('another tab observes persisted lock before attempting a second submission',async()=>{
  const storage=new Map(),first=await browser({storage}),second=await browser({storage});await first.click();
  second.listeners.storage({key:[...storage.keys()][0]});await second.click();assert.equal(second.probes().length,0);
+});
+
+test('explicit follow-up uses its own marker and leaves the failed first marker intact',async()=>{
+ const storage=new Map([['edenmish-readiness:edenmish-luna-ui-tests:readiness:small_item','submitted']]);
+ const b=await browser({storage,config:{...readyEnv(),WHATSAPP_BOOKING_READINESS_ATTEMPT:'2',WHATSAPP_BOOKING_READINESS_ADDITIONAL_APPROVED:'on'}});
+ assert.equal(b.element('run-readiness').disabled,false);await b.click();await b.click();assert.equal(b.probes().length,1);
+ assert.equal(JSON.parse(b.probes()[0].options.body).attempt_id,'edenmish-luna-ui-tests:readiness:small_item:2');assert.equal(storage.size,2);
 });

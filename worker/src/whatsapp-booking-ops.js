@@ -1,4 +1,4 @@
-import { lunaPilotCanRun } from './whatsapp-pilot-budget.js';
+import { lunaPilotCanRun, readinessAttemptId } from './whatsapp-pilot-budget.js';
 // Staging pilot controls reuse the existing Ops session and booking APIs.
 export function bookingPilotOpsPage(req, env) {
   const url = new URL(req.url);
@@ -6,8 +6,9 @@ export function bookingPilotOpsPage(req, env) {
   if (req.method !== 'GET' || url.hostname !== 'ops-staging.edenmish.com'
     || env.BOOKING_URL !== 'https://staging.edenmish.com'
     || env.WHATSAPP_BOOKING_MODE !== 'conversation_only') return new Response('Not found', { status: 404 });
-  const readiness = env.WHATSAPP_BOOKING_READINESS_CASE === 'small_item' && lunaPilotCanRun(env, Date.now(), true)
-    ? { caseId: 'small_item', id: env.WHATSAPP_BOOKING_PILOT_ID + ':readiness:small_item',
+  const attemptId = readinessAttemptId(env, 'small_item');
+  const readiness = attemptId && env.WHATSAPP_BOOKING_READINESS_CASE === 'small_item' && lunaPilotCanRun(env, Date.now(), true)
+    ? { caseId: 'small_item', id: attemptId,
       expiresAt: Date.parse(env.WHATSAPP_BOOKING_READINESS_EXPIRES_AT) } : null;
   return new Response(`<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>EdenMish — בקרת בדיקת WhatsApp</title>
@@ -44,10 +45,10 @@ $('run-readiness').onclick = async () => {
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 15000);
   try {
     const r = await fetch('/api/ops/whatsapp/pilot/readiness', { method: 'POST', credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({case_id: readinessConfig.caseId}), signal: controller.signal });
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({case_id: readinessConfig.caseId, attempt_id:readinessConfig.id}), signal: controller.signal });
     const data = await r.json(), d = data.diagnostic, s = d?.synthetic;
     const outcomes = ['valid_proposal','http_error','transport_failure','timeout','expired','readiness_mismatch','input_token_count','input_limit','response_size','response_json','response_envelope','refusal','proposal_json','proposal_schema','usage_unverified','pending'];
-    const safe = { http_status:r.status, case_id:readinessConfig.caseId, passed:data.passed===true,
+    const safe = { http_status:r.status, case_id:readinessConfig.caseId, attempt_id:readinessConfig.id, passed:data.passed===true,
       replay:data.replay===true, outcome:outcomes.includes(data.outcome)?data.outcome:'unconfirmed',
       schema_valid:s?.schema_valid===true, elapsed_ms:Number.isSafeInteger(d?.elapsedMs)?d.elapsedMs:null,
       provider_http_status:Number.isInteger(d?.httpStatus)?d.httpStatus:null,

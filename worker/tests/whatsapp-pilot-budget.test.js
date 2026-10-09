@@ -280,3 +280,36 @@ test('fictional readiness reports structural/schema failures usefully without ex
   assert.equal(row(e).charged_micros,100000);
  }
 });
+
+test('only explicit follow-up approval reserves a second allowance without resetting stopped ledger',async()=>{
+ const {readinessAttemptId}=await import('../src/whatsapp-pilot-budget.js');
+ const e={...env(),WHATSAPP_BOOKING_ENABLED:'off',WHATSAPP_BOOKING_SEND_ENABLED:'off',WHATSAPP_BOOKING_MODEL_ENABLED:'off',
+ WHATSAPP_BOOKING_PILOT_STARTED_AT:undefined,WHATSAPP_BOOKING_PILOT_EXPIRES_AT:undefined,
+ WHATSAPP_BOOKING_READINESS_APPROVED:'on',WHATSAPP_BOOKING_READINESS_CASE:'small_item',WHATSAPP_BOOKING_READINESS_EXPIRES_AT:new Date(now+3600000).toISOString()};
+ const first=await reserveLunaPilotModel(e,now,true,'small_item');await finishLunaPilotModel(e,first,{outcome:'transport_failure',elapsedMs:150},now+150);
+ const evidence=e.DB.sqlite.prepare('SELECT * FROM whatsapp_pilot_model_attempts WHERE id=?').get(first);
+ for(const patch of [{WHATSAPP_BOOKING_READINESS_ATTEMPT:'2'}, {WHATSAPP_BOOKING_READINESS_ATTEMPT:'3',WHATSAPP_BOOKING_READINESS_ADDITIONAL_APPROVED:'on'}])
+  assert.equal(await reserveLunaPilotModel({...e,...patch},now+200,true,'small_item'),null);
+ const secondEnv={...e,WHATSAPP_BOOKING_READINESS_ATTEMPT:'2',WHATSAPP_BOOKING_READINESS_ADDITIONAL_APPROVED:'on'};
+ assert.equal(readinessAttemptId(secondEnv,'small_item'),first+':2');
+ const ids=await Promise.all(Array.from({length:4},()=>reserveLunaPilotModel(secondEnv,now+200,true,'small_item')));
+ assert.equal(ids.filter(Boolean).length,1);assert.equal(row(e).charged_micros,200000);
+ await finishLunaPilotModel(secondEnv,ids.find(Boolean),{outcome:'valid_proposal',usage,elapsedMs:10},now+300);
+ assert.equal(row(e).charged_micros,200000);assert.equal(row(e).stopped_reason,'transport_failure');assert.equal(row(e).attempts,2);
+ assert.deepEqual(e.DB.sqlite.prepare('SELECT * FROM whatsapp_pilot_model_attempts WHERE id=?').get(first),evidence);
+ assert.equal(await reserveLunaPilotModel(secondEnv,now+400,true,'small_item'),null);
+ assert.equal(await reserveLunaPilotModel(secondEnv,now+400,true,'relative_time'),null);
+});
+test('follow-up cannot be used before a first failed transport attempt or with stale browser identity',async()=>{
+ const {validReadinessRequest}=await import('../src/whatsapp-pilot-readiness.js');
+ const e={...env(),WHATSAPP_BOOKING_ENABLED:'off',WHATSAPP_BOOKING_SEND_ENABLED:'off',WHATSAPP_BOOKING_MODEL_ENABLED:'off',
+ WHATSAPP_BOOKING_PILOT_STARTED_AT:undefined,WHATSAPP_BOOKING_PILOT_EXPIRES_AT:undefined,WHATSAPP_BOOKING_READINESS_APPROVED:'on',
+ WHATSAPP_BOOKING_READINESS_CASE:'small_item',WHATSAPP_BOOKING_READINESS_EXPIRES_AT:new Date(now+3600000).toISOString(),
+ WHATSAPP_BOOKING_READINESS_ATTEMPT:'2',WHATSAPP_BOOKING_READINESS_ADDITIONAL_APPROVED:'on'};
+ assert.equal(await reserveLunaPilotModel(e,now,true,'small_item'),null);
+ const id=e.WHATSAPP_BOOKING_PILOT_ID+':readiness:small_item:2';
+ assert.equal(validReadinessRequest(e,{case_id:'small_item'}),false);
+ assert.equal(validReadinessRequest(e,{case_id:'small_item',attempt_id:id.slice(0,-2)}),false);
+ assert.equal(validReadinessRequest(e,{case_id:'small_item',attempt_id:id}),true);
+ assert.equal(validReadinessRequest(e,{case_id:'small_item',attempt_id:id,extra:true}),false);
+});

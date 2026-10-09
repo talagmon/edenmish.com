@@ -1,4 +1,4 @@
-import { runLunaPilotReadiness } from './whatsapp-pilot-readiness.js';
+import { runLunaPilotReadiness, validReadinessRequest } from './whatsapp-pilot-readiness.js';
 import { lunaPilot } from './whatsapp-pilot-budget.js';
 import { readTwilioBookingEvent, applyTwilioBookingStatus } from './whatsapp-booking-twilio.js';
 import { bookingEnabled, resolveBookingAddress, QUOTE_TTL } from './whatsapp-booking.js';
@@ -2754,7 +2754,7 @@ const worker = {
       if (!isTrustedOpsMutationOrigin(req, env)) return json({ error: 'untrusted_origin' }, 403);
       let input;
       try { input = await req.json(); } catch { return json({ error: 'invalid_request' }, 400); }
-      if (!input || typeof input.case_id !== 'string' || Object.keys(input).length !== 1) return json({ error: 'invalid_request' }, 400);
+      if (!validReadinessRequest(env, input)) return json({ error: 'invalid_request' }, 400);
       try {
         const result = await runLunaPilotReadiness(env, input.case_id);
         return json(result.report, result.status);

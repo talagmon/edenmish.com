@@ -188,3 +188,16 @@ explains that local tokenizers cannot reliably include schema/format overhead.
 No specific known fee exceeds this allowance. The prior $0.30 context-sized reservation is **not**
 used for readiness; the actual input/output caps above are enforced. Old evaluation
 ledgers and pilot counters remain unchanged. No new spend approval is requested.
+
+## Separately approved second readiness attempt
+
+A single follow-up after the first transport failure requires both
+`WHATSAPP_BOOKING_READINESS_ATTEMPT=2` and
+`WHATSAPP_BOOKING_READINESS_ADDITIONAL_APPROVED=on`. Its fixed case remains
+`small_item`, with request ID suffixed `:2`. The same budget must contain exactly
+one uncertain transport-failure attempt retaining $0.10, no live window and no
+active lease. Reservation atomically adds $0.10, preserving the first attempt and
+the stopped reason. Total held becomes $0.20; there is no refund, ledger reset,
+automatic retry or third attempt. Even success leaves customer automation stopped.
+The UI uses the second ID for its lock and request; stale first-attempt requests
+are rejected. The existing deadline is not extended by this authorization.
