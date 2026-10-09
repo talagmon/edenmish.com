@@ -1201,3 +1201,40 @@ The validator checks exact full table/index definitions, including budget limits
 missing/partial/weakened definitions block readiness. It never applies migrations.
 Only set `WHATSAPP_BOOKING_PILOT_BUDGET_READY=on` after verification. No remote 040
 migration, deployment or activation was performed as part of this implementation.
+
+## 041 — Versioned WhatsApp continuation grant
+
+Adds `whatsapp_continuation_grants`, `whatsapp_continuation_operations` and its
+lookup index. Requires 040. No edits to original hashes, stops, rows or holds.
+One grant per original run, ≤30-minute immutable window, retained reservations,
+$0.50 fee cushion, $0.50 cumulative model sub-cap and $2 same-run constraint.
+No PII/secrets; no retention reset. Disabled deployments do not use these tables.
+Exact future production prerequisite after merge if this feature is adopted:
+
+```bash
+cd worker
+wrangler d1 execute edenmish --remote --file=./migrations/041_whatsapp_continuation_grant.sql
+```
+
+For the separately approved staging rehearsal only:
+
+```bash
+cd worker
+wrangler d1 execute edenmish-staging --remote --config <staging-config> --file=./migrations/041_whatsapp_continuation_grant.sql
+node scripts/validate-continuation-schema.mjs --config <staging-config>
+```
+
+Read-only verification:
+
+```sql
+SELECT name,sql FROM sqlite_master WHERE name IN
+('whatsapp_continuation_grants','whatsapp_continuation_operations','whatsapp_continuation_operations_grant');
+SELECT id,pilot_id,version,starts_at,expires_at,historical_micros,fee_cushion_micros,
+spent_micros,model_micros,inbound,outbound,address,model,lock_id,stopped_reason
+FROM whatsapp_continuation_grants;
+```
+
+Only after exact schema verification set `WHATSAPP_BOOKING_CONTINUATION_SCHEMA_READY=on`.
+The validator rejects missing/partial/weakened definitions and never repairs them.
+Migration replay cannot reset a grant. No remote migration, issuance or activation
+was performed. See `docs/WHATSAPP_CONTINUATION_GRANT.md`.

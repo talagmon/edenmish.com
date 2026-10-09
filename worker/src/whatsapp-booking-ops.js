@@ -1,3 +1,4 @@
+import { continuationIssuable } from './whatsapp-continuation.js';
 import { lunaPilotCanRun, readinessAttemptId } from './whatsapp-pilot-budget.js';
 // Staging pilot controls reuse the existing Ops session and booking APIs.
 export function bookingPilotOpsPage(req, env) {
@@ -10,6 +11,7 @@ export function bookingPilotOpsPage(req, env) {
   const readiness = attemptId && env.WHATSAPP_BOOKING_READINESS_CASE === 'small_item' && lunaPilotCanRun(env, Date.now(), true)
     ? { caseId: 'small_item', id: attemptId,
       expiresAt: Date.parse(env.WHATSAPP_BOOKING_READINESS_EXPIRES_AT) } : null;
+  const grant = continuationIssuable(env) ? {id:env.WHATSAPP_BOOKING_CONTINUATION_ID,startsAt:Date.parse(env.WHATSAPP_BOOKING_CONTINUATION_START)} : null;
   return new Response(`<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>EdenMish — בקרת בדיקת WhatsApp</title>
 <style>body{font-family:system-ui;background:#faf8fc;color:#302938;max-width:700px;margin:32px auto;padding:20px}section,article{background:white;border:1px solid #ded4e9;border-radius:18px;padding:20px;margin:16px 0}button,input{font:inherit;padding:12px;border-radius:12px;border:1px solid #5b2a86}button{background:#5b2a86;color:white;cursor:pointer}button:disabled{opacity:.5}p{line-height:1.6}#status{white-space:pre-wrap}</style></head><body>
@@ -18,13 +20,16 @@ export function bookingPilotOpsPage(req, env) {
 <section id="controls" hidden><button id="refresh">רענון</button> <button id="logout">יציאה</button>
 <section id="readiness" hidden><p>בדיקת Luna אחת עם משפט דמיוני בלבד. נשמרת הקצבה של $0.10 מתוך התקציב המאושר. בדיקת הלקוחות לא מתחילה.</p>
 <button id="run-readiness" disabled>הפעלת בדיקת Luna אחת</button><p id="readiness-status" role="status" aria-live="polite"></p><pre id="readiness-result" dir="ltr" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></section>
+<section id="grant" hidden><p>הכנת המשך הבדיקה שאושר. ההודעות נשארות כבויות עד להפעלה הנפרדת.</p><button id="issue-grant" disabled>הכנת בדיקת ההמשך פעם אחת</button><p id="grant-status" role="status"></p></section>
 <div id="rows"></div></section>
 <p id="status" role="status" aria-live="polite"></p><script>
 const $ = id => document.getElementById(id);
 const readinessConfig = ${JSON.stringify(readiness)};
+const grantConfig = ${JSON.stringify(grant)};
 let authenticated = false, readinessSent = false;
 const readinessKey = readinessConfig ? 'edenmish-readiness:' + readinessConfig.id : null;
 function updateReadiness() {
+  updateGrant();
   $('readiness').hidden = !readinessConfig;
   if (!readinessConfig) return;
   try { if (localStorage.getItem(readinessKey)) readinessSent = true; }
@@ -65,6 +70,23 @@ $('run-readiness').onclick = async () => {
   } catch { $('readiness-status').textContent = 'התוצאה אינה ודאית. עוצרים כאן; אין לשלוח שוב. יש לבדוק את הרישום עם המפעיל.'; }
   finally { clearTimeout(timer); }
 };
+function updateGrant() {
+  $('grant').hidden=!grantConfig;
+  if(!grantConfig)return;
+  let sent=true;
+  try { sent=!!localStorage.getItem('edenmish-grant:'+grantConfig.id); } catch {}
+  $('issue-grant').disabled=!authenticated || sent || Date.now()>grantConfig.startsAt;
+}
+$('issue-grant').onclick=async()=>{
+  updateGrant();if(!grantConfig || $('issue-grant').disabled)return;
+  try { localStorage.setItem('edenmish-grant:'+grantConfig.id,'sent'); } catch { $('issue-grant').disabled=true;return; }
+  $('issue-grant').disabled=true;
+  try {
+    const r=await api('whatsapp/pilot/continuation/grant',{grant_id:grantConfig.id,version:1});
+    $('grant-status').textContent=r.status===201?'ההרשאה נרשמה. ההודעות עדיין כבויות.':'הפעולה לא אומתה. אין לנסות שוב; נדרשת בדיקת הרישום.';
+  } catch { $('grant-status').textContent='התוצאה אינה ודאית. אין לנסות שוב; נדרשת בדיקת הרישום.'; }
+};
+if(grantConfig)setTimeout(updateGrant,Math.max(0,grantConfig.startsAt-Date.now()+1));
 addEventListener('storage', event => { if(event.key === readinessKey) updateReadiness(); });
 updateReadiness();
 if (readinessConfig) setTimeout(updateReadiness, Math.max(0, readinessConfig.expiresAt-Date.now()));

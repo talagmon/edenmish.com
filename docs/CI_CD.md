@@ -485,3 +485,15 @@ directly to `main`, and do not create a competing manual version bump.
 
 The `scripts/inject-version.js` script auto-stamps `package.json` version into
 HTML metadata on every build.
+
+### Optional versioned WhatsApp continuation (disabled by default)
+
+No workflow sets these variables or applies migration 041 automatically:
+`WHATSAPP_BOOKING_CONTINUATION_SCHEMA_READY`, `..._VERSION`, `..._ID`,
+`..._APPROVED`, `..._COST_REVIEW`, `..._COSTS_UNKNOWN`, `..._START`, `..._END`
+(all share the `WHATSAPP_BOOKING_CONTINUATION` prefix). They require separate
+staging approval and schema/history checks. The existing OpenAI secret binding is
+reused only through approved temporary user entry; no new secret/permission.
+Operator issuance with customer flags OFF does not activate them. Old pilot
+limits/hash/stop stay unchanged. See `WHATSAPP_CONTINUATION_GRANT.md`. CI uses
+synthetic keys and intercepted mock IO; production/default staging remain disabled.

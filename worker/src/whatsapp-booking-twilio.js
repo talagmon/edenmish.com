@@ -1,3 +1,4 @@
+import { continuationSelected, stopContinuation } from './whatsapp-continuation.js';
 // Dedicated Twilio WhatsApp booking sender. Independent of proactive link/marketing
 // work in the other checkout; reuse the same account secret names and allowlist.
 import { normalizeIlPhone } from './validate.js';
@@ -122,6 +123,10 @@ export async function reconcileTwilioBookingReceipts(env, providerRef = null, he
       ] : [DB.prepare("UPDATE whatsapp_booking_replies SET state = ? WHERE id = ? AND state IN ('sent', 'failed', 'delivered')").bind(current.rank === 3 ? 'read' : 'delivered', receipt.id)];
       statements.push(DB.prepare('UPDATE whatsapp_booking_receipts SET applied_rank = MAX(applied_rank, ?) WHERE provider_ref = ?').bind(current.rank, receipt.provider_ref));
       await DB.batch(statements);
+      if (current.rank===1 && continuationSelected(env)) {
+        const failed=await DB.prepare(`SELECT c.state_json FROM whatsapp_booking_replies r JOIN whatsapp_booking_conversations c ON c.id=r.conversation_id WHERE r.id=? AND r.state='failed'`).bind(receipt.id).first();
+        if (failed && JSON.parse(failed.state_json).continuation_id===env.WHATSAPP_BOOKING_CONTINUATION_ID) await stopContinuation(env,'provider_uncertain');
+      }
     } finally {
       if (!heldLease) await DB.prepare('UPDATE whatsapp_booking_conversations SET lock_id = NULL, lock_at = NULL WHERE id = ? AND lock_id = ?').bind(receipt.conversation_id, lease).run();
     }

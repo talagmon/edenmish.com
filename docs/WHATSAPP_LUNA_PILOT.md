@@ -252,3 +252,10 @@ no permissions or billing settings change. After the single check (or expiry),
 disable readiness and its quote-v2 approval and remove the active key binding.
 The tighter $0.50 model pool is unchanged within the approved $2 overall cap;
 no prior reservation is refunded. A passing check does not start a pilot.
+
+## Offline-prepared handset continuation
+
+A separately versioned grant supports six counted interpretations without changing
+this original profile's limits, hash, stop or $0.30 historical holds. It retains
+$0.03 per new attempt and a fixed $0.50 fee cushion inside the October 9 $2 cap.
+It is not issued/activated; see [grant design](WHATSAPP_CONTINUATION_GRANT.md).

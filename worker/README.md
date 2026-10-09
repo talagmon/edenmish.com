@@ -394,3 +394,11 @@ on these tables (exact command in `MIGRATIONS.md`). Never enable the staging pil
 in production. The standard staging workflow neither applies 040 nor enables this
 profile. See [`WHATSAPP_LUNA_PILOT.md`](../docs/WHATSAPP_LUNA_PILOT.md) for the fixed
 quotas, shared readiness/live budget, schema verification and activation sequence.
+
+The separately approved quote-v2 continuation requires migration
+`041_whatsapp_continuation_grant.sql` and read-only
+`node scripts/validate-continuation-schema.mjs --config <staging-config>`.
+Apply only missing migrations after approval, before its versioned flags are set
+(see `MIGRATIONS.md` for exact commands). Default configs do not enable/issue it.
+Original stopped records/holds remain unchanged; OFF-state Ops issuance and
+activation are separate actions. See `../docs/WHATSAPP_CONTINUATION_GRANT.md`.

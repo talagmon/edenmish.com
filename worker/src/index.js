@@ -1,3 +1,4 @@
+import { continuationSelected, continuationCanProceed, finishContinuation, issueContinuationGrant } from './whatsapp-continuation.js';
 import { runLunaPilotReadiness, validReadinessRequest } from './whatsapp-pilot-readiness.js';
 import { lunaPilot } from './whatsapp-pilot-budget.js';
 import { readTwilioBookingEvent, applyTwilioBookingStatus } from './whatsapp-booking-twilio.js';
@@ -608,11 +609,23 @@ function isTrustedOpsMutationOrigin(req, env) {
 
 function bookingServices(env, ctx) {
   return {
+    conversationModelForEvent: eventId => bookingEnabled(env) && (!conversationOnlyPilot(env) || lunaPilot(env)) ? createOpenAIBookingModel(env,{eventId}) : undefined,
     conversationModel: bookingEnabled(env) && (!conversationOnlyPilot(env) || lunaPilot(env)) ? createOpenAIBookingModel(env) : undefined,
     resolveAddress: (text) => resolveBookingAddress(text, env, { fetchImpl: async (...args) => {
-      if (!await reservePilotOperation(env, 'address')) throw new Error('pilot_address_limit');
+      const operationKey=crypto.randomUUID();
+      if (!await reservePilotOperation(env, 'address',Date.now(),operationKey)) throw new Error('pilot_address_limit');
       if (conversationOnlyPilot(env) && !bookingEnabled(env)) throw new Error('pilot_expired');
-      return fetch(...args);
+      if (!continuationSelected(env)) return fetch(...args);
+      try {
+        if (!await continuationCanProceed(env)) throw new Error('continuation_stopped');
+        const response=await fetch(...args);
+        await finishContinuation(env,'address',operationKey,{ok:response.ok});
+        if (!response.ok || !await continuationCanProceed(env)) throw new Error('continuation_address_failed');
+        return response;
+      } catch {
+        await finishContinuation(env,'address',operationKey,{ok:false});
+        throw new Error('continuation_address_failed');
+      }
     } }),
     order: (token) => getOrderByToken(env.DB, token),
     quote: async (input) => {
@@ -2761,10 +2774,22 @@ const worker = {
       } catch { return json({ error: 'readiness_unconfirmed_no_retry' }, 503); }
     }
 
+    // Explicit OFF-state issuance. Never creates a grant from customer traffic.
+    if (path === '/api/ops/whatsapp/pilot/continuation/grant' && req.method === 'POST') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      if (!isTrustedOpsMutationOrigin(req, env)) return json({ error: 'untrusted_origin' }, 403);
+      let input;
+      try { input=await req.json(); } catch { return json({error:'invalid_request'},400); }
+      if (!input || Object.keys(input).sort().join(',')!=='grant_id,version' || input.version!==1
+        || input.grant_id!==env.WHATSAPP_BOOKING_CONTINUATION_ID) return json({error:'invalid_request'},400);
+      try { const issued=await issueContinuationGrant(env); return json({issued},issued?201:409); }
+      catch { return json({error:'grant_unconfirmed_no_retry'},503); }
+    }
+
     // Authenticated operator queue. No phone lookup grants business/wallet access.
     if (path === '/api/ops/whatsapp/bookings' && req.method === 'GET') {
       if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
-      if (!bookingEnabled(env)) return json({ disabled: true, bookings: [] });
+      if (!bookingEnabled(env) || (continuationSelected(env) && !await continuationCanProceed(env))) return json({ disabled: true, bookings: [] });
       const rows = await env.DB.prepare(`SELECT c.id, c.phase, COALESCE(c.order_id, o.id) AS order_id, c.recipient,
         c.state_json, c.created_at, c.updated_at, c.consent_at, c.confirmed_at, c.confirmed_revision, c.confirmed_price
         FROM whatsapp_booking_conversations c LEFT JOIN orders o ON o.token = c.order_token
@@ -2776,7 +2801,7 @@ const worker = {
       if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
       if (!isTrustedOpsMutationOrigin(req, env)) return json({ error: 'untrusted_origin' }, 403);
       if (!bookingEnabled(env)) return json({ error: 'disabled' }, 404);
-      const result = await (bookingPause[2] === 'close' ? closeBooking : pauseBooking)(env.DB, bookingPause[1]);
+      const result = await (bookingPause[2] === 'close' ? closeBooking : pauseBooking)(env.DB, bookingPause[1], Date.now(), env);
       return json({ ok: result.status === 200, ...(result.status === 409 ? { error: 'in_flight_or_checkout_requires_review' } : {}) }, result.status);
     }
 
@@ -2789,6 +2814,7 @@ const worker = {
     // Separate dedicated Twilio booking number; never shares inbound marketing routes.
     if (path === '/webhooks/twilio/booking' && req.method === 'POST') {
       if (!bookingEnabled(env) || env.WHATSAPP_BOOKING_PROVIDER !== 'twilio') return json({ error: 'disabled' }, 503);
+      if (continuationSelected(env) && !await continuationCanProceed(env)) return json({disabled:true},200);
       const parsed = await readTwilioBookingEvent(req, env);
       if (parsed.status !== 200) return json({ error: 'booking_webhook_rejected' }, parsed.status);
       if (parsed.event) {

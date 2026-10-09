@@ -1,7 +1,9 @@
+import { continuationSelected, continuationReady, reserveContinuation } from './whatsapp-continuation.js';
 import { lunaPilot, lunaPilotCanRun, ensureLunaPilotBudget, LUNA_PILOT_LIMITS } from './whatsapp-pilot-budget.js';
 // Staging-only conversation pilot. Counts contain no phone, chat or credential.
 export const conversationOnlyPilot = env => env.WHATSAPP_BOOKING_MODE === 'conversation_only';
 export function bookingPilotReady(env, now = Date.now()) {
+  if (continuationSelected(env)) return continuationReady(env, now);
   if (env.WHATSAPP_BOOKING_MODE == null || env.WHATSAPP_BOOKING_MODE === 'full') return true;
   if (!conversationOnlyPilot(env)) return false;
   if (lunaPilot(env)) return lunaPilotCanRun(env, now);
@@ -16,9 +18,10 @@ export function bookingPilotReady(env, now = Date.now()) {
     && Number.isFinite(expires) && expires > now && expires <= now + 24 * 60 * 60 * 1000;
 }
 
-export async function reservePilotOperation(env, kind, now = Date.now()) {
+export async function reservePilotOperation(env, kind, now = Date.now(), operationKey = null) {
   if (!conversationOnlyPilot(env)) return true;
   if (!bookingPilotReady(env, now)) return false;
+  if (continuationSelected(env)) return !!await reserveContinuation(env,kind,operationKey,now);
   // The already received manual test counts as the first of 30 inbound messages.
   const isLuna = lunaPilot(env);
   if (isLuna && !await ensureLunaPilotBudget(env, now, false, kind === 'outbound')) return false;

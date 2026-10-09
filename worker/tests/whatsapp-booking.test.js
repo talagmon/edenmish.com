@@ -1,3 +1,5 @@
+import {prepareContinuation} from './fixtures/continuation-env.js';
+import {issueContinuationGrant} from '../src/whatsapp-continuation.js';
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
@@ -711,4 +713,50 @@ test('new Luna pilot isolates its draft and cannot dispatch a previous pilot rep
  assert.equal(sends,1);
  assert.equal(db.sqlite.prepare('SELECT state FROM whatsapp_booking_replies WHERE conversation_id=?').get(previous.id).state,'cancelled');
  assert.equal(JSON.parse(db.sqlite.prepare('SELECT state_json FROM whatsapp_booking_conversations WHERE id=?').get(previous.id).state_json).pilot_id,undefined);
+});
+
+test('signed continuation conversation counts model and Maps calls, reviews edits, and stops before order/payment/driver creation',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:NOW+60000});
+ const env={...await prepareContinuation(database(),NOW),TWILIO_AUTH_TOKEN:'local-test-auth',TWILIO_BOOKING_WEBHOOK_URL:URL,GOOGLE_PLACES_SERVER_KEY:'mock'};
+ const history=JSON.stringify(env.DB.sqlite.prepare('SELECT * FROM whatsapp_pilot_model_attempts ORDER BY id').all());
+ assert.equal(await issueContinuationGrant(env,NOW),true);
+ Object.assign(env,{WHATSAPP_BOOKING_ENABLED:'on',WHATSAPP_BOOKING_SEND_ENABLED:'on',WHATSAPP_BOOKING_MODEL_ENABLED:'on'});
+ const net=installNetworkFixtures(env),fallback=globalThis.fetch;let counts=0,models=0,maps=0,sends=0;
+ const fields={size:'מפתחות',notes:'מפתחות',pickup:'דיזנגוף 10, תל אביב',dropoff:'ביאליק 2, רמת גן',schedule:'מחר בשעה 11',name:'יעל כהן',email:'yael@example.com',pickup_detail:'קומה 2 דירה 4',dropoff_detail:'אצל השומר'};
+ globalThis.fetch=async(url,init)=>{
+  if(String(url).endsWith('/Messages.json'))return Response.json({sid:'SM'+(++sends).toString(16).padStart(32,'0')});
+  if(String(url).includes('places.googleapis.com'))maps++;
+  if(String(url).endsWith('/input_tokens')){counts++;return Response.json({object:'response.input_tokens',input_tokens:1000});}
+  if(String(url)==='https://api.openai.com/v1/responses'){
+   models++;const text=JSON.parse(JSON.parse(init.body).input[0].content).customer_message;
+   const picked=text.startsWith('בעצם')?{dropoff:'ביאליק 4, רמת גן'}:fields;
+   const raw={version:2,intent:'update',fields:Object.entries(picked).map(([field,quote])=>({field,quote})),topic:null,clarify_field:null};
+   return Response.json({model:'gpt-6-luna',service_tier:'default',status:'completed',usage:{input_tokens:1000,output_tokens:100,total_tokens:1100},output:[{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:JSON.stringify(raw)}]}]});
+  }
+  return fallback(url,init);
+ };
+ for(const text of ['שלום','מתחילים','צריך לשלוח מפתחות מדיזנגוף 10, תל אביב לביאליק 2, רמת גן מחר בשעה 11. שמי יעל כהן yael@example.com, באיסוף קומה 2 דירה 4 ובמסירה אצל השומר','1'])assert.equal((await net.inbound(text)).response.status,200);
+ let row=env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get();assert.equal(row.phase,'review');const revision=JSON.parse(row.state_json).revision;
+ await net.inbound('בעצם למסירה ביאליק 4, רמת גן');row=env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get();assert.equal(row.phase,'address_review');assert.ok(JSON.parse(row.state_json).revision>revision);
+ await net.inbound('ok');row=env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get();assert.equal(row.phase,'review');
+ const final=await net.inbound('conf');assert.equal(final.response.status,200);assert.equal(env.DB.sqlite.prepare('SELECT phase FROM whatsapp_booking_conversations').get().phase,'handoff');
+ assert.equal((await worker.fetch(request('conf',final.id).req,env)).status,200);assert.equal(models,2);assert.equal(counts,2);assert.equal(maps,3);assert.ok(sends<=10);
+ const g=env.DB.sqlite.prepare('SELECT * FROM whatsapp_continuation_grants').get();assert.equal(g.model_micros,60000);assert.equal(g.address,3);assert.equal(g.inbound,7);assert.equal(g.outbound,sends);
+ assert.equal(history,JSON.stringify(env.DB.sqlite.prepare('SELECT * FROM whatsapp_pilot_model_attempts ORDER BY id').all()));
+ for(const table of ['orders','payments','notifications','driver_assignments','driver_routes'])assert.equal(env.DB.sqlite.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n,0);
+ assert.equal(net.counts.charges,0);assert.equal(net.counts.emails,0);
+});
+
+test('continuation grant endpoint requires Ops authorization, trusted origin, exact identity and explicit OFF-state approval',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:NOW});const env={...await prepareContinuation(database(),NOW),TWILIO_AUTH_TOKEN:'local-test-auth'};
+ const url='https://ops-staging.edenmish.com/api/ops/whatsapp/pilot/continuation/grant';
+ const req=(headers={},body={grant_id:env.WHATSAPP_BOOKING_CONTINUATION_ID,version:1})=>new Request(url,{method:'POST',headers:{'Content-Type':'application/json',...headers},body:JSON.stringify(body)});
+ assert.equal((await worker.fetch(req(),env)).status,401);const session=await makeSession(env);
+ assert.equal((await worker.fetch(req({Cookie:`ops_sess=${session}`,Origin:'https://evil.invalid'}),env)).status,403);
+ assert.equal((await worker.fetch(req({'X-Ops':session},{grant_id:'other',version:1}),env)).status,400);
+ assert.equal((await worker.fetch(req({'X-Ops':session}),{...env,WHATSAPP_BOOKING_CONTINUATION_APPROVED:'off'})).status,409);
+ assert.equal((await worker.fetch(req({'X-Ops':session}),env)).status,201);
+ assert.equal((await worker.fetch(req({'X-Ops':session}),env)).status,409);
+ assert.equal(env.DB.sqlite.prepare('SELECT COUNT(*) n FROM whatsapp_continuation_grants').get().n,1);
+ assert.equal(env.DB.sqlite.prepare('SELECT COUNT(*) n FROM whatsapp_continuation_operations').get().n,0);
 });

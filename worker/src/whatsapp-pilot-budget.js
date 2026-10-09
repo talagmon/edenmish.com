@@ -55,7 +55,7 @@ export function lunaPilotCanRun(env, now = Date.now(), readiness = false) {
     && env.WHATSAPP_BOOKING_MODEL_ENABLED === 'on'
     && env.WHATSAPP_BOOKING_MODEL_EVAL_APPROVED === 'on' && !!lunaPilotWindow(env, now);
 }
-async function bindingHash(env) {
+export async function lunaPilotBindingHash(env) {
   const values = ['luna-v1', env.WHATSAPP_BOOKING_PILOT_ID, env.TWILIO_ACCOUNT_SID,
     env.TWILIO_BOOKING_FROM, env.TWILIO_RECIPIENT_ALLOWLIST, env.BOOKING_URL, LUNA_PILOT_LIMITS, LUNA_READINESS_LIMITS];
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(values)));
@@ -65,7 +65,7 @@ const changes = result => Number(result?.meta?.changes || 0);
 
 export async function ensureLunaPilotBudget(env, now = Date.now(), readiness = false, allowStopped = false) {
   if (!lunaPilotCanRun(env, now, readiness)) return null;
-  const hash = await bindingHash(env), id = env.WHATSAPP_BOOKING_PILOT_ID;
+  const hash = await lunaPilotBindingHash(env), id = env.WHATSAPP_BOOKING_PILOT_ID;
   const window = readiness ? null : lunaPilotWindow(env, now);
   await env.DB.prepare(`INSERT OR IGNORE INTO whatsapp_pilot_budgets
     (pilot_id,binding_hash,started_at,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,?)`)

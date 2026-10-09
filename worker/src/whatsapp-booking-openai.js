@@ -1,3 +1,4 @@
+import { continuationSelected, continuationCanProceed, reserveContinuation, finishContinuation } from './whatsapp-continuation.js';
 import { createBookingModel, validateBookingProposal } from './whatsapp-booking-model.js';
 import { lunaPilot, lunaPilotCanRun, reserveLunaPilotModel, finishLunaPilotModel,
   LUNA_PILOT_LIMITS, LUNA_READINESS_LIMITS, lunaUsageUpperMicros } from './whatsapp-pilot-budget.js';
@@ -45,8 +46,12 @@ export function bookingModelEnvelope(result) {
 // Readiness is an internal-only capability: explicit OFF-state approval and
 // expiry are required; no customer webhook can set this option.
 export function createOpenAIBookingModel(env, { fetchImpl = globalThis.fetch, readiness = false,
-  clock = Date.now, onDiagnostic = () => {}, readinessCase = null, acceptProposal = () => true } = {}) {
+  clock = Date.now, onDiagnostic = () => {}, readinessCase = null, acceptProposal = () => true, eventId = null } = {}) {
   const pilot = lunaPilot(env);
+  const continuation = continuationSelected(env);
+  if (continuation && (readiness || !pilot || !/^[a-f0-9]{64}$/.test(eventId || ''))) return undefined;
+  const countedMode = readiness || continuation;
+  const canProceed = () => continuation ? continuationCanProceed(env,clock()) : lunaPilotCanRun(env,clock(),readiness);
   if (readiness && (!readinessCase || !pilot || !lunaPilotCanRun(env, clock(), true))) return undefined;
   const config = readiness ? { ...env, WHATSAPP_BOOKING_MODEL_ENABLED: 'on', WHATSAPP_BOOKING_MODEL_EVAL_APPROVED: 'on' } : env;
   if (['WHATSAPP_BOOKING_MODEL_ENABLED', 'WHATSAPP_BOOKING_MODEL_PRIVACY_APPROVED',
@@ -66,21 +71,21 @@ export function createOpenAIBookingModel(env, { fetchImpl = globalThis.fetch, re
       const input = { customer_message: request.customer_message,
         context: request.context, approved_facts: request.approved_facts };
       const payload = { model: 'gpt-6-luna', store: false, service_tier: 'default',
-        reasoning: { effort: 'none' }, max_output_tokens: readiness ? LUNA_READINESS_LIMITS.outputTokens : 1024,
+        reasoning: { effort: 'none' }, max_output_tokens: countedMode ? LUNA_READINESS_LIMITS.outputTokens : 1024,
         instructions: request.instructions,
         input: [{ role: 'user', content: JSON.stringify(input) }],
         text: { format: { type: 'json_schema', name: 'booking_proposal', strict: true, schema: request.schema } },
       };
       const body = JSON.stringify(payload);
-      if (new TextEncoder().encode(body).byteLength > (readiness ? LUNA_READINESS_LIMITS.requestBytes : 16000)) throw failure('response_size');
+      if (new TextEncoder().encode(body).byteLength > (countedMode ? LUNA_READINESS_LIMITS.requestBytes : 16000)) throw failure('response_size');
       if (pilot) {
-        attempt = await reserveLunaPilotModel(env, clock(), readiness, readinessCase);
+        attempt = continuation ? await reserveContinuation(env,'model',eventId,clock()) : await reserveLunaPilotModel(env, clock(), readiness, readinessCase);
         if (!attempt) { outcome = 'pilot_limit'; return null; }
         // Check fresh time AFTER awaited reservation, immediately before IO.
-        if (!lunaPilotCanRun(env, clock(), readiness)) throw failure('expired');
+        if (!await canProceed()) throw failure('expired');
       }
       if (signal.aborted) throw failure('timeout');
-      if (readiness) {
+      if (countedMode) {
         // Count the identical model input, including schema and formatting, before
         // generation. No byte-to-token estimate, history, tools or hidden context.
         const countBody = JSON.stringify({ model: payload.model, instructions: payload.instructions,
@@ -96,9 +101,9 @@ export function createOpenAIBookingModel(env, { fetchImpl = globalThis.fetch, re
           || count.input_tokens < 1) throw failure('input_token_count');
         if (count.input_tokens > LUNA_READINESS_LIMITS.inputTokens) throw failure('input_limit');
         countedInput = count.input_tokens;
-        syntheticDiagnostic.counted_input_tokens = countedInput;
+        if (syntheticDiagnostic) syntheticDiagnostic.counted_input_tokens = countedInput;
         if (signal.aborted) throw failure('timeout');
-        if (!lunaPilotCanRun(env, clock(), true)) throw failure('expired');
+        if (!await canProceed()) throw failure('expired');
       }
       const response = await fetchImpl(ENDPOINT, { method: 'POST', redirect: 'manual', signal,
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body });
@@ -129,9 +134,9 @@ export function createOpenAIBookingModel(env, { fetchImpl = globalThis.fetch, re
         if (texts.length===1 && texts[0].text.length<=8000) syntheticDiagnostic.synthetic_output=texts[0].text;
       }
       if (signal.aborted) throw failure('timeout');
-      if (pilot && !lunaPilotCanRun(env, clock(), readiness)) throw failure('expired');
+      if (pilot && !await canProceed()) throw failure('expired');
       if (pilot && (result.model !== 'gpt-6-luna' || result.service_tier !== 'default' || lunaUsageUpperMicros(result.usage) === null)) throw failure('usage_unverified');
-      if (readiness && (result.usage.input_tokens !== countedInput || result.usage.output_tokens > LUNA_READINESS_LIMITS.outputTokens)) throw failure('usage_unverified');
+      if (countedMode && (result.usage.input_tokens !== countedInput || result.usage.output_tokens > LUNA_READINESS_LIMITS.outputTokens)) throw failure('usage_unverified');
       const content = bookingModelEnvelope(result);
       if (readiness) syntheticDiagnostic.synthetic_output = content;
       let raw;
@@ -141,13 +146,18 @@ export function createOpenAIBookingModel(env, { fetchImpl = globalThis.fetch, re
       if (readiness) syntheticDiagnostic.schema_valid = true;
       if (readiness && !acceptProposal(proposal)) throw failure('readiness_mismatch');
       outcome = 'valid_proposal';
-      if (attempt) await finishLunaPilotModel(env, attempt, { outcome, httpStatus, usage: result.usage, elapsedMs: Math.max(0, clock()-started) }, clock());
+      if (continuation && attempt) {
+        await finishContinuation(env,'model',eventId,{ok:true,usage:result.usage},clock());
+        if (!await canProceed()) return null;
+      }
+      else if (attempt) await finishLunaPilotModel(env, attempt, { outcome, httpStatus, usage: result.usage, elapsedMs: Math.max(0, clock()-started) }, clock());
       return content;
     } catch (error) {
       outcome = signal.aborted ? 'timeout' : ['http_error','response_size','response_json','response_envelope','refusal',
         'proposal_json','proposal_schema','usage_unverified','expired','readiness_mismatch','input_token_count','input_limit'].includes(error?.category) ? error.category : 'transport_failure';
       if (attempt) {
-        try { await finishLunaPilotModel(env, attempt, { outcome, httpStatus, elapsedMs: Math.max(0, clock()-started) }, clock()); }
+        try { if (continuation) await finishContinuation(env,'model',eventId,{ok:false},clock());
+          else await finishLunaPilotModel(env, attempt, { outcome, httpStatus, elapsedMs: Math.max(0, clock()-started) }, clock()); }
         catch { /* An unpersisted settlement retains the pending reservation. */ }
       }
       return null;

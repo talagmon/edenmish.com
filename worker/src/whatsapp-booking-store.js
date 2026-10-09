@@ -1,3 +1,4 @@
+import { continuationSelected, continuationCanProceed, finishContinuation, stopContinuation } from './whatsapp-continuation.js';
 import { lunaPilot } from './whatsapp-pilot-budget.js';
 import { proposeBookingTurn } from './whatsapp-booking-model.js';
 import { HANDOFF_EN } from './whatsapp-booking-copy.js';
@@ -50,12 +51,15 @@ export function extractBookingEvents(payload, phoneId, now = Date.now()) {
 export async function processBookingEvent(env, event, services, now = Date.now()) {
   if (!bookingEnabled(env, now)) return { disabled: true };
   const DB = env.DB;
-  const pilotScope = lunaPilot(env) ? ':' + env.WHATSAPP_BOOKING_PILOT_ID : '';
+  const pilotScope = lunaPilot(env) ? ':' + (continuationSelected(env) ? env.WHATSAPP_BOOKING_CONTINUATION_ID : env.WHATSAPP_BOOKING_PILOT_ID) : '';
   const senderKey = await digest(env.SESSION_SECRET, 'wa-sender:' + env.WHATSAPP_BOOKING_PROVIDER + ':' + event.phone + pilotScope);
   const eventKey = await digest(env.SESSION_SECRET, 'wa-event:' + env.WHATSAPP_BOOKING_PROVIDER + ':' + event.id);
   if (await DB.prepare('SELECT event_key FROM whatsapp_booking_events WHERE event_key = ?').bind(eventKey).first()) return { duplicate: true };
+  if (continuationSelected(env) && !await continuationCanProceed(env,now)) return { disabled:true };
+  if (services.conversationModelForEvent) services = { ...services, conversationModel: services.conversationModelForEvent(eventKey) };
   const initial = newBooking();
   if (lunaPilot(env)) initial.pilot_id = env.WHATSAPP_BOOKING_PILOT_ID;
+  if (continuationSelected(env)) initial.continuation_id = env.WHATSAPP_BOOKING_CONTINUATION_ID;
   await DB.prepare(`INSERT OR IGNORE INTO whatsapp_booking_conversations
     (id, sender_key, recipient, state_json, phase, order_token, created_at, updated_at, provider)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), senderKey, event.phone, JSON.stringify(initial), initial.phase, crypto.randomUUID().replace(/-/g, '').slice(0, 22), now, now, env.WHATSAPP_BOOKING_PROVIDER).run();
@@ -83,8 +87,11 @@ export async function processBookingEvent(env, event, services, now = Date.now()
     let reply = null;
     let outcome = 'processed';
     let orderId = row.order_id;
+    const continuationInbound = !continuationSelected(env) || event.echo || await reservePilotOperation(env,'inbound',now,eventKey);
     // A manual reply is a takeover even if delivered late. Never resume from chat.
-    if (event.echo) {
+    if (!continuationInbound) {
+      state.phase='handoff'; outcome='pilot_limit';
+    } else if (event.echo) {
       state.phase = 'handoff'; outcome = 'manual_takeover';
     } else if (state.phase === 'handoff') {
       outcome = 'paused';
@@ -100,7 +107,7 @@ export async function processBookingEvent(env, event, services, now = Date.now()
       }
     } else if (event.at === row.last_event_at && row.last_event_at > 0) {
       state.phase = 'handoff'; reply = HANDOFF; outcome = 'ambiguous_order';
-    } else if (!await reservePilotOperation(env, 'inbound', now)) {
+    } else if (!continuationSelected(env) && !await reservePilotOperation(env, 'inbound', now)) {
       state.phase = 'handoff'; outcome = 'pilot_limit';
     } else {
       const count = await DB.prepare('SELECT COUNT(*) AS n FROM whatsapp_booking_events WHERE conversation_id = ? AND created_at > ?').bind(row.id, now - SESSION_WINDOW).first();
@@ -181,7 +188,8 @@ export async function sendBookingReplies(env, fetchImpl = globalThis.fetch, cloc
   const readTime = typeof clock === 'function' ? clock : () => clock;
   const now = readTime();
   if (!bookingEnabled(env, now) || env.WHATSAPP_BOOKING_SEND_ENABLED !== 'on') return;
-  const sendFetch = (...args) => {
+  const sendFetch = async (...args) => {
+    if (continuationSelected(env) && !await continuationCanProceed(env,readTime())) throw new Error('continuation_stopped');
     if (!bookingEnabled(env, readTime()) || env.WHATSAPP_BOOKING_SEND_ENABLED !== 'on') throw new Error('booking_send_disabled');
     return fetchImpl(...args);
   };
@@ -200,7 +208,8 @@ export async function sendBookingReplies(env, fetchImpl = globalThis.fetch, cloc
       if (!changes(await DB.prepare(`UPDATE whatsapp_booking_replies SET state = 'sending' WHERE id = ? AND state = 'pending'`).bind(row.id).run())) continue;
       if (conversationOnlyPilot(env) && (!JSON.parse(row.state_json).conversation_only
         || (lunaPilot(env) && JSON.parse(row.state_json).pilot_id !== env.WHATSAPP_BOOKING_PILOT_ID)
-        || !await reservePilotOperation(env, 'outbound', readTime()))) {
+        || (continuationSelected(env) && JSON.parse(row.state_json).continuation_id !== env.WHATSAPP_BOOKING_CONTINUATION_ID)
+        || !await reservePilotOperation(env, 'outbound', readTime(),row.id))) {
         await DB.batch([
           DB.prepare(`UPDATE whatsapp_booking_replies SET state = 'cancelled', body = NULL WHERE id = ?`).bind(row.id),
           DB.prepare(`UPDATE whatsapp_booking_conversations SET phase = 'handoff', state_json = json_set(state_json, '$.phase', 'handoff') WHERE id = ? AND lock_id = ?`).bind(row.conversation_id, lease),
@@ -221,6 +230,7 @@ export async function sendBookingReplies(env, fetchImpl = globalThis.fetch, cloc
           if (response.ok && /^[A-Za-z0-9._:=/-]{1,200}$/.test(data?.messages?.[0]?.id || '')) providerRef = data.messages[0].id;
         }
       } catch {}
+      if (continuationSelected(env)) await finishContinuation(env,'outbound',row.id,{ok:!!providerRef},readTime());
       await DB.prepare('UPDATE whatsapp_booking_replies SET state = ?, provider_ref = ?, body = NULL WHERE id = ?').bind(providerRef ? 'sent' : 'failed', providerRef, row.id).run();
       if (!providerRef) await DB.prepare(`UPDATE whatsapp_booking_conversations SET phase = 'handoff', state_json = json_set(state_json, '$.phase', 'handoff') WHERE id = ? AND lock_id = ?`).bind(row.conversation_id, lease).run();
     } finally {
@@ -235,7 +245,7 @@ export async function sendBookingReplies(env, fetchImpl = globalThis.fetch, cloc
   }
 }
 
-export async function pauseBooking(DB, id, now = Date.now()) {
+export async function pauseBooking(DB, id, now = Date.now(), env = null) {
   const row = await DB.prepare('SELECT * FROM whatsapp_booking_conversations WHERE id = ?').bind(id).first();
   if (!row) return { status: 404 };
   // An in-flight provider send/order call cannot be recalled. Return busy until
@@ -244,6 +254,7 @@ export async function pauseBooking(DB, id, now = Date.now()) {
   const result = await DB.prepare(`UPDATE whatsapp_booking_conversations SET phase = 'handoff', state_json = json_set(state_json, '$.phase', 'handoff'), lock_id = NULL, lock_at = NULL WHERE id = ? AND (lock_id IS NULL OR lock_at < ?)`).bind(id, now - LOCK_TIMEOUT).run();
   if (!changes(result)) return { status: 409 };
   await DB.prepare(`UPDATE whatsapp_booking_replies SET state = 'cancelled', body = NULL WHERE conversation_id = ? AND state IN ('pending', 'sending')`).bind(id).run();
+  if (env && continuationSelected(env) && JSON.parse(row.state_json).continuation_id===env.WHATSAPP_BOOKING_CONTINUATION_ID) await stopContinuation(env);
   return { status: 200 };
 }
 
