@@ -4,7 +4,7 @@ export const LUNA_PILOT_LIMITS = Object.freeze({ inbound: 24, outbound: 24, addr
   model: 20, modelMicros: 500000, reserveMicros: 300000, inputTokens: 1050000,
   outputTokens: 1024, timeoutMs: 10000 });
 export const LUNA_READINESS_LIMITS = Object.freeze({ inputTokens: 4096, outputTokens: 512,
-  requestBytes: 8192, reserveMicros: 10000 });
+  requestBytes: 8192, reserveMicros: 100000 });
 const reservationFor = (env, id) => id.startsWith(`${env.WHATSAPP_BOOKING_PILOT_ID}:readiness:`)
   ? LUNA_READINESS_LIMITS.reserveMicros : LUNA_PILOT_LIMITS.reserveMicros;
 export const lunaPilot = env => env.WHATSAPP_BOOKING_MODE === 'conversation_only'

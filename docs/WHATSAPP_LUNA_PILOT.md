@@ -38,14 +38,14 @@ Its code-fixed limits are:
 | OpenAI attempts, including readiness probes | 20 |
 | OpenAI pool | US$0.50 |
 | Reservation before each live model attempt | US$0.30 |
-| Reservation for the selected synthetic readiness case | US$0.01, never refunded |
+| Reservation for the selected synthetic readiness case | US$0.10, never refunded |
 | Concurrent model attempts | 1 |
 | Live window | At most one hour |
 | Model deadline | 10 seconds |
 
 All limits can end the test early. Twenty attempts is a ceiling, not a promise.
 Reserve before network I/O; a valid live result settles once to a conservative
-token cost. A readiness attempt retains its full $0.01 allocation, including its
+token cost. A readiness attempt retains its full $0.10 allocation, including its
 counting/fee margin, even when successful. Unknown usage/model/tier, timeout, invalid proposal or failed readiness keeps
 the full reservation and stops further model requests. There are no automatic
 retries. A crash retains the pending reservation and lock. Late results cannot
@@ -122,7 +122,7 @@ accompany the single structured assistant message; it is ignored, never logged.
    tokens, a body over 8,192 UTF-8 bytes, invalid counting output, expiry or timeout.
    Only then generate, with `max_output_tokens:512`, Standard tier and no tools or
    history. Verify actual input usage equals the count and output is at most 512.
-   An uncertain count or generation keeps the $0.01 reservation and stops; no retry.
+   An uncertain count or generation keeps the $0.10 reservation and stops; no retry.
    Check the interpretation and latency before considering further cases or handset
    testing. A single pass establishes first interpretation, not complete quality.
    Fixed cases `relative_time`, `public_route` and `off_topic` remain available for
@@ -163,14 +163,21 @@ At 4,096 input and 512 output tokens, applying the higher published Luna rates
 ($0.25 input/cache-write and $0.75 output per million) plus 10% regional margin
 gives **$0.0015488 maximum generation allowance**. The normal short-input tariff
 is lower; this calculation deliberately uses the higher rates. The code reserves
-and retains **$0.01 for the single count+generation attempt**, from the same pilot
+and retains **$0.10 for the single count+generation attempt**, from the same pilot
 pool, before either request. Twilio and Maps incremental cost is zero in this
 probe because neither is called. No payment, email or driver paths run.
 
 The primary counting documentation inspected does not explicitly state a separate
 counting-endpoint fee. Account-specific taxes and mandatory fees are also not
 verified. The retained margin is an allowance, not a certified invoice ceiling.
-Keep the live-call gate closed until the operator reviews these uncertainties
-against the approved $2 total. The prior $0.30 context-sized reservation is **not**
+The operator approved a retained $0.10 allowance for this single probe within
+the existing $2 total. These generic fee uncertainties do not block that bounded
+probe: [published pricing](https://developers.openai.com/api/docs/pricing) states
+that Responses API is not priced separately, and tokens are billed at model rates.
+No separately priced optional service or minimum request charge is documented
+for this tool-free text request. Exact input counting is retained because the
+[official guide](https://developers.openai.com/api/docs/guides/token-counting)
+explains that local tokenizers cannot reliably include schema/format overhead.
+No specific known fee exceeds this allowance. The prior $0.30 context-sized reservation is **not**
 used for readiness; the actual input/output caps above are enforced. Old evaluation
 ledgers and pilot counters remain unchanged. No new spend approval is requested.

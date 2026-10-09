@@ -91,7 +91,7 @@ test('readiness uses same budget before live hour; cannot be called under ordina
  const id=await reserveLunaPilotModel(ready,now,true);assert.ok(id);assert.equal(row(e).started_at,null);
  await finishLunaPilotModel(ready,id,{outcome:'valid_proposal',usage,elapsedMs:4100},now+4100);
  const live={...e,WHATSAPP_BOOKING_PILOT_STARTED_AT:new Date(now+600000).toISOString(),WHATSAPP_BOOKING_PILOT_EXPIRES_AT:new Date(now+4200000).toISOString()};
- assert.ok(await reserveLunaPilotModel(live,now+600000));assert.equal(row(e).attempts,2);assert.equal(row(e).charged_micros,310000);
+ assert.ok(await reserveLunaPilotModel(live,now+600000));assert.equal(row(e).attempts,2);assert.equal(row(e).charged_micros,400000);
  assert.equal(await reserveLunaPilotModel(ready,now+600000,true),null,'readiness cannot reopen after live window pinned');
 });
 test('full context upper bound fits reservation; invalid usage and pool shortage fail closed',async()=>{
@@ -149,7 +149,7 @@ test('readiness replay is nonbillable, fixed synthetic-only and consumes the for
  assert.equal((await runLunaPilotReadiness(e,'unknown',options)).status,404);
  const first=await runLunaPilotReadiness(e,'small_item',options);assert.equal(first.report.passed,true);
  const retry=await runLunaPilotReadiness(e,'small_item',options);assert.equal(retry.report.replay,true);assert.equal(calls,1);
- assert.equal(row(e).attempts,1);assert.equal(row(e).started_at,null);assert.equal(row(e).charged_micros,10000);
+ assert.equal(row(e).attempts,1);assert.equal(row(e).started_at,null);assert.equal(row(e).charged_micros,100000);
  assert.doesNotMatch(JSON.stringify(first.report),/I need to send|sk-/);
  assert.equal(retry.report.diagnostic,undefined,'D1 replay does not retain synthetic output');
 });
@@ -164,7 +164,7 @@ test('readiness semantic mismatch stops the ledger and preserves full reservatio
   if(url.endsWith('/input_tokens'))return Response.json({object:'response.input_tokens',input_tokens:1000});
   calls++;const data=await response().json();data.output[0].content[0].text=JSON.stringify({...raw,intent:'greeting',fields:[]});return Response.json(data);
  }});
- assert.equal(report.report.outcome,'readiness_mismatch');assert.equal(row(e).charged_micros,10000);assert.equal(calls,1);
+ assert.equal(report.report.outcome,'readiness_mismatch');assert.equal(row(e).charged_micros,100000);assert.equal(calls,1);
  assert.equal(await reserveLunaPilotModel(e,now,true),null);
 });
 
@@ -202,7 +202,7 @@ test('provider ignoring abort cannot use a late answer or free a pending reserva
  assert.equal(await reserveLunaPilotModel(e,now+10002),null);assert.equal(calls,1);
 });
 
-test('one explicitly selected readiness case counts exact payload before bounded generation and keeps one-cent allocation',async()=>{
+test('one explicitly selected readiness case counts exact payload before bounded generation and keeps ten-cent allocation',async()=>{
  const {runLunaPilotReadiness}=await import('../src/whatsapp-pilot-readiness.js');
  const e={...env(),WHATSAPP_BOOKING_ENABLED:'off',WHATSAPP_BOOKING_SEND_ENABLED:'off',WHATSAPP_BOOKING_MODEL_ENABLED:'off',
  WHATSAPP_BOOKING_PILOT_STARTED_AT:undefined,WHATSAPP_BOOKING_PILOT_EXPIRES_AT:undefined,
@@ -210,7 +210,7 @@ test('one explicitly selected readiness case counts exact payload before bounded
  const calls=[];let counted;
  const options={clock:()=>now,fetchImpl:async(url,init)=>{
   calls.push(url);const body=JSON.parse(init.body);assert.ok(new TextEncoder().encode(init.body).byteLength<=8192);
-  assert.equal(row(e).charged_micros,10000,'reserve precedes BOTH network operations');
+  assert.equal(row(e).charged_micros,100000,'reserve precedes BOTH network operations');
   if(url.endsWith('/input_tokens')){
    counted=body;assert.deepEqual(Object.keys(body).sort(),['input','instructions','model','reasoning','text']);
    return Response.json({object:'response.input_tokens',input_tokens:1000});
@@ -226,7 +226,7 @@ test('one explicitly selected readiness case counts exact payload before bounded
  assert.equal(result.report.diagnostic.synthetic.counted_input_tokens,1000);
  assert.equal(JSON.parse(result.report.diagnostic.synthetic.synthetic_output).intent,'update');
  assert.deepEqual(calls,['https://api.openai.com/v1/responses/input_tokens','https://api.openai.com/v1/responses']);
- assert.equal(row(e).charged_micros,10000,'no refund of counting/fee margin even on success');
+ assert.equal(row(e).charged_micros,100000,'no refund of counting/fee margin even on success');
  await runLunaPilotReadiness(e,'small_item',options);assert.equal(calls.length,2,'replay calls neither endpoint');
 });
 
@@ -241,7 +241,7 @@ test('readiness token counting rejects missing, excessive and failed counts with
    return count==='http_error'?new Response('private provider detail',{status:403}):Response.json({object:'response.input_tokens',input_tokens:count});}};
   const result=await runLunaPilotReadiness(e,'small_item',options);assert.equal(result.report.passed,false);
   assert.equal(result.report.outcome,count===4097?'input_limit':'input_token_count');
-  assert.equal(row(e).charged_micros,10000);assert.ok(row(e).stopped_reason);
+  assert.equal(row(e).charged_micros,100000);assert.ok(row(e).stopped_reason);
   await runLunaPilotReadiness(e,'small_item',options);assert.equal(calls,1);
  }
 });
@@ -254,7 +254,7 @@ test('readiness fails closed when actual input differs from count or output exce
    WHATSAPP_BOOKING_READINESS_APPROVED:'on',WHATSAPP_BOOKING_READINESS_CASE:'small_item',WHATSAPP_BOOKING_READINESS_EXPIRES_AT:new Date(now+3600000).toISOString()};
   const r=await runLunaPilotReadiness(e,'small_item',{clock:()=>now,fetchImpl:async url=>url.endsWith('/input_tokens')
    ?Response.json({object:'response.input_tokens',input_tokens:1000}):response({usage:badUsage})});
-  assert.equal(r.report.outcome,'usage_unverified');assert.equal(row(e).charged_micros,10000);assert.ok(row(e).stopped_reason);
+  assert.equal(r.report.outcome,'usage_unverified');assert.equal(row(e).charged_micros,100000);assert.ok(row(e).stopped_reason);
  }
 });
 
@@ -277,6 +277,6 @@ test('fictional readiness reports structural/schema failures usefully without ex
   if(failure==='http'){assert.equal(diag.provider_error_code,'invalid_api_key');assert.equal(r.report.diagnostic.httpStatus,401);}
   else {assert.equal(diag.response_status,'completed');assert.ok(diag.synthetic_output);assert.ok(diag.output_structure.length);}
   assert.doesNotMatch(JSON.stringify(r.report),/sk-private|X-Private|Authorization/);
-  assert.equal(row(e).charged_micros,10000);
+  assert.equal(row(e).charged_micros,100000);
  }
 });
