@@ -3,6 +3,10 @@
 export const LUNA_PILOT_LIMITS = Object.freeze({ inbound: 24, outbound: 24, address: 8,
   model: 20, modelMicros: 500000, reserveMicros: 300000, inputTokens: 1050000,
   outputTokens: 1024, timeoutMs: 10000 });
+export const LUNA_READINESS_LIMITS = Object.freeze({ inputTokens: 4096, outputTokens: 512,
+  requestBytes: 8192, reserveMicros: 10000 });
+const reservationFor = (env, id) => id.startsWith(`${env.WHATSAPP_BOOKING_PILOT_ID}:readiness:`)
+  ? LUNA_READINESS_LIMITS.reserveMicros : LUNA_PILOT_LIMITS.reserveMicros;
 export const lunaPilot = env => env.WHATSAPP_BOOKING_MODE === 'conversation_only'
   && env.WHATSAPP_BOOKING_PILOT_PROFILE === 'luna-v1';
 
@@ -42,7 +46,7 @@ export function lunaPilotCanRun(env, now = Date.now(), readiness = false) {
 }
 async function bindingHash(env) {
   const values = ['luna-v1', env.WHATSAPP_BOOKING_PILOT_ID, env.TWILIO_ACCOUNT_SID,
-    env.TWILIO_BOOKING_FROM, env.TWILIO_RECIPIENT_ALLOWLIST, env.BOOKING_URL, LUNA_PILOT_LIMITS];
+    env.TWILIO_BOOKING_FROM, env.TWILIO_RECIPIENT_ALLOWLIST, env.BOOKING_URL, LUNA_PILOT_LIMITS, LUNA_READINESS_LIMITS];
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(values)));
   return [...new Uint8Array(bytes)].map(x => x.toString(16).padStart(2, '0')).join('');
 }
@@ -69,16 +73,17 @@ export async function reserveLunaPilotModel(env, now = Date.now(), readiness = f
   const row = await ensureLunaPilotBudget(env, now, readiness);
   if (!row) return null;
   if (readinessCase !== null && (!readiness || !/^[a-z_]{3,40}$/.test(readinessCase))) return null;
-  const id = readinessCase ? `${row.pilot_id}:readiness:${readinessCase}` : crypto.randomUUID();
+  const id = readiness ? `${row.pilot_id}:readiness:${readinessCase || crypto.randomUUID()}` : crypto.randomUUID();
+  const reserve = reservationFor(env, id);
   const result = await env.DB.batch([
     env.DB.prepare(`UPDATE whatsapp_pilot_budgets SET attempts=attempts+1,charged_micros=charged_micros+?,lock_id=?,updated_at=?
       WHERE pilot_id=? AND binding_hash=? AND lock_id IS NULL AND stopped_reason IS NULL
       AND attempts < ? AND charged_micros <= ?
       AND NOT EXISTS (SELECT 1 FROM whatsapp_pilot_model_attempts WHERE id=?)`)
-      .bind(LUNA_PILOT_LIMITS.reserveMicros,id,now,row.pilot_id,row.binding_hash,LUNA_PILOT_LIMITS.model,LUNA_PILOT_LIMITS.modelMicros-LUNA_PILOT_LIMITS.reserveMicros,id),
+      .bind(reserve,id,now,row.pilot_id,row.binding_hash,LUNA_PILOT_LIMITS.model,LUNA_PILOT_LIMITS.modelMicros-reserve,id),
     env.DB.prepare(`INSERT OR IGNORE INTO whatsapp_pilot_model_attempts (id,pilot_id,status,charged_micros,created_at,readiness_case)
       SELECT ?,pilot_id,'pending',?,?,? FROM whatsapp_pilot_budgets WHERE pilot_id=? AND lock_id=?`)
-      .bind(id,LUNA_PILOT_LIMITS.reserveMicros,now,readinessCase,row.pilot_id,id),
+      .bind(id,reserve,now,readinessCase,row.pilot_id,id),
   ]);
   return changes(result[0]) && changes(result[1]) ? id : null;
 }
@@ -91,13 +96,15 @@ export function lunaUsageUpperMicros(usage) {
   return Math.ceil((input + 3 * output) * 11 / 40);
 }
 const OUTCOMES = new Set(['valid_proposal','http_error','transport_failure','timeout','expired',
-  'readiness_mismatch','response_size','response_json','response_envelope','refusal','proposal_json','proposal_schema','usage_unverified']);
+  'readiness_mismatch','input_token_count','input_limit','response_size','response_json','response_envelope','refusal','proposal_json','proposal_schema','usage_unverified']);
 export async function finishLunaPilotModel(env, id, { outcome, usage, elapsedMs, httpStatus }, now = Date.now()) {
   if (!OUTCOMES.has(outcome)) outcome = 'response_envelope';
+  const reserve = reservationFor(env, id);
   const upper = lunaUsageUpperMicros(usage);
-  const valid = outcome === 'valid_proposal' && upper !== null && upper <= LUNA_PILOT_LIMITS.reserveMicros;
+  const valid = outcome === 'valid_proposal' && upper !== null && upper <= reserve;
   if (outcome === 'valid_proposal' && !valid) outcome = 'usage_unverified';
-  const charge = valid ? upper : LUNA_PILOT_LIMITS.reserveMicros;
+  // Keep the readiness allocation even on success, including counting/fee margin.
+  const charge = valid && reserve === LUNA_PILOT_LIMITS.reserveMicros ? upper : reserve;
   const elapsed = Number.isSafeInteger(elapsedMs) && elapsedMs >= 0 ? Math.min(elapsedMs, 3600000) : null;
   // Both records settle atomically and once. A duplicate/late callback cannot
   // refund an uncertain reservation or unlock another request's lease.
@@ -107,6 +114,6 @@ export async function finishLunaPilotModel(env, id, { outcome, usage, elapsedMs,
       .bind(valid?'settled':'uncertain',charge,valid?usage.input_tokens:null,valid?usage.output_tokens:null,outcome,elapsed,Number.isInteger(httpStatus) && httpStatus>=100 && httpStatus<=599 ? httpStatus : null,id,env.WHATSAPP_BOOKING_PILOT_ID),
     env.DB.prepare(`UPDATE whatsapp_pilot_budgets SET charged_micros=charged_micros-?+?,lock_id=NULL,stopped_reason=?,updated_at=?
       WHERE pilot_id=? AND lock_id=?`)
-      .bind(LUNA_PILOT_LIMITS.reserveMicros,charge,valid?null:outcome,now,env.WHATSAPP_BOOKING_PILOT_ID,id),
+      .bind(reserve,charge,valid?null:outcome,now,env.WHATSAPP_BOOKING_PILOT_ID,id),
   ]);
 }

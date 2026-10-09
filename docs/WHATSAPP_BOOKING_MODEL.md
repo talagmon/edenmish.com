@@ -131,7 +131,9 @@ request IDs are saved. Canonical-order and unresolved-checkout retention is unch
 - Fixed `https://api.openai.com/v1/responses`, redirects rejected, `gpt-6-luna`,
   `service_tier: default`, `reasoning.effort: none`, strict JSON schema,
   `max_output_tokens: 1024`,
-  `store: false`, no tools/history/background mode. Response body capped at 32 KiB.
+  `store: false`, no tools/history/background mode. Response body capped at 32 KiB. The selected staging readiness case also counts
+  the exact input first, caps it at 4,096 tokens and output at 512, and retains a
+  $0.01 allocation. See the pilot runbook; counting is not used in ordinary live turns.
 - No automatic retry or escalation to another model/provider.
 - Malformed output, exception or timeout falls back to bounded parsing where safe.
   Questions/corrections must not become names or notes. Failure during summary or

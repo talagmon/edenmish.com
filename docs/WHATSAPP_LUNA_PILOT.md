@@ -37,14 +37,16 @@ Its code-fixed limits are:
 | Google Places requests | 8 |
 | OpenAI attempts, including readiness probes | 20 |
 | OpenAI pool | US$0.50 |
-| Reservation before each model attempt | US$0.30 |
+| Reservation before each live model attempt | US$0.30 |
+| Reservation for the selected synthetic readiness case | US$0.01, never refunded |
 | Concurrent model attempts | 1 |
 | Live window | At most one hour |
 | Model deadline | 10 seconds |
 
 All limits can end the test early. Twenty attempts is a ceiling, not a promise.
-Reserve before network I/O; a valid result settles once to a conservative token
-cost. Unknown usage/model/tier, timeout, invalid proposal or failed readiness keeps
+Reserve before network I/O; a valid live result settles once to a conservative
+token cost. A readiness attempt retains its full $0.01 allocation, including its
+counting/fee margin, even when successful. Unknown usage/model/tier, timeout, invalid proposal or failed readiness keeps
 the full reservation and stops further model requests. There are no automatic
 retries. A crash retains the pending reservation and lock. Late results cannot
 revive the conversation or refund an uncertain call.
@@ -85,7 +87,7 @@ Sources: [Twilio pricing](https://www.twilio.com/en-us/whatsapp/pricing),
 [Maps pricing](https://developers.google.com/maps/billing-and-pricing/pricing),
 [Israel tax authority notice](https://www.gov.il/BlobFolder/dynamiccollectorresultitem/represent-info-051224-2/he/vat_represent-info-051224-2.pdf).
 
-The model reservation covers full documented input context, 1,024 output tokens,
+The live-pilot model reservation covers full documented input context, 1,024 output tokens,
 the higher long-context/cache-write tariff and 10% regional margin, rounded up
 from $0.289595. Requests force Standard tier, no tools, `store:false`, and use
 only the current consented message plus bounded field-name context. Request size
@@ -107,19 +109,27 @@ accompany the single structured assistant message; it is ignored, never logged.
 4. Configure one approved pilot ID, account, sender and recipient. Set profile
    `luna-v1`, `WHATSAPP_BOOKING_PILOT_BUDGET_READY=on`, model `gpt-6-luna`, and the
    model privacy/spend flags only after their reviews. Leave live start/end unset.
-5. Only under explicit probe approval, set `WHATSAPP_BOOKING_READINESS_APPROVED=on`
-   and `WHATSAPP_BOOKING_READINESS_EXPIRES_AT` to a concrete deadline within one
-   hour. Booking/send/model flags must all stay `off`. Through authenticated Ops
-   and a trusted same-origin request, POST JSON `{ "case_id": "small_item" }` to
-   `/api/ops/whatsapp/pilot/readiness`; repeat sequentially for `relative_time`,
-   `public_route`, `off_topic`. No caller-supplied prompts are accepted. Repeating
-   a completed case returns its stored report without another provider call.
-6. Require all four fixed cases to pass. Review latency and safe failure categories;
-   these are a readiness screen, not a substitute for Hebrew handset acceptance.
-   Reports contain only case ID, outcome, HTTP status and elapsed time; ledgers
-   additionally contain token counts/costs. No raw response or conversation body
-   is retained. On failure stop and diagnose with mocks; a stopped ledger cannot
-   be reopened. Do not mark evaluation approved merely because access succeeds.
+5. Only under explicit probe approval, select `WHATSAPP_BOOKING_READINESS_CASE=small_item`,
+   set `WHATSAPP_BOOKING_READINESS_APPROVED=on`, and give
+   `WHATSAPP_BOOKING_READINESS_EXPIRES_AT` a concrete deadline within one hour.
+   Booking/send/model flags must all stay `off`. Through authenticated Ops and a
+   trusted same-origin request, POST `{ "case_id": "small_item" }` to
+   `/api/ops/whatsapp/pilot/readiness`. Other cases are rejected unless explicitly
+   selected by the operator. The first check is one synthetic generation, not an
+   automatic four-case run. Replays return the stored report without another call.
+6. For that single case, the same bounded input (instructions, input, reasoning,
+   schema) first goes to `/v1/responses/input_tokens`. Refuse more than 4,096 input
+   tokens, a body over 8,192 UTF-8 bytes, invalid counting output, expiry or timeout.
+   Only then generate, with `max_output_tokens:512`, Standard tier and no tools or
+   history. Verify actual input usage equals the count and output is at most 512.
+   An uncertain count or generation keeps the $0.01 reservation and stops; no retry.
+   Check the interpretation and latency before considering further cases or handset
+   testing. A single pass establishes first interpretation, not complete quality.
+   Fixed cases `relative_time`, `public_route` and `off_topic` remain available for
+   separately reviewed selection. Reports contain safe outcomes/numeric metadata and, on the first response only,
+   the bounded model answer to this fixed fictional probe. It is returned only to
+   authenticated Ops, never from customer messages. No credentials, headers or
+   provider error messages are returned. The D1 replay retains only safe metadata. Do not mark evaluation approved from access alone.
 7. Only when ready and activation is approved, disable readiness, set model eval
    approval, set explicit `WHATSAPP_BOOKING_PILOT_STARTED_AT` and
    `WHATSAPP_BOOKING_PILOT_EXPIRES_AT` no more than one hour apart, and enable
@@ -138,3 +148,29 @@ accompany the single structured assistant message; it is ignored, never logged.
 Standard CI staging configuration remains disabled and does not apply 040 or
 activate this profile automatically. Production requires its own reviewed release,
 privacy, payment/provider validation and activation approval.
+
+## Incremental first-probe cost review
+
+This is preparation only; no live probe is implied by the code. The selected
+`small_item` request measured 3,996 UTF-8 bytes offline; the real token count must
+still be obtained before generation. Counting uses the identical supported input
+fields, including schema. [OpenAI's counting guide](https://developers.openai.com/api/docs/guides/token-counting)
+explains that the count includes formatting/schema overhead; byte length is not a
+token estimate. The [count endpoint reference](https://developers.openai.com/api/reference/resources/responses/subresources/input_tokens/methods/count)
+defines its input and response contract.
+
+At 4,096 input and 512 output tokens, applying the higher published Luna rates
+($0.25 input/cache-write and $0.75 output per million) plus 10% regional margin
+gives **$0.0015488 maximum generation allowance**. The normal short-input tariff
+is lower; this calculation deliberately uses the higher rates. The code reserves
+and retains **$0.01 for the single count+generation attempt**, from the same pilot
+pool, before either request. Twilio and Maps incremental cost is zero in this
+probe because neither is called. No payment, email or driver paths run.
+
+The primary counting documentation inspected does not explicitly state a separate
+counting-endpoint fee. Account-specific taxes and mandatory fees are also not
+verified. The retained margin is an allowance, not a certified invoice ceiling.
+Keep the live-call gate closed until the operator reviews these uncertainties
+against the approved $2 total. The prior $0.30 context-sized reservation is **not**
+used for readiness; the actual input/output caps above are enforced. Old evaluation
+ledgers and pilot counters remain unchanged. No new spend approval is requested.

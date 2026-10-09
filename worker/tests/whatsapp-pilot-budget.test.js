@@ -86,12 +86,12 @@ test('uncertain reservation survives restart, late completion and retention; no 
 test('readiness uses same budget before live hour; cannot be called under ordinary or enabled config',async()=>{
  const e=env();const ready={...e,WHATSAPP_BOOKING_ENABLED:'off',WHATSAPP_BOOKING_SEND_ENABLED:'off',WHATSAPP_BOOKING_MODEL_ENABLED:'off',
   WHATSAPP_BOOKING_PILOT_STARTED_AT:undefined,WHATSAPP_BOOKING_PILOT_EXPIRES_AT:undefined,
-  WHATSAPP_BOOKING_READINESS_APPROVED:'on',WHATSAPP_BOOKING_READINESS_EXPIRES_AT:new Date(now+3600000).toISOString()};
+  WHATSAPP_BOOKING_READINESS_APPROVED:'on',WHATSAPP_BOOKING_READINESS_CASE:'small_item',WHATSAPP_BOOKING_READINESS_EXPIRES_AT:new Date(now+3600000).toISOString()};
  assert.equal(lunaPilotCanRun(e,now,true),false);assert.equal(lunaPilotCanRun({...ready,WHATSAPP_BOOKING_READINESS_APPROVED:'off'},now,true),false);
  const id=await reserveLunaPilotModel(ready,now,true);assert.ok(id);assert.equal(row(e).started_at,null);
  await finishLunaPilotModel(ready,id,{outcome:'valid_proposal',usage,elapsedMs:4100},now+4100);
  const live={...e,WHATSAPP_BOOKING_PILOT_STARTED_AT:new Date(now+600000).toISOString(),WHATSAPP_BOOKING_PILOT_EXPIRES_AT:new Date(now+4200000).toISOString()};
- assert.ok(await reserveLunaPilotModel(live,now+600000));assert.equal(row(e).attempts,2);assert.equal(row(e).charged_micros,300000+lunaUsageUpperMicros(usage));
+ assert.ok(await reserveLunaPilotModel(live,now+600000));assert.equal(row(e).attempts,2);assert.equal(row(e).charged_micros,310000);
  assert.equal(await reserveLunaPilotModel(ready,now+600000,true),null,'readiness cannot reopen after live window pinned');
 });
 test('full context upper bound fits reservation; invalid usage and pool shortage fail closed',async()=>{
@@ -138,9 +138,10 @@ test('readiness replay is nonbillable, fixed synthetic-only and consumes the for
  const {runLunaPilotReadiness}=await import('../src/whatsapp-pilot-readiness.js');
  const e={...env(),WHATSAPP_BOOKING_ENABLED:'off',WHATSAPP_BOOKING_SEND_ENABLED:'off',WHATSAPP_BOOKING_MODEL_ENABLED:'off',
  WHATSAPP_BOOKING_PILOT_STARTED_AT:undefined,WHATSAPP_BOOKING_PILOT_EXPIRES_AT:undefined,
- WHATSAPP_BOOKING_READINESS_APPROVED:'on',WHATSAPP_BOOKING_READINESS_EXPIRES_AT:new Date(now+3600000).toISOString()};
+ WHATSAPP_BOOKING_READINESS_APPROVED:'on',WHATSAPP_BOOKING_READINESS_CASE:'small_item',WHATSAPP_BOOKING_READINESS_EXPIRES_AT:new Date(now+3600000).toISOString()};
  let calls=0;
  const options={clock:()=>now,fetchImpl:async(_url,init)=>{
+  if(_url.endsWith('/input_tokens'))return Response.json({object:'response.input_tokens',input_tokens:1000});
   calls++;const message=JSON.parse(JSON.parse(init.body).input[0].content).customer_message;
   assert.equal(message,'I need to send my keys');
   const data=await response().json();data.output[0].content[0].text=JSON.stringify({...raw,fields:[{field:'size',start:message.indexOf('keys'),end:message.length}]});return Response.json(data);
@@ -148,20 +149,22 @@ test('readiness replay is nonbillable, fixed synthetic-only and consumes the for
  assert.equal((await runLunaPilotReadiness(e,'unknown',options)).status,404);
  const first=await runLunaPilotReadiness(e,'small_item',options);assert.equal(first.report.passed,true);
  const retry=await runLunaPilotReadiness(e,'small_item',options);assert.equal(retry.report.replay,true);assert.equal(calls,1);
- assert.equal(row(e).attempts,1);assert.equal(row(e).started_at,null);
- assert.doesNotMatch(JSON.stringify(first.report),/keys|sk-|message/);
+ assert.equal(row(e).attempts,1);assert.equal(row(e).started_at,null);assert.equal(row(e).charged_micros,10000);
+ assert.doesNotMatch(JSON.stringify(first.report),/I need to send|sk-/);
+ assert.equal(retry.report.diagnostic,undefined,'D1 replay does not retain synthetic output');
 });
 
 test('readiness semantic mismatch stops the ledger and preserves full reservation',async()=>{
  const {runLunaPilotReadiness}=await import('../src/whatsapp-pilot-readiness.js');
  const e={...env(),WHATSAPP_BOOKING_ENABLED:'off',WHATSAPP_BOOKING_SEND_ENABLED:'off',WHATSAPP_BOOKING_MODEL_ENABLED:'off',
  WHATSAPP_BOOKING_PILOT_STARTED_AT:undefined,WHATSAPP_BOOKING_PILOT_EXPIRES_AT:undefined,
- WHATSAPP_BOOKING_READINESS_APPROVED:'on',WHATSAPP_BOOKING_READINESS_EXPIRES_AT:new Date(now+3600000).toISOString()};
+ WHATSAPP_BOOKING_READINESS_APPROVED:'on',WHATSAPP_BOOKING_READINESS_CASE:'small_item',WHATSAPP_BOOKING_READINESS_EXPIRES_AT:new Date(now+3600000).toISOString()};
  let calls=0;
- const report=await runLunaPilotReadiness(e,'small_item',{clock:()=>now,fetchImpl:async()=>{
+ const report=await runLunaPilotReadiness(e,'small_item',{clock:()=>now,fetchImpl:async url=>{
+  if(url.endsWith('/input_tokens'))return Response.json({object:'response.input_tokens',input_tokens:1000});
   calls++;const data=await response().json();data.output[0].content[0].text=JSON.stringify({...raw,intent:'greeting',fields:[]});return Response.json(data);
  }});
- assert.equal(report.report.outcome,'readiness_mismatch');assert.equal(row(e).charged_micros,300000);assert.equal(calls,1);
+ assert.equal(report.report.outcome,'readiness_mismatch');assert.equal(row(e).charged_micros,10000);assert.equal(calls,1);
  assert.equal(await reserveLunaPilotModel(e,now,true),null);
 });
 
@@ -197,4 +200,83 @@ test('provider ignoring abort cannot use a late answer or free a pending reserva
  for(let i=0;i<80;i++)await Promise.resolve();
  assert.equal(row(e).charged_micros,300000);assert.equal(row(e).stopped_reason,'timeout');
  assert.equal(await reserveLunaPilotModel(e,now+10002),null);assert.equal(calls,1);
+});
+
+test('one explicitly selected readiness case counts exact payload before bounded generation and keeps one-cent allocation',async()=>{
+ const {runLunaPilotReadiness}=await import('../src/whatsapp-pilot-readiness.js');
+ const e={...env(),WHATSAPP_BOOKING_ENABLED:'off',WHATSAPP_BOOKING_SEND_ENABLED:'off',WHATSAPP_BOOKING_MODEL_ENABLED:'off',
+ WHATSAPP_BOOKING_PILOT_STARTED_AT:undefined,WHATSAPP_BOOKING_PILOT_EXPIRES_AT:undefined,
+ WHATSAPP_BOOKING_READINESS_APPROVED:'on',WHATSAPP_BOOKING_READINESS_CASE:'small_item',WHATSAPP_BOOKING_READINESS_EXPIRES_AT:new Date(now+3600000).toISOString()};
+ const calls=[];let counted;
+ const options={clock:()=>now,fetchImpl:async(url,init)=>{
+  calls.push(url);const body=JSON.parse(init.body);assert.ok(new TextEncoder().encode(init.body).byteLength<=8192);
+  assert.equal(row(e).charged_micros,10000,'reserve precedes BOTH network operations');
+  if(url.endsWith('/input_tokens')){
+   counted=body;assert.deepEqual(Object.keys(body).sort(),['input','instructions','model','reasoning','text']);
+   return Response.json({object:'response.input_tokens',input_tokens:1000});
+  }
+  assert.equal(body.max_output_tokens,512);assert.equal(body.service_tier,'default');assert.equal(body.store,false);
+  for(const key of Object.keys(counted))assert.deepEqual(body[key],counted[key]);
+  const message=JSON.parse(body.input[0].content).customer_message;
+  const result=await response().json();result.output[0].content[0].text=JSON.stringify({...raw,fields:[{field:'size',start:message.indexOf('keys'),end:message.length}]});return Response.json(result);
+ }};
+ assert.equal((await runLunaPilotReadiness(e,'relative_time',options)).status,404);assert.equal(calls.length,0);
+ const result=await runLunaPilotReadiness(e,'small_item',options);assert.equal(result.report.passed,true);
+ assert.equal(result.report.diagnostic.synthetic.schema_valid,true);
+ assert.equal(result.report.diagnostic.synthetic.counted_input_tokens,1000);
+ assert.equal(JSON.parse(result.report.diagnostic.synthetic.synthetic_output).intent,'update');
+ assert.deepEqual(calls,['https://api.openai.com/v1/responses/input_tokens','https://api.openai.com/v1/responses']);
+ assert.equal(row(e).charged_micros,10000,'no refund of counting/fee margin even on success');
+ await runLunaPilotReadiness(e,'small_item',options);assert.equal(calls.length,2,'replay calls neither endpoint');
+});
+
+test('readiness token counting rejects missing, excessive and failed counts without generating or retrying',async()=>{
+ const {runLunaPilotReadiness}=await import('../src/whatsapp-pilot-readiness.js');
+ for(const count of [null,0,4097,'1000','http_error']){
+  const e={...env(),WHATSAPP_BOOKING_ENABLED:'off',WHATSAPP_BOOKING_SEND_ENABLED:'off',WHATSAPP_BOOKING_MODEL_ENABLED:'off',
+   WHATSAPP_BOOKING_PILOT_STARTED_AT:undefined,WHATSAPP_BOOKING_PILOT_EXPIRES_AT:undefined,
+   WHATSAPP_BOOKING_READINESS_APPROVED:'on',WHATSAPP_BOOKING_READINESS_CASE:'small_item',WHATSAPP_BOOKING_READINESS_EXPIRES_AT:new Date(now+3600000).toISOString()};
+  let calls=0;
+  const options={clock:()=>now,fetchImpl:async url=>{calls++;assert.ok(url.endsWith('/input_tokens'));
+   return count==='http_error'?new Response('private provider detail',{status:403}):Response.json({object:'response.input_tokens',input_tokens:count});}};
+  const result=await runLunaPilotReadiness(e,'small_item',options);assert.equal(result.report.passed,false);
+  assert.equal(result.report.outcome,count===4097?'input_limit':'input_token_count');
+  assert.equal(row(e).charged_micros,10000);assert.ok(row(e).stopped_reason);
+  await runLunaPilotReadiness(e,'small_item',options);assert.equal(calls,1);
+ }
+});
+
+test('readiness fails closed when actual input differs from count or output exceeds requested cap',async()=>{
+ const {runLunaPilotReadiness}=await import('../src/whatsapp-pilot-readiness.js');
+ for(const badUsage of [{input_tokens:1001,output_tokens:100,total_tokens:1101},{input_tokens:1000,output_tokens:513,total_tokens:1513}]){
+  const e={...env(),WHATSAPP_BOOKING_ENABLED:'off',WHATSAPP_BOOKING_SEND_ENABLED:'off',WHATSAPP_BOOKING_MODEL_ENABLED:'off',
+   WHATSAPP_BOOKING_PILOT_STARTED_AT:undefined,WHATSAPP_BOOKING_PILOT_EXPIRES_AT:undefined,
+   WHATSAPP_BOOKING_READINESS_APPROVED:'on',WHATSAPP_BOOKING_READINESS_CASE:'small_item',WHATSAPP_BOOKING_READINESS_EXPIRES_AT:new Date(now+3600000).toISOString()};
+  const r=await runLunaPilotReadiness(e,'small_item',{clock:()=>now,fetchImpl:async url=>url.endsWith('/input_tokens')
+   ?Response.json({object:'response.input_tokens',input_tokens:1000}):response({usage:badUsage})});
+  assert.equal(r.report.outcome,'usage_unverified');assert.equal(row(e).charged_micros,10000);assert.ok(row(e).stopped_reason);
+ }
+});
+
+test('fictional readiness reports structural/schema failures usefully without exposing provider error text or headers',async()=>{
+ const {runLunaPilotReadiness}=await import('../src/whatsapp-pilot-readiness.js');
+ for(const failure of ['envelope','schema','http']){
+  const e={...env(),WHATSAPP_BOOKING_ENABLED:'off',WHATSAPP_BOOKING_SEND_ENABLED:'off',WHATSAPP_BOOKING_MODEL_ENABLED:'off',
+   WHATSAPP_BOOKING_PILOT_STARTED_AT:undefined,WHATSAPP_BOOKING_PILOT_EXPIRES_AT:undefined,
+   WHATSAPP_BOOKING_READINESS_APPROVED:'on',WHATSAPP_BOOKING_READINESS_CASE:'small_item',WHATSAPP_BOOKING_READINESS_EXPIRES_AT:new Date(now+3600000).toISOString()};
+  const r=await runLunaPilotReadiness(e,'small_item',{clock:()=>now,fetchImpl:async url=>{
+   if(url.endsWith('/input_tokens'))return Response.json({object:'response.input_tokens',input_tokens:1000});
+   if(failure==='http')return Response.json({error:{code:'invalid_api_key',message:'sk-private-test-error'}},{status:401,headers:{'X-Private':'sk-private-header'}});
+   const body=await response().json();
+   if(failure==='envelope')delete body.output[0].status;
+   else body.output[0].content[0].text=JSON.stringify({...raw,price:1});
+   return Response.json(body);
+  }});
+  const diag=r.report.diagnostic.synthetic;
+  assert.equal(r.report.passed,false);assert.equal(diag.schema_valid,false);
+  if(failure==='http'){assert.equal(diag.provider_error_code,'invalid_api_key');assert.equal(r.report.diagnostic.httpStatus,401);}
+  else {assert.equal(diag.response_status,'completed');assert.ok(diag.synthetic_output);assert.ok(diag.output_structure.length);}
+  assert.doesNotMatch(JSON.stringify(r.report),/sk-private|X-Private|Authorization/);
+  assert.equal(row(e).charged_micros,10000);
+ }
 });

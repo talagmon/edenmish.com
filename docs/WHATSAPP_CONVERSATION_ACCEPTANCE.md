@@ -90,8 +90,9 @@ the current bounded adapter timeout is not evidence of acceptable live latency.
 - Review the implemented [bounded Luna pilot](WHATSAPP_LUNA_PILOT.md). The legacy
   profile still rejects MODEL on; the new explicit `luna-v1` profile requires
   migration 040, immutable identity/window, serialized model spending and durable
-  message/address limits. Its fixed readiness probes run with booking/sending off
-  and consume the same forthcoming pilot budget. No activation is implied.
+  message/address limits. Its explicitly selected readiness case runs with booking/sending off,
+  counts input before generation, and consumes the same forthcoming pilot budget.
+  Start with one synthetic case; a pass does not establish full conversation quality. No activation is implied.
 - Deploy only the reviewed staging version under explicit activation authority,
   verify authenticated operator pause, configure the incoming callback, start a
   new expressly approved window and supervise shutdown. Do not reset/reuse the
