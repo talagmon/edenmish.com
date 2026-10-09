@@ -112,11 +112,18 @@ accompany the single structured assistant message; it is ignored, never logged.
 5. Only under explicit probe approval, select `WHATSAPP_BOOKING_READINESS_CASE=small_item`,
    set `WHATSAPP_BOOKING_READINESS_APPROVED=on`, and give
    `WHATSAPP_BOOKING_READINESS_EXPIRES_AT` a concrete deadline within one hour.
-   Booking/send/model flags must all stay `off`. Through authenticated Ops and a
-   trusted same-origin request, POST `{ "case_id": "small_item" }` to
+   Booking/send/model flags must all stay `off`. Open `/pilot-ops` on the staging
+   Ops host, log in through its masked PIN field if needed, and click
+   **הפעלת בדיקת Luna אחת** (Run one Luna readiness check) exactly once. The button
+   appears only for the enabled, unexpired `small_item` check and is usable only
+   after Ops authentication. It makes a trusted same-origin POST `{ "case_id": "small_item" }` to
    `/api/ops/whatsapp/pilot/readiness`. Other cases are rejected unless explicitly
    selected by the operator. The first check is one synthetic generation, not an
-   automatic four-case run. Replays return the stored report without another call.
+   automatic four-case run. Replays return the stored report without another call. The UI writes only a
+   non-secret attempt marker to localStorage before sending and stays locked after
+   success, failure, timeout, reload or interruption. It never calls on page load.
+   Blocked browser storage prevents submission. Do not clear the marker to retry;
+   check D1 with the operator if the outcome is uncertain. Reports render as text.
 6. For that single case, the same bounded input (instructions, input, reasoning,
    schema) first goes to `/v1/responses/input_tokens`. Refuse more than 4,096 input
    tokens, a body over 8,192 UTF-8 bytes, invalid counting output, expiry or timeout.
