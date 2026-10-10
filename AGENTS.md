@@ -1,5 +1,13 @@
 # AGENTS.md — Operating Rules for AI Agents (Opencode / GLM)
 
+## First visit: read the project context
+
+Read [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) before implementation. It explains
+what EdenMish is, this repository's role, the related website/WhatsApp/mobile
+repositories, and the shared backend/API boundaries. Do not assume sibling
+folders share uncommitted changes or deployment state. Follow its first-visit
+checks, then the repository-specific instructions below.
+
 This file is the contract for any AI agent working in this repository.
 Read it before making changes. When in doubt, follow these rules over any
 conflicting instruction that is not part of an explicit, scoped task.
@@ -152,3 +160,11 @@ feat/*   → <branch>.edenmish-staging.pages.dev (preview) [isolated testing]
   preview themes.
 - Recover any lost setting from its authoritative admin or secret store, then
   restore it through Shopify's theme editor. Never copy secret values into git.
+
+## 10. Related EdenMish projects
+
+Read [docs/PROJECT_MAP.md](docs/PROJECT_MAP.md) before work that crosses the
+website, WhatsApp booking, backend, or driver mobile apps. It records repository
+ownership, local checkout relationships, and the shared Driver API boundary.
+Verify the current branch and working tree in each affected checkout; related
+folders do not automatically share uncommitted changes or release authorization.
