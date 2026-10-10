@@ -74,6 +74,26 @@ test('short acknowledgements confirm only a displayed current review menu',async
  assert.equal((await advanceBooking(state,'ok but change the address',services(),opts)).create,undefined);
  assert.equal((await advanceBooking(state,'ok?',services(),opts)).create,undefined);
 });
+
+for (const phase of ['review','address_review']) test(`all spoken confirmation aliases remain blocked in ${phase}`,async()=>{
+ const base=await review();
+ if(phase==='address_review')Object.assign(base,{phase,quote:null,address_confirmed:false,menu:{kind:phase,phase,revision:base.revision}});
+ base.multilingual=true;
+ for(const text of ['1','01','١','۱','confirm','k','first','first option','האפשרות הראשונה','אפשרות 1','أؤكد','подтверждаю','je confirme']) {
+  const svc={...services(),multilingual:true,quote:()=>assert.fail('voice confirmation must not reprice')};
+  const spoken=await advanceBooking(base,text,svc,{...opts,inputKind:'voice'});
+  assert.equal(spoken.state.phase,phase,text);assert.equal(spoken.create,undefined,text);
+  assert.equal(spoken.state.terms_accepted_at,undefined,text);
+  assert.deepEqual(spoken.state.data,base.data,text);assert.equal(spoken.state.address_confirmed,base.address_confirmed,text);
+  // The same current-menu alias remains available as an explicit typed action.
+  const typed=await advanceBooking(base,text,{...services(),multilingual:true},opts);
+  assert.equal(typed.state.phase,phase==='review'?'creating':'review',text);
+ }
+ const edit=await advanceBooking(base,'second',services(),{...opts,inputKind:'voice'});
+ assert.equal(edit.state.edit_menu,true);assert.equal(edit.create,undefined);
+ const human=await advanceBooking(base,'third',services(),{...opts,inputKind:'voice'});
+ assert.equal(human.state.phase,'handoff');assert.equal(human.create,undefined);
+});
 test('wallet, additional orders and business accounts require a person',async()=>{
  for(const text of ['use my wallet','business account','another order','חשבון עסקי']) {
   const result=await advanceBooking(await review(),text,services(),opts); assert.equal(result.state.phase,'handoff'); assert.equal(result.create,undefined);

@@ -1,0 +1,76 @@
+{
+  "candidate": "whatsapp-rc3-off-staging",
+  "checkedAt": "2026-10-10T18:32:21.826764+00:00",
+  "baseCommit": "c6e4e5c5023833fab7df7ae6996a4b01e56657cc",
+  "runtimeSourceSha256": "d4b2aeb5503e6e86536ea7da1c698cd9af4c37bbfd589d1aba4a3a0d4118e6c1",
+  "offConfigSha256": "5cc567810ae2faa5886a91a444ed56fc72fe83c7f595ededafadcc557a4191da",
+  "bundleFiles": [
+    {
+      "path": "README.md",
+      "sha256": "65246fbc58f31864fbe05413b268e59881f95d40b2947a500afd1744e5498f98"
+    },
+    {
+      "path": "index.js",
+      "sha256": "3dd64500f831f0101244c45029fc9ed3d73943dcd33827bac1891e53d368ad1f"
+    },
+    {
+      "path": "index.js.map",
+      "sha256": "66845a1fc251b166b15024de41ee7caa06bda1198f4c2d7c915f682012a394cf"
+    }
+  ],
+  "checks": {
+    "worker": {
+      "passed": 1254,
+      "suites": 65,
+      "failed": 0,
+      "skipped": 0
+    },
+    "storefront": {
+      "passed": 175,
+      "failed": 0,
+      "API_URL": "",
+      "providerIntegrationExecuted": false
+    },
+    "supervisor": {
+      "passed": 8
+    },
+    "workerSyntax": {
+      "files": 73
+    },
+    "storefrontSyntax": {
+      "scripts": 13
+    },
+    "offConfigSafety": {
+      "passed": 3
+    },
+    "wranglerDryRun": {
+      "exitCode": 0
+    },
+    "syntheticFlow": {
+      "networkCalls": 0,
+      "turns": 7,
+      "modelMocks": 1,
+      "mapsMocks": 2,
+      "outboundSegments": 7,
+      "orders": 0
+    }
+  },
+  "initialWorkerSandboxRun": "Loopback EPERM; rerun with local loopback permission passed all tests, providers mocked.",
+  "independentReview": "Scoped pass; 12 runtime/script/migration files match previously reviewed source; final OFF preparer, tests and plan re-reviewed, 3 tests pass.",
+  "remoteActions": {
+    "published": false,
+    "deployed": false,
+    "migration047Applied": false,
+    "paidCalls": 0,
+    "credentialsInstalled": false,
+    "whatsappActivated": false
+  },
+  "remainingBeforeOffDeployment": [
+    "publication approval for final allowlist",
+    "verify current target/binding names and types without secret values",
+    "verify schema039 and browser-owned blank callback",
+    "verify pinned config/source",
+    "verify zero schedules and OFF bindings after deployment"
+  ],
+  "paidAndProductionReady": false
+}

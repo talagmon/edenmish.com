@@ -181,7 +181,7 @@ async function refresh(){
   if(!r.ok) return showTransientError("לא ניתן לרענן כרגע. בדקו את החיבור ונסו שוב.");
   var payload = await r.json();
   orders = payload.orders || [];
-  whatsappBookingEnabled = !!(payload.integrations && payload.integrations.whatsapp_booking);
+  whatsappBookingEnabled = !!(payload.integrations && (payload.integrations.whatsapp_booking_storage || payload.integrations.whatsapp_booking));
   webhookHealth = payload.integrations && payload.integrations.shopify_webhooks || null;
   try{
     var dr = await api("/api/ops/driver");
@@ -348,7 +348,7 @@ async function showWhatsAppBookings(){
     var response=await api("/api/ops/whatsapp/bookings");
     if(!response.ok)throw new Error("load");
     var result=await response.json();list.textContent="";
-    if(result.disabled){list.textContent="ערוץ ההזמנות אינו פעיל.";return;}
+    if(result.disabled)hint.textContent="האוטומציה כבויה. אפשר לבדוק בקשות קיימות ולעצור או לסגור שיחה לפי כללי הטיפול. סגירת שיחה אינה מבטלת הזמנה או קישור תשלום.";
     var labels={consent:"ממתין להסכמה",collect:"איסוף פרטים",address_review:"אישור כתובות",review:"אישור הצעה",creating:"יצירת הזמנה",booked:"נוצרה הזמנה",handoff:"דורש טיפול אנושי",closed:"נסגרה"};
     if(!result.bookings.length)list.textContent="אין בקשות כרגע.";
     result.bookings.forEach(function(row){

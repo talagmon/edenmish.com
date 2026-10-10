@@ -191,6 +191,7 @@ async function advanceBookingCore(current, text, services, { phone, now = Date.n
     if (!supplied && state.phase !== 'collect') return { state, reply: state.phase === 'review' ? summary(state, phone) : bookingSay(state, 'בדקו את הכתובות בסיכום ובחרו אפשרות.', 'Check the addresses in the summary and choose an option.') };
     if (!supplied && !field) return { state, reply: 'כתבו שם שדה ונקודתיים לשינוי, או נציג.' };
     const updates = supplied || [[field, text.trim()]];
+    let unresolvedAddress = null;
     for (const [index, [key, value]] of updates.entries()) {
       // Any attempted edit invalidates consent to the old summary, even if the
       // replacement is invalid/ambiguous. Never let an old Confirm book old data.
@@ -227,7 +228,12 @@ async function advanceBookingCore(current, text, services, { phone, now = Date.n
           return { state, reply: bookingSay(state, 'מצאתי כתובות אפשריות. איזו נכונה?', 'I found possible addresses. Which is correct?') };
         }
         if (resolved.error === 'out_of_zone') { state.phase = 'handoff'; return { state, reply: bookingSay(state,'הכתובת מחוץ לאזור השירות האוטומטי. ','The address is outside the automatic service area. ') + bookingSay(state,HANDOFF,HANDOFF_EN) }; }
-        if (resolved.error) return { state, reply: (state.multilingual ? bookingSay(state,'לא הצלחתי לזהות כתובת יחידה בוודאות. בדקו רחוב, מספר בית ועיר, או כתבו נציג.\n','I could not identify one address. Check the street, house number and city, or ask for a person.\n') + bookingQuestion(state,key) : 'לא הצלחתי לזהות כתובת יחידה בוודאות. בדקו רחוב, מספר בית ועיר, או כתבו נציג.\n' + QUESTIONS[key]) };
+        if (resolved.error) {
+          // Keep independently supplied later fields, but never store an
+          // unresolved address or quote it as a validated route.
+          unresolvedAddress ||= {field:key,reply:(state.multilingual ? bookingSay(state,'לא הצלחתי לזהות כתובת יחידה בוודאות. בדקו רחוב, מספר בית ועיר, או כתבו נציג.\n','I could not identify one address. Check the street, house number and city, or ask for a person.\n') + bookingQuestion(state,key) : 'לא הצלחתי לזהות כתובת יחידה בוודאות. בדקו רחוב, מספר בית ועיר, או כתבו נציג.\n' + QUESTIONS[key])};
+          continue;
+        }
         Object.assign(state.data, { [key]: resolved.address, [key + '_city']: resolved.city, [key + '_lat']: resolved.lat, [key + '_lng']: resolved.lng });
         state.address_confirmed = false;
       } else {
@@ -237,6 +243,10 @@ async function advanceBookingCore(current, text, services, { phone, now = Date.n
       if (state.editing_field === key) delete state.editing_field;
       delete state.edit_menu;
       state.quote = null; state.phase = 'collect';
+    }
+    if (unresolvedAddress) {
+      state.phase='collect';state.editing_field=unresolvedAddress.field;state.quote=null;
+      return {state,reply:unresolvedAddress.reply};
     }
   }
   return continueBookingCollection(state, services, { phone, now });
@@ -282,7 +292,31 @@ async function advanceBookingInternal(current, text, services, options = {}) {
   if (hasSensitiveBookingText(text) && state.phase !== 'handoff') return { state, reply: bookingSay(state,
     'אין לשלוח פרטי כרטיס, מספרי מסמכים או סודות. התשלום בקישור מאובטח בלבד.',
     'Please do not send card numbers, documents or secrets. Payment uses the secure link only.') };
-  if (state.phase === 'address_choice' && !isBookingHandoff(text) && !/^(edit|עריכה)$/i.test(text.trim())) return { state, reply: bookingSay(state, 'בחרו את מספר הכתובת המתאימה, או בקשו נציג.', 'Choose the matching address number, or ask for a person.') };
+  if (state.phase === 'address_choice' && !isBookingHandoff(text) && !/^(edit|עריכה)$/i.test(text.trim())) {
+    const pending=state.pending_address;
+    const prompt=bookingSay(state,'בחרו את מספר הכתובת המתאימה, או בקשו נציג.','Choose the matching address number, or ask for a person.');
+    if(!pending)return {state,reply:prompt};
+    let entries=!services.conversationModel && parseAddress(text)?[[pending.field,text.trim()]]:null,interpretation;
+    if(!entries && services.conversationModel) {
+      const proposal=await proposeBookingTurn(services.conversationModel,{...state,phase:'collect',editing_field:pending.field},text,now);
+      interpretation=proposal?'model_proposal':'model_fallback';
+      if(proposal && ['handoff','other_order','unsupported'].includes(proposal.intent)) {
+        state.phase='handoff';return {state,interpretation,reply:bookingSay(state,HANDOFF,HANDOFF_EN)};
+      }
+      if(proposal?.intent==='update' && proposal.entries.some(([field])=>field===pending.field))entries=proposal.entries;
+    }
+    if(!entries)return {state,...(interpretation?{interpretation}:{}),reply:prompt};
+    const supplied=new Set(entries.map(([field])=>field));
+    // Corrections replace only explicitly supplied fields. Earlier grounded
+    // details survive candidate selection and still pass canonical validation.
+    const updates=[...entries,...(pending.remaining||[]).filter(([field])=>!supplied.has(field))];
+    state.phase='collect';state.editing_field=pending.field;state.quote=null;state.address_confirmed=false;
+    delete state.pending_address;delete state.terms_accepted_at;
+    const result=await advanceBookingCore(state,updates.map(([field,value])=>`${LABELS[field]}: ${value}`).join('\n'),services,options);
+    const question=Object.entries(QUESTIONS).find(([,copy])=>result.reply===copy)?.[0];
+    if(question)result.reply=bookingQuestion(result.state,question);
+    return {...result,...(interpretation?{interpretation}:{})};
+  }
   if (['collect', 'address_review', 'review'].includes(state.phase)
     && /\b(?:business account|use (?:my |the )?wallet|pay (?:with|from) (?:my |the )?wallet|another order|multiple orders|flash delivery)\b|חשבון עסקי|ארנק עסקי|הזמנה נוספת|שתי הזמנות/u.test(text.toLowerCase())) {
     state.phase = 'handoff';
@@ -402,9 +436,6 @@ export async function advanceBooking(current, text, services, options = {}) {
   }
 
   const confirmation=reviewMenu && /^(?:k|ok|okay|conf|confirm|כן|אוקיי|מאשר|מאשרת|אני מאשר|אני מאשרת|אישור|הכל נכון)$/.test(answer);
-  if(options.inputKind==='voice' && reviewMenu && (confirmation || text.trim()==='1'))return withBookingMenu({state,reply:bookingSay(state,
-    'שמעתי אישור. כדי לאשר, שלחו את מספר האפשרות המוצגת בהודעת טקסט.',
-    'I heard a confirmation. Please confirm using the displayed number in a text message.')},now);
   const modification=reviewMenu && /^(?:edit|modify|change|עריכה|שינוי|שינוי פרטים|לשנות|אני רוצה לשנות|אני רוצה לערוך)$/.test(answer);
   let choice=confirmation?1:modification?2:/^\d{1,2}$/.test(text.trim())?Number(text.trim()):null;
   // Written options are shortcuts only for the displayed, current post-consent
@@ -421,6 +452,11 @@ export async function advanceBooking(current, text, services, options = {}) {
       if(field)choice=FIELDS.indexOf(field)+1;
     }
   }
+  // Every alias must reach the same input-kind guard before it becomes a
+  // revision-bound confirmation, including ordinals and localized digits.
+  if(options.inputKind==='voice' && reviewMenu && choice===1)return withBookingMenu({state,reply:bookingSay(state,
+    'שמעתי אישור. כדי לאשר, שלחו את מספר האפשרות המוצגת בהודעת טקסט.',
+    'I heard a confirmation. Please confirm using the displayed number in a text message.')},now);
   if (menu && menu.phase === state.phase && menu.revision === state.revision && choice != null) {
     if (menu.kind === 'review' || menu.kind === 'address_review') {
       text = ({ 1: `${menu.kind === 'review' ? 'confirm' : 'addresses'} ${menu.revision}`, 2: 'edit', 3: 'human' })[choice] || text;

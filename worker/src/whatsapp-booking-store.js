@@ -44,7 +44,7 @@ export function extractBookingEvents(payload, phoneId, now = Date.now()) {
       const at = Number(m.timestamp) * 1000;
       if (!phone || !/^[A-Za-z0-9._:=/-]{1,200}$/.test(String(m.id || '')) || !Number.isSafeInteger(at) || at <= now - SESSION_WINDOW || at > now + 60_000) continue;
       const text = m.type === 'text' ? m.text?.body : m.type === 'interactive' ? (m.interactive?.button_reply?.id || m.interactive?.list_reply?.id) : null;
-      events.push({ id: m.id, phone, at, echo, text: typeof text === 'string' && text.length <= 2000 ? text : null });
+      events.push({ id: m.id, phone, at, echo, text: typeof text === 'string' && text.length <= 2000 ? text : null, ...(m.type==='location'?{unsupported:'location'}:{}) });
     }
   }
   return events.sort((a, b) => a.at - b.at || Number(b.echo) - Number(a.echo));
@@ -129,7 +129,11 @@ export async function processBookingEvent(env, event, services, now = Date.now()
             if(!text){outcome='voice_failed';reply=bookingSay(state,'עיבוד הודעות קוליות אינו זמין בבדיקה הזו. כתבו את ההודעה או בקשו נציג.','Voice processing is unavailable for this test. Please type your message or ask for a person.');}
           }
         }
-        if(!text && !reply)reply=bookingSay(state,'שלחו הודעה קולית OGG/Opus, קובץ MP3 או WAV, או כתבו הודעת טקסט.','Please send a supported voice note (OGG/Opus), MP3 or WAV file, or type your message.');
+        if(!text && !reply)reply=event.unsupported==='location'
+          ? bookingSay(state,'אין כרגע תמיכה בסיכת מיקום. כתבו רחוב, מספר בית ועיר, או בקשו נציג.','Location pins are not supported. Type the street, house number and city, or ask for a person.')
+          : env.WHATSAPP_BOOKING_VOICE_ENABLED==='on'
+            ? bookingSay(state,'שלחו הודעה קולית OGG/Opus, קובץ MP3 או WAV, או כתבו הודעת טקסט.','Please send a supported voice note (OGG/Opus), MP3 or WAV file, or type your message.')
+            : bookingSay(state,'כתבו את ההודעה בטקסט, או בקשו נציג.','Please type your message, or ask for a person.');
         if(text) {
         const result = await advanceBooking(state, text, {
           ...services,
@@ -138,7 +142,7 @@ export async function processBookingEvent(env, event, services, now = Date.now()
         state = result.state; reply = result.reply;
         if (['model_proposal', 'model_fallback'].includes(result.interpretation)) outcome = result.interpretation;
         if (lunaPilot(env) && result.interpretation === 'model_fallback') {
-          state.phase = 'handoff'; reply = continuationSelected(env) && continuationFailureNoticePolicy(env) ? failureNoticeText(state.language) : bookingSay(state,HANDOFF,HANDOFF_EN);
+          state.phase = 'handoff'; reply = continuationSelected(env) && continuationFailureNoticePolicy(env) ? failureNoticeText(state.language,env) : bookingSay(state,HANDOFF,HANDOFF_EN);
         }
         if (result.create && (conversationOnlyPilot(env) || state.conversation_only)) {
           state.phase = 'handoff'; reply = pilotComplete(state.language); outcome = 'pilot_complete';

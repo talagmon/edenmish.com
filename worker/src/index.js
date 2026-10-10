@@ -2443,7 +2443,7 @@ const worker = {
       });
       return json({
         orders,
-        integrations: { shopify_webhooks: shopifyWebhookRegistrar.status(), whatsapp_booking: bookingEnabled(env) },
+        integrations: { shopify_webhooks: shopifyWebhookRegistrar.status(), whatsapp_booking: bookingEnabled(env), whatsapp_booking_storage: env.WHATSAPP_BOOKING_STORAGE_READY === 'on' },
       });
     }
 
@@ -2785,7 +2785,7 @@ const worker = {
       if (!isTrustedOpsMutationOrigin(req, env)) return json({ error: 'untrusted_origin' }, 403);
       let input;
       try { input=await req.json(); } catch { return json({error:'invalid_request'},400); }
-      if (!input || Object.keys(input).sort().join(',')!=='grant_id,version' || ![1,2,3,4,5].includes(input.version) || input.version!==Number(env.WHATSAPP_BOOKING_CONTINUATION_VERSION)
+      if (!input || Object.keys(input).sort().join(',')!=='grant_id,version' || ![1,2,3,4,5,6].includes(input.version) || input.version!==Number(env.WHATSAPP_BOOKING_CONTINUATION_VERSION)
         || input.grant_id!==env.WHATSAPP_BOOKING_CONTINUATION_ID) return json({error:'invalid_request'},400);
       try { const issued=await issueContinuationGrant(env); return json({issued},issued?201:409); }
       catch { return json({error:'grant_unconfirmed_no_retry'},503); }
@@ -2794,18 +2794,21 @@ const worker = {
     // Authenticated operator queue. No phone lookup grants business/wallet access.
     if (path === '/api/ops/whatsapp/bookings' && req.method === 'GET') {
       if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
-      if (!bookingEnabled(env) || (continuationSelected(env) && !await continuationCanProceed(env))) return json({ disabled: true, bookings: [] });
+      if (env.WHATSAPP_BOOKING_STORAGE_READY !== 'on') return json({ disabled: true, bookings: [] });
+      // Shutdown must not hide handoffs or prevent authenticated reconciliation.
+      // Reading drafts never enables intake, sends, models or checkout.
+      const disabled = !bookingEnabled(env) || (continuationSelected(env) && !await continuationCanProceed(env));
       const rows = await env.DB.prepare(`SELECT c.id, c.phase, COALESCE(c.order_id, o.id) AS order_id, c.recipient,
         c.state_json, c.created_at, c.updated_at, c.consent_at, c.confirmed_at, c.confirmed_revision, c.confirmed_price
         FROM whatsapp_booking_conversations c LEFT JOIN orders o ON o.token = c.order_token
         ORDER BY CASE WHEN c.phase = 'handoff' THEN 0 ELSE 1 END, c.updated_at DESC LIMIT 100`).all();
-      return json({ bookings: rows.results || [] });
+      return json({ disabled, bookings: rows.results || [] });
     }
     const bookingPause = /^\/api\/ops\/whatsapp\/bookings\/([a-f0-9-]{36})\/(pause|close)$/.exec(path);
     if (bookingPause && req.method === 'POST') {
       if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
       if (!isTrustedOpsMutationOrigin(req, env)) return json({ error: 'untrusted_origin' }, 403);
-      if (!bookingEnabled(env)) return json({ error: 'disabled' }, 404);
+      if (env.WHATSAPP_BOOKING_STORAGE_READY !== 'on') return json({ error: 'disabled' }, 404);
       const result = await (bookingPause[2] === 'close' ? closeBooking : pauseBooking)(env.DB, bookingPause[1], Date.now(), env);
       return json({ ok: result.status === 200, ...(result.status === 409 ? { error: 'in_flight_or_checkout_requires_review' } : {}) }, result.status);
     }

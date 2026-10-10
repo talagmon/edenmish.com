@@ -1800,3 +1800,22 @@ describe('Frontend: first-delivery launch promotion', () => {
     assertContains(html, 'step="0.001"', 'millisecond-preserving promotion deadline');
   });
 });
+
+
+test('WhatsApp recovery displays existing handoffs while automation is off and preserves failed-close feedback', async () => {
+  const html=readPage('dash.html');
+  const source=html.slice(html.indexOf('async function showWhatsAppBookings(){'),html.indexOf('function showDriverAccess(){'));
+  const nodes=[],calls=[],errors=[];
+  function element(tag){const node={tag,children:[],textContent:'',appendChild(child){this.children.push(child);},setAttribute(){},addEventListener(){},focus(){},remove(){}};nodes.push(node);return node;}
+  const context={document:{getElementById(){return null;},createElement:element,body:element('body')},encodeURIComponent,
+    api:async(path,options)=>{calls.push({path,options});return options?{ok:false}:{ok:true,json:async()=>({disabled:true,bookings:[{id:'synthetic-recovery',phase:'handoff',recipient:null,state_json:JSON.stringify({data:{name:'<script>synthetic</script>'}})}]})};},
+    showTransientError:message=>errors.push(message)};
+  runInNewContext(source,context);await context.showWhatsAppBookings();
+  assert.ok(nodes.some(n=>n.textContent.includes('האוטומציה כבויה')));
+  assert.ok(nodes.some(n=>n.textContent==='שם: <script>synthetic</script>'),'customer data stays plain text');
+  const action=nodes.find(n=>n.tag==='button'&&n.textContent.includes('סגירת שיחה'));
+  assert.ok(action,'off-state list retains the recovery action');await action.onclick();
+  assert.equal(calls.length,2);assert.equal(calls[1].options.method,'POST');
+  assert.equal(calls[1].path,'/api/ops/whatsapp/bookings/synthetic-recovery/close');
+  assert.equal(action.disabled,false);assert.equal(errors.length,1);assert.match(errors[0],/קישור תשלום/);
+});

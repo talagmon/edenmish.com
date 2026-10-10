@@ -1384,3 +1384,41 @@ reserved for six audio calls and $0.25 contingency. Window maximum 900 seconds.
 Production is not authorized. If promoted later, the corresponding command is
 `npx wrangler d1 execute edenmish --remote --file migrations/046_whatsapp_voice_session.sql`
 after prerequisite 045 and before deploying. Do not execute it for this test.
+
+### 047 — immutable v6 text-only review session (local package; not applied)
+
+Adds a one-attempt synthetic preflight ledger and fresh v6 grant/operations.
+Keeps all historical reservations: $0.912564 operational/model history after
+preflight, $0.78 cushions, and at most $0.293120 handset reservations. Maximum
+15 minutes, eight inbound/eight outbound, one model, two Maps HTTP attempts,
+no audio. No migration creates a grant or enables traffic. Proof must be matched
+and cover the whole immutable window; old grants cannot be reset.
+
+This is a **dedicated staging, single-history migration**, not a general
+production grant system. Once v6 exists, prior voice/audio tables are frozen in
+full, matching the one-ledger historical fingerprint. Do not apply it to an
+unrelated/multi-tenant database or promote that freeze policy to production.
+
+After explicit scoped approval, from `worker`:
+```sh
+npx wrangler d1 execute edenmish-staging --remote --config <private-reviewed-off-config.json> --file migrations/047_whatsapp_review_session.sql
+```
+Verify before any proof or grant:
+```sql
+SELECT COUNT(*) FROM whatsapp_review_preflight;
+SELECT COUNT(*) FROM whatsapp_continuation_review_grants;
+SELECT COUNT(*) FROM whatsapp_continuation_review_operations;
+```
+All three start at zero; a migration replay must preserve existing rows. After
+issuance inspect numeric quota/history/window fields and previous table hashes.
+The runnable operator sequence is in
+`docs/reviews/whatsapp-release-readiness-20261010/V6_RUNBOOK.md`.
+
+Repository-required future production command (documentation only; **not
+approved or appropriate for the current staging-specific freeze policy**):
+```sh
+npx wrangler d1 execute edenmish --remote --file migrations/047_whatsapp_review_session.sql
+```
+Before any future production adoption, independently redesign/review the
+single-history freeze and have the operator apply the approved migration after
+merge and before deployment. No production migration is part of this task.

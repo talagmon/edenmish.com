@@ -1,0 +1,57 @@
+{
+  "originalCapMicros": 2000000,
+  "earlierHeldMicros": 1078748,
+  "earlierRemainingMicros": 921252,
+  "records": [
+    {
+      "id": "approved-sol-reasoning-20261009-a",
+      "retainedMicros": 78848,
+      "approvalAt": null,
+      "reportFileMtimeUtc": "2026-10-09T18:47:09.077568+00:00",
+      "timestampCaveat": "Report mtime is filesystem evidence, not a provider event timestamp; JSONL has no event timestamps.",
+      "ledgerSha256": "7b28d00752cb3ba3873ce5e957692503d914a9632ec1bcebbd29986ff1d61fdf"
+    },
+    {
+      "id": "approved-sol-reasoning-20261009-b",
+      "retainedMicros": 78848,
+      "approvalAt": "2026-10-10T09:08:14.793Z",
+      "reportFileMtimeUtc": "2026-10-10T09:30:51.632847+00:00",
+      "timestampCaveat": "Report mtime is filesystem evidence, not a provider event timestamp; JSONL has no event timestamps.",
+      "ledgerSha256": "a046b54a4e5679bd671c52b71c022a08630546d3bbda7a3b42f5675cc68163d8"
+    },
+    {
+      "id": "approved-sol-description-20261010-c",
+      "retainedMicros": 77528,
+      "approvalAt": "2026-10-10T10:13:37.825Z",
+      "reportFileMtimeUtc": "2026-10-10T10:14:28.315764+00:00",
+      "timestampCaveat": "Report mtime is filesystem evidence, not a provider event timestamp; JSONL has no event timestamps.",
+      "ledgerSha256": "db1255247cdf38c1faf8d11e64bef9ec1375d62b326af3597d7f531ad5db90a5"
+    },
+    {
+      "id": "v5-handset",
+      "retainedMicros": 121120,
+      "feeAndUnusedAudioRetainedMicros": 280000,
+      "grantCreatedAtUtc": "2026-10-10T11:49:58.012000+00:00",
+      "closedAtUtc": "2026-10-10T12:01:02.441548+00:00",
+      "auditAtUtc": "2026-10-10T12:01:07.189308+00:00",
+      "inbound": 3,
+      "outbound": 3,
+      "model": 1,
+      "audio": 0,
+      "auditSha256": "5a9fb1304d751718553b0c6c0042126e3b43a7adbbf4b2b56b2a5eb60aa98c8f"
+    }
+  ],
+  "laterAdditionsMicros": [
+    78848,
+    77528,
+    121120,
+    280000
+  ],
+  "retainedMicros": 1636244,
+  "remainingMicros": 363756,
+  "releasedMicros": 0,
+  "newRequestedMicros": 350000,
+  "aggregateWithAllocationMicros": 1986244,
+  "remainingAfterAllocationMicros": 13756,
+  "privateTranscriptsAccessed": false
+}

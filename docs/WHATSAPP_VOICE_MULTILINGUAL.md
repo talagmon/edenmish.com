@@ -1,5 +1,7 @@
 # Voice notes and multilingual booking — local implementation, 10 October 2026
 
+Current local release assessment: [10 October readiness review](reviews/whatsapp-release-readiness-20261010/README.md). Historical sessions below are closed; they do not authorize another test.
+
 ## Status
 
 The initial implementation was deployed for the approved 10 October staging

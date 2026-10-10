@@ -456,3 +456,21 @@ reserved for six audio calls and $0.25 contingency. Window maximum 900 seconds.
 Production is not authorized. If promoted later, the corresponding command is
 `npx wrangler d1 execute edenmish --remote --file migrations/046_whatsapp_voice_session.sql`
 after prerequisite 045 and before deploying. Do not execute it for this test.
+
+### Prepared v6 text-only review session — local only
+
+Migration047 and the `scripts/whatsapp-review-*` package provide an immutable
+preflight/grant, budget enforcement, primary supervisor, independent deadline
+watchdog and idempotent cleanup. All external operations are behind a private
+explicit approval envelope; preparation writes OFF/unapproved artifacts only.
+The fixed model is Sol low, with one synthetic call and one handset call, no
+retries/counting/audio, and all previous reservations retained within the
+original $2 allocation. The preflight reuses strict runtime evidence validation.
+
+See `../docs/reviews/whatsapp-release-readiness-20261010/V6_RUNBOOK.md` for exact
+commands and prerequisites. Migration047 must precede a separately approved
+staging deployment. Its historical voice freezes are staging-specific; it is
+not a general production rollout migration. The exact future production command
+and required operator-after-merge reminder are in `MIGRATIONS.md`; do not run it
+for this test. No publication, remote migration, deployment, key operation or
+paid test has occurred as part of this preparation.

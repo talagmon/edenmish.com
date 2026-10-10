@@ -1,6 +1,16 @@
 // Fixed customer copy. Never run translations over customer values or URLs.
 export const BOOKING_LANGUAGES = Object.freeze(['he', 'ar', 'ru', 'fr', 'en']);
 export const BOOKING_TRANSLATIONS = {
+  "Location pins are not supported. Type the street, house number and city, or ask for a person.": {
+    "ar": "مشاركة الموقع غير مدعومة حاليًا. اكتب الشارع ورقم المبنى والمدينة، أو اطلب موظفًا.",
+    "ru": "Метки геолокации пока не поддерживаются. Напишите улицу, номер дома и город или попросите сотрудника.",
+    "fr": "Les positions partagées ne sont pas prises en charge. Indiquez la rue, le numéro et la ville, ou demandez un conseiller."
+  },
+  "Please type your message, or ask for a person.": {
+    "ar": "اكتب رسالتك نصًا، أو اطلب موظفًا.",
+    "ru": "Напишите сообщение текстом или попросите сотрудника.",
+    "fr": "Écrivez votre message ou demandez un conseiller."
+  },
   "Human help": {
     "ar": "مساعدة بشرية",
     "ru": "Помощь сотрудника",

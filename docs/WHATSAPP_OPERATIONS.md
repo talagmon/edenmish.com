@@ -1,5 +1,7 @@
 # WhatsApp Business operations
 
+Current local release assessment: [10 October readiness review](reviews/whatsapp-release-readiness-20261010/README.md). Historical sessions below are closed; they do not authorize another test.
+
 Operational runbook for issue
 [#213](https://github.com/talagmon/edenmish.com/issues/213). Customer-facing
 WhatsApp text is in Hebrew; operator instructions and evidence remain in English.

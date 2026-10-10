@@ -43,6 +43,46 @@ function database() {
   }, async batch(statements) { sqlite.exec('BEGIN'); try { const out = []; for (const stmt of statements) out.push(await stmt.run()); sqlite.exec('COMMIT'); return out; } catch (error) { sqlite.exec('ROLLBACK'); throw error; } } };
 }
 
+test('unresolved pickup retains later grounded destination, date preference and email',async()=>{
+ const text='from Unknown 10 Tel Aviv to Bialik 2 Ramat Gan tomorrow morning test@example.com';
+ const svc=services();svc.resolveAddress=async value=>value.startsWith('Unknown')?{error:'not_found'}:{address:value,city:'רמת גן',lat:32.08,lng:34.78};
+ svc.conversationModel=createOfflineBookingModel(()=>proposal(text,{pickup:'Unknown 10 Tel Aviv',dropoff:'Bialik 2 Ramat Gan',schedule:'tomorrow morning',email:'test@example.com'}));
+ const state=await initial();state.data.size='small';
+ const result=await advanceBooking(state,text,svc,opts);
+ assert.equal(result.state.phase,'collect');assert.equal(result.state.editing_field,'pickup');
+ assert.equal(result.state.data.pickup,undefined);assert.equal(result.state.data.dropoff,'Bialik 2 Ramat Gan');
+ assert.equal(result.state.data.email,'test@example.com');assert.equal(result.state.schedule_preference.period,'morning');
+ assert.equal(result.state.quote,null);assert.equal(result.create,undefined);
+ const next=await advanceBooking(result.state,'דיזנגוף 10 תל אביב',{...svc,conversationModel:undefined},opts);
+ assert.equal(next.state.data.email,'test@example.com');assert.equal(next.state.menu.kind,'schedule');
+});
+
+for(const natural of [false,true])test(`address candidates accept ${natural?'model-grounded natural':'typed full-address'} correction and retain remaining details`,async()=>{
+ const svc=services(),state=await initial();state.data.size='small';
+ svc.resolveAddress=async value=>value==='Unknown 10 Tel Aviv'?{error:'ambiguous',candidates:[{address:'Old 10 Tel Aviv',city:'תל אביב',lat:32.08,lng:34.78}]}:{address:value,city:'תל אביב',lat:32.08,lng:34.78};
+ const first='from Unknown 10 Tel Aviv to Bialik 2 Ramat Gan tomorrow morning test@example.com';
+ svc.conversationModel=createOfflineBookingModel(()=>proposal(first,{pickup:'Unknown 10 Tel Aviv',dropoff:'Bialik 2 Ramat Gan',schedule:'tomorrow morning',email:'test@example.com'}));
+ const waiting=await advanceBooking(state,first,svc,opts);assert.equal(waiting.state.phase,'address_choice');
+ const text=natural?'actually pickup is Dizengoff 12 Tel Aviv':'דיזנגוף 12 תל אביב';
+ svc.conversationModel=natural?createOfflineBookingModel(req=>{assert.equal(req.context.phase,'collect');return proposal(text,{pickup:'Dizengoff 12 Tel Aviv'});}):undefined;
+ const fixed=await advanceBooking(waiting.state,text,svc,opts);
+ assert.equal(fixed.state.data.pickup,natural?'Dizengoff 12 Tel Aviv':text);assert.equal(fixed.state.data.dropoff,'Bialik 2 Ramat Gan');
+ assert.equal(fixed.state.data.email,'test@example.com');assert.equal(fixed.state.schedule_preference.period,'morning');
+ assert.equal(fixed.state.pending_address,undefined);assert.equal(fixed.state.address_confirmed,false);assert.equal(fixed.create,undefined);
+ assert.equal(waiting.state.pending_address.candidates[0].address,'Old 10 Tel Aviv','original state is not mutated');
+});
+
+test('ambiguous or rejected natural address-choice input never silently selects a candidate',async()=>{
+ const state=await initial();state.phase='address_choice';state.pending_address={field:'pickup',candidates:[{address:'Old 10 Tel Aviv',city:'תל אביב',lat:32,lng:34}],remaining:[['email','test@example.com']]};
+ state.menu={kind:'address_choice',phase:state.phase,revision:state.revision};
+ for(const raw of [null,proposal('the other one',{},'clarify',null,'pickup'),proposal('hello',{},'greeting')]) {
+  const svc={...services(),resolveAddress:()=>assert.fail('no inferred address lookup'),conversationModel:createOfflineBookingModel(()=>raw)};
+  const result=await advanceBooking(state,'the other one',svc,opts);
+  assert.equal(result.state.phase,'address_choice');assert.equal(result.state.data.pickup,undefined);assert.equal(result.create,undefined);
+  assert.deepEqual(result.state.pending_address,state.pending_address);
+ }
+});
+
 const corpus = JSON.parse(readFileSync(new URL('./fixtures/whatsapp-booking-model-evals.json', import.meta.url), 'utf8'));
 for (const scenario of corpus) test(`synthetic model contract: ${scenario.id}`, async () => {
   globalThis.fetch = async () => { throw new Error('network forbidden'); };

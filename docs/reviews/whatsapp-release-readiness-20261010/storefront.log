@@ -1,0 +1,1250 @@
+
+> edenmish-storefront@0.2.0 test
+> node --test tests/pricing.test.js tests/scheduling.test.js tests/business-booking.test.js tests/frontend.test.js tests/api.test.js
+
+TAP version 13
+# (node:31160) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///private/tmp/edenmish-readiness/storefront/tests/api.test.js is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /private/tmp/edenmish-readiness/storefront/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: API: Order lifecycle (test mode)
+ok 1 - API: Order lifecycle (test mode) # SKIP
+  ---
+  duration_ms: 0.210708
+  type: 'suite'
+  ...
+# Subtest: API: Pricing regression (test mode)
+ok 2 - API: Pricing regression (test mode) # SKIP
+  ---
+  duration_ms: 0.036584
+  type: 'suite'
+  ...
+# (node:31161) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///private/tmp/edenmish-readiness/storefront/tests/business-booking.test.js is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /private/tmp/edenmish-readiness/storefront/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: Business booking decisions
+    # Subtest: only locks the business email field when the account supplies an email
+    ok 1 - only locks the business email field when the account supplies an email
+      ---
+      duration_ms: 0.651333
+      type: 'test'
+      ...
+    # Subtest: selects the correct default and available services for every plan family
+    ok 2 - selects the correct default and available services for every plan family
+      ---
+      duration_ms: 0.204166
+      type: 'test'
+      ...
+    # Subtest: falls back to the first included service if the recommendation is unavailable
+    ok 3 - falls back to the first included service if the recommendation is unavailable
+      ---
+      duration_ms: 0.1
+      type: 'test'
+      ...
+    # Subtest: waits for an authoritative business quote and requires another click to confirm it
+    ok 4 - waits for an authoritative business quote and requires another click to confirm it
+      ---
+      duration_ms: 0.115375
+      type: 'test'
+      ...
+    # Subtest: fails closed when the authoritative business quote cannot be loaded
+    ok 5 - fails closed when the authoritative business quote cannot be loaded
+      ---
+      duration_ms: 0.066583
+      type: 'test'
+      ...
+    # Subtest: does not create an order on the click that obtains a new exact price
+    ok 6 - does not create an order on the click that obtains a new exact price
+      ---
+      duration_ms: 0.080625
+      type: 'test'
+      ...
+    1..6
+ok 3 - Business booking decisions
+  ---
+  duration_ms: 1.769916
+  type: 'suite'
+  ...
+# (node:31162) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///private/tmp/edenmish-readiness/storefront/tests/frontend.test.js is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /private/tmp/edenmish-readiness/storefront/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: Frontend: Pages exist
+    # Subtest: index.html exists
+    ok 1 - index.html exists
+      ---
+      duration_ms: 0.372042
+      type: 'test'
+      ...
+    # Subtest: booking.html exists
+    ok 2 - booking.html exists
+      ---
+      duration_ms: 0.067042
+      type: 'test'
+      ...
+    # Subtest: track.html exists
+    ok 3 - track.html exists
+      ---
+      duration_ms: 0.119
+      type: 'test'
+      ...
+    # Subtest: about.html exists
+    ok 4 - about.html exists
+      ---
+      duration_ms: 0.045333
+      type: 'test'
+      ...
+    # Subtest: blog/edenmish-information-security.html exists
+    ok 5 - blog/edenmish-information-security.html exists
+      ---
+      duration_ms: 0.041375
+      type: 'test'
+      ...
+    # Subtest: business.html exists
+    ok 6 - business.html exists
+      ---
+      duration_ms: 0.0355
+      type: 'test'
+      ...
+    # Subtest: business-account.html exists
+    ok 7 - business-account.html exists
+      ---
+      duration_ms: 0.036084
+      type: 'test'
+      ...
+    # Subtest: success.html exists
+    ok 8 - success.html exists
+      ---
+      duration_ms: 0.104625
+      type: 'test'
+      ...
+    # Subtest: thank-you.html exists
+    ok 9 - thank-you.html exists
+      ---
+      duration_ms: 0.154709
+      type: 'test'
+      ...
+    # Subtest: payment-failed.html exists
+    ok 10 - payment-failed.html exists
+      ---
+      duration_ms: 0.25175
+      type: 'test'
+      ...
+    # Subtest: 404.html exists
+    ok 11 - 404.html exists
+      ---
+      duration_ms: 0.041083
+      type: 'test'
+      ...
+    # Subtest: error.html exists
+    ok 12 - error.html exists
+      ---
+      duration_ms: 0.030375
+      type: 'test'
+      ...
+    # Subtest: terms.html exists
+    ok 13 - terms.html exists
+      ---
+      duration_ms: 0.025583
+      type: 'test'
+      ...
+    # Subtest: privacy.html exists
+    ok 14 - privacy.html exists
+      ---
+      duration_ms: 0.024334
+      type: 'test'
+      ...
+    # Subtest: refund.html exists
+    ok 15 - refund.html exists
+      ---
+      duration_ms: 0.023583
+      type: 'test'
+      ...
+    # Subtest: accessibility.html exists
+    ok 16 - accessibility.html exists
+      ---
+      duration_ms: 0.023917
+      type: 'test'
+      ...
+    # Subtest: cancel.html exists
+    ok 17 - cancel.html exists
+      ---
+      duration_ms: 0.02225
+      type: 'test'
+      ...
+    1..17
+ok 4 - Frontend: Pages exist
+  ---
+  duration_ms: 2.051958
+  type: 'suite'
+  ...
+# Subtest: Frontend: Shopify post-payment exit
+    # Subtest: ships responsive EdenMish payment branding artwork
+    ok 1 - ships responsive EdenMish payment branding artwork
+      ---
+      duration_ms: 0.813166
+      type: 'test'
+      ...
+    # Subtest: publishes a branded payment result page that defaults to unverified
+    ok 2 - publishes a branded payment result page that defaults to unverified
+      ---
+      duration_ms: 0.327
+      type: 'test'
+      ...
+    # Subtest: shows success only after the Worker confirms the signed payment capability
+    ok 3 - shows success only after the Worker confirms the signed payment capability
+      ---
+      duration_ms: 6.630792
+      type: 'test'
+      ...
+    # Subtest: does not claim success when the browser has no payment capability
+    ok 4 - does not claim success when the browser has no payment capability
+      ---
+      duration_ms: 1.078917
+      type: 'test'
+      ...
+    # Subtest: publishes a distinct failure page with a guarded retry destination
+    ok 5 - publishes a distinct failure page with a guarded retry destination
+      ---
+      duration_ms: 0.369541
+      type: 'test'
+      ...
+    # Subtest: only exposes retry links that return to an EdenMish Shopify checkout host
+    ok 6 - only exposes retry links that return to an EdenMish Shopify checkout host
+      ---
+      duration_ms: 1.671916
+      type: 'test'
+      ...
+    # Subtest: routes explicit failures separately from the fail-closed payment result
+    ok 7 - routes explicit failures separately from the fail-closed payment result
+      ---
+      duration_ms: 1.198167
+      type: 'test'
+      ...
+    1..7
+ok 5 - Frontend: Shopify post-payment exit
+  ---
+  duration_ms: 12.249292
+  type: 'suite'
+  ...
+# Subtest: Frontend: Branded static error recovery
+    # Subtest: publishes a noindex 404 page with the shared recovery artwork
+    ok 1 - publishes a noindex 404 page with the shared recovery artwork
+      ---
+      duration_ms: 0.288917
+      type: 'test'
+      ...
+    1..1
+ok 6 - Frontend: Branded static error recovery
+  ---
+  duration_ms: 0.319417
+  type: 'suite'
+  ...
+# Subtest: Frontend: Tracking terminal states
+    # Subtest: does not offer payment again for a cancelled order
+    ok 1 - does not offer payment again for a cancelled order
+      ---
+      duration_ms: 0.125791
+      type: 'test'
+      ...
+    1..1
+ok 7 - Frontend: Tracking terminal states
+  ---
+  duration_ms: 0.146542
+  type: 'suite'
+  ...
+# Subtest: Frontend: SEO foundations
+    # Subtest: Publishes crawler directives and a focused sitemap
+    ok 1 - Publishes crawler directives and a focused sitemap
+      ---
+      duration_ms: 0.388458
+      type: 'test'
+      ...
+    # Subtest: Business page preserves both original offers and adds three account plans
+    ok 2 - Business page preserves both original offers and adds three account plans
+      ---
+      duration_ms: 0.783583
+      type: 'test'
+      ...
+    # Subtest: Homepage exposes valid LocalBusiness structured data
+    ok 3 - Homepage exposes valid LocalBusiness structured data
+      ---
+      duration_ms: 0.857583
+      type: 'test'
+      ...
+    # Subtest: Homepage exposes every supported city in a fixed-height orbital map and directory
+    ok 4 - Homepage exposes every supported city in a fixed-height orbital map and directory
+      ---
+      duration_ms: 1.127125
+      type: 'test'
+      ...
+    # Subtest: Homepage preserves customer destinations and slogans in the light scooter presentation
+    ok 5 - Homepage preserves customer destinations and slogans in the light scooter presentation
+      ---
+      duration_ms: 1.583792
+      type: 'test'
+      ...
+    # Subtest: Customer journeys carry the slogan system and the About page ships the selected contact concept
+    ok 6 - Customer journeys carry the slogan system and the About page ships the selected contact concept
+      ---
+      duration_ms: 0.969917
+      type: 'test'
+      ...
+    # Subtest: Public journey CTAs share the semi-transparent glass treatment
+    ok 7 - Public journey CTAs share the semi-transparent glass treatment
+      ---
+      duration_ms: 0.464666
+      type: 'test'
+      ...
+    # Subtest: Publishes the EdenMish platform story with professional attribution and honest launch copy
+    ok 8 - Publishes the EdenMish platform story with professional attribution and honest launch copy
+      ---
+      duration_ms: 0.277
+      type: 'test'
+      ...
+    1..8
+ok 8 - Frontend: SEO foundations
+  ---
+  duration_ms: 6.547166
+  type: 'suite'
+  ...
+# Subtest: Frontend: consent-aware analytics
+    # Subtest: Loads the shared consent boundary on customer pages but not the ops dashboard
+    ok 1 - Loads the shared consent boundary on customer pages but not the ops dashboard
+      ---
+      duration_ms: 3.002042
+      type: 'test'
+      ...
+    # Subtest: Fails closed and loads vendor scripts only after an explicit opt-in
+    ok 2 - Fails closed and loads vendor scripts only after an explicit opt-in
+      ---
+      duration_ms: 0.0705
+      type: 'test'
+      ...
+    # Subtest: Hides analytics controls and internal status UI when no provider is enabled
+    ok 3 - Hides analytics controls and internal status UI when no provider is enabled
+      ---
+      duration_ms: 4.446167
+      type: 'test'
+      ...
+    # Subtest: Queues namespaced GTM events only after stored opt-in
+    ok 4 - Queues namespaced GTM events only after stored opt-in
+      ---
+      duration_ms: 1.220209
+      type: 'test'
+      ...
+    # Subtest: Fails closed on sensitive locations/referrers and supports immediate cross-tab withdrawal
+    ok 5 - Fails closed on sensitive locations/referrers and supports immediate cross-tab withdrawal
+      ---
+      duration_ms: 1.204541
+      type: 'test'
+      ...
+    # Subtest: Uses environment-provided public IDs and excludes personal/order identifiers
+    ok 6 - Uses environment-provided public IDs and excludes personal/order identifiers
+      ---
+      duration_ms: 0.121833
+      type: 'test'
+      ...
+    # Subtest: Requires an explicit provider flag in addition to a valid GTM ID
+    ok 7 - Requires an explicit provider flag in addition to a valid GTM ID
+      ---
+      duration_ms: 8.944459
+      type: 'test'
+      ...
+    # Subtest: Enables paid claims only on the exact configured Shopify return origin
+    ok 8 - Enables paid claims only on the exact configured Shopify return origin
+      ---
+      duration_ms: 2.079458
+      type: 'test'
+      ...
+    # Subtest: Retries pending and transient paid-conversion observations with backoff
+    ok 9 - Retries pending and transient paid-conversion observations with backoff
+      ---
+      duration_ms: 1.0855
+      type: 'test'
+      ...
+    # Subtest: Instruments the agreed funnel events without treating payment start as purchase
+    ok 10 - Instruments the agreed funnel events without treating payment start as purchase
+      ---
+      duration_ms: 0.595583
+      type: 'test'
+      ...
+    # Subtest: Publishes disclosure, preference controls, and the required CSP allowlist
+    ok 11 - Publishes disclosure, preference controls, and the required CSP allowlist
+      ---
+      duration_ms: 0.085542
+      type: 'test'
+      ...
+    1..11
+ok 9 - Frontend: consent-aware analytics
+  ---
+  duration_ms: 23.058166
+  type: 'suite'
+  ...
+# Subtest: Frontend: RTL + accessible viewport
+    # Subtest: index.html is RTL Hebrew and allows browser zoom
+    ok 1 - index.html is RTL Hebrew and allows browser zoom
+      ---
+      duration_ms: 0.165333
+      type: 'test'
+      ...
+    # Subtest: booking.html is RTL Hebrew and allows browser zoom
+    ok 2 - booking.html is RTL Hebrew and allows browser zoom
+      ---
+      duration_ms: 0.214959
+      type: 'test'
+      ...
+    # Subtest: track.html is RTL Hebrew and allows browser zoom
+    ok 3 - track.html is RTL Hebrew and allows browser zoom
+      ---
+      duration_ms: 0.119667
+      type: 'test'
+      ...
+    # Subtest: about.html is RTL Hebrew and allows browser zoom
+    ok 4 - about.html is RTL Hebrew and allows browser zoom
+      ---
+      duration_ms: 0.106
+      type: 'test'
+      ...
+    # Subtest: success.html is RTL Hebrew and allows browser zoom
+    ok 5 - success.html is RTL Hebrew and allows browser zoom
+      ---
+      duration_ms: 0.04975
+      type: 'test'
+      ...
+    # Subtest: error.html is RTL Hebrew and allows browser zoom
+    ok 6 - error.html is RTL Hebrew and allows browser zoom
+      ---
+      duration_ms: 0.065292
+      type: 'test'
+      ...
+    # Subtest: accessibility.html is RTL Hebrew and allows browser zoom
+    ok 7 - accessibility.html is RTL Hebrew and allows browser zoom
+      ---
+      duration_ms: 0.047375
+      type: 'test'
+      ...
+    # Subtest: cancel.html is RTL Hebrew and allows browser zoom
+    ok 8 - cancel.html is RTL Hebrew and allows browser zoom
+      ---
+      duration_ms: 0.064167
+      type: 'test'
+      ...
+    1..8
+ok 10 - Frontend: RTL + accessible viewport
+  ---
+  duration_ms: 0.904875
+  type: 'suite'
+  ...
+# Subtest: Frontend: Stylesheet + fonts
+    # Subtest: Compiled CSS exists
+    ok 1 - Compiled CSS exists
+      ---
+      duration_ms: 0.063458
+      type: 'test'
+      ...
+    # Subtest: index.html links stylesheet + Hanken Grotesk
+    ok 2 - index.html links stylesheet + Hanken Grotesk
+      ---
+      duration_ms: 0.097084
+      type: 'test'
+      ...
+    # Subtest: booking.html links stylesheet + Hanken Grotesk
+    ok 3 - booking.html links stylesheet + Hanken Grotesk
+      ---
+      duration_ms: 0.18575
+      type: 'test'
+      ...
+    # Subtest: track.html links stylesheet + Hanken Grotesk
+    ok 4 - track.html links stylesheet + Hanken Grotesk
+      ---
+      duration_ms: 0.086916
+      type: 'test'
+      ...
+    # Subtest: about.html links stylesheet + Hanken Grotesk
+    ok 5 - about.html links stylesheet + Hanken Grotesk
+      ---
+      duration_ms: 0.064333
+      type: 'test'
+      ...
+    # Subtest: accessibility.html links stylesheet + Hanken Grotesk
+    ok 6 - accessibility.html links stylesheet + Hanken Grotesk
+      ---
+      duration_ms: 0.0505
+      type: 'test'
+      ...
+    # Subtest: Homepage cache-busts the current compiled stylesheet
+    ok 7 - Homepage cache-busts the current compiled stylesheet
+      ---
+      duration_ms: 0.835292
+      type: 'test'
+      ...
+    1..7
+ok 11 - Frontend: Stylesheet + fonts
+  ---
+  duration_ms: 1.456
+  type: 'suite'
+  ...
+# Subtest: Frontend: Booking form
+    # Subtest: Groups seven validation sections into five screens without removing canonical fields
+    ok 1 - Groups seven validation sections into five screens without removing canonical fields
+      ---
+      duration_ms: 0.300375
+      type: 'test'
+      ...
+    # Subtest: Merged route validates both addresses before advancing
+    ok 2 - Merged route validates both addresses before advancing
+      ---
+      duration_ms: 1.482458
+      type: 'test'
+      ...
+    # Subtest: Merged service screen cannot skip schedule validation
+    ok 3 - Merged service screen cannot skip schedule validation
+      ---
+      duration_ms: 0.294875
+      type: 'test'
+      ...
+    # Subtest: Review rechecks earlier answers and returns to the invalid group
+    ok 4 - Review rechecks earlier answers and returns to the invalid group
+      ---
+      duration_ms: 0.520958
+      type: 'test'
+      ...
+    # Subtest: Back follows merged screen boundaries
+    ok 5 - Back follows merged screen boundaries
+      ---
+      duration_ms: 0.300708
+      type: 'test'
+      ...
+    # Subtest: Has size selector (Small/Medium)
+    ok 6 - Has size selector (Small/Medium)
+      ---
+      duration_ms: 0.043208
+      type: 'test'
+      ...
+    # Subtest: Has service selector (Eco/Standard/Flash)
+    ok 7 - Has service selector (Eco/Standard/Flash)
+      ---
+      duration_ms: 0.068959
+      type: 'test'
+      ...
+    # Subtest: Has special instructions textarea
+    ok 8 - Has special instructions textarea
+      ---
+      duration_ms: 0.044125
+      type: 'test'
+      ...
+    # Subtest: Supports authenticated business-wallet quotes and one-tap reservations
+    ok 9 - Supports authenticated business-wallet quotes and one-tap reservations
+      ---
+      duration_ms: 0.312375
+      type: 'test'
+      ...
+    # Subtest: Has terms acceptance separated from operational notifications
+    ok 10 - Has terms acceptance separated from operational notifications
+      ---
+      duration_ms: 0.130958
+      type: 'test'
+      ...
+    # Subtest: Uses Places API (New) with a plain-input fallback
+    ok 11 - Uses Places API (New) with a plain-input fallback
+      ---
+      duration_ms: 0.308459
+      type: 'test'
+      ...
+    # Subtest: Uses Route Matrix for driving distance with a stale-response guard
+    ok 12 - Uses Route Matrix for driving distance with a stale-response guard
+      ---
+      duration_ms: 0.160125
+      type: 'test'
+      ...
+    # Subtest: Has area gate (Gush-Dan bounds)
+    ok 13 - Has area gate (Gush-Dan bounds)
+      ---
+      duration_ms: 0.114458
+      type: 'test'
+      ...
+    # Subtest: Uses the Worker quote as the authoritative price with a bounded fallback
+    ok 14 - Uses the Worker quote as the authoritative price with a bounded fallback
+      ---
+      duration_ms: 0.192417
+      type: 'test'
+      ...
+    # Subtest: Has scheduling (business hours)
+    ok 15 - Has scheduling (business hours)
+      ---
+      duration_ms: 0.128458
+      type: 'test'
+      ...
+    # Subtest: Sends when_date + when_hour + notes in payload
+    ok 16 - Sends when_date + when_hour + notes in payload
+      ---
+      duration_ms: 0.171709
+      type: 'test'
+      ...
+    # Subtest: Flash is present-moment only (immediate dispatch)
+    ok 17 - Flash is present-moment only (immediate dispatch)
+      ---
+      duration_ms: 0.108541
+      type: 'test'
+      ...
+    # Subtest: Has coupon UI in price summary
+    ok 18 - Has coupon UI in price summary
+      ---
+      duration_ms: 0.139958
+      type: 'test'
+      ...
+    # Subtest: Calls coupon validation API
+    ok 19 - Calls coupon validation API
+      ---
+      duration_ms: 0.0525
+      type: 'test'
+      ...
+    # Subtest: Sends coupon_code in order payload conditionally
+    ok 20 - Sends coupon_code in order payload conditionally
+      ---
+      duration_ms: 0.060959
+      type: 'test'
+      ...
+    # Subtest: Handles invalid_coupon server response
+    ok 21 - Handles invalid_coupon server response
+      ---
+      duration_ms: 0.061708
+      type: 'test'
+      ...
+    # Subtest: Redirects exact-price orders to checkout before exposing tracking
+    ok 22 - Redirects exact-price orders to checkout before exposing tracking
+      ---
+      duration_ms: 0.138833
+      type: 'test'
+      ...
+    # Subtest: blocks high-confidence email-domain typos instead of allowing an override
+    ok 23 - blocks high-confidence email-domain typos instead of allowing an override
+      ---
+      duration_ms: 0.122417
+      type: 'test'
+      ...
+    # Subtest: Keeps the final-submit Material icon intact across loading states
+    ok 24 - Keeps the final-submit Material icon intact across loading states
+      ---
+      duration_ms: 0.09775
+      type: 'test'
+      ...
+    # Subtest: Keeps inactive privacy controls hidden and never creates a floating booking control
+    ok 25 - Keeps inactive privacy controls hidden and never creates a floating booking control
+      ---
+      duration_ms: 0.284042
+      type: 'test'
+      ...
+    # Subtest: Keeps the fixed action dock clear of the booking footer and isolates copyright direction
+    ok 26 - Keeps the fixed action dock clear of the booking footer and isolates copyright direction
+      ---
+      duration_ms: 0.127875
+      type: 'test'
+      ...
+    1..26
+ok 12 - Frontend: Booking form
+  ---
+  duration_ms: 5.993542
+  type: 'suite'
+  ...
+# Subtest: Frontend: Post-booking confirmation
+    # Subtest: Keeps tracking hidden until payment, except in paid local test mode
+    ok 1 - Keeps tracking hidden until payment, except in paid local test mode
+      ---
+      duration_ms: 0.048667
+      type: 'test'
+      ...
+    1..1
+ok 13 - Frontend: Post-booking confirmation
+  ---
+  duration_ms: 0.078166
+  type: 'suite'
+  ...
+# Subtest: Frontend: Tracking page
+    # Subtest: Has live map container
+    ok 1 - Has live map container
+      ---
+      duration_ms: 0.061125
+      type: 'test'
+      ...
+    # Subtest: Has magic-link (no forced OTP for active orders)
+    ok 2 - Has magic-link (no forced OTP for active orders)
+      ---
+      duration_ms: 0.038667
+      type: 'test'
+      ...
+    # Subtest: Has PoD display (delivered photo)
+    ok 3 - Has PoD display (delivered photo)
+      ---
+      duration_ms: 0.027875
+      type: 'test'
+      ...
+    # Subtest: Uses Asia/Jerusalem timezone
+    ok 4 - Uses Asia/Jerusalem timezone
+      ---
+      duration_ms: 0.025125
+      type: 'test'
+      ...
+    # Subtest: Displays service names in Hebrew
+    ok 5 - Displays service names in Hebrew
+      ---
+      duration_ms: 0.0565
+      type: 'test'
+      ...
+    # Subtest: offers an OTP-gated corrected-address and redelivery checkout flow
+    ok 6 - offers an OTP-gated corrected-address and redelivery checkout flow
+      ---
+      duration_ms: 0.0655
+      type: 'test'
+      ...
+    # Subtest: tracking refresh is fast only for live GPS and stops on terminal states
+    ok 7 - tracking refresh is fast only for live GPS and stops on terminal states
+      ---
+      duration_ms: 0.534459
+      type: 'test'
+      ...
+    # Subtest: shows live GPS only for a fresh sample and explains a missing signal
+    ok 8 - shows live GPS only for a fresh sample and explains a missing signal
+      ---
+      duration_ms: 0.035541
+      type: 'test'
+      ...
+    # Subtest: tracking distinguishes missing orders, retries transient failures, and lazy-loads Maps
+    ok 9 - tracking distinguishes missing orders, retries transient failures, and lazy-loads Maps
+      ---
+      duration_ms: 0.070958
+      type: 'test'
+      ...
+    # Subtest: ETA targets pickup before collection and drop-off during delivery
+    ok 10 - ETA targets pickup before collection and drop-off during delivery
+      ---
+      duration_ms: 0.405584
+      type: 'test'
+      ...
+    # Subtest: ETA route refresh is throttled for one minute but refreshes on leg changes
+    ok 11 - ETA route refresh is throttled for one minute but refreshes on leg changes
+      ---
+      duration_ms: 0.265709
+      type: 'test'
+      ...
+    # Subtest: renders ETA as a polite Hebrew live status overlay
+    ok 12 - renders ETA as a polite Hebrew live status overlay
+      ---
+      duration_ms: 0.072417
+      type: 'test'
+      ...
+    # Subtest: OTP cells expose numeric and one-time-code input semantics
+    ok 13 - OTP cells expose numeric and one-time-code input semantics
+      ---
+      duration_ms: 0.061416
+      type: 'test'
+      ...
+    # Subtest: pasting a full OTP into any cell distributes it and auto-submits once
+    ok 14 - pasting a full OTP into any cell distributes it and auto-submits once
+      ---
+      duration_ms: 7.660875
+      type: 'test'
+      ...
+    # Subtest: autofill-shaped input auto-submits and duplicate input is guarded
+    ok 15 - autofill-shaped input auto-submits and duplicate input is guarded
+      ---
+      duration_ms: 0.86625
+      type: 'test'
+      ...
+    # Subtest: backspace moves focus and failed verification retains the OTP
+    ok 16 - backspace moves focus and failed verification retains the OTP
+      ---
+      duration_ms: 0.504583
+      type: 'test'
+      ...
+    1..16
+ok 14 - Frontend: Tracking page
+  ---
+  duration_ms: 10.88525
+  type: 'suite'
+  ...
+# Subtest: Frontend: Security and accessibility hardening
+    # Subtest: ops dashboard uses cookie credentials instead of localStorage bearer tokens
+    ok 1 - ops dashboard uses cookie credentials instead of localStorage bearer tokens
+      ---
+      duration_ms: 0.239167
+      type: 'test'
+      ...
+    # Subtest: static responses define a restrictive Content Security Policy
+    ok 2 - static responses define a restrictive Content Security Policy
+      ---
+      duration_ms: 0.072916
+      type: 'test'
+      ...
+    # Subtest: delivery rating is keyboard-operable
+    ok 3 - delivery rating is keyboard-operable
+      ---
+      duration_ms: 0.103459
+      type: 'test'
+      ...
+    # Subtest: FAQ controls expose keyboard and expanded state
+    ok 4 - FAQ controls expose keyboard and expanded state
+      ---
+      duration_ms: 0.088417
+      type: 'test'
+      ...
+    # Subtest: homepage exposes right-side WhatsApp and keyboard-accessible accessibility tools
+    ok 5 - homepage exposes right-side WhatsApp and keyboard-accessible accessibility tools
+      ---
+      duration_ms: 0.138167
+      type: 'test'
+      ...
+    # Subtest: staging and preview pages use isolated Worker origins
+    ok 6 - staging and preview pages use isolated Worker origins
+      ---
+      duration_ms: 0.8525
+      type: 'test'
+      ...
+    # Subtest: ops dashboard renders a retryable connection error instead of hanging
+    ok 7 - ops dashboard renders a retryable connection error instead of hanging
+      ---
+      duration_ms: 0.1915
+      type: 'test'
+      ...
+    # Subtest: ops dashboard replaces repricing with guarded recovery for classified checkout orphans
+    ok 8 - ops dashboard replaces repricing with guarded recovery for classified checkout orphans
+      ---
+      duration_ms: 0.210709
+      type: 'test'
+      ...
+    # Subtest: ops authentication uses the translucent iOS-style glass treatment
+    ok 9 - ops authentication uses the translucent iOS-style glass treatment
+      ---
+      duration_ms: 0.165792
+      type: 'test'
+      ...
+    # Subtest: ops dashboard exposes secure per-driver invitation and QR controls
+    ok 10 - ops dashboard exposes secure per-driver invitation and QR controls
+      ---
+      duration_ms: 0.208125
+      type: 'test'
+      ...
+    # Subtest: storefront fingerprints shared runtime assets for cache consistency
+    ok 11 - storefront fingerprints shared runtime assets for cache consistency
+      ---
+      duration_ms: 0.265167
+      type: 'test'
+      ...
+    # Subtest: ops dashboard requests GPS only from an explicit start/stop control
+    ok 12 - ops dashboard requests GPS only from an explicit start/stop control
+      ---
+      duration_ms: 0.32525
+      type: 'test'
+      ...
+    # Subtest: proof-of-delivery preserves the first selected image while its modal is open
+    ok 13 - proof-of-delivery preserves the first selected image while its modal is open
+      ---
+      duration_ms: 0.2415
+      type: 'test'
+      ...
+    1..13
+ok 15 - Frontend: Security and accessibility hardening
+  ---
+  duration_ms: 3.2235
+  type: 'suite'
+  ...
+# Subtest: Frontend: Ops daily summary and queue ordering
+    # Subtest: uses Israel calendar days for delivered count and revenue
+    ok 1 - uses Israel calendar days for delivered count and revenue
+      ---
+      duration_ms: 9.87325
+      type: 'test'
+      ...
+    # Subtest: counts only unpaid priced/payment-link orders older than one hour as stale
+    ok 2 - counts only unpaid priced/payment-link orders older than one hour as stale
+      ---
+      duration_ms: 0.67475
+      type: 'test'
+      ...
+    # Subtest: new paid orders stay in the inbox until dispatch starts
+    ok 3 - new paid orders stay in the inbox until dispatch starts
+      ---
+      duration_ms: 0.684375
+      type: 'test'
+      ...
+    # Subtest: sorts urgent then scheduled queue windows
+    ok 4 - sorts urgent then scheduled queue windows
+      ---
+      duration_ms: 1.04925
+      type: 'test'
+      ...
+    # Subtest: uses the correctly spelled empty-category message
+    ok 5 - uses the correctly spelled empty-category message
+      ---
+      duration_ms: 0.287542
+      type: 'test'
+      ...
+    # Subtest: renders the Hebrew daily summary strip in the canonical dashboard
+    ok 6 - renders the Hebrew daily summary strip in the canonical dashboard
+      ---
+      duration_ms: 0.182666
+      type: 'test'
+      ...
+    # Subtest: renders Ops queue orders with the native iOS card hierarchy and six-stage progress
+    ok 7 - renders Ops queue orders with the native iOS card hierarchy and six-stage progress
+      ---
+      duration_ms: 0.3195
+      type: 'test'
+      ...
+    1..7
+ok 16 - Frontend: Ops daily summary and queue ordering
+  ---
+  duration_ms: 13.172708
+  type: 'suite'
+  ...
+# Subtest: Frontend: Legal pages
+    # Subtest: Homepage exposes the verified legal business identity
+    ok 1 - Homepage exposes the verified legal business identity
+      ---
+      duration_ms: 0.141917
+      type: 'test'
+      ...
+    # Subtest: Terms page has עוסק פטור + number
+    ok 2 - Terms page has עוסק פטור + number
+      ---
+      duration_ms: 0.097833
+      type: 'test'
+      ...
+    # Subtest: Privacy page exists with sections
+    ok 3 - Privacy page exists with sections
+      ---
+      duration_ms: 0.083791
+      type: 'test'
+      ...
+    # Subtest: Refund page states statutory cancellation rights
+    ok 4 - Refund page states statutory cancellation rights
+      ---
+      duration_ms: 0.074708
+      type: 'test'
+      ...
+    # Subtest: Customer pages use the standardized business address
+    ok 5 - Customer pages use the standardized business address
+      ---
+      duration_ms: 0.635291
+      type: 'test'
+      ...
+    # Subtest: Online cancellation form is prominent and privacy-minimizing
+    ok 6 - Online cancellation form is prominent and privacy-minimizing
+      ---
+      duration_ms: 0.13925
+      type: 'test'
+      ...
+    # Subtest: Accessibility declaration is transparent and contactable
+    ok 7 - Accessibility declaration is transparent and contactable
+      ---
+      duration_ms: 0.054834
+      type: 'test'
+      ...
+    # Subtest: Terms and customer footers link to the accessibility declaration
+    ok 8 - Terms and customer footers link to the accessibility declaration
+      ---
+      duration_ms: 1.712208
+      type: 'test'
+      ...
+    1..8
+ok 17 - Frontend: Legal pages
+  ---
+  duration_ms: 3.020542
+  type: 'suite'
+  ...
+# Subtest: Frontend: Mobile nav
+    # Subtest: mobile-nav.js exists and does not block zoom gestures
+    ok 1 - mobile-nav.js exists and does not block zoom gestures
+      ---
+      duration_ms: 1.044542
+      type: 'test'
+      ...
+    # Subtest: Shared header uses one canonical order and keeps cancellation in the footer
+    ok 2 - Shared header uses one canonical order and keeps cancellation in the footer
+      ---
+      duration_ms: 0.096375
+      type: 'test'
+      ...
+    # Subtest: About mobile hero owns the compact booking CTA without a truck icon
+    ok 3 - About mobile hero owns the compact booking CTA without a truck icon
+      ---
+      duration_ms: 0.135167
+      type: 'test'
+      ...
+    # Subtest: Pages include mobile-nav.js
+    ok 4 - Pages include mobile-nav.js
+      ---
+      duration_ms: 0.929708
+      type: 'test'
+      ...
+    # Subtest: Business login ships dedicated desktop and mobile 3D backgrounds
+    ok 5 - Business login ships dedicated desktop and mobile 3D backgrounds
+      ---
+      duration_ms: 1.019083
+      type: 'test'
+      ...
+    1..5
+ok 18 - Frontend: Mobile nav
+  ---
+  duration_ms: 3.30875
+  type: 'suite'
+  ...
+# Subtest: Frontend: first-delivery launch promotion
+    # Subtest: homepage retires the expired promotion and keeps the booking entry
+    ok 1 - homepage retires the expired promotion and keeps the booking entry
+      ---
+      duration_ms: 0.217459
+      type: 'test'
+      ...
+    # Subtest: terms explicitly cover private and authenticated business eligibility
+    ok 2 - terms explicitly cover private and authenticated business eligibility
+      ---
+      duration_ms: 0.098333
+      type: 'test'
+      ...
+    # Subtest: booking previews automatic eligibility but leaves final enforcement to order creation
+    ok 3 - booking previews automatic eligibility but leaves final enforcement to order creation
+      ---
+      duration_ms: 0.316292
+      type: 'test'
+      ...
+    # Subtest: ops dashboard exposes safe automatic first-delivery controls
+    ok 4 - ops dashboard exposes safe automatic first-delivery controls
+      ---
+      duration_ms: 0.253166
+      type: 'test'
+      ...
+    1..4
+ok 19 - Frontend: first-delivery launch promotion
+  ---
+  duration_ms: 0.936375
+  type: 'suite'
+  ...
+# Subtest: WhatsApp recovery displays existing handoffs while automation is off and preserves failed-close feedback
+ok 20 - WhatsApp recovery displays existing handoffs while automation is off and preserves failed-close feedback
+  ---
+  duration_ms: 0.909125
+  type: 'test'
+  ...
+# (node:31163) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///private/tmp/edenmish-readiness/storefront/tests/pricing.test.js is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /private/tmp/edenmish-readiness/storefront/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: Pricing: Base matrix (small, no surcharges)
+    # Subtest: Standard Zone 1 (TLV→Ramat Gan) = ₪50
+    ok 1 - Standard Zone 1 (TLV→Ramat Gan) = ₪50
+      ---
+      duration_ms: 0.449667
+      type: 'test'
+      ...
+    # Subtest: Standard Zone 2 (TLV→Holon) = ₪70
+    ok 2 - Standard Zone 2 (TLV→Holon) = ₪70
+      ---
+      duration_ms: 0.060625
+      type: 'test'
+      ...
+    # Subtest: Standard Zone 3 (TLV→Rishon) = ₪115
+    ok 3 - Standard Zone 3 (TLV→Rishon) = ₪115
+      ---
+      duration_ms: 0.116917
+      type: 'test'
+      ...
+    # Subtest: Eco Zone 1 = ₪35
+    ok 4 - Eco Zone 1 = ₪35
+      ---
+      duration_ms: 0.05175
+      type: 'test'
+      ...
+    # Subtest: Eco Zone 3 = ₪75
+    ok 5 - Eco Zone 3 = ₪75
+      ---
+      duration_ms: 0.047584
+      type: 'test'
+      ...
+    # Subtest: Flash Zone 1 = ₪85
+    ok 6 - Flash Zone 1 = ₪85
+      ---
+      duration_ms: 0.040125
+      type: 'test'
+      ...
+    # Subtest: Flash Zone 2 = ₪110
+    ok 7 - Flash Zone 2 = ₪110
+      ---
+      duration_ms: 0.036291
+      type: 'test'
+      ...
+    # Subtest: Zone = max(pickup, dropoff) — pickup Z1 + dropoff Z3 → Zone 3
+    ok 8 - Zone = max(pickup, dropoff) — pickup Z1 + dropoff Z3 → Zone 3
+      ---
+      duration_ms: 0.11125
+      type: 'test'
+      ...
+    1..8
+ok 21 - Pricing: Base matrix (small, no surcharges)
+  ---
+  duration_ms: 1.4245
+  type: 'suite'
+  ...
+# Subtest: Pricing: Surcharges
+    # Subtest: Medium size adds ₪15
+    ok 1 - Medium size adds ₪15
+      ---
+      duration_ms: 0.18175
+      type: 'test'
+      ...
+    # Subtest: Evening pickup (19:00-22:00) adds ₪30
+    ok 2 - Evening pickup (19:00-22:00) adds ₪30
+      ---
+      duration_ms: 0.161291
+      type: 'test'
+      ...
+    # Subtest: Evening boundary: 18:00 → no surcharge
+    ok 3 - Evening boundary: 18:00 → no surcharge
+      ---
+      duration_ms: 0.041083
+      type: 'test'
+      ...
+    # Subtest: Evening boundary: 22:00 → no surcharge
+    ok 4 - Evening boundary: 22:00 → no surcharge
+      ---
+      duration_ms: 0.423208
+      type: 'test'
+      ...
+    # Subtest: Friday → no weekend multiplier (regular work day in Israel)
+    ok 5 - Friday → no weekend multiplier (regular work day in Israel)
+      ---
+      duration_ms: 0.068834
+      type: 'test'
+      ...
+    # Subtest: Saturday ×1.5 multiplier
+    ok 6 - Saturday ×1.5 multiplier
+      ---
+      duration_ms: 0.061792
+      type: 'test'
+      ...
+    # Subtest: Sunday → no weekend multiplier
+    ok 7 - Sunday → no weekend multiplier
+      ---
+      duration_ms: 0.02775
+      type: 'test'
+      ...
+    # Subtest: Medium + evening + Friday (no weekend multiplier)
+    ok 8 - Medium + evening + Friday (no weekend multiplier)
+      ---
+      duration_ms: 0.030959
+      type: 'test'
+      ...
+    1..8
+ok 22 - Pricing: Surcharges
+  ---
+  duration_ms: 1.102209
+  type: 'suite'
+  ...
+# Subtest: Pricing: Review guards
+    # Subtest: Flash Zone 3 → review (flash_unavailable_z3)
+    ok 1 - Flash Zone 3 → review (flash_unavailable_z3)
+      ---
+      duration_ms: 0.066208
+      type: 'test'
+      ...
+    # Subtest: Out-of-zone city → review (out_of_zone)
+    ok 2 - Out-of-zone city → review (out_of_zone)
+      ---
+      duration_ms: 0.026375
+      type: 'test'
+      ...
+    # Subtest: Both cities unknown → review
+    ok 3 - Both cities unknown → review
+      ---
+      duration_ms: 0.024125
+      type: 'test'
+      ...
+    # Subtest: Valid Zone 1 order → no review
+    ok 4 - Valid Zone 1 order → no review
+      ---
+      duration_ms: 0.233959
+      type: 'test'
+      ...
+    1..4
+ok 23 - Pricing: Review guards
+  ---
+  duration_ms: 0.388375
+  type: 'suite'
+  ...
+# Subtest: Pricing: Edge cases
+    # Subtest: Default service is standard
+    ok 1 - Default service is standard
+      ---
+      duration_ms: 0.044458
+      type: 'test'
+      ...
+    # Subtest: Default size is small
+    ok 2 - Default size is small
+      ---
+      duration_ms: 0.024041
+      type: 'test'
+      ...
+    # Subtest: TLV variants all Zone 1 (תל אביב / תל אביב-יפו / תל אביב יפו)
+    ok 3 - TLV variants all Zone 1 (תל אביב / תל אביב-יפו / תל אביב יפו)
+      ---
+      duration_ms: 0.031625
+      type: 'test'
+      ...
+    # Subtest: קריית אונו and קרית אונו both Zone 2 (spelling variants)
+    ok 4 - קריית אונו and קרית אונו both Zone 2 (spelling variants)
+      ---
+      duration_ms: 0.022875
+      type: 'test'
+      ...
+    1..4
+ok 24 - Pricing: Edge cases
+  ---
+  duration_ms: 0.161542
+  type: 'suite'
+  ...
+# (node:31164) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///private/tmp/edenmish-readiness/storefront/tests/scheduling.test.js is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /private/tmp/edenmish-readiness/storefront/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: Pickup scheduling
+    # Subtest: offers the remaining Eco pickup window at 08:47
+    ok 1 - offers the remaining Eco pickup window at 08:47
+      ---
+      duration_ms: 1.176208
+      type: 'test'
+      ...
+    # Subtest: closes same-day Eco ordering after the lead time reaches 13:00
+    ok 2 - closes same-day Eco ordering after the lead time reaches 13:00
+      ---
+      duration_ms: 0.062625
+      type: 'test'
+      ...
+    # Subtest: keeps full three-hour Eco windows for future dates
+    ok 3 - keeps full three-hour Eco windows for future dates
+      ---
+      duration_ms: 0.052375
+      type: 'test'
+      ...
+    # Subtest: does not offer Saturday pickup windows
+    ok 4 - does not offer Saturday pickup windows
+      ---
+      duration_ms: 0.084
+      type: 'test'
+      ...
+    1..4
+ok 25 - Pickup scheduling
+  ---
+  duration_ms: 1.822958
+  type: 'suite'
+  ...
+1..25
+# tests 175
+# suites 24
+# pass 175
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 140.907917

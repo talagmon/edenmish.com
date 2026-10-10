@@ -1,5 +1,7 @@
 > **Review publication, 10 October 2026:** Historical authorization and test entries below do not authorize another run. Current scope and fresh local test evidence are in [the revision 2 handoff](reviews/whatsapp-size-context-r2/README.md). No deployment or activation is part of this publication.
 
+Current local release assessment: [10 October readiness review](reviews/whatsapp-release-readiness-20261010/README.md). Historical sessions below are closed; they do not authorize another test.
+
 > **10 October 2026 local update:** voice notes plus Hebrew, Arabic, Russian, French, English and mixed-language intake are implemented behind disabled feature gates. See [current scope, local evidence and proposed test budget](WHATSAPP_VOICE_MULTILINGUAL.md). The deployed Sol text rehearsal and earlier Luna sections below are historical; this update has not been deployed.
 
 # Focused booking interpretation — gated Luna adapter

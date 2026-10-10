@@ -66,7 +66,12 @@ export async function readTwilioBookingEvent(req, env, fetchImpl = globalThis.fe
   if (message.sid !== id || message.account_sid !== env.TWILIO_ACCOUNT_SID || message.direction !== 'inbound' || message.from !== from || message.to !== env.TWILIO_BOOKING_FROM || !Number.isFinite(at)) return { status: 400 };
   if (at <= now - SESSION_WINDOW || at > now + 60_000) return { status: 200, event: null };
   const body = form.get('Body') || '';
-  return { status: 200, event: { id, phone, at, echo: false, text: form.get('NumMedia') === '0' && body.length <= 2000 ? body : null, ...(env.WHATSAPP_BOOKING_VOICE_ENABLED==='on' && twilioVoiceMedia(form,env,id)?{audio:twilioVoiceMedia(form,env,id)}:{}) } };
+  // A location label/body is not a typed booking answer or confirmation.
+  // Coordinates and labels are unsupported and never enter the draft/model.
+  const location=form.has('Latitude') || form.has('Longitude');
+  return { status: 200, event: { id, phone, at, echo: false, text: !location && form.get('NumMedia') === '0' && body.length <= 2000 ? body : null,
+    ...(location?{unsupported:'location'}:{}),
+    ...(!location && env.WHATSAPP_BOOKING_VOICE_ENABLED==='on' && twilioVoiceMedia(form,env,id)?{audio:twilioVoiceMedia(form,env,id)}:{}) } };
 }
 export async function sendTwilioBookingReply(env, recipient, body, fetchImpl = globalThis.fetch) {
   if (!twilioBookingConfigured(env) || !bookingRecipientAllowed(env, recipient) || !body || body.length > 1600) return null;

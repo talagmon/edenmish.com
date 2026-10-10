@@ -178,6 +178,27 @@ test('Meta adapter ignores history, wrong number, media payload and expired even
   assert.equal(extractBookingEvents(envelope('messages'), 'phone', NOW + SESSION_WINDOW).length, 0);
 });
 
+test('signed location bodies cannot become field answers or confirmations',async()=>{
+ const env=environment(database()),id='SM'+'7'.repeat(32);
+ const parsed=await readTwilioBookingEvent(request('1',id,{Latitude:'32.08000',Longitude:'34.78000',Address:'Synthetic address',Label:'1'}).req,env,async()=>Response.json(messageResource(id)),NOW);
+ assert.equal(parsed.status,200);assert.equal(parsed.event.text,null);assert.equal(parsed.event.unsupported,'location');
+ assert.doesNotMatch(JSON.stringify(parsed.event),/32\.08000|34\.78000|Synthetic address/);
+ await processBookingEvent(env,{id:'initial',phone,at:NOW-1000,text:'מתחילים'},services(),NOW);
+ const state=await reviewed();env.DB.sqlite.prepare('UPDATE whatsapp_booking_conversations SET state_json=?,phase=?').run(JSON.stringify(state),'review');
+ await processBookingEvent(env,parsed.event,{...services(),quote:()=>assert.fail('location cannot confirm'),conversationModel:()=>assert.fail('location cannot reach a model')},NOW);
+ const row=env.DB.sqlite.prepare('SELECT phase,state_json FROM whatsapp_booking_conversations').get();
+ assert.equal(row.phase,'review');assert.equal(JSON.parse(row.state_json).terms_accepted_at,undefined);
+ assert.equal(env.DB.sqlite.prepare('SELECT COUNT(*) n FROM orders').get().n,0);
+ assert.match(env.DB.sqlite.prepare('SELECT body FROM whatsapp_booking_replies WHERE body IS NOT NULL').get().body,/סיכת מיקום/);
+});
+
+test('unsupported attachments do not advertise voice when voice is disabled',async()=>{
+ const env=environment(database());
+ await processBookingEvent(env,{id:'attachment',phone,at:NOW,text:null},services(),NOW);
+ const body=env.DB.sqlite.prepare('SELECT body FROM whatsapp_booking_replies').get().body;
+ assert.match(body,/בטקסט/);assert.doesNotMatch(body,/MP3|WAV|OGG|קולית/);
+});
+
 function installNetworkFixtures(env, { chargeFails = false } = {}) {
   const messages = new Map(); const counts = { charges: 0, sends: 0, emails: 0 };
   globalThis.fetch = async (url, options = {}) => {
@@ -285,6 +306,34 @@ test('operator pause is authenticated and CSRF guarded; explicit close allows a 
   assert.equal(env.DB.sqlite.prepare("SELECT COUNT(*) n FROM whatsapp_booking_conversations WHERE phase = 'consent'").get().n, 1);
   const response = await worker.fetch(new Request('https://ops.edenmish.com/api/ops/whatsapp/bookings', { headers: { 'X-Ops': token } }), env);
   assert.equal(response.status, 200); const list = await response.json(); assert.equal(list.bookings.length, 2); assert.equal(list.bookings[0].order_token, undefined);
+});
+
+for(const stopped of ['off','expired'])test(`operator recovery remains authenticated and usable when booking is ${stopped}`,async()=>{
+ const env=environment(database());await processBookingEvent(env,{id:'recover',at:NOW,phone,text:'מתחילים'},services(),NOW);
+ const row=env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get();
+ const config=stopped==='off'?{...env,WHATSAPP_BOOKING_ENABLED:'off'}:{...pilotEnvironment(env.DB),WHATSAPP_BOOKING_PILOT_EXPIRES_AT:new Date(NOW-1).toISOString()};
+ const token=await makeSession(config),headers={'X-Ops':token};
+ globalThis.fetch=()=>assert.fail('operator recovery must not call any provider');
+ const listUrl='https://ops.edenmish.com/api/ops/whatsapp/bookings';
+ assert.equal((await worker.fetch(new Request(listUrl),config)).status,401);
+ const listing=await (await worker.fetch(new Request(listUrl,{headers}),config)).json();
+ assert.equal(listing.disabled,true);assert.equal(listing.bookings.length,1);assert.equal(listing.bookings[0].id,row.id);
+ const pause=listUrl+'/'+row.id+'/pause';
+ assert.equal((await worker.fetch(new Request(pause,{method:'POST',headers:{Cookie:'ops_sess='+token}}),config)).status,403);
+ assert.equal((await worker.fetch(new Request(pause,{method:'POST',headers}),config)).status,200);
+ assert.equal((await worker.fetch(new Request(pause.replace('/pause','/close'),{method:'POST',headers}),config)).status,200);
+ assert.equal(env.DB.sqlite.prepare('SELECT phase FROM whatsapp_booking_conversations').get().phase,'closed');
+ assert.equal((await processBookingEvent(config,{id:'after-close',at:NOW+1000,phone,text:'hello'},services(),NOW)).disabled,true);
+ assert.equal(env.DB.sqlite.prepare('SELECT COUNT(*) n FROM orders').get().n,0);
+});
+
+test('operator recovery without storage readiness never reads booking tables',async()=>{
+ const env=environment(database()),token=await makeSession(env);
+ env.WHATSAPP_BOOKING_STORAGE_READY='off';env.WHATSAPP_BOOKING_ENABLED='off';
+ env.DB={prepare:()=>assert.fail('storage not ready')};
+ const headers={'X-Ops':token},base='https://ops.edenmish.com/api/ops/whatsapp/bookings';
+ const listing=await (await worker.fetch(new Request(base,{headers}),env)).json();assert.deepEqual(listing,{disabled:true,bookings:[]});
+ assert.equal((await worker.fetch(new Request(base+'/00000000-0000-0000-0000-000000000001/pause',{method:'POST',headers}),env)).status,404);
 });
 
 test('Twilio delivery failures pause, delivered/read never regress, callbacks do not mark orders paid', async () => {
@@ -422,6 +471,9 @@ test('cancelled or missing canonical order never releases an uncertain checkout,
   assert.equal((await closeBooking(env.DB, row.id, NOW)).status, 409, 'no D1 order is not evidence of no provider effect');
   env.DB.sqlite.prepare("INSERT INTO orders (token, created_at, status, payment_status) VALUES (?, ?, 'cancelled', 'checkout_failed')").run(row.order_token, NOW);
   assert.equal((await closeBooking(env.DB, row.id, NOW)).status, 409, 'local cancellation does not void a Shopify invoice');
+  const stopped={...env,WHATSAPP_BOOKING_ENABLED:'off'},auth=await makeSession(stopped);
+  const closeRequest=new Request('https://ops.edenmish.com/api/ops/whatsapp/bookings/'+row.id+'/close',{method:'POST',headers:{'X-Ops':auth}});
+  assert.equal((await worker.fetch(closeRequest,stopped)).status,409,'OFF recovery cannot release an unpaid external invoice');
   await cleanupBookings(env, NOW + 31 * SESSION_WINDOW);
   assert.equal(env.DB.sqlite.prepare('SELECT recipient FROM whatsapp_booking_conversations').get().recipient, null);
   assert.equal((await closeBooking(env.DB, row.id, NOW + 31 * SESSION_WINDOW)).status, 409);
