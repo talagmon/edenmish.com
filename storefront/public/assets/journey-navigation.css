@@ -1,8 +1,8 @@
 /* Native scroll, one pinned visual scene, existing destination pages. */
 .delivery-journey{position:relative;isolation:isolate;background:#f6f1fa;border-radius:28px;overflow:hidden;margin:10px 24px 24px}
 .delivery-scene{position:absolute;inset:0;z-index:-1;overflow:hidden;background:#f2edf7}
-.delivery-scene video{width:100%;height:100%;object-fit:cover;object-position:28% center;transition:transform 1s cubic-bezier(.2,.65,.25,1),opacity .6s;opacity:.82}
-.delivery-scene::after{content:"";position:absolute;inset:0;background:linear-gradient(270deg,#faf8fc 0%,#faf8fcf5 25%,#faf8fc44 65%,#faf8fc00)}
+.delivery-scene video{width:100%;height:100%;object-fit:cover;object-position:28% center;transition:transform 1s cubic-bezier(.2,.65,.25,1),opacity .6s;opacity:1}
+.delivery-scene::after{content:"";position:absolute;inset:0;background:linear-gradient(270deg,#faf8fcf2 0%,#faf8fcd9 24%,#faf8fc85 43%,#faf8fc00 62%)}
 .journey-stop{position:relative;min-height:650px;padding:70px 6%;display:flex;align-items:center;gap:36px}
 .stop-copy{max-width:440px;width:42%;padding:24px 0}
 .stop-copy h1,.stop-copy h2{font-size:clamp(36px,4.3vw,64px);font-weight:800;line-height:1.15;color:#241334;margin:0 0 24px}
@@ -54,7 +54,7 @@
 @media(max-width:900px){.journey-stops button{padding:10px 14px}.journey-illustration{display:none}.stop-copy h1,.stop-copy h2{font-size:38px}.journey-stop--areas{gap:16px;padding-inline:24px}.journey-stop--areas .stop-copy{width:32%}.journey-stop--areas .journey-map-hub{width:68%}.journey-map-hub .service-areas-stage{height:300px}}
 @media(max-width:700px){
 .delivery-journey{margin:0 10px 16px;border-radius:22px}.delivery-journey.is-pinned{height:calc(100svh - 94px);min-height:530px}
-.delivery-scene video{object-position:34% center}.delivery-scene::after{background:linear-gradient(180deg,#faf8fcfa 0%,#faf8fcea 31%,#faf8fc00 65%,#faf8fcb0)}
+.delivery-scene video{object-position:34% center}.delivery-scene::after{background:linear-gradient(180deg,#faf8fcf5 0%,#faf8fcd9 25%,#faf8fc66 43%,#faf8fc00 59%,#faf8fc33)}
 .is-pinned .journey-stop{padding:32px 20px 132px;align-items:flex-start}.stop-copy{width:100%;max-width:100%;padding:0}.stop-copy h1,.stop-copy h2{font-size:35px;margin-bottom:12px}.stop-copy .journey-eyebrow{font-size:9px;margin-bottom:12px}.stop-lead{font-size:14px;max-width:310px;margin-bottom:18px;line-height:1.6}.stop-copy .journey-button{font-size:14px;padding:13px 18px;gap:16px}.stop-copy .home-slogan-signature{font-size:12px;margin-top:14px}.journey-controls{right:12px;left:12px;bottom:14px}.journey-control-top{margin-bottom:8px}.journey-control-top p{font-size:10px}.journey-control-top button{font-size:10px;padding:8px 10px}.journey-stops{width:100%;justify-content:space-between;gap:2px;padding:5px}.journey-stops button{gap:5px;padding:11px 9px;font-size:11px}.journey-stops button span{font-size:9px}
 .is-pinned .journey-stop--areas{display:flex;flex-direction:column;gap:12px;padding:24px 12px 125px;justify-content:center}.journey-stop--areas .stop-copy{width:100%;padding:0 6px}.journey-stop--areas .stop-copy h2{font-size:24px;margin:0 0 5px}.journey-stop--areas .stop-copy h2 br{display:none}.journey-stop--areas .stop-lead{font-size:12px;margin:0}.journey-stop--areas .stop-copy .journey-button{display:none}.journey-stop--areas .journey-eyebrow{display:none}.journey-stop--areas .journey-map-hub{width:100%}.journey-stop--areas .service-areas-intro{display:none}.journey-stop--areas .service-areas-switch{margin:0 auto 8px}.journey-stop--areas .service-areas-stage{height:clamp(210px,36svh,330px)}.home-page .journey-stop--areas .service-areas-shell{padding:10px}.journey-more{margin-top:16px;font-size:12px}.journey-audience-switch{top:10px;left:12px;font-size:10px;padding:6px 10px}
 .journey-gateway{padding:38px 20px;align-items:flex-start;background:linear-gradient(180deg,#faf8fcfa,#faf8fce0 45%,#faf8fc00 80%)}.gateway-copy{width:100%;max-width:none}.gateway-copy h1{font-size:38px;margin-bottom:16px}.gateway-copy>p{font-size:14px;margin-bottom:20px}.gateway-options{gap:10px}.gateway-options button{padding:16px 14px}.gateway-options strong{font-size:19px}.gateway-options small{font-size:11px}.gateway-direct{background:#faf8fcd9;padding:5px 8px;border-radius:8px;margin-top:14px}
@@ -64,6 +64,7 @@ html.eden-a11y-motion .delivery-journey *{transition:none!important;scroll-behav
 
 .gateway-on .journey-scroller{visibility:hidden}
 .gateway-on .journey-stops,.gateway-on #journey-scroll-hint{display:none}
+.gateway-on .journey-controls{z-index:8}
 .gateway-on .journey-control-top{justify-content:flex-end}
 .journey-stops button{min-height:44px}
 @media(max-width:700px){.journey-controls{right:60px;left:12px}.journey-stops button{padding:9px 7px;font-size:11px;gap:0}.journey-stops button span{display:none}.journey-control-top{gap:4px}.journey-control-top p{font-size:9px;padding:6px}.gateway-on .journey-controls{right:12px;left:60px}}
