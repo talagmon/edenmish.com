@@ -1,10 +1,26 @@
+import { multilingualSchedule, normalizeBookingDigits } from './whatsapp-booking-language.js';
 // Suggestions only. Selection and final confirmation still use canonical checks.
 import { scheduleError } from './validate.js';
 export function israelDay(now) {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
 }
 export function pickupPreference(text, now, knownDate = null) {
-  const value = text.trim().toLowerCase().replace(/\s+/g, ' ');
+  const value = multilingualSchedule(normalizeBookingDigits(text)).trim().toLowerCase().replace(/\s+/g, ' ');
+  // Exact Hebrew word-hour grammar only: never infer AM/PM, a date, or a
+  // conflicting weekday. Keep the original quote outside this normalized value.
+  const wordTime = /^(?:(היום|מחר|\d{4}-\d{2}-\d{2}|\d{1,2}[/.]\d{1,2}[/.]\d{4})\s+)?(?:(?:בשעה\s+|ב-?))?(אחת עשרה|שתיים עשרה|שתים עשרה|אחת|שתיים|שתים|שלוש|ארבע|חמש|שש|שבע|שמונה|תשע|עשר)\s+(בבוקר|בצהריים|אחר הצהריים|בערב)$/.exec(value);
+  if (wordTime) {
+    const hours = {'אחת':1,'שתיים':2,'שתים':2,'שלוש':3,'ארבע':4,'חמש':5,'שש':6,'שבע':7,'שמונה':8,'תשע':9,'עשר':10,'אחת עשרה':11,'שתיים עשרה':12,'שתים עשרה':12};
+    let hour=hours[wordTime[2]];
+    const period=wordTime[3]==='בבוקר'?'morning':wordTime[3]==='בערב'?'evening':'afternoon';
+    if (period==='morning' && hour===12 || wordTime[3]==='בצהריים' && hour!==12
+      || wordTime[3]==='אחר הצהריים' && hour>5 || period==='evening' && (hour<5||hour===12)) return null;
+    if (period!=='morning' && hour<12) hour+=12;
+    const requestedDate=wordTime[1]||knownDate;
+    const day=requestedDate?pickupPreference(requestedDate,now):null;
+    if (requestedDate&&!day) return null;
+    return {date:day?.date||null,period,hour};
+  }
   const daypart = /^(?:in the )?(morning|afternoon|evening|בבוקר|בצהריים|אחר הצהריים|בערב)$/.exec(value);
   if (daypart) {
     const period = /morning|בבוקר/.test(daypart[1]) ? 'morning' : /afternoon|צהריים/.test(daypart[1]) ? 'afternoon' : 'evening';
@@ -37,6 +53,7 @@ export function pickupSlotChoices(preference, now) {
     const day = new Date(date+'T00:00:00Z').getUTCDay();
     const close = day === 5 ? 13 : 20;
     for (let h=0; h<24 && slots.length<3; h++) {
+      if (preference.hour!=null && h!==preference.hour) continue;
       if (scheduleError('standard',day,h) || (date===today && h<earliest) || (date!==today && h+3>close)) continue;
       if (preference.period==='morning' && h>=12 || preference.period==='afternoon' && (h<12 || h>=17) || preference.period==='evening' && h<17) continue;
       slots.push(`${date} ${String(h).padStart(2,'0')}:00`);

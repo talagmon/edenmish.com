@@ -1,10 +1,13 @@
+import { twilioVoiceMedia } from './whatsapp-booking-audio.js';
 import { continuationSelected, stopContinuation } from './whatsapp-continuation.js';
 // Dedicated Twilio WhatsApp booking sender. Independent of proactive link/marketing
 // work in the other checkout; reuse the same account secret names and allowlist.
 import { normalizeIlPhone } from './validate.js';
 import { SESSION_WINDOW } from './whatsapp-booking.js';
 const SID = /^AC[0-9a-f]{32}$/i;
-const MESSAGE_SID = /^SM[0-9a-f]{32}$/i;
+// Twilio uses SM for text messages and can use MM for incoming WhatsApp media.
+// Both remain bound to the signed webhook and verified message resource below.
+const MESSAGE_SID = /^(?:SM|MM)[0-9a-f]{32}$/i;
 const FROM = /^whatsapp:\+[1-9]\d{7,14}$/;
 export function twilioBookingConfigured(env) {
   return SID.test(env.TWILIO_ACCOUNT_SID || '') && !!env.TWILIO_AUTH_TOKEN
@@ -63,7 +66,7 @@ export async function readTwilioBookingEvent(req, env, fetchImpl = globalThis.fe
   if (message.sid !== id || message.account_sid !== env.TWILIO_ACCOUNT_SID || message.direction !== 'inbound' || message.from !== from || message.to !== env.TWILIO_BOOKING_FROM || !Number.isFinite(at)) return { status: 400 };
   if (at <= now - SESSION_WINDOW || at > now + 60_000) return { status: 200, event: null };
   const body = form.get('Body') || '';
-  return { status: 200, event: { id, phone, at, echo: false, text: form.get('NumMedia') === '0' && body.length <= 2000 ? body : null } };
+  return { status: 200, event: { id, phone, at, echo: false, text: form.get('NumMedia') === '0' && body.length <= 2000 ? body : null, ...(env.WHATSAPP_BOOKING_VOICE_ENABLED==='on' && twilioVoiceMedia(form,env,id)?{audio:twilioVoiceMedia(form,env,id)}:{}) } };
 }
 export async function sendTwilioBookingReply(env, recipient, body, fetchImpl = globalThis.fetch) {
   if (!twilioBookingConfigured(env) || !bookingRecipientAllowed(env, recipient) || !body || body.length > 1600) return null;

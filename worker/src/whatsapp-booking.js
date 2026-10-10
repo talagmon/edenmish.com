@@ -1,3 +1,6 @@
+import { conversationalLead } from './whatsapp-booking-conversation.js';
+import { localCopy, multilingualConsent } from './whatsapp-booking-i18n.js';
+import { selectBookingLanguage, explicitLanguage, localizedCommand, multilingualSize, BOOKING_CITY_ALIASES, normalizeBookingDigits } from './whatsapp-booking-language.js';
 // Transport-independent booking authority. Optional bounded interpretation proposes
 // fields only; validation, confirmation and state transitions remain deterministic.
 import { proposeBookingTurn, hasSensitiveBookingText } from './whatsapp-booking-model.js';
@@ -32,10 +35,13 @@ const command = (text) => text.trim().toLowerCase();
 function schedulingPreference(state, text, now) {
   const pending = state.schedule_preference;
   const preference = pickupPreference(text, now, state.data.when_date || pending?.date);
-  if (preference && preference.period === 'any' && pending?.date === null) preference.period = pending.period;
+  if (preference && preference.period === 'any' && pending?.date === null) {
+    preference.period = pending.period;
+    if (pending.hour != null) preference.hour = pending.hour;
+  }
   return preference;
 }
-export const isBookingHandoff = (text) => /^(?:(?:can i |i want to |please )?(?:speak|talk) to (?:a )?(?:human|person|agent)|(?:please )?(?:human|stop|cancel)(?: please)?|(?:אני רוצה|אפשר) לדבר עם נציג)[.!?]?$/i.test(command(text)) || /^(?:(?:אני רוצה|אני צריך|אני צריכה|אפשר|בבקשה)\s+)?(נציג|אדם|עזרה|human|stop|עצור|ביטול)(?:\s+בבקשה)?[.!]?$/.test(command(text));
+export const isBookingHandoff = (text) => localizedCommand(text)==='human' || /^(?:(?:can i |i want to |please )?(?:speak|talk) to (?:a )?(?:human|person|agent)|(?:please )?(?:human|stop|cancel)(?: please)?|(?:אני רוצה|אפשר) לדבר עם נציג)[.!?]?$/i.test(command(text)) || /^(?:(?:אני רוצה|אני צריך|אני צריכה|אפשר|בבקשה)\s+)?(נציג|אדם|עזרה|human|stop|עצור|ביטול)(?:\s+בבקשה)?[.!]?$/.test(command(text));
 export function newBooking() { return { phase: 'consent', data: { service: 'standard', customer_type: 'private' }, revision: 0 }; }
 export function bookingEnabled(env, now = Date.now()) {
   return bookingPilotReady(env, now) && env.WHATSAPP_BOOKING_STORAGE_READY === 'on'
@@ -46,8 +52,8 @@ export function bookingEnabled(env, now = Date.now()) {
 }
 
 export function parseAddress(text) {
-  const aliases = { 'tel aviv': 'תל אביב', 'tel aviv yafo': 'תל אביב-יפו', 'ramat gan': 'רמת גן' };
-  const input = text.trim().replace(/\s+/g, ' ');
+  const aliases = BOOKING_CITY_ALIASES;
+  const input = normalizeBookingDigits(text).trim().replace(/\s+/g, ' ');
   const cityNames = [...GUSH_DAN, ...Object.keys(aliases)].sort((a,b)=>b.length-a.length);
   for (const city of cityNames) {
     if (!input.toLowerCase().startsWith(city.toLowerCase() + ' ') && !input.toLowerCase().startsWith(city.toLowerCase() + ',')) continue;
@@ -62,9 +68,9 @@ export function parseAddress(text) {
 export function parseSchedule(text, now = Date.now()) {
   // Accept explicit Israeli day/month/year input as well as the canonical ISO
   // form. Never infer a missing year or discard nonzero minutes/time ranges.
-  const input = text.trim().replace(/\s+/g, ' ').replace(/^(\d{1,2})([/.])(\d{1,2})\2(\d{4})(?=\s)/,
+  const input = normalizeBookingDigits(text).trim().replace(/\s+/g, ' ').replace(/^(\d{1,2})([/.])(\d{1,2})\2(\d{4})(?=\s)/,
     (_, day, separator, month, year) => `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`)
-    .replace(/ (?:at|בשעה|ב-?)\s*/i, ' ');
+    .replace(/ (?:at|בשעה|ב-?|à|в|الساعة)\s*/i, ' ');
   const match = /^(\d{4}-\d{2}-\d{2})\s+(\d{1,2})(?::00)?$/.exec(input);
   if (!match) return null;
   const date = new Date(match[1] + 'T00:00:00Z');
@@ -97,6 +103,12 @@ function displayAddress(data, key) {
 function summary(state, phone) {
   const d = state.data;
   const q = state.quote;
+  if (['ar','ru','fr'].includes(state.language)) {
+    const t=key=>localCopy(state.language,key);
+    const values=[['Size',t(d.size)],['Pickup',displayAddress(d,'pickup')],['Pickup details',d.pickup_detail],['Delivery',displayAddress(d,'dropoff')],['Delivery details',d.dropoff_detail],['When',`${d.schedule} · ${t('Israel time')}`],['Name',d.name],['Phone',normalizeIlPhone(phone)],['Email',d.email],['Notes',d.notes],['Final price',`₪${q.price} (ILS)`]];
+    if(q.discount_amount)values.push(['Discount',`₪${q.discount_amount}`]);
+    return (state.conversation_only?pilotNotice(state.language)+'\n':'') + t('Standard private delivery summary')+'\n'+values.map(([key,value])=>`${t(key)}: ${value}`).join('\n')+'\n'+t('Valid for 10 minutes and checked again when you confirm.')+(state.conversation_only?'':'\n'+t('Confirmation accepts the terms, privacy and cancellation policies:')+'\nhttps://edenmish.com/terms.html\nhttps://edenmish.com/privacy.html\nhttps://edenmish.com/refund.html');
+  }
   if (state.conversation_only) {
     const normal = summary({ ...state, conversation_only: false }, phone);
     const beforeTerms = normal.split(state.language === 'en' ? 'Confirmation accepts' : 'באישור אתם מאשרים')[0];
@@ -110,11 +122,13 @@ async function advanceBookingCore(current, text, services, { phone, now = Date.n
   const c = command(text);
   if (state.phase === 'handoff') return { state, reply: null };
   if (isBookingHandoff(text)) {
-    state.phase = 'handoff'; return { state, reply: HANDOFF };
+    state.phase = 'handoff'; return { state, reply: bookingSay(state,HANDOFF,HANDOFF_EN) };
   }
   if (state.phase === 'consent') {
+    if(state.multilingual && !/^(מתחילים|start)$/.test(c)){state.audio_disclosure_shown=true;return {state,reply:multilingualConsent(state.language)};}
     if (!/^(מתחילים|start)$/.test(c)) return { state, reply: bookingSay(state, 'היי, אני העוזר הדיגיטלי של EdenMish להזמנת משלוח רגיל ללקוח פרטי; נשמור פרטי הזמנה ונצטרך אימייל למעקב ולאימות.\nלהסכמה ולהתחלה כתבו מתחילים, או נציג לעזרה — בלי פרטי כרטיס, תעודות או מידע רגיש.\nפרטיות: https://edenmish.com/privacy.html', 'Hi, I’m the EdenMish digital assistant for standard private deliveries; email is needed for tracking and verification. To consent to collecting booking details, reply start — please never send card numbers or sensitive documents.\nPrivacy: https://edenmish.com/privacy.html\nAsk for a person: human') };
     state.phase = 'collect'; state.consent_at = now;
+    if(state.multilingual && state.audio_disclosure_shown && state.menu?.kind==='consent')state.audio_consent_at=now;
     return { state, reply: QUESTIONS[missing(state.data)] };
   }
   // Do not persist or echo probable payment-card strings, even in free-text fields.
@@ -123,7 +137,7 @@ async function advanceBookingCore(current, text, services, { phone, now = Date.n
     if (/^(עריכה|edit)$/.test(c)) { state.phase = 'handoff'; return { state, reply: HANDOFF }; }
     const order = await services.order();
     if (order?.payment_status === 'paid') return { state, reply: bookingSay(state, 'התשלום אומת במערכת. פרטי המעקב וקוד האימות נשלחים באימייל. אישור תשלום אינו אישור איסוף או מסירה.', 'Payment is verified in the system; tracking and verification details are sent by email. This does not mean the item has been collected or delivered.') };
-    if (order?.payment_status === 'link_sent' && order.payment_url) return { state, reply: state.language === 'en' ? `The order is awaiting payment through this existing secure link:\n${order.payment_url}\nPayment will be verified by the system; ask for a person to change the order.` : `ההזמנה ממתינה לתשלום. הקישור המאובטח הקיים:\n${order.payment_url}\nאישור תשלום יתקבל רק לאחר אימות במערכת. לשינוי ההזמנה כתבו נציג.` };
+    if (order?.payment_status === 'link_sent' && order.payment_url) return { state, reply: state.language && state.language !== 'he' ? `${localCopy(state.language,'The order is awaiting payment through this existing secure link:')}\n${order.payment_url}\n${localCopy(state.language,'Payment will be verified by the system; ask for a person to change the order.')}` : `ההזמנה ממתינה לתשלום. הקישור המאובטח הקיים:\n${order.payment_url}\nאישור תשלום יתקבל רק לאחר אימות במערכת. לשינוי ההזמנה כתבו נציג.` };
     state.phase = 'handoff'; return { state, reply: HANDOFF };
   }
   if (state.phase === 'creating') { state.phase = 'handoff'; return { state, reply: HANDOFF }; }
@@ -187,13 +201,13 @@ async function advanceBookingCore(current, text, services, { phone, now = Date.n
         state.address_confirmed = false;
         for (const suffix of ['_city', '_lat', '_lng']) delete state.data[key + suffix];
       }
-      if (!value || value.length > (['notes', 'pickup_detail', 'dropoff_detail'].includes(key) ? 300 : 254)) return { state, reply: 'הפרט חסר או ארוך מדי. ' + QUESTIONS[key] };
+      if (!value || value.length > (['notes', 'pickup_detail', 'dropoff_detail'].includes(key) ? 300 : 254)) return { state, reply: (state.multilingual ? bookingSay(state,'הפרט חסר או ארוך מדי. ','That detail is missing or too long. ') + bookingQuestion(state,key) : 'הפרט חסר או ארוך מדי. ' + QUESTIONS[key]) };
       if (key === 'size') {
         if (!/^(קטן|קטנה|small|בינוני|בינונית|medium)$/.test(value)) return { state, reply: QUESTIONS.size };
         state.data.size = /^(קטן|קטנה|small)$/.test(value) ? 'small' : 'medium';
       } else if (key === 'email') {
         const validated = validateEmailAddress(value);
-        if (!validated.valid) return { state, reply: 'כתובת האימייל אינה תקינה. ' + QUESTIONS.email };
+        if (!validated.valid) return { state, reply: (state.multilingual ? bookingSay(state,'כתובת האימייל אינה תקינה. ','That email address is invalid. ') + bookingQuestion(state,'email') : 'כתובת האימייל אינה תקינה. ' + QUESTIONS.email) };
         state.data.email = validated.email;
       } else if (key === 'schedule') {
         const preference = schedulingPreference(state, value, now);
@@ -203,7 +217,7 @@ async function advanceBookingCore(current, text, services, { phone, now = Date.n
           continue;
         }
         const schedule = parseSchedule(value, now);
-        if (!schedule) return { state, reply: 'המועד אינו זמין. בחרו מועד עתידי בשעות הפעילות, עד 30 יום קדימה. ' + QUESTIONS.schedule };
+        if (!schedule) return { state, reply: (state.multilingual ? bookingSay(state,'המועד אינו זמין. בחרו מועד עתידי בשעות הפעילות, עד 30 יום קדימה. ','That time is unavailable. Choose a future time within service hours, up to 30 days ahead. ') + bookingQuestion(state,'schedule') : 'המועד אינו זמין. בחרו מועד עתידי בשעות הפעילות, עד 30 יום קדימה. ' + QUESTIONS.schedule) };
         Object.assign(state.data, schedule, { schedule: value });
         delete state.schedule_preference;
       } else if (['pickup', 'dropoff'].includes(key)) {
@@ -212,8 +226,8 @@ async function advanceBookingCore(current, text, services, { phone, now = Date.n
           state.phase = 'address_choice'; state.pending_address = { field: key, candidates: resolved.candidates.slice(0,3), remaining: updates.slice(index + 1) };
           return { state, reply: bookingSay(state, 'מצאתי כתובות אפשריות. איזו נכונה?', 'I found possible addresses. Which is correct?') };
         }
-        if (resolved.error === 'out_of_zone') { state.phase = 'handoff'; return { state, reply: 'הכתובת מחוץ לאזור השירות האוטומטי. ' + HANDOFF }; }
-        if (resolved.error) return { state, reply: 'לא הצלחתי לזהות כתובת יחידה בוודאות. בדקו רחוב, מספר בית ועיר, או כתבו נציג.\n' + QUESTIONS[key] };
+        if (resolved.error === 'out_of_zone') { state.phase = 'handoff'; return { state, reply: bookingSay(state,'הכתובת מחוץ לאזור השירות האוטומטי. ','The address is outside the automatic service area. ') + bookingSay(state,HANDOFF,HANDOFF_EN) }; }
+        if (resolved.error) return { state, reply: (state.multilingual ? bookingSay(state,'לא הצלחתי לזהות כתובת יחידה בוודאות. בדקו רחוב, מספר בית ועיר, או כתבו נציג.\n','I could not identify one address. Check the street, house number and city, or ask for a person.\n') + bookingQuestion(state,key) : 'לא הצלחתי לזהות כתובת יחידה בוודאות. בדקו רחוב, מספר בית ועיר, או כתבו נציג.\n' + QUESTIONS[key]) };
         Object.assign(state.data, { [key]: resolved.address, [key + '_city']: resolved.city, [key + '_lat']: resolved.lat, [key + '_lng']: resolved.lng });
         state.address_confirmed = false;
       } else {
@@ -233,7 +247,7 @@ async function continueBookingCollection(state, services, { phone, now = Date.no
   if (field) return { state, reply: QUESTIONS[field] };
   if (!state.address_confirmed) {
     state.phase = 'address_review'; state.revision++;
-    return { state, reply: state.language === 'en' ? `Please check the addresses:\nPickup: ${displayAddress(state.data, 'pickup')}\nDelivery: ${displayAddress(state.data, 'dropoff')}` : `זיהיתי את הכתובות:\nאיסוף: ${displayAddress(state.data, 'pickup')}\nמסירה: ${displayAddress(state.data, 'dropoff')}` };
+    return { state, reply: state.language && state.language !== 'he' ? `${localCopy(state.language,'Please check the addresses:')}\n${localCopy(state.language,'Pickup')}: ${displayAddress(state.data, 'pickup')}\n${localCopy(state.language,'Delivery')}: ${displayAddress(state.data, 'dropoff')}` : `זיהיתי את הכתובות:\nאיסוף: ${displayAddress(state.data, 'pickup')}\nמסירה: ${displayAddress(state.data, 'dropoff')}` };
   }
   const quote = await services.quote(orderInput(state.data, phone));
   if (!quote || quote.review || !Number.isFinite(quote.price)) { state.phase = 'handoff'; return { state, reply: HANDOFF }; }
@@ -263,7 +277,7 @@ const modelBypass = (state, text) => literalAnswer(state, text) || !['collect', 
 // Interpretation is optional and separately gated; canonical validation stays here.
 async function advanceBookingInternal(current, text, services, options = {}) {
   const state = structuredClone(current);
-  state.language = bookingLanguage(state.language, text);
+  if(!state.multilingual)state.language = bookingLanguage(state.language, text);
   const now = options.now ?? Date.now();
   if (hasSensitiveBookingText(text) && state.phase !== 'handoff') return { state, reply: bookingSay(state,
     'אין לשלוח פרטי כרטיס, מספרי מסמכים או סודות. התשלום בקישור מאובטח בלבד.',
@@ -274,7 +288,7 @@ async function advanceBookingInternal(current, text, services, options = {}) {
     state.phase = 'handoff';
     return { state, reply: bookingSay(state, HANDOFF, HANDOFF_EN) };
   }
-  if (isBookingLanguageRequest(text) && ['collect', 'address_review', 'review'].includes(state.phase)) return { state, reply: bookingSay(state, 'בשמחה. ', 'Happy to help. ') + nextBookingPrompt(state) };
+  if ((isBookingLanguageRequest(text) || state.multilingual && explicitLanguage(text)) && ['collect', 'address_review', 'review'].includes(state.phase)) return { state, reply: bookingSay(state, 'בשמחה. ', 'Happy to help. ') + nextBookingPrompt(state) };
   // Dayparts are requests for suggestions, never permission to choose a slot.
   const preference = schedulingPreference(state, text, now);
   if (preference && ['collect', 'address_review', 'review'].includes(state.phase)) {
@@ -297,6 +311,8 @@ async function advanceBookingInternal(current, text, services, options = {}) {
     const proposal = await proposeBookingTurn(services.conversationModel, state, text, now);
     if (proposal) {
       interpretation = 'model_proposal';
+      if(state.multilingual && proposal.replyStyle)state.reply_style=proposal.replyStyle;
+      if(state.multilingual && !state.language_explicit && proposal.replyLanguage)state.language=proposal.replyLanguage;
       if (['handoff', 'other_order', 'unsupported'].includes(proposal.intent)) {
         state.phase = 'handoff';
         return { state, interpretation, reply: bookingSay(state, HANDOFF, HANDOFF_EN) };
@@ -304,15 +320,16 @@ async function advanceBookingInternal(current, text, services, options = {}) {
       if (proposal.intent === 'clarify') {
         state.phase = 'collect'; state.quote = null; state.address_confirmed = false;
         delete state.terms_accepted_at; delete state.data[proposal.clarifyField];
+        state.editing_field = proposal.clarifyField;
         if (['pickup', 'dropoff'].includes(proposal.clarifyField)) for (const suffix of ['_city', '_lat', '_lng']) delete state.data[proposal.clarifyField + suffix];
         if (proposal.clarifyField === 'schedule') for (const key of ['when_date', 'when_hour', 'when_text']) delete state.data[key];
-        return { state, interpretation, reply: bookingSay(state, 'כדי לדייק, ', 'To make sure, ') + bookingQuestion(state, proposal.clarifyField) };
+        return { state, interpretation, reply: bookingSay(state, 'כדי לדייק, ', 'To make sure, ') + bookingQuestion(state, proposal.clarifyField, {single:true}) };
       }
       if (['question', 'greeting', 'off_topic'].includes(proposal.intent)) {
         const intro = proposal.intent === 'question' ? bookingFact(state, proposal.topic)
           : proposal.intent === 'off_topic' ? bookingSay(state, 'אני כאן לעזור בהזמנת משלוח.', 'I’m here to help with your delivery booking.')
-          : bookingSay(state, 'בשמחה.', 'Happy to help.');
-        return { state, interpretation, reply: intro + ' ' + nextBookingPrompt(state) };
+          : state.multilingual ? conversationalLead(state).trim() : bookingSay(state, 'בשמחה.', 'Happy to help.');
+        return { state, interpretation, reply: (intro ? intro + ' ' : '') + nextBookingPrompt(state) };
       }
       if (proposal.intent === 'update') {
         // Only verified source quotes become field input. They cannot contain
@@ -336,10 +353,10 @@ async function advanceBookingInternal(current, text, services, options = {}) {
   }
   result ||= await advanceBookingCore(state, text, services, options);
   const question = Object.entries(QUESTIONS).find(([, copy]) => result.reply === copy)?.[0];
-  if (question && (services.conversationModel || state.language === 'en')) result.reply = bookingQuestion(result.state, question);
-  if (state.language === 'en' && result.reply && result.state.phase === 'collect' && /[א-ת]/u.test(result.reply)) result.reply = 'Please check that detail. ' + nextBookingPrompt(result.state);
+  if (question && (state.multilingual || services.conversationModel || state.language && state.language !== 'he')) result.reply = bookingQuestion(result.state, question);
+  if (state.language && state.language !== 'he' && result.reply && result.state.phase === 'collect' && /[א-ת]/u.test(result.reply)) result.reply = localCopy(state.language,'Please check that detail. ') + nextBookingPrompt(result.state);
   if (state.language === 'en' && result.reply && result.state.phase === 'address_review' && /^(לאישור)/u.test(result.reply)) result.reply = nextBookingPrompt(result.state);
-  if (result.state.phase === 'handoff' && result.reply && state.language === 'en' && result.reply !== pilotComplete('en')) result.reply = HANDOFF_EN;
+  if (result.state.phase === 'handoff' && result.reply && state.language && state.language !== 'he' && result.reply !== pilotComplete(state.language)) result.reply = localCopy(state.language,HANDOFF_EN);
   if (interpretation) result.interpretation = interpretation;
   return result;
 }
@@ -347,6 +364,22 @@ async function advanceBookingInternal(current, text, services, options = {}) {
 export async function advanceBooking(current, text, services, options = {}) {
   const state = structuredClone(current);
   const now = options.now ?? Date.now();
+  if(services.multilingual || state.multilingual) {
+    state.multilingual=true;
+    state.bundle_route=!!services.conversationModel;
+    selectBookingLanguage(state,text);
+    // Preserve source evidence for the model. Only closed menu commands normalize.
+    const normalized=localizedCommand(text);
+    if(normalized==='human' || ['consent','review','address_review'].includes(state.phase)
+      || normalized==='edit' || /^\d{1,2}$/.test(normalized)
+      || activeField(state)==='size' && ['small','medium'].includes(normalized)
+      || ['pickup_detail','dropoff_detail','notes'].includes(activeField(state)) && normalized==='none')text=normalized;
+  }
+  if(state.audio_consent_pending && options.inputKind!=='voice' && text.trim()==='1') {
+    state.audio_consent_at=now;delete state.audio_consent_pending;
+    return withBookingMenu({state,reply:bookingQuestion(state,activeField(state)||'notes')},now);
+  }
+  if(state.audio_consent_pending && options.inputKind!=='voice')delete state.audio_consent_pending;
   if (options.conversationOnly) state.conversation_only = true;
   if (state.conversation_only && ['creating', 'booked'].includes(state.phase)) {
     state.phase = 'handoff';
@@ -356,8 +389,38 @@ export async function advanceBooking(current, text, services, options = {}) {
   // phase/revision. Confirmation still passes through quote revalidation and
   // the durable event/order idempotency path; the interpreter cannot confirm.
   const menu = state.menu;
-  const confirmation = ['review', 'address_review'].includes(state.phase) && /^(?:k|ok|okay|conf|confirm|כן|אוקיי|מאשר|מאשרת)[.!]?$/i.test(text.trim());
-  const choice = confirmation ? 1 : /^\d{1,2}$/.test(text.trim()) ? Number(text.trim()) : null;
+  const currentMenu = menu && menu.phase===state.phase && menu.revision===state.revision;
+  const answer=text.trim().replace(/[.!]$/, '').trim().toLowerCase();
+  const reviewMenu=currentMenu && ['review','address_review'].includes(menu.kind);
+  // Public menu numbers are not quote revision tokens. Mixed commands can
+  // contradict the displayed choice, so never forward them to legacy parsing.
+  if (['review','address_review'].includes(state.phase)
+    && /^(?:(?:אישור|כתובות|confirm|addresses|מאשר|מאשרת|כן|ok|okay)\s+\d+|\d+\s+(?:אישור|כתובות|confirm|addresses|מאשר|מאשרת|כן|ok|okay))$/u.test(answer)) {
+    return withBookingMenu({state,reply:bookingSay(state,
+      'לא ברור אם התכוונתם לאשר או לבחור פעולה אחרת. בחרו אפשרות אחת לפי התפריט, בלי לשלב מילה ומספר.',
+      'It is unclear whether you want to confirm or choose another action. Please choose one option from the menu without combining a word and number.')},now);
+  }
+
+  const confirmation=reviewMenu && /^(?:k|ok|okay|conf|confirm|כן|אוקיי|מאשר|מאשרת|אני מאשר|אני מאשרת|אישור|הכל נכון)$/.test(answer);
+  if(options.inputKind==='voice' && reviewMenu && (confirmation || text.trim()==='1'))return withBookingMenu({state,reply:bookingSay(state,
+    'שמעתי אישור. כדי לאשר, שלחו את מספר האפשרות המוצגת בהודעת טקסט.',
+    'I heard a confirmation. Please confirm using the displayed number in a text message.')},now);
+  const modification=reviewMenu && /^(?:edit|modify|change|עריכה|שינוי|שינוי פרטים|לשנות|אני רוצה לשנות|אני רוצה לערוך)$/.test(answer);
+  let choice=confirmation?1:modification?2:/^\d{1,2}$/.test(text.trim())?Number(text.trim()):null;
+  // Written options are shortcuts only for the displayed, current post-consent
+  // menu. Never infer consent or select an address/time from an unscoped 'ok'.
+  if(currentMenu && state.consent_at && choice===null && menu.kind!=='consent') {
+    const ordinals=[/^(?:(?:האפשרות|אפשרות) )?(?:הראשון|הראשונה|ראשון|ראשונה|first)(?: option)?$/,
+      /^(?:(?:האפשרות|אפשרות) )?(?:השני|השנייה|השניה|שני|שנייה|שניה|second)(?: option)?$/,
+      /^(?:(?:האפשרות|אפשרות) )?(?:השלישי|השלישית|שלישי|שלישית|third)(?: option)?$/];
+    const ordinal=ordinals.findIndex(pattern=>pattern.test(answer));
+    if(ordinal>=0)choice=ordinal+1;
+    else if(/^אפשרות \d{1,2}$/.test(answer))choice=Number(answer.split(' ')[1]);
+    else if(menu.kind==='edit') {
+      const field=FIELDS.find(key=>[LABELS[key],key].includes(answer));
+      if(field)choice=FIELDS.indexOf(field)+1;
+    }
+  }
   if (menu && menu.phase === state.phase && menu.revision === state.revision && choice != null) {
     if (menu.kind === 'review' || menu.kind === 'address_review') {
       text = ({ 1: `${menu.kind === 'review' ? 'confirm' : 'addresses'} ${menu.revision}`, 2: 'edit', 3: 'human' })[choice] || text;
@@ -426,7 +489,7 @@ export function withBookingMenu(result, now) {
   }
   if (copy) {
     state.menu = { kind, phase: state.phase, revision: state.revision, ...(slots ? { slots } : {}) };
-    result.reply += '\n\n' + copy + '\n' + say('אפשר להשיב במספר.', 'You can reply with the number.');
+    result.reply += '\n\n' + copy + (state.multilingual && state.reply_style === 'brief' && !['review','address_review','consent'].includes(kind) ? '' : '\n' + say('אפשר להשיב במספר.', 'You can reply with the number.'));
   }
   return result;
 }

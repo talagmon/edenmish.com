@@ -96,7 +96,8 @@ test('safe diagnostics distinguish envelope, refusal, JSON and proposal rejectio
   const model=createOpenAIBookingModel(env,{fetchImpl:async()=>factory(),onDiagnostic:entry=>diagnostics.push(entry)});
   assert.equal(await proposeBookingTurn(model,state,text,Date.now()),null);
   assert.equal(diagnostics[0].outcome,expected);
-  assert.deepEqual(Object.keys(diagnostics[0]).sort(),['elapsedMs','httpStatus','outcome']);
+  assert.deepEqual(Object.keys(diagnostics[0]).sort(),['elapsedMs','httpStatus','outcome',...(expected==='proposal_schema'?['proposalRejection']:[])]);
+  if(expected==='proposal_schema')assert.equal(diagnostics[0].proposalRejection,'field_shape');
   assert.doesNotMatch(JSON.stringify(diagnostics),/secret|private|sk-|קטנה/);
  }
 });

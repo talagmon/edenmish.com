@@ -27,7 +27,7 @@ async function initial() { return (await advanceBooking(newBooking(), 'מתחי�
 async function reviewed() {
   let state = await initial();
   for (const text of ['קטן', 'דיזנגוף 10, תל אביב', 'ביאליק 2, רמת גן', '2026-10-11 11:00', 'יעל כהן', 'fiction@example.com', 'אין', 'אין', 'ספר']) state = (await advanceBooking(state, text, services(), opts)).state;
-  return (await advanceBooking(state, `כתובות ${state.revision}`, services(), opts)).state;
+  return (await advanceBooking(state, '1', services(), opts)).state;
 }
 function proposal(text, fields = {}, intent = 'update', topic = null, clarify_field = null) {
   return { version: 2, intent, fields: Object.entries(fields).map(([field, value]) => {
@@ -129,12 +129,12 @@ test('provider-neutral boundary accepts JSON text, rejects unbranded adapters an
 test('exact current summary confirmation bypasses model; expiry and price change still require another confirmation', async () => {
   const state = await reviewed(); const svc = services(); let calls = 0;
   svc.conversationModel = createOfflineBookingModel(async () => { calls++; return proposal('', {}, 'greeting'); });
-  const confirmed = await advanceBooking(state, `confirm ${state.revision}`, svc, opts);
+  const confirmed = await advanceBooking(state, '1', svc, opts);
   assert.equal(confirmed.create.expectedPrice, 50); assert.equal(calls, 0);
-  const expired = await advanceBooking(state, `אישור ${state.revision}`, svc, { ...opts, now: NOW + QUOTE_TTL });
+  const expired = await advanceBooking(state, '1', svc, { ...opts, now: NOW + QUOTE_TTL });
   assert.equal(expired.create, undefined); assert.ok(expired.state.revision > state.revision);
   svc.quote = async () => ({ ...quote, price: 65 });
-  const changed = await advanceBooking(state, `אישור ${state.revision}`, svc, opts); assert.equal(changed.create, undefined);
+  const changed = await advanceBooking(state, '1', svc, opts); assert.equal(changed.create, undefined);
 });
 
 test('D1 retry dedup precedes model and late updates remain ignored; only structured fields and bounded outcome are retained', async () => {
@@ -214,8 +214,8 @@ test('scripted Hebrew example asks missing details, answers a service question a
   const oldRevision = state.revision;
   await say('טעיתי, האיסוף מהרצל 12, תל אביב', { pickup: 'הרצל 12, תל אביב' });
   assert.ok(state.revision > oldRevision); assert.equal(state.phase, 'address_review');
-  await say('כתובות ' + state.revision); assert.equal(state.phase, 'review');
-  const countBeforeConfirm = calls; const final = await say('אישור ' + state.revision);
+  await say('1'); assert.equal(state.phase, 'review');
+  const countBeforeConfirm = calls; const final = await say('1');
   assert.equal(calls, countBeforeConfirm); assert.equal(final.create.expectedPrice, 50);
   assert.equal(final.create.input.pickup, 'הרצל 12, תל אביב'); assert.equal(final.create.input.notes, 'ספר קטן');
   if (process.env.BOOKING_MODEL_TRANSCRIPT_PATH) writeFileSync(process.env.BOOKING_MODEL_TRANSCRIPT_PATH,
@@ -259,4 +259,20 @@ test('source-grounded bare morning in a multi-field model proposal asks for date
  const result=await advanceBooking(state,text,svc,opts);
  assert.equal(result.state.data.size,'small');assert.equal(result.state.schedule_preference.date,null);
  assert.equal(result.state.menu.kind,'schedule_day');assert.equal(result.state.data.when_date,undefined);assert.equal(result.create,undefined);
+});
+
+test('validated item quote retains description without overwriting explicit or collected notes', async () => {
+  const text = 'אני צריך לשלוח מפתחות';
+  const raw = proposal(text, {size:'מפתחות'});
+  assert.deepEqual(validateBookingProposal(raw,text,NOW).entries,[['size','small'],['notes','מפתחות']]);
+  assert.deepEqual(validateBookingProposal(proposal('קטן',{size:'קטן'}),'קטן',NOW).entries,[['size','קטן']]);
+  const explicitText = 'מפתחות; נא להתקשר';
+  assert.deepEqual(validateBookingProposal(proposal(explicitText,{size:'מפתחות',notes:'נא להתקשר'}),explicitText,NOW).entries,
+    [['size','small'],['notes','נא להתקשר']]);
+  const svc = services();svc.conversationModel=createOfflineBookingModel(async()=>raw);
+  let state=await initial();state.data.notes='לשמור זקוף';
+  const result=await advanceBooking(state,text,svc,opts);
+  assert.equal(result.state.data.notes,'לשמור זקוף');assert.equal(result.create,undefined);
+  assert.equal(validateBookingProposal(proposal('לא מפתחות',{size:'מפתחות'}),'לא מפתחות',NOW),null);
+  assert.equal(validateBookingProposal(proposal('מפתחות או מקרר',{size:'מפתחות או מקרר'}),'מפתחות או מקרר',NOW),null);
 });

@@ -83,7 +83,7 @@ test('counted model transport uses six unique events, exact payload and caps, no
    if(url.endsWith('/input_tokens')){count++;counted=payload;return Response.json({object:'response.input_tokens',input_tokens:1000});}
    generation++;for(const key of Object.keys(counted))assert.deepEqual(payload[key],counted[key]);assert.equal(payload.max_output_tokens,512);assert.equal(payload.store,false);assert.equal(payload.service_tier,'default');assert.ok(new TextEncoder().encode(init.body).length<=8192);return response();
   }});
-  assert.deepEqual((await proposeBookingTurn(adapter,state,'מפתחות',now)).entries,[['size','small']]);
+  assert.deepEqual((await proposeBookingTurn(adapter,state,'מפתחות',now)).entries,[['size','small'],['notes','מפתחות']]);
   assert.equal(await proposeBookingTurn(adapter,state,'מפתחות',now),null);
  }
  assert.equal(count,6);assert.equal(generation,6);assert.equal(grant(e).model_micros,180000);
@@ -259,4 +259,229 @@ test('v2 Ops page supplies version two and stays OFF until separate activation',
  assert.doesNotThrow(()=>new Script(html.match(/<script>([\s\S]*?)<\/script>/)[1]));
  assert.match(html,/"version":2/);assert.match(html,/version:grantConfig.version/);
  assert.equal(followonGrant(e),undefined);assert.equal(await continuationCanProceed(e,later),false);
+});
+
+// Synthetic exchange only: no customer transcript or external provider calls.
+async function failedNoticeFixture(policy=true,version=1){
+ const base=version===3?thirdTime:now;let e=version===3?await retryPrepared():await prepared();if(policy)e.WHATSAPP_BOOKING_FAILURE_NOTICE_POLICY='one-shot-v1';
+ assert.equal(await issueContinuationGrant(e,base),true);e=enable(e);
+ let modelCalls=0,sends=0;
+ const service={order:async()=>null,resolveAddress:async()=>({error:'address_not_found'}),create:()=>assert.fail('orders prohibited'),
+  conversationModelForEvent:id=>createOpenAIBookingModel(e,{clock:()=>base,eventId:id,fetchImpl:async url=>{
+   modelCalls++;return url.endsWith('/input_tokens')?Response.json({object:'response.input_tokens',input_tokens:1000}):new Response('',{status:503});
+  }})};
+ for(const [i,text] of ['שלום','1','1','אבקש לבדוק אפשרות למשלוח מסמכים בהמשך השבוע'].entries()){
+  await processBookingEvent(e,{id:'synthetic-notice-'+i,phone:e.TWILIO_RECIPIENT_ALLOWLIST,at:base+i,text},service,base+i);
+  if(i<3)await sendBookingReplies(e,async()=>{sends++;return Response.json({sid:'SM'+String(i+1).repeat(32)});},base+i);
+ }
+ assert.equal(modelCalls,2);assert.equal(sends,3);
+ const reply=e.DB.sqlite.prepare("SELECT * FROM whatsapp_booking_replies WHERE state='pending'").get();assert.ok(reply);
+ return {e,reply,service};
+}
+test('default remains fail-closed; policy cannot be retrofitted onto an issued grant',async()=>{
+ const {e,reply}=await failedNoticeFixture(false);assert.equal(grant(e).stopped_reason,'provider_uncertain');
+ assert.equal(await continuationCanProceed({...e,WHATSAPP_BOOKING_FAILURE_NOTICE_POLICY:'one-shot-v1'},now),false);
+ await sendBookingReplies(e,()=>assert.fail('legacy stopped send'),now+4);
+ assert.equal(e.DB.sqlite.prepare('SELECT state FROM whatsapp_booking_replies WHERE id=?').get(reply.id).state,'cancelled');
+});
+test('model failure allows exactly one fixed budgeted notice, never restarts conversation or downstream work',async()=>{
+ const {e,reply,service}=await failedNoticeFixture();const before=grant(e);assert.equal(before.stopped_reason,'model_uncertain');
+ assert.equal(reply.kind,'model_failure_notice');let sends=0;
+ await Promise.all(Array.from({length:4},()=>sendBookingReplies(e,async(url,init)=>{
+  sends++;assert.equal(new URLSearchParams(init.body).get('Body'),'לא הצלחתי לעבד את הפרטים. האוטומציה נעצרה. אפשר לפנות לנציג להמשך.');
+  return Response.json({sid:'SM'+'9'.repeat(32)});
+ },now+4)));
+ assert.equal(sends,1);assert.equal(grant(e).outbound,4);assert.equal(grant(e).spent_micros,before.spent_micros+11300);
+ assert.equal(grant(e).stopped_reason,'model_uncertain');assert.equal(grant(e).lock_id,null);
+ assert.equal(await continuationCanProceed(e,now+5),false);
+ for(const kind of ['model','address','inbound','outbound'])assert.equal(await reserveContinuation(e,kind,'after-stop',now+5),null);
+ await sendBookingReplies(e,()=>assert.fail('notice retry'),now+5);
+ await processBookingEvent(e,{id:'after-failure',phone:e.TWILIO_RECIPIENT_ALLOWLIST,at:now+5,text:'1'},service,now+5);
+ assert.equal(grant(e).inbound,4);
+ const op=e.DB.sqlite.prepare("SELECT * FROM whatsapp_continuation_operations WHERE id LIKE '%:outbound:failure-notice'").get();assert.equal(op.outcome,'notice_sent');
+ for(const table of ['orders','payments','notifications','driver_assignments','driver_routes'])assert.equal(e.DB.sqlite.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n,0);
+});
+for(const problem of ['quota','budget','expired','late','off','operator','receipt','body','recipient','grant','model','policy','json'])test('failure notice rejects '+problem,async()=>{
+ const {e,reply}=await failedNoticeFixture();let clock=now+4;
+ if(problem==='quota')e.DB.sqlite.exec('UPDATE whatsapp_continuation_grants SET outbound=10');
+ if(problem==='budget')e.DB.sqlite.exec('UPDATE whatsapp_continuation_grants SET spent_micros=1190000');
+ if(problem==='expired')clock=now+1800000;
+ if(problem==='late')clock=now+15001;
+ if(problem==='off')e.WHATSAPP_BOOKING_SEND_ENABLED='off';
+ if(problem==='operator')await stopContinuation(e);
+ if(problem==='receipt')await stopContinuation(e,'provider_uncertain');
+ if(problem==='body')e.DB.sqlite.prepare('UPDATE whatsapp_booking_replies SET body=? WHERE id=?').run('arbitrary content',reply.id);
+ if(problem==='recipient')e.DB.sqlite.exec("UPDATE whatsapp_booking_conversations SET recipient='+972549999999'");
+ if(problem==='grant')e.DB.sqlite.exec("UPDATE whatsapp_booking_conversations SET state_json=json_set(state_json,'$.continuation_id','other')");
+ if(problem==='model')e.DB.sqlite.exec("UPDATE whatsapp_continuation_operations SET status='settled' WHERE kind='model'");
+ if(problem==='policy')e.WHATSAPP_BOOKING_FAILURE_NOTICE_POLICY='off';
+ if(problem==='json')e.DB.sqlite.exec("UPDATE whatsapp_booking_conversations SET state_json='null'");
+ const before=grant(e).spent_micros;
+ await sendBookingReplies(e,()=>assert.fail('forbidden send '+problem),clock);
+ assert.equal(grant(e).spent_micros,before);assert.ok(grant(e).stopped_reason);
+});
+test('notice transport uncertainty retains hold and is never retried',async()=>{
+ const {e}=await failedNoticeFixture();const before=grant(e).spent_micros;let calls=0;
+ await sendBookingReplies(e,async()=>{calls++;throw new Error('synthetic uncertain send');},now+4);
+ await sendBookingReplies(e,()=>assert.fail('retry'),now+5);
+ assert.equal(calls,1);assert.equal(grant(e).spent_micros,before+11300);assert.ok(grant(e).stopped_reason);
+ assert.equal(e.DB.sqlite.prepare("SELECT outcome FROM whatsapp_continuation_operations WHERE id LIKE '%:outbound:failure-notice'").get().outcome,'notice_uncertain');
+});
+test('notice reservation crash, explicit stop and elapsed time cannot authorize a resend',async()=>{
+ const {claimContinuationFailureNotice,continuationFailureNoticeCanSend,finishContinuationFailureNotice}=await import('../src/whatsapp-continuation.js');
+ for(const problem of ['crash','stop','elapsed']){
+  const {e,reply}=await failedNoticeFixture();e.DB.sqlite.prepare("UPDATE whatsapp_booking_replies SET state='sending' WHERE id=?").run(reply.id);
+  assert.equal(await claimContinuationFailureNotice(e,reply.id,now+4),true);
+  assert.equal(await claimContinuationFailureNotice(e,reply.id,now+4),false);
+  if(problem==='stop')await stopContinuation(e);
+  const clock=problem==='elapsed'?now+15004:now+5;
+  assert.equal(await continuationFailureNoticeCanSend(e,reply.id,clock),problem==='crash');
+  await sendBookingReplies(e,()=>assert.fail('crashed pending notice retry'),clock);
+  await finishContinuationFailureNotice(e,reply.id,false,clock);
+  await finishContinuationFailureNotice(e,reply.id,true,clock);
+  assert.equal(await claimContinuationFailureNotice(e,reply.id,clock),false);
+  assert.equal(e.DB.sqlite.prepare("SELECT outcome FROM whatsapp_continuation_operations WHERE id LIKE '%:outbound:failure-notice'").get().outcome,'notice_uncertain');
+ }
+});
+test('continuation failure diagnostics persist only bounded categories and numbers',async()=>{
+ const {e}=await failedNoticeFixture();const row=e.DB.sqlite.prepare("SELECT outcome FROM whatsapp_continuation_operations WHERE kind='model'").get();
+ assert.deepEqual(JSON.parse(row.outcome),{category:'http_error',http_status:503,elapsed_ms:0,counted_input_tokens:1000,output_tokens:null});
+ const f=await active();await reserveContinuation(f,'model','sanitizer',now);
+ await finishContinuation(f,'model','sanitizer',{diagnostic:{category:'timeout',httpStatus:999,elapsedMs:-1,countedInput:'private input',outputTokens:Infinity,secret:'NEVER_PERSIST',body:'customer text'}},now);
+ const value=f.DB.sqlite.prepare("SELECT outcome FROM whatsapp_continuation_operations WHERE kind='model'").get().outcome;
+ assert.deepEqual(JSON.parse(value),{category:'timeout',http_status:null,elapsed_ms:null,counted_input_tokens:null,output_tokens:null});assert.doesNotMatch(value,/NEVER_PERSIST|customer text|private input/);
+});
+
+const thirdTime=later+3600000;
+async function retryPrepared(){
+ const e=await followonPrepared();assert.equal(await issueContinuationGrant(e,later),true);const on=enable(e);
+ for(let i=0;i<4;i++)assert.ok(await reserveContinuation(on,'inbound','old-inbound-'+i,later));
+ for(let i=0;i<3;i++){assert.ok(await reserveContinuation(on,'outbound','old-outbound-'+i,later));await finishContinuation(on,'outbound','old-outbound-'+i,{ok:true},later);}
+ assert.ok(await reserveContinuation(on,'model','old-model',later));await finishContinuation(on,'model','old-model',{ok:false},later);
+ return {...e,WHATSAPP_BOOKING_CONTINUATION_VERSION:'3',WHATSAPP_BOOKING_CONTINUATION_RETRY_SCHEMA_READY:'on',WHATSAPP_BOOKING_FAILURE_NOTICE_POLICY:'one-shot-v1',
+  WHATSAPP_BOOKING_CONTINUATION_ID:e.WHATSAPP_BOOKING_PILOT_ID+':quote-v2-handset-3',
+  WHATSAPP_BOOKING_CONTINUATION_START:new Date(thirdTime).toISOString(),WHATSAPP_BOOKING_CONTINUATION_END:new Date(thirdTime+1800000).toISOString()};
+}
+const retryGrant=e=>e.DB.sqlite.prepare('SELECT * FROM whatsapp_continuation_retry_grants').get();
+const retryHistory=e=>JSON.stringify([historical(e),priorSnapshot(e),e.DB.sqlite.prepare('SELECT * FROM whatsapp_continuation_followon_grants').all(),e.DB.sqlite.prepare('SELECT * FROM whatsapp_continuation_followon_operations ORDER BY id').all()]);
+test('third grant carries every old hold once and permits only five more interpretations',async()=>{
+ const e=await retryPrepared(),before=retryHistory(e);assert.equal(await issueContinuationGrant(e,thirdTime),true);
+ const on=enable(e);assert.equal(retryGrant(e).historical_micros,405100);assert.equal(retryGrant(e).historical_model_micros,330000);
+ assert.equal(retryGrant(e).fee_cushion_micros,500000);assert.equal(await continuationCanProceed(on,thirdTime),true);
+ for(let i=0;i<5;i++){assert.ok(await reserveContinuation(on,'model','new-'+i,thirdTime));await finishContinuation(on,'model','new-'+i,{ok:true,usage},thirdTime);}
+ assert.equal(await reserveContinuation(on,'model','sixth',thirdTime),null);assert.equal(retryGrant(e).model_micros,150000);
+ assert.equal(await issueContinuationGrant(e,thirdTime),false);assert.equal(retryHistory(e),before);
+ assert.equal(await issueContinuationGrant({...e,WHATSAPP_BOOKING_CONTINUATION_ID:e.WHATSAPP_BOOKING_CONTINUATION_ID+'-again'},thirdTime),false);
+ assert.equal(await continuationCanProceed({...on,WHATSAPP_BOOKING_FAILURE_NOTICE_POLICY:'off'},thirdTime),false);
+});
+for(const problem of ['active','missing','lock','stop','spend','model_hold','count','operation','policy','schema','version'])test('third grant rejects altered predecessor or missing approval: '+problem,async()=>{
+ const e=await retryPrepared();
+ if(problem==='active')e.DB.sqlite.exec('UPDATE whatsapp_continuation_followon_grants SET starts_at=starts_at+3600000,expires_at=expires_at+3600000');
+ if(problem==='missing')e.DB.sqlite.exec('DELETE FROM whatsapp_continuation_followon_operations; DELETE FROM whatsapp_continuation_followon_grants');
+ if(problem==='lock')e.DB.sqlite.exec("UPDATE whatsapp_continuation_followon_grants SET lock_id='uncertain'");
+ if(problem==='stop')e.DB.sqlite.exec("UPDATE whatsapp_continuation_followon_grants SET stopped_reason='operator_stop'");
+ if(problem==='spend')e.DB.sqlite.exec('UPDATE whatsapp_continuation_followon_grants SET spent_micros=105101');
+ if(problem==='model_hold')e.DB.sqlite.exec('UPDATE whatsapp_continuation_followon_grants SET model_micros=30001');
+ if(problem==='count')e.DB.sqlite.exec('UPDATE whatsapp_continuation_followon_grants SET inbound=5');
+ if(problem==='operation')e.DB.sqlite.exec("UPDATE whatsapp_continuation_followon_operations SET status='pending' WHERE kind='model'");
+ if(problem==='policy')e.WHATSAPP_BOOKING_FAILURE_NOTICE_POLICY='off';
+ if(problem==='schema')e.WHATSAPP_BOOKING_CONTINUATION_RETRY_SCHEMA_READY='off';
+ if(problem==='version')e.WHATSAPP_BOOKING_CONTINUATION_VERSION='4';
+ assert.equal(await issueContinuationGrant(e,thirdTime),false);
+});
+test('third grant atomic issuance freezes predecessor grants and every operation mutation',async()=>{
+ const e=await retryPrepared();const result=await Promise.all([issueContinuationGrant(e,thirdTime),issueContinuationGrant(e,thirdTime)]);assert.equal(result.filter(Boolean).length,1);
+ for(const sql of ['UPDATE whatsapp_continuation_followon_grants SET spent_micros=0','DELETE FROM whatsapp_continuation_followon_grants',
+  "UPDATE whatsapp_continuation_followon_operations SET outcome='refunded'",'DELETE FROM whatsapp_continuation_followon_operations',
+  "INSERT INTO whatsapp_continuation_followon_operations(id,grant_id,kind,status,reserved_micros,created_at) SELECT 'race',id,'inbound','settled',10300,1 FROM whatsapp_continuation_followon_grants"])
+  assert.throws(()=>e.DB.sqlite.exec(sql),/predecessor retained/);
+ const before=retryHistory(e);e.DB.sqlite.exec(readFileSync(new URL('../migrations/043_whatsapp_continuation_retry.sql',import.meta.url),'utf8'));assert.equal(retryHistory(e),before);
+ const {RETRY_SCHEMA_SQL,retrySchemaReady}=await import('../scripts/validate-continuation-retry-schema.mjs');
+ const rows=e.DB.sqlite.prepare(RETRY_SCHEMA_SQL).all();assert.equal(retrySchemaReady(rows),true);assert.equal(retrySchemaReady(rows.slice(1)),false);
+ assert.equal(retrySchemaReady(rows.map(r=>({...r,sql:r.sql.replace('405100','300000')}))),false);
+});
+test('third grant preserves $0.9051 baseline and refuses IO above original $2 cap',async()=>{
+ const e=await retryPrepared();await issueContinuationGrant(e,thirdTime);const on=enable(e);
+ e.DB.sqlite.exec('UPDATE whatsapp_continuation_retry_grants SET spent_micros=1084900');
+ assert.equal(await reserveContinuation(on,'outbound','over',thirdTime),null);
+ assert.throws(()=>e.DB.sqlite.exec('UPDATE whatsapp_continuation_retry_grants SET spent_micros=1094901'));
+ assert.equal(await reserveContinuation(on,'inbound','expired',thirdTime+1800000),null);
+});
+
+test('third-window fixed notice spends only new allowance with prior holds unchanged',async()=>{
+ const {e}=await failedNoticeFixture(true,3);const prior=retryHistory(e);let calls=0;
+ await sendBookingReplies(e,async()=>{calls++;return Response.json({sid:'SM'+'8'.repeat(32)});},thirdTime+4);
+ assert.equal(calls,1);const g=retryGrant(e);assert.equal(g.stopped_reason,'model_uncertain');assert.equal(g.spent_micros,116400);
+ assert.equal(g.historical_micros+g.fee_cushion_micros+g.spent_micros,1021500);assert.equal(g.historical_model_micros+g.model_micros,360000);
+ assert.equal(retryHistory(e),prior);await sendBookingReplies(e,()=>assert.fail('no retry'),thirdTime+5);
+});
+
+test('model proposal rejection persists one allowlisted reason, never the quote or provider body',async()=>{
+ const e=await active();const adapter=createOpenAIBookingModel(e,{clock:()=>now,eventId:eventId(901),fetchImpl:async url=>{
+  if(url.endsWith('/input_tokens'))return Response.json({object:'response.input_tokens',input_tokens:1000});
+  const r=await response().json();r.output[0].content[0].text=JSON.stringify({version:2,intent:'update',fields:[{field:'size',quote:'my'}],topic:null,clarify_field:null});return Response.json(r);
+ }});
+ assert.equal(await proposeBookingTurn(adapter,state,'send my keys',now),null);
+ const outcome=e.DB.sqlite.prepare("SELECT outcome FROM whatsapp_continuation_operations WHERE kind='model'").get().outcome;
+ assert.equal(JSON.parse(outcome).proposal_rejection,'size_unsupported');assert.doesNotMatch(outcome,/send my keys|"quote"|"my"/);
+ const f=await active();await reserveContinuation(f,'model','untrusted-diagnostic',now);
+ await finishContinuation(f,'model','untrusted-diagnostic',{diagnostic:{category:'proposal_schema',proposalRejection:'private raw provider text'}},now);
+ assert.equal(JSON.parse(f.DB.sqlite.prepare("SELECT outcome FROM whatsapp_continuation_operations WHERE kind='model'").get().outcome).proposal_rejection,undefined);
+});
+
+const solTime=thirdTime+3600000;
+async function solPrepared(){
+ const e=await retryPrepared();assert.equal(await issueContinuationGrant(e,thirdTime),true);const on=enable(e);
+ for(let i=0;i<3;i++){
+  assert.ok(await reserveContinuation(on,'inbound','third-in-'+i,thirdTime));
+  assert.ok(await reserveContinuation(on,'outbound','third-out-'+i,thirdTime));await finishContinuation(on,'outbound','third-out-'+i,{ok:true},thirdTime);
+ }
+ assert.ok(await reserveContinuation(on,'model','third-model',thirdTime));await finishContinuation(on,'model','third-model',{ok:false},thirdTime);
+ return {...e,WHATSAPP_BOOKING_MODEL:'gpt-6.1-sol',WHATSAPP_BOOKING_REASONING_EFFORT:'low',WHATSAPP_BOOKING_CONTINUATION_VERSION:'4',WHATSAPP_BOOKING_CONTINUATION_SOL_SCHEMA_READY:'on',
+  WHATSAPP_BOOKING_CONTINUATION_ID:e.WHATSAPP_BOOKING_PILOT_ID+':quote-v2-handset-4',WHATSAPP_BOOKING_CONTINUATION_START:new Date(solTime).toISOString(),WHATSAPP_BOOKING_CONTINUATION_END:new Date(solTime+900000).toISOString()};
+}
+const solGrant=e=>e.DB.sqlite.prepare('SELECT * FROM whatsapp_continuation_sol_grants').get();
+const solUsage={input_tokens:871,output_tokens:98,total_tokens:969,input_tokens_details:{cached_tokens:0},output_tokens_details:{reasoning_tokens:0}};
+test('Sol fourth grant preserves stopped history, offline holds, model identity, expiry and all quotas',async()=>{
+ const e=await solPrepared(),before=JSON.stringify(retryGrant(e));
+ for(const patch of [{WHATSAPP_BOOKING_MODEL:'gpt-6-luna'},{WHATSAPP_BOOKING_REASONING_EFFORT:'medium'},{WHATSAPP_BOOKING_CONTINUATION_SOL_SCHEMA_READY:'off'},{WHATSAPP_BOOKING_CONTINUATION_END:new Date(solTime+900001).toISOString()}])
+  assert.equal(await issueContinuationGrant({...e,...patch},solTime),false);
+ assert.equal(await issueContinuationGrant(e,solTime),true);assert.equal(await issueContinuationGrant(e,solTime),false);
+ assert.equal(solGrant(e).historical_micros,735124);assert.equal(solGrant(e).historical_model_micros,595224);
+ assert.throws(()=>e.DB.sqlite.exec('UPDATE whatsapp_continuation_retry_grants SET spent_micros=0'),/predecessor/);
+ const on=enable(e);assert.equal(await continuationCanProceed({...on,WHATSAPP_BOOKING_REASONING_EFFORT:'medium'},solTime),false);
+ for(const [kind,max] of [['inbound',12],['outbound',12],['address',3],['model',4]]){
+  for(let i=0;i<max;i++){
+   const key=eventId(i);assert.ok(await reserveContinuation(on,kind,key,solTime));
+   assert.equal(await reserveContinuation(on,kind,key,solTime),null);
+   if(kind!=='inbound')await finishContinuation(on,kind,key,{ok:true,usage:solUsage},solTime);
+  }
+  assert.equal(await reserveContinuation(on,kind,'overflow',solTime),null);
+ }
+ assert.equal(solGrant(e).spent_micros,580480);assert.equal(solGrant(e).model_micros,225280);
+ assert.equal(await continuationCanProceed(on,solTime+900000),false);assert.equal(JSON.stringify(retryGrant(e)),before);
+});
+test('Sol live adapter pins low, no counting, four serialized calls and retains item notes',async()=>{
+ const e=await solPrepared();assert.equal(await issueContinuationGrant(e,solTime),true);const on=enable(e);let calls=0;
+ for(let i=0;i<5;i++){
+  const adapter=createOpenAIBookingModel(on,{clock:()=>solTime,eventId:eventId(i),fetchImpl:async(url,init)=>{
+   calls++;assert.equal(url,'https://api.openai.com/v1/responses');const body=JSON.parse(init.body);
+   assert.equal(body.model,'gpt-6.1-sol');assert.equal(body.reasoning.effort,'low');assert.equal(body.max_output_tokens,1024);assert.equal(body.store,false);assert.equal(body.service_tier,'default');
+   assert.equal(solGrant(e).model_micros,calls*56320);
+   const result=await response().json();result.model='gpt-6.1-sol';result.usage=solUsage;return Response.json(result);
+  }});
+  const p=await proposeBookingTurn(adapter,state,'מפתחות',solTime);
+  if(i<4)assert.deepEqual(p.entries,[['size','small'],['notes','מפתחות']]);else assert.equal(p,null);
+ }
+ assert.equal(calls,4);
+});
+test('Sol incomplete, unverified usage, wrong model and transport failure retain the hold and stop',async()=>{
+ for(const kind of ['incomplete','usage','model','transport']){
+  const e=await solPrepared();assert.equal(await issueContinuationGrant(e,solTime),true);let calls=0;
+  const on=enable(e),adapter=createOpenAIBookingModel(on,{clock:()=>solTime,eventId:eventId(1),fetchImpl:async()=>{
+   calls++;if(kind==='transport')throw new Error('synthetic');const r=await response().json();r.model=kind==='model'?'gpt-6-luna':'gpt-6.1-sol';r.usage=kind==='usage'?{...solUsage,input_tokens:17000}:solUsage;if(kind==='incomplete')r.status='incomplete';return Response.json(r);
+  }});
+  assert.equal(await proposeBookingTurn(adapter,state,'מפתחות',solTime),null);assert.equal(calls,1);assert.equal(solGrant(e).model_micros,56320);assert.equal(solGrant(e).stopped_reason,'model_uncertain');
+  assert.equal(await reserveContinuation(on,'model','again',solTime),null);
+ }
 });

@@ -1,3 +1,5 @@
+import { conversationalQuestion } from './whatsapp-booking-conversation.js';
+import { localCopy } from './whatsapp-booking-i18n.js';
 // Reviewed copy only: a model selects meaning, never ungrounded customer prose.
 export const bookingLanguage = (previous, text) => {
   const requested = requestedBookingLanguage(text);
@@ -9,7 +11,7 @@ export const bookingLanguage = (previous, text) => {
   if ((words.match(/\b[a-z]{2,}\b/gi) || []).length >= 3) return 'en';
   return previous === 'en' ? 'en' : 'he';
 };
-export const bookingSay = (state, he, en) => state.language === 'en' ? en : he;
+export const bookingSay = (state, he, en) => state.language && state.language !== 'he' ? localCopy(state.language, en) : he;
 export const SHORT_QUESTIONS = {
   he: {
     size: 'מה גודל הפריט — קטן או בינוני (עד קופסת נעליים ועד 5 ק״ג)?',
@@ -54,8 +56,8 @@ const FACT_REPLIES = {
     identity: 'I’m the EdenMish digital assistant, and you can ask for a person at any time.',
   },
 };
-export const bookingQuestion = (state, field) => SHORT_QUESTIONS[state.language === 'en' ? 'en' : 'he'][field];
-export const bookingFact = (state, topic) => FACT_REPLIES[state.language === 'en' ? 'en' : 'he'][topic];
+export const bookingQuestion = (state, field, options) => conversationalQuestion(state, field, options) || (state.language && state.language !== 'he' ? localCopy(state.language, SHORT_QUESTIONS.en[field]) : SHORT_QUESTIONS.he[field]);
+export const bookingFact = (state, topic) => state.language && state.language !== 'he' ? localCopy(state.language, FACT_REPLIES.en[topic]) : FACT_REPLIES.he[topic];
 
 export const requestedBookingLanguage = text => /^(?:(?:please )?(?:(?:can we|can you|could we|could you) )?(?:continue|speak|reply|respond|switch)(?: to me)?(?: in| to)? (?:english|hebrew)(?: please)?|(?:english|hebrew)(?: please)?|(?:עברית|אנגלית)(?: בבקשה)?|(?:בוא(?:ו)? נמשיך|אפשר|נא לעבור|לעבור|אני רוצה)(?: לדבר)? (?:בעברית|באנגלית|לעברית|לאנגלית)(?: בבקשה)?)[.!?]?$/iu.test(text.trim()) ? /english|אנגלית/iu.test(text) ? 'en' : 'he' : null;
 export const isBookingLanguageRequest = text => requestedBookingLanguage(text) !== null;

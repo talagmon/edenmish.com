@@ -1,0 +1,604 @@
+[
+  {
+    "id": "he-reject-0",
+    "text": "מעטפה קטנה? לא, חבילה בינונית",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-1",
+    "text": "מעטפה קטנה. לא, סליחה, מקרר",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-2",
+    "text": "מעטפה קטנה. בעצם חבילה בינונית",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-3",
+    "text": "מעטפה קטנה, אבל בעצם לא",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-4",
+    "text": "מעטפה קטנה, אולי גדולה יותר",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-5",
+    "text": "מעטפה קטנה 10kg",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-6",
+    "text": "מעטפה קטנה 20kg",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-7",
+    "text": "מעטפה קטנה 10KG",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-8",
+    "text": "מעטפה קטנה 10 ק\"ג",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-9",
+    "text": "מעטפה קטנה. תיקון: מקרר",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-10",
+    "text": "מעטפה קטנה, טעות, חבילה בינונית",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-11",
+    "text": "מעטפה קטנה, חבילה בינונית",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-12",
+    "text": "מעטפה קטנה? לא!",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "fr-review-alternative",
+    "text": "une petite enveloppe ou une grande boîte",
+    "quote": "petite",
+    "language": "fr",
+    "accept": false
+  },
+  {
+    "id": "en-review-negation",
+    "text": "I do not have a small envelope, it is a fridge",
+    "quote": "small",
+    "language": "en",
+    "accept": false
+  },
+  {
+    "id": "en-alternative",
+    "text": "a small envelope or a large box",
+    "quote": "small",
+    "language": "en",
+    "accept": false
+  },
+  {
+    "id": "en-negative",
+    "text": "I do not really have a small envelope",
+    "quote": "small",
+    "language": "en",
+    "accept": false
+  },
+  {
+    "id": "en-correction",
+    "text": "a small envelope. Actually a fridge",
+    "quote": "small",
+    "language": "en",
+    "accept": false
+  },
+  {
+    "id": "en-weight",
+    "text": "a small envelope 10kg",
+    "quote": "small",
+    "language": "en",
+    "accept": false
+  },
+  {
+    "id": "en-valid-note",
+    "text": "a small envelope, not urgent",
+    "quote": "small",
+    "language": "en",
+    "accept": true
+  },
+  {
+    "id": "en-bare",
+    "text": "small",
+    "quote": "small",
+    "language": "en",
+    "accept": true
+  },
+  {
+    "id": "fr-alternative",
+    "text": "une petite enveloppe ou une grande boîte",
+    "quote": "petite",
+    "language": "fr",
+    "accept": false
+  },
+  {
+    "id": "fr-negative",
+    "text": "je n’ai pas de petite enveloppe",
+    "quote": "petite",
+    "language": "fr",
+    "accept": false
+  },
+  {
+    "id": "fr-correction",
+    "text": "une petite enveloppe. En fait un réfrigérateur",
+    "quote": "petite",
+    "language": "fr",
+    "accept": false
+  },
+  {
+    "id": "fr-weight",
+    "text": "une petite enveloppe 10kg",
+    "quote": "petite",
+    "language": "fr",
+    "accept": false
+  },
+  {
+    "id": "fr-valid-note",
+    "text": "une petite enveloppe, pas urgent",
+    "quote": "petite",
+    "language": "fr",
+    "accept": true
+  },
+  {
+    "id": "fr-bare",
+    "text": "petite",
+    "quote": "petite",
+    "language": "fr",
+    "accept": true
+  },
+  {
+    "id": "ru-alternative",
+    "text": "маленький конверт или большая коробка",
+    "quote": "маленький",
+    "language": "ru",
+    "accept": false
+  },
+  {
+    "id": "ru-negative",
+    "text": "у меня нет маленький конверт",
+    "quote": "маленький",
+    "language": "ru",
+    "accept": false
+  },
+  {
+    "id": "ru-correction",
+    "text": "маленький конверт. На самом деле холодильник",
+    "quote": "маленький",
+    "language": "ru",
+    "accept": false
+  },
+  {
+    "id": "ru-weight",
+    "text": "маленький конверт 10кг",
+    "quote": "маленький",
+    "language": "ru",
+    "accept": false
+  },
+  {
+    "id": "ru-valid-note",
+    "text": "маленький конверт, не срочно",
+    "quote": "маленький",
+    "language": "ru",
+    "accept": true
+  },
+  {
+    "id": "ru-bare",
+    "text": "маленький",
+    "quote": "маленький",
+    "language": "ru",
+    "accept": true
+  },
+  {
+    "id": "ar-alternative",
+    "text": "ظرف صغير أو صندوق كبير",
+    "quote": "صغير",
+    "language": "ar",
+    "accept": false
+  },
+  {
+    "id": "ar-negative",
+    "text": "ليس لدي ظرف صغير",
+    "quote": "صغير",
+    "language": "ar",
+    "accept": false
+  },
+  {
+    "id": "ar-correction",
+    "text": "ظرف صغير. بل ثلاجة",
+    "quote": "صغير",
+    "language": "ar",
+    "accept": false
+  },
+  {
+    "id": "ar-weight",
+    "text": "ظرف صغير ١٠كغ",
+    "quote": "صغير",
+    "language": "ar",
+    "accept": false
+  },
+  {
+    "id": "ar-valid-note",
+    "text": "ظرف صغير، ليس عاجلا",
+    "quote": "صغير",
+    "language": "ar",
+    "accept": true
+  },
+  {
+    "id": "ar-bare",
+    "text": "صغير",
+    "quote": "صغير",
+    "language": "ar",
+    "accept": true
+  },
+  {
+    "id": "he-positive-0",
+    "text": "מעטפה קטנה מחר בבוקר או בצהריים",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": true
+  },
+  {
+    "id": "he-positive-1",
+    "text": "מעטפה קטנה. מחר בבוקר או בצהריים",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": true
+  },
+  {
+    "id": "he-positive-2",
+    "text": "מעטפה קטנה, תתקשרו או תשלחו הודעה",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": true
+  },
+  {
+    "id": "he-positive-3",
+    "text": "מעטפה קטנה, לא דחוף",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": true
+  },
+  {
+    "id": "he-positive-4",
+    "text": "מעטפה קטנה, לא שביר",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": true
+  },
+  {
+    "id": "he-positive-5",
+    "text": "מעטפה קטנה. אין מעלית",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": true
+  },
+  {
+    "id": "he-positive-6",
+    "text": "אין מעלית, מעטפה קטנה",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": true
+  },
+  {
+    "id": "he-positive-7",
+    "text": "מעטפה קטנה מרחוב הכבד 10 תל אביב",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": true
+  },
+  {
+    "id": "mixed-alternative",
+    "text": "מעטפה קטנה or a large box",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "mixed-negation",
+    "text": "I do not have מעטפה קטנה",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "mixed-time",
+    "text": "מעטפה קטנה, tomorrow morning or afternoon",
+    "quote": "מעטפה קטנה",
+    "language": "he",
+    "accept": true
+  },
+  {
+    "id": "en-contact",
+    "text": "a small envelope, call or send a message",
+    "quote": "small",
+    "language": "en",
+    "accept": true
+  },
+  {
+    "id": "fr-time",
+    "text": "une petite enveloppe, demain matin ou midi",
+    "quote": "petite",
+    "language": "fr",
+    "accept": true
+  },
+  {
+    "id": "ru-contact",
+    "text": "маленький конверт, позвоните или напишите",
+    "quote": "маленький",
+    "language": "ru",
+    "accept": true
+  },
+  {
+    "id": "ar-time",
+    "text": "ظرف صغير، غدا صباحا أو مساء",
+    "quote": "صغير",
+    "language": "ar",
+    "accept": true
+  },
+  {
+    "id": "en-trailing-no",
+    "text": "a small envelope? No!",
+    "quote": "small",
+    "language": "en",
+    "accept": false
+  },
+  {
+    "id": "en-trailing-correct",
+    "text": "a small envelope. No, a fridge",
+    "quote": "small",
+    "language": "en",
+    "accept": false
+  },
+  {
+    "id": "fr-trailing-no",
+    "text": "une petite enveloppe. Non, un réfrigérateur",
+    "quote": "petite",
+    "language": "fr",
+    "accept": false
+  },
+  {
+    "id": "ru-trailing-no",
+    "text": "маленький конверт? Нет!",
+    "quote": "маленький",
+    "language": "ru",
+    "accept": false
+  },
+  {
+    "id": "ar-trailing-no",
+    "text": "ظرف صغير؟ لا!",
+    "quote": "صغير",
+    "language": "ar",
+    "accept": false
+  },
+  {
+    "id": "en-correct-replacement",
+    "text": "not a large box but a small envelope",
+    "quote": "small",
+    "language": "en",
+    "accept": true
+  },
+  {
+    "id": "fr-correct-replacement",
+    "text": "pas une grande boîte mais une petite enveloppe",
+    "quote": "petite",
+    "language": "fr",
+    "accept": true
+  },
+  {
+    "id": "ru-correct-replacement",
+    "text": "не большая коробка но маленький конверт",
+    "quote": "маленький",
+    "language": "ru",
+    "accept": true
+  },
+  {
+    "id": "ar-correct-replacement",
+    "text": "ليس صندوق كبير بل ظرف صغير",
+    "quote": "صغير",
+    "language": "ar",
+    "accept": true
+  },
+  {
+    "id": "he-reject-0-adjective",
+    "text": "מעטפה קטנה? לא, חבילה בינונית",
+    "quote": "קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-1-adjective",
+    "text": "מעטפה קטנה. לא, סליחה, מקרר",
+    "quote": "קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-2-adjective",
+    "text": "מעטפה קטנה. בעצם חבילה בינונית",
+    "quote": "קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-3-adjective",
+    "text": "מעטפה קטנה, אבל בעצם לא",
+    "quote": "קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-4-adjective",
+    "text": "מעטפה קטנה, אולי גדולה יותר",
+    "quote": "קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-5-adjective",
+    "text": "מעטפה קטנה 10kg",
+    "quote": "קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-6-adjective",
+    "text": "מעטפה קטנה 20kg",
+    "quote": "קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-7-adjective",
+    "text": "מעטפה קטנה 10KG",
+    "quote": "קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-8-adjective",
+    "text": "מעטפה קטנה 10 ק\"ג",
+    "quote": "קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-9-adjective",
+    "text": "מעטפה קטנה. תיקון: מקרר",
+    "quote": "קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-10-adjective",
+    "text": "מעטפה קטנה, טעות, חבילה בינונית",
+    "quote": "קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-11-adjective",
+    "text": "מעטפה קטנה, חבילה בינונית",
+    "quote": "קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-reject-12-adjective",
+    "text": "מעטפה קטנה? לא!",
+    "quote": "קטנה",
+    "language": "he",
+    "accept": false
+  },
+  {
+    "id": "he-positive-0-adjective",
+    "text": "מעטפה קטנה מחר בבוקר או בצהריים",
+    "quote": "קטנה",
+    "language": "he",
+    "accept": true
+  },
+  {
+    "id": "he-positive-1-adjective",
+    "text": "מעטפה קטנה. מחר בבוקר או בצהריים",
+    "quote": "קטנה",
+    "language": "he",
+    "accept": true
+  },
+  {
+    "id": "he-positive-2-adjective",
+    "text": "מעטפה קטנה, תתקשרו או תשלחו הודעה",
+    "quote": "קטנה",
+    "language": "he",
+    "accept": true
+  },
+  {
+    "id": "he-positive-3-adjective",
+    "text": "מעטפה קטנה, לא דחוף",
+    "quote": "קטנה",
+    "language": "he",
+    "accept": true
+  },
+  {
+    "id": "he-positive-4-adjective",
+    "text": "מעטפה קטנה, לא שביר",
+    "quote": "קטנה",
+    "language": "he",
+    "accept": true
+  },
+  {
+    "id": "he-positive-5-adjective",
+    "text": "מעטפה קטנה. אין מעלית",
+    "quote": "קטנה",
+    "language": "he",
+    "accept": true
+  },
+  {
+    "id": "he-positive-6-adjective",
+    "text": "אין מעלית, מעטפה קטנה",
+    "quote": "קטנה",
+    "language": "he",
+    "accept": true
+  },
+  {
+    "id": "he-positive-7-adjective",
+    "text": "מעטפה קטנה מרחוב הכבד 10 תל אביב",
+    "quote": "קטנה",
+    "language": "he",
+    "accept": true
+  },
+  {
+    "id": "fr-bare-retraction",
+    "text": "une petite enveloppe? Non!",
+    "quote": "petite",
+    "language": "fr",
+    "accept": false
+  },
+  {
+    "id": "en-multiple-owned-items",
+    "text": "my keys; your keys",
+    "quote": "my keys",
+    "language": "en",
+    "accept": false
+  }
+]

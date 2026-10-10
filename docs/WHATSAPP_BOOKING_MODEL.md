@@ -1,3 +1,7 @@
+> **Review publication, 10 October 2026:** Historical authorization and test entries below do not authorize another run. Current scope and fresh local test evidence are in [the revision 2 handoff](reviews/whatsapp-size-context-r2/README.md). No deployment or activation is part of this publication.
+
+> **10 October 2026 local update:** voice notes plus Hebrew, Arabic, Russian, French, English and mixed-language intake are implemented behind disabled feature gates. See [current scope, local evidence and proposed test budget](WHATSAPP_VOICE_MULTILINGUAL.md). The deployed Sol text rehearsal and earlier Luna sections below are historical; this update has not been deployed.
+
 # Focused booking interpretation — gated Luna adapter
 
 ## Current delivery and selected model
@@ -278,3 +282,246 @@ pricing remain in their canonical backend checks. No offline corpus approves
 live model quality, latency, cost or release. A later explicitly approved,
 bounded live check must use fresh attempt authorization while retaining both
 existing attempts and the $0.20 hold. No new key is needed for offline work.
+
+## Proposed stopped-model notice policy (offline, not activated)
+
+The October 9 staging rehearsal stopped on the fourth inbound message after an
+uncertain model result. The stop correctly prevented more paid work, but also
+cancelled the queued handoff acknowledgement. The retained ledger cannot identify
+whether that model result failed at HTTP, token count, response validation or
+transport; its duration alone does not establish a timeout.
+
+`WHATSAPP_BOOKING_FAILURE_NOTICE_POLICY=one-shot-v1` is an optional policy for a
+**new, explicitly approved grant**, bound into its immutable configuration hash.
+Absent or `off` preserves the current fail-closed behavior and binding. Changing
+an already issued grant's policy fails validation. Unknown policy values fail
+closed. This change does not create a new grant path, reopen a closed grant,
+reset a budget, enable a feature flag or deploy anything.
+
+With this policy, an uncertain model operation stops the grant with
+`model_uncertain`. Normal inbound, model, address lookup and outbound reservations
+remain blocked. Only the matching event's fixed failure notice may reserve one
+remaining outbound slot and its full $0.0113 allowance, within the existing
+aggregate $2 cap, original holds/cushion and exact session end. The notice:
+
+- Requires the scoped allowlisted conversation in handoff, a matching uncertain
+  model operation and an exact fixed Hebrew/English body; no model text is sent.
+- Must be claimed within 15 seconds of the failed operation and dispatched within
+  15 seconds of that claim, always before the original session expiry.
+- Has one singleton operation per grant. Concurrent dispatch, duplicates, crashes
+  and uncertain sends cannot authorize another attempt. No holds are refunded.
+- Remains subject to all send/configuration gates. Explicit operator stop, failed
+  delivery receipt, expiry or budget exhaustion suppresses it.
+- Does not promise a human has been notified. It says automation paused and asks
+  the customer to contact a person. It creates no order or other downstream work.
+
+Failure operations now retain only a whitelisted category, bounded HTTP status,
+elapsed milliseconds and token counts in their existing outcome field. Unknown
+categories remain `uncertain`. No raw provider errors, prompts, customer text,
+credentials, headers or reasoning are retained. No schema migration is needed.
+
+Before any future live validation, review the notice permission and prepare a
+new explicitly authorized immutable grant mechanism that preserves the spent
+second grant and the original aggregate budget. The current one-use follow-on
+mechanism cannot issue another window. Also adapt and test the external read-only
+supervisor: it may allow this notice to settle only until the earlier of the
+original cutoff or 30 seconds after the model failure, then clean up. Every other
+stop must trigger immediate cleanup. The independent hard-cutoff watchdog must
+remain unconditional. The prior session controllers are closed and unchanged;
+this supervisor adaptation and live approval are still outstanding.
+
+A separate UX decision remains: content sent before consent is deliberately not
+retained. Supporting a detailed first message across the consent transition needs
+an explicit privacy/design decision; this patch does not introduce raw-message
+retention. Numbered date/daypart suggestions have offline coverage but were not
+reached in the short live exchange. Offline mocked success does not establish
+real provider quality or live end-to-end completion.
+
+### Prepared third-window implementation
+
+Migration 043 now provides the narrowly scoped immutable third grant described
+above, and `worker/scripts/whatsapp-session-supervision.py` supplies a pure,
+read-only, tested supervisor decision. The local retry controller integrates that
+policy and retains an independent hard-expiry watchdog and frozen cleanup bundle.
+These are prepared artifacts, not running controls. Neither migration nor code
+has been deployed. Explicit approval of the fixed notice and bounded grace,
+remote preparation, secure user key entry, fixed future times, OFF-state grant
+issuance verification and both live shutdown processes are still required before
+any callback connection/activation. Existing pre-consent behavior stays unchanged.
+
+### Offline diagnosis after the third-window stop
+
+The third session returned HTTP200 with a completed, parseable response, but
+`validateBookingProposal` rejected it (`proposal_schema`). Its retained metadata
+records 846 counted input tokens, 83 output tokens and 9197ms elapsed. Neither the
+proposal nor its exact rejected rule was retained, so the specific cause cannot
+be reconstructed. This is not evidence of a timeout or a particular address typo.
+The fixed pause notice was delivered/read and automation stopped as designed.
+
+The offline follow-up adds a `proposal_rejection` enum to future failed-operation
+metadata, only alongside `proposal_schema`. Its fixed codes distinguish envelope
+shape/values, intent consistency, field shape/duplication, quote format/presence/
+ambiguity/boundaries/negation/overlap, size recognition, schedule syntax and email
+validation. It retains no quoted text, raw output, field values, customer
+identifiers, free-form errors or reasoning. Unknown codes are discarded. The
+validator uses the same acceptance checks; diagnostics cannot approve input or
+change a rejection, and observer failures cannot affect validation. No migration
+is required and no new provider request, retry or prompt change is introduced.
+
+Numbers remain optional post-consent shortcuts. Clear written review/modify and
+ordinal choices are resolved only against the displayed current phase/revision.
+A generic `ok` cannot select an uncertain address or time. Pre-consent retention
+and explicit final confirmation remain unchanged. Synthetic Hebrew coverage
+includes one message providing keys, two typo-containing public addresses, a
+morning request and recipient details; approved mock address suggestions require
+selection, the known daypart survives, and only missing information is requested.
+These fixtures prove routing/validation with supplied model proposals; they do
+not prove that the live model will return a valid proposal. The follow-up is
+local only, not deployed or enabled. Further live testing needs separate review
+and authorization; no fourth grant or budget increase has been prepared.
+
+### Reasoning comparison and offline semantic gates (2026-10-09)
+
+The closed handset pilot actually used `gpt-6-luna`, Responses API, reasoning
+`none`, strict proposal schema v2, Standard tier, `store:false`, and a 512-token
+output cap. HTTP 200 followed by `proposal_schema` means our application rejected
+parsed output; it does not prove the provider violated JSON Schema or identify
+which semantic/evidence rule failed. No private transcript or raw output was used
+for the follow-up. Fixed rejection codes now distinguish evidence, field,
+normalization and route-role failures without retaining customer/provider text.
+
+New offline gates keep exact source quotes separate from normalized values.
+Unambiguous Hebrew word-hours produce a separate hour preference; missing dates
+remain a question, and AM/PM conflicts remain unaccepted. Suggestions are generated
+from service rules, require selection, and are not claims of live driver capacity.
+Explicit route prefixes/labels are independently checked against pickup/dropoff
+roles. Swaps, negated old addresses and alternatives fail before geocoding; paired
+unlabelled routes require clarification. These are bounded language rules, not a
+claim to resolve every possible Hebrew sentence.
+
+`worker/scripts/evaluate-booking-reasoning.mjs` prepares a fixed synthetic
+comparison of `gpt-6.1-sol` with `low` and `medium` reasoning. The two turns per
+configuration are a multi-field typo route/daypart request and a scoped pickup
+correction. Contract tests have handwritten expectations, extraction grading uses
+that independent oracle, and conversation tests exercise the actual state machine
+with frozen time, mock geocoding, service-rule slots and a fixed ILS 50 quote.
+These layers are deliberately separate. No new `none` configuration is evaluated.
+
+`worker/scripts/run-booking-reasoning.mjs` is a separate, one-batch local runner,
+never a Worker adapter or live grant. The human approved up to USD 0.32, reallocated
+inside the original USD 2 total; prior holds remain. It permits four Responses
+calls, zero token-count calls, no retries, Standard tier and no tools/history/media.
+Each serialized request is at most 8192 UTF-8 bytes. Input accounting conservatively
+allows 16384 tokens (one per payload byte plus another 8192 for framing/schema),
+not an exact tokenizer count or a provider-enforced input limit. Output has an
+explicit 3072-token ceiling including reasoning; incomplete output is a stopped,
+inconclusive result, never silently accepted or retried. The 30-second evaluation
+deadline does not change the live adapter deadline.
+
+Using USD 2.50/M for all input (cache-write upper tariff), USD 10/M output, and 10%
+contingency gives a USD 0.078848 reservation per call, USD 0.315392 for four. The
+runner verifies returned usage, model and tier, retaining the entire reservation
+even on failure or cheap success. No unpriced counting endpoint is called. The
+input/framing allowance is an engineering budget assumption, not an invoice
+guarantee. An unexpected usage overrun stops the batch and requires review.
+
+The manifest fingerprints requests and relevant source. A fixed exclusive ledger
+prevents replay; the hidden user-entry helper supplies the key through stdin only,
+without local or staging persistence. Reports retain fixed outcomes, bounded
+rejection codes, latency and input/cached/output/reasoning token usage. No raw
+reasoning is inspected or logged. Schema/prompt changes invalidate the manifest.
+
+Four calls are smoke evidence only. Before release, expand synthetic coverage to
+natural menu equivalents, multi-field retention, ambiguity/negation, bare dayparts,
+weekday/date conflicts, unavailable times, stale lists, punctuation/emoji,
+withdrawal, refreshed recaps and duplicate delivery/confirmation. Required safety
+results: zero invented address/slot/price, zero wrong route accepted, no booking
+without current explicit confirmation, no duplicate booking and no use of discarded
+pre-consent details. Product targets are 98% correct next action, 99% supplied-field
+retention and 95% complete-script success; the four-call batch cannot establish
+those rates. Compare clarification quality and cost per successful scenario, not
+just schema-valid output. Handset activation still requires real-provider review
+and a new bounded session with coordinated safeguards.
+
+References checked October 9: [Sol settings and pricing](https://developers.openai.com/api/docs/models/gpt-6.1-sol),
+[reasoning/output limits](https://developers.openai.com/api/docs/guides/reasoning),
+[prompt-cache pricing](https://developers.openai.com/api/docs/guides/prompt-caching).
+
+### First Sol observation and prefix fix (offline follow-up)
+
+The first real Sol-low call stopped after `route_ambiguous`: client-observed
+request/validation duration5019ms, input871, output98, reasoning0 tokens. Medium
+and the correction turn were not called. The frozen request fingerprint confirms
+`reasoning.effort:low`; usage parsing preserves a reported zero and rejects a
+missing reasoning count. Zero reported reasoning tokens is not evidence that the
+request omitted effort or that the provider ignored it. Provider-only compute time
+and WhatsApp end-to-end latency were not measured.
+
+The actual model proposal was not retained. For this fixed synthetic input, the
+only reachable `route_ambiguous` branch was an unrecognized marker before at least
+one quote in a paired route. A reproduced application defect explains one concrete
+way to reach it: literal quotes that include Hebrew מ/ל failed, while otherwise
+identical quotes excluding the prefixes passed. This establishes the defect and
+branch, not the exact unretained provider quote.
+
+The fix checks route markers inside exact evidence as well as before it. An
+included Hebrew pickup prefix needs a shipment/correction context; a quoted
+pickup-to-delivery sequence must have an independently established pickup. Named
+street letters are preserved, unlabelled pairs remain ambiguous, and swapped roles,
+negation and alternatives still fail. Raw quotes are never edited; only independently
+verified markers are removed from separate normalized addresses before canonical
+resolution. `route_unmarked` now distinguishes missing source-role evidence.
+
+Synthetic-only rejection diagnostics retain bounded field enums and source span
+indices, never arbitrary model output or reasoning. Future reviewers can reconstruct
+quotes from the fixed public synthetic fixture. These diagnostics are not enabled
+for customer transcripts. The runner additionally measures model round-trip and
+validation durations separately for future approved calls.
+
+Fast reasoning is a product requirement. Keep Sol low and medium as candidates;
+no new none mode. Typical replies around2–3s is a target, not demonstrated capability.
+The single5019ms observation misses that target and does not establish a typical
+rate. Keep the compact871-token request stable for the causal retest; measure
+before attempting further prompt changes. Slow-reply acknowledgements require a
+separately budgeted channel design, not an unapproved extra send. No speed-tier
+upgrade is configured.
+
+A fresh, unapproved two-call retest plan uses one identical route case at each
+reasoning effort, reserves at most$0.157696, and retains the existing$0.078848 hold.
+It requires distinct explicit post-stop approval and a fresh ephemeral key handoff.
+The old manifest/ledger is unchanged and cannot be reused. No new batch is executed
+merely because the earlier$0.32 allocation still has unused room.
+
+### Item-description retention (10 October local fix)
+
+A validated size quote that the bounded item parser recognizes as keys or an
+ envelope also supplies missing `notes`. Explicit notes in the proposal and
+already collected notes take precedence; bare size words do not create notes.
+The existing source-evidence, route, sensitive-input and confirmation checks
+still apply. The description remains visible in the final summary before an
+order can be created. This local change is not a staging deployment.
+
+The separately authorized description retest uses batch
+`edenmish-sol-description-20261010-c`, one fixed synthetic route case at low then
+medium effort, no retries, and stop on the first failed/incomplete/unverified
+response. Each request caps output including reasoning at 1,024 tokens and its
+serialized body at 5,000 bytes. A conservative 10,000-input-token allowance
+(payload bytes plus 5,000 framing/schema allowance), cache-write input tariff,
+and 10% contingency reserve $0.038764 per call, $0.077528 total within the
+$0.078848 authorization. The input allowance is an engineering estimate, not a
+provider-enforced input cap. Earlier batch records and holds remain unchanged.
+
+### October 10 Sol-low handset grant
+
+The owner authorized staging deployment and a fresh bounded WhatsApp test using
+Sol low. Version 4 retains all historical handset and synthetic holds. It allows
+one allowlisted recipient, 15 minutes, 12 inbound/12 outbound messages, 3 address
+lookups and 4 model calls. Model requests use `gpt-6.1-sol`, low effort, Standard
+tier, no counting calls, no store/tools/history, 1,024 output tokens and 8,192
+payload bytes. Each model reservation is $0.056320, with 16,384 input-token
+engineering allowance and 10% contingency. Maximum new reservations: $0.580480
+inside the prior $0.764876 remainder. Total with prior holds and fee cushion:
+$1.815604, below the original $2 ceiling. Unknown usage or any model failure
+stops the session. One existing fixed failure notice may settle for at most
+30 seconds; it cannot reopen model processing. Only conversation testing is
+permitted; the canonical order/payment boundary remains disabled.

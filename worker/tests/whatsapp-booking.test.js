@@ -41,7 +41,7 @@ async function reviewed(svc = services()) {
   let state = newBooking();
   for (const text of ['מתחילים', ...details]) state = (await advanceBooking(state, text, svc, { phone, now: NOW })).state;
   assert.equal(state.phase, 'address_review');
-  return (await advanceBooking(state, `כתובות ${state.revision}`, svc, { phone, now: NOW })).state;
+  return (await advanceBooking(state, '1', svc, { phone, now: NOW })).state;
 }
 function sign(form, url = URL, secret = 'local-test-auth') {
   let message = url; for (const key of [...form.keys()].sort()) message += key + form.get(key);
@@ -59,7 +59,7 @@ test('partial conversation, explicit privacy consent, address review and revisio
   assert.equal(welcome.state.phase, 'consent'); assert.match(welcome.reply, /פרטיות/);
   state = await reviewed(); assert.equal(state.phase, 'review');
   const stale = await advanceBooking(state, 'אישור 0', services(), { phone, now: NOW }); assert.equal(stale.create, undefined);
-  const confirmed = await advanceBooking(state, `אישור ${state.revision}`, services(), { phone, now: NOW });
+  const confirmed = await advanceBooking(state, '1', services(), { phone, now: NOW });
   assert.equal(confirmed.create.expectedPrice, 50); assert.equal(confirmed.create.input.email, 'test@example.com');
   assert.equal(confirmed.create.input.use_wallet, undefined); assert.equal(confirmed.create.input.customer_type, 'private');
   assert.equal(confirmed.create.input.phone_delivery_link_opt_in, false);
@@ -79,7 +79,7 @@ test('edits invalidate quote; ambiguous and unsupported addresses cannot book', 
 test('price changes and quote expiry require new confirmation', async () => {
   const state = await reviewed(); const svc = services(); svc.quote = async () => ({ ...quote, price: 65 });
   for (const [service, now] of [[svc, NOW], [services(), NOW + QUOTE_TTL]]) {
-    const result = await advanceBooking(state, `אישור ${state.revision}`, service, { phone, now });
+    const result = await advanceBooking(state, '1', service, { phone, now });
     assert.equal(result.create, undefined); assert.ok(result.state.revision > state.revision); assert.match(result.reply, /אישור חדש/);
   }
 });
@@ -140,8 +140,8 @@ test('checkout ambiguity never retries creation; durable token remains for recon
   await processBookingEvent(env, { id: 'start', at: NOW, phone, text: 'מתחילים' }, svc, NOW);
   const state = await reviewed();
   env.DB.sqlite.prepare('UPDATE whatsapp_booking_conversations SET phase = ?, state_json = ?').run(state.phase, JSON.stringify(state));
-  await processBookingEvent(env, { id: 'confirm', at: NOW + 1000, phone, text: `אישור ${state.revision}` }, svc, NOW + 1000);
-  await processBookingEvent(env, { id: 'retry', at: NOW + 2000, phone, text: `אישור ${state.revision}` }, svc, NOW + 2000);
+  await processBookingEvent(env, { id: 'confirm', at: NOW + 1000, phone, text: '1' }, svc, NOW + 1000);
+  await processBookingEvent(env, { id: 'retry', at: NOW + 2000, phone, text: '1' }, svc, NOW + 2000);
   assert.equal(creates, 1); const row = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get(); assert.equal(row.phase, 'handoff'); assert.equal(row.order_token.length, 22);
 });
 
@@ -210,7 +210,7 @@ async function fullReview(env, net) {
   for (const text of ['hello', 'מתחילים', ...details]) assert.equal((await net.inbound(text)).response.status, 200);
   let row = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get();
   assert.equal(row.phase, 'address_review');
-  await net.inbound(`כתובות ${JSON.parse(row.state_json).revision}`);
+  await net.inbound('1');
   row = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get(); assert.equal(row.phase, 'review'); return row;
 }
 
@@ -218,10 +218,10 @@ test('signed Twilio to canonical order, single invoice, mismatch rejected, paid 
   t.mock.timers.enable({ apis: ['Date'], now: NOW + 60_000 });
   const env = { ...environment(database()), GOOGLE_PLACES_SERVER_KEY: 'mock', SHOPIFY_SHOP: 'mock.myshopify.com', SHOPIFY_ADMIN_TOKEN: 'mock', SHOPIFY_WEBHOOK_SECRET: 'webhook-mock', SENDGRID_API_KEY: 'mock', OPS_EMAIL: 'ops@example.com' };
   const net = installNetworkFixtures(env); const row = await fullReview(env, net); const state = JSON.parse(row.state_json);
-  const confirmed = await net.inbound(`אישור ${state.revision}`); assert.equal(confirmed.response.status, 200);
+  const confirmed = await net.inbound('1'); assert.equal(confirmed.response.status, 200);
   let order = env.DB.sqlite.prepare('SELECT * FROM orders').get(); assert.ok(order); assert.equal(order.source_channel, 'whatsapp'); assert.equal(order.customer_type, 'private'); assert.equal(order.email, 'test@example.com'); assert.equal(order.payment_status, 'link_sent'); assert.ok(order.otp_hash); assert.equal(net.counts.charges, 1); assert.equal(net.counts.sends, 0);
-  assert.equal((await worker.fetch(request(`אישור ${state.revision}`, confirmed.id).req, env)).status, 200);
-  await net.inbound('שילמתי'); await net.inbound(`אישור ${state.revision}`);
+  assert.equal((await worker.fetch(request('1', confirmed.id).req, env)).status, 200);
+  await net.inbound('שילמתי'); await net.inbound('1');
   assert.equal(net.counts.charges, 1); assert.equal(env.DB.sqlite.prepare('SELECT COUNT(*) n FROM orders').get().n, 1);
   async function paid(total, currency = 'ILS', id = 567) {
     const body = JSON.stringify({ id, draft_order_id: 123, note: `EdenMish token: ${order.token}`, total_price: String(total), currency, financial_status: 'paid' });
@@ -244,7 +244,7 @@ test('canonical checkout failure hands off and never creates another order or in
   t.mock.timers.enable({ apis: ['Date'], now: NOW + 60_000 });
   const env = { ...environment(database()), GOOGLE_PLACES_SERVER_KEY: 'mock', SHOPIFY_SHOP: 'mock.myshopify.com', SHOPIFY_ADMIN_TOKEN: 'mock' };
   const net = installNetworkFixtures(env, { chargeFails: true }); const row = await fullReview(env, net);
-  await net.inbound(`אישור ${JSON.parse(row.state_json).revision}`); await net.inbound('אישור 2');
+  await net.inbound('1'); await net.inbound('אישור 2');
   assert.equal(env.DB.sqlite.prepare('SELECT phase FROM whatsapp_booking_conversations').get().phase, 'handoff');
   assert.equal(env.DB.sqlite.prepare('SELECT COUNT(*) n FROM orders').get().n, 1); assert.equal(net.counts.charges, 1);
 });
@@ -326,7 +326,7 @@ test('losing a lease before checkout cannot create an order or publish a reply',
   env.DB.sqlite.prepare('UPDATE whatsapp_booking_conversations SET phase = ?, state_json = ?').run(state.phase, JSON.stringify(state));
   svc.quote = async () => { env.DB.sqlite.prepare("UPDATE whatsapp_booking_conversations SET lock_id = NULL, lock_at = NULL, phase = 'handoff'").run(); return quote; };
   svc.create = async () => { creates++; return {}; };
-  const result = await processBookingEvent(env, { id: 'confirm', at: NOW + 1000, phone, text: `אישור ${state.revision}` }, svc, NOW + 1000);
+  const result = await processBookingEvent(env, { id: 'confirm', at: NOW + 1000, phone, text: '1' }, svc, NOW + 1000);
   assert.equal(result.phase, 'handoff'); assert.equal(creates, 0);
 });
 
@@ -343,7 +343,7 @@ test('canonical creation rejects a price race after confirmation recheck, before
     }
     return statement;
   };
-  await net.inbound(`אישור ${JSON.parse(row.state_json).revision}`);
+  await net.inbound('1');
   assert.equal(env.DB.sqlite.prepare('SELECT COUNT(*) n FROM orders').get().n, 0); assert.equal(net.counts.charges, 0);
   const changed = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get(); assert.equal(changed.phase, 'address_review');
   assert.equal(changed.confirmed_at, null);
@@ -417,7 +417,7 @@ test('cancelled or missing canonical order never releases an uncertain checkout,
   const env = environment(database()); const svc = services();
   await processBookingEvent(env, { id: 'start', at: NOW, phone, text: 'מתחילים' }, svc, NOW);
   const state = await reviewed(); env.DB.sqlite.prepare('UPDATE whatsapp_booking_conversations SET phase = ?, state_json = ?').run(state.phase, JSON.stringify(state));
-  await processBookingEvent(env, { id: 'confirm', at: NOW + 1000, phone, text: `אישור ${state.revision}` }, svc, NOW + 1000);
+  await processBookingEvent(env, { id: 'confirm', at: NOW + 1000, phone, text: '1' }, svc, NOW + 1000);
   const row = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get(); assert.ok(row.checkout_started_at);
   assert.equal((await closeBooking(env.DB, row.id, NOW)).status, 409, 'no D1 order is not evidence of no provider effect');
   env.DB.sqlite.prepare("INSERT INTO orders (token, created_at, status, payment_status) VALUES (?, ?, 'cancelled', 'checkout_failed')").run(row.order_token, NOW);
@@ -454,9 +454,14 @@ test('mocked natural conversation reaches one canonical invoice and pauses on hu
   for (const text of ['שלום, אפשר להזמין משלוח?', 'מתחילים', 'אני רוצה לשלוח חבילה קטנה מדיזנגוף 10, תל אביב לביאליק 2, רמת גן מחר בשעה 11, שמי יעל כהן, האימייל שלי yael@example.com', 'קומה 2, דירה 4', 'אין', 'ספר']) await say(text);
   let row = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get(); assert.equal(row.phase, 'address_review');
   assert.match(transcript.at(-1), /איסוף: דיזנגוף 10, תל אביב/); assert.match(transcript.at(-1), /מסירה: ביאליק 2, רמת גן/);
-  await say(`כתובות ${JSON.parse(row.state_json).revision}`);
+  await say('1');
   row = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get(); assert.equal(row.phase, 'review');
-  await say(`אישור ${JSON.parse(row.state_json).revision}`); await say('שילמתי');
+  await say('אישור 2');
+  assert.equal(env.DB.sqlite.prepare('SELECT COUNT(*) n FROM orders').get().n,0);
+  assert.equal(net.counts.charges,0);
+  assert.equal(env.DB.sqlite.prepare('SELECT phase FROM whatsapp_booking_conversations').get().phase,'review');
+  assert.match(transcript.at(-1),/בחרו אפשרות אחת/);
+  await say('1'); await say('שילמתי');
   const order = env.DB.sqlite.prepare('SELECT * FROM orders').get(); assert.equal(order.payment_status, 'link_sent');
   assert.equal(order.email, 'yael@example.com'); assert.equal(order.name, 'יעל כהן'); assert.equal(order.source_channel, 'whatsapp');
   assert.equal(order.when_date, '2026-10-09'); assert.equal(net.counts.charges, 1); assert.equal(net.counts.sends, 0);
@@ -507,7 +512,7 @@ test('failure receipt arriving during quote recheck blocks checkout under the sa
   env.DB.sqlite.prepare("UPDATE whatsapp_booking_replies SET state = 'sent', body = NULL, provider_ref = ?").run(sid);
   svc.quote = async () => { env.DB.sqlite.prepare('INSERT INTO whatsapp_booking_receipts (provider_ref, rank, created_at) VALUES (?, 1, ?)').run(sid, NOW); return quote; };
   svc.create = async () => { creates++; return {}; };
-  await processBookingEvent(env, { id: 'confirm', at: NOW + 1000, phone, text: `אישור ${state.revision}` }, svc, NOW + 1000);
+  await processBookingEvent(env, { id: 'confirm', at: NOW + 1000, phone, text: '1' }, svc, NOW + 1000);
   assert.equal(creates, 0); assert.equal(env.DB.sqlite.prepare('SELECT phase FROM whatsapp_booking_conversations').get().phase, 'handoff');
 });
 
@@ -538,7 +543,7 @@ test('conversation pilot collects, quotes, edits and ends without orders, invoic
   await net.inbound('גודל: בינוני');
   const edited = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get();
   assert.equal(edited.phase, 'review');
-  const confirmed = await net.inbound(`אישור ${JSON.parse(edited.state_json).revision}`);
+  const confirmed = await net.inbound('1');
   assert.equal(confirmed.response.status, 200);
   assert.match(messages.at(-1), /בדיקת השיחה הסתיימה/);
   const sends = messages.length;

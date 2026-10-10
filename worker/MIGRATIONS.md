@@ -1276,3 +1276,111 @@ FROM whatsapp_continuation_followon_grants;
 Set `WHATSAPP_BOOKING_CONTINUATION_FOLLOWON_SCHEMA_READY=on` only after validation.
 Use version `2` and the SAME original pilot ID with suffix `:quote-v2-handset-2`.
 Do not alter/reissue the old window, change the pilot ID, or release old holds.
+
+### 043 — one separately approved retry after the stopped v2 rehearsal
+
+Adds `whatsapp_continuation_retry_grants` and operations plus exact-predecessor
+and freeze triggers. Version 3 carries $0.4051 prior operation holds and $0.50
+cushion once; separately carries $0.33 model holds and permits at most five new
+$0.03 interpretations. Original $2 aggregate/$0.50 model caps remain. Only the
+exact expired, stopped v2 ledger (4 inbound/3 outbound/1 uncertain model, $0.1051)
+is eligible. Previous rows and operations become immutable after issuance.
+Migration alone creates no grant, enables no flag and performs no provider IO.
+
+Staging preparation, only after explicit approval:
+
+```sh
+wrangler d1 execute edenmish-staging --remote --config <staging-config> --file=./migrations/043_whatsapp_continuation_retry.sql
+node scripts/validate-continuation-retry-schema.mjs --config <staging-config>
+```
+
+Production operator command for the PR deployment checklist; **not authorized now**:
+
+```sh
+wrangler d1 execute edenmish --remote --file=./migrations/043_whatsapp_continuation_retry.sql
+```
+
+Verify exact schema definitions with the validator and verify zero new rows before
+issuance:
+
+```sql
+SELECT name,sql FROM sqlite_master WHERE name LIKE 'whatsapp_continuation_retry_%' OR name LIKE 'whatsapp_retry_%';
+SELECT COUNT(*) FROM whatsapp_continuation_retry_grants;
+SELECT COUNT(*) FROM whatsapp_continuation_retry_operations;
+```
+
+Version `3`, the SAME pilot ID with suffix `:quote-v2-handset-3`, schema readiness
+`WHATSAPP_BOOKING_CONTINUATION_RETRY_SCHEMA_READY=on`, and explicitly approved
+`WHATSAPP_BOOKING_FAILURE_NOTICE_POLICY=one-shot-v1` are required. OFF-only Ops
+issuance remains separate from activation. Fresh approval is required for the
+fixed failure notice and at most 30 seconds of shutdown grace within the hard
+cutoff. No transcript/retention policy change is included. Do not replay/reset
+old grants, replace pilot IDs, refund reservations or generalize this to recurring
+windows. After merge, the operator must run required migrations before any
+separately approved deployment.
+
+### 044 — bounded Sol-low continuation (staging only)
+
+Adds immutable fourth-session identity, exact stopped-predecessor checks and
+predecessor retention triggers. Carries $0.735124 historical reservations plus
+the existing $0.50 fee cushion. New quotas: 15 minutes, 12 inbound, 12 outbound,
+3 address lookups, 4 Sol-low calls; maximum new reservations $0.580480.
+
+Authorized staging application:
+`npx wrangler d1 execute edenmish-staging --remote --config ../outputs/wrangler.sol.prepared.toml --file migrations/044_whatsapp_continuation_sol.sql`
+
+Verify with `node scripts/validate-continuation-sol-schema.mjs --config ../outputs/wrangler.sol.prepared.toml` and
+`SELECT id,version,starts_at,expires_at,spent_micros,stopped_reason FROM whatsapp_continuation_sol_grants;`.
+No production migration is part of this staging task.
+For a separately authorized future production deployment after merge, from `worker`:
+`npx wrangler d1 execute edenmish --remote --file=./migrations/044_whatsapp_continuation_sol.sql`
+Verify the schema definitions and preserve all existing grant history before deploying.
+
+### 045 — voice-note allowance (local only; not applied remotely)
+
+Adds `whatsapp_voice_grants`, `whatsapp_voice_attempts` and atomic reservation /
+retention triggers. Each approved grant is bound to one sender, recipient and
+session, up to 6 files / 60 seconds each / $0.03 / 15 minutes. No customer request
+issues a grant. No reset/refund of failed or duplicate operations is allowed.
+
+After review and explicit staging deployment approval, from `worker`:
+
+```sh
+npx wrangler d1 execute edenmish-staging --remote --config <reviewed-staging-config> --file=./migrations/045_whatsapp_voice_budget.sql
+```
+
+Verification (expect zero grants/attempts before separate authorized issuance):
+
+```sql
+SELECT name,sql FROM sqlite_master WHERE name LIKE 'whatsapp_voice_%';
+SELECT COUNT(*) FROM whatsapp_voice_grants;
+SELECT COUNT(*) FROM whatsapp_voice_attempts;
+```
+
+After merge, before any separately authorized production deployment that requires
+this schema, the operator must run the migration. Exact future production command
+(required in the eventual PR description; **not authorized/executed here**):
+
+```sh
+npx wrangler d1 execute edenmish --remote --file=./migrations/045_whatsapp_voice_budget.sql
+```
+
+The voice feature itself remains staging/conversation-only. Keep all voice gates
+OFF until a fresh reviewed continuation profile, audio grant and supervision are
+prepared; existing version-4 quotas do not cover the proposed expanded pilot.
+
+### Authorized 15-minute voice test (10 October 2026)
+
+Apply migrations 045 and 046 to staging before the bounded voice test:
+```sh
+npx wrangler d1 execute edenmish-staging --remote --config wrangler.staging.toml --file migrations/045_whatsapp_voice_budget.sql
+npx wrangler d1 execute edenmish-staging --remote --config wrangler.staging.toml --file migrations/046_whatsapp_voice_session.sql
+```
+Verify `SELECT COUNT(*) FROM whatsapp_continuation_voice_grants;` and
+`SELECT COUNT(*) FROM whatsapp_voice_grants;` before separate operator issuance.
+Migration 046 retains the expired unused v4 predecessor and enforces a fresh
+$1.65 ceiling: 24 inbound/outbound, 12 Sol calls, 4 address lookups, with $0.03
+reserved for six audio calls and $0.25 contingency. Window maximum 900 seconds.
+Production is not authorized. If promoted later, the corresponding command is
+`npx wrangler d1 execute edenmish --remote --file migrations/046_whatsapp_voice_session.sql`
+after prerequisite 045 and before deploying. Do not execute it for this test.

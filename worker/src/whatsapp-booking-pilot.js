@@ -1,3 +1,4 @@
+import { localCopy } from './whatsapp-booking-i18n.js';
 import { continuationSelected, continuationReady, reserveContinuation } from './whatsapp-continuation.js';
 import { lunaPilot, lunaPilotCanRun, ensureLunaPilotBudget, LUNA_PILOT_LIMITS } from './whatsapp-pilot-budget.js';
 // Staging-only conversation pilot. Counts contain no phone, chat or credential.
@@ -37,9 +38,9 @@ export async function reservePilotOperation(env, kind, now = Date.now(), operati
   return Number(result?.meta?.changes || 0) === 1;
 }
 
-export const pilotNotice = language => language === 'en'
-  ? 'Test only: use fictitious contact details. No order, payment link or delivery will be created.'
+export const pilotNotice = language => language && language !== 'he'
+  ? localCopy(language, 'Test only: use fictitious contact details. No order, payment link or delivery will be created.')
   : 'בדיקה בלבד: השתמשו בפרטי קשר פיקטיביים. לא ייווצרו הזמנה, קישור תשלום או משלוח.';
-export const pilotComplete = language => language === 'en'
-  ? 'Conversation test complete. No order or payment link was created, no email was sent, and no driver was assigned. Automation is now paused.'
+export const pilotComplete = language => language && language !== 'he'
+  ? localCopy(language, 'Conversation test complete. No order or payment link was created, no email was sent, and no driver was assigned. Automation is now paused.')
   : 'בדיקת השיחה הסתיימה. לא נוצרו הזמנה או קישור תשלום, לא נשלח אימייל ולא שובץ נהג. האוטומציה נעצרה.';

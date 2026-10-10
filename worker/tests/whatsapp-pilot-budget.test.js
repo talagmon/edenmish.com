@@ -107,7 +107,7 @@ test('model request pins tier, validates usage, ignores optional reasoning and r
   count++;const body=JSON.parse(init.body);assert.equal(body.service_tier,'default');assert.equal(body.max_output_tokens,1024);
   const r=await response().json();r.output.unshift({type:'reasoning',summary:[{text:'private reasoning must not be logged'}]});return Response.json(r);
  }});
- const answer=await proposeBookingTurn(adapter,state,text,now);assert.deepEqual(answer.entries,[['size','small']]);
+ const answer=await proposeBookingTurn(adapter,state,text,now);assert.deepEqual(answer.entries,[['size','small'],['notes','keys']]);
  assert.equal(count,1);assert.equal(row(e).charged_micros,lunaUsageUpperMicros(usage));
  assert.equal(diagnostics[0].outcome,'valid_proposal');assert.doesNotMatch(JSON.stringify(diagnostics),/private|keys|sk-|reasoning/);
 });
@@ -327,7 +327,7 @@ test('observed offset payload and quoted pronoun fail closed; exact keys quote p
    WHATSAPP_BOOKING_PILOT_STARTED_AT:undefined,WHATSAPP_BOOKING_PILOT_EXPIRES_AT:undefined,
    WHATSAPP_BOOKING_READINESS_APPROVED:'on',WHATSAPP_BOOKING_READINESS_CASE:'small_item',WHATSAPP_BOOKING_READINESS_EXPIRES_AT:new Date(now+3600000).toISOString()};
   const validated=validateBookingProposal(observed,message,now);
-  if(passes)assert.deepEqual(validated.entries,[['size','small']]);else assert.equal(validated,null);
+  if(passes)assert.deepEqual(validated.entries,[['size','small'],['notes','keys']]);else assert.equal(validated,null);
   let calls=0;
   const options={clock:()=>now,fetchImpl:async url=>{
    calls++;

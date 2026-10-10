@@ -1,3 +1,5 @@
+import { voiceProfileEnvironment } from './whatsapp-booking-voice-profile.js';
+import { transcribeBookingAudio } from './whatsapp-booking-audio.js';
 import { continuationSelected, continuationCanProceed, finishContinuation, issueContinuationGrant } from './whatsapp-continuation.js';
 import { runLunaPilotReadiness, validReadinessRequest } from './whatsapp-pilot-readiness.js';
 import { lunaPilot } from './whatsapp-pilot-budget.js';
@@ -609,6 +611,8 @@ function isTrustedOpsMutationOrigin(req, env) {
 
 function bookingServices(env, ctx) {
   return {
+    multilingual: env.WHATSAPP_BOOKING_MULTILINGUAL_ENABLED === 'on',
+    transcribeAudio: (event,eventKey) => transcribeBookingAudio(env,event,eventKey),
     conversationModelForEvent: eventId => bookingEnabled(env) && (!conversationOnlyPilot(env) || lunaPilot(env)) ? createOpenAIBookingModel(env,{eventId}) : undefined,
     conversationModel: bookingEnabled(env) && (!conversationOnlyPilot(env) || lunaPilot(env)) ? createOpenAIBookingModel(env) : undefined,
     resolveAddress: (text) => resolveBookingAddress(text, env, { fetchImpl: async (...args) => {
@@ -651,6 +655,7 @@ function bookingServices(env, ctx) {
 
 const worker = {
   async fetch(req, env, ctx) {
+    env = voiceProfileEnvironment(env);
     const booking = bookingRequests.get(req);
     bookingRequests.delete(req);
     const url = new URL(req.url);
@@ -2780,7 +2785,7 @@ const worker = {
       if (!isTrustedOpsMutationOrigin(req, env)) return json({ error: 'untrusted_origin' }, 403);
       let input;
       try { input=await req.json(); } catch { return json({error:'invalid_request'},400); }
-      if (!input || Object.keys(input).sort().join(',')!=='grant_id,version' || ![1,2].includes(input.version) || input.version!==Number(env.WHATSAPP_BOOKING_CONTINUATION_VERSION)
+      if (!input || Object.keys(input).sort().join(',')!=='grant_id,version' || ![1,2,3,4,5].includes(input.version) || input.version!==Number(env.WHATSAPP_BOOKING_CONTINUATION_VERSION)
         || input.grant_id!==env.WHATSAPP_BOOKING_CONTINUATION_ID) return json({error:'invalid_request'},400);
       try { const issued=await issueContinuationGrant(env); return json({issued},issued?201:409); }
       catch { return json({error:'grant_unconfirmed_no_retry'},503); }
@@ -3113,6 +3118,7 @@ const worker = {
     return new Response('Not found', { status: 404 });
   },
   async scheduled(event, env, ctx) {
+    env = voiceProfileEnvironment(env);
     // Runs on every scheduled tick, not only the daily one, so a hold reverts to a return
     // close to its 24h boundary rather than up to a day late.
     // Reconcile the route after the held-package transition completes so that the same

@@ -137,3 +137,63 @@ test('day clarification supports another date and handoff; closed day suggestion
  assert.equal(dated.state.menu.slots[0],'2026-10-11 09:00');assert.match(dated.reply,/היום המתאים הבא/);assert.equal(dated.state.data.when_date,undefined);
  assert.equal((await advanceBooking(asked.state,'3',services(),opts)).state.phase,'handoff');
 });
+
+test('written review and edit choices are optional shortcuts scoped to the current menu',async()=>{
+ for(const text of ['אני מאשר','אני מאשרת','הכל נכון','האפשרות הראשונה']) {
+  const state=await review();const accepted=await advanceBooking(state,text,services(),opts);assert.equal(accepted.create.expectedPrice,50);
+  const beforeConsent=await advanceBooking(newBooking(),text,services(),opts);assert.equal(beforeConsent.state.phase,'consent');assert.equal(beforeConsent.state.consent_at,undefined);assert.equal(beforeConsent.create,undefined);
+  state.revision++;assert.equal((await advanceBooking(state,text,services(),opts)).create,undefined);
+ }
+ for(const text of ['modify','שינוי פרטים','אני רוצה לשנות','השנייה']) {
+  const result=await advanceBooking(await review(),text,services(),opts);assert.equal(result.state.menu.kind,'edit');assert.equal(result.state.quote,null);assert.equal(result.create,undefined);
+  const name=await advanceBooking(result.state,'שם',services(),opts);assert.equal(name.state.editing_field,'name');assert.equal(name.state.data.name,'Test Person');assert.equal(name.create,undefined);
+ }
+ for(const text of ['אני מאשר אבל צריך לשנות','אני לא מאשר','אישור?'])assert.equal((await advanceBooking(await review(),text,services(),opts)).create,undefined);
+});
+test('Hebrew natural multi-field message after consent keeps details through typo choices and daypart selection',async()=>{
+ const {createOfflineBookingModel}=await import('../src/whatsapp-booking-model.js');
+ const text='אני צריך לשלוח מפתחות מבני מושה 16 תל אביב לקרינצקי 111 רמת גן מחר בבוקר לנועה';
+ const fields=[['size','מפתחות'],['notes','מפתחות'],['pickup','בני מושה 16 תל אביב'],['dropoff','קרינצקי 111 רמת גן'],['schedule','מחר בבוקר'],['dropoff_detail','לנועה']];
+ const svc=services();let modelCalls=0,lookups=0;
+ svc.conversationModel=createOfflineBookingModel(async request=>{
+  modelCalls++;assert.equal(request.customer_message,text);
+  return {version:2,intent:'update',fields:fields.map(([field,quote])=>({field,quote})),topic:null,clarify_field:null};
+ });
+ svc.resolveAddress=async value=>{lookups++;return {error:'ambiguous',candidates:[{address:value.startsWith('בני')?'בני משה 16, תל אביב':'קריניצי 111, רמת גן',city:value.startsWith('בני')?'תל אביב':'רמת גן',lat:32.08,lng:34.78}]};};
+ let state=(await advanceBooking(newBooking(),'היי',svc,opts)).state;
+ state=(await advanceBooking(state,'1',svc,opts)).state;assert.equal(modelCalls,0);assert.equal(state.menu.kind,'size');
+ let result=await advanceBooking(state,text,svc,opts);state=result.state;
+ assert.equal(modelCalls,1);assert.equal(state.data.size,'small');assert.equal(state.data.notes,'מפתחות');assert.equal(state.data.pickup,undefined);assert.equal(state.phase,'address_choice');assert.equal(result.create,undefined);
+ state=(await advanceBooking(state,'האפשרות הראשונה',svc,opts)).state;
+ assert.equal(state.data.pickup,'בני משה 16, תל אביב');assert.equal(state.data.dropoff,undefined);assert.equal(state.phase,'address_choice');
+ state=(await advanceBooking(state,'אפשרות ראשונה',svc,opts)).state;
+ assert.equal(state.data.dropoff,'קריניצי 111, רמת גן');assert.equal(state.data.dropoff_detail,'לנועה');assert.equal(state.schedule_preference.period,'morning');assert.equal(state.menu.kind,'schedule');assert.equal(state.data.when_hour,undefined);
+ result=await advanceBooking(state,'השנייה',svc,opts);state=result.state;
+ assert.equal(state.data.when_hour,9);assert.equal(state.data.when_date,'2026-10-09');assert.equal(state.data.name,undefined);
+ assert.equal(state.data.size,'small');assert.equal(state.data.notes,'מפתחות');assert.equal(state.address_confirmed,false);assert.equal(result.create,undefined);
+ assert.match(result.reply,/שם/);assert.equal(modelCalls,1);assert.equal(lookups,2);
+});
+test('unscoped or stale written options cannot select an address or time',async()=>{
+ let state=(await advanceBooking(newBooking(),'start',services(),opts)).state;
+ const scheduled=await advanceBooking(state,'מחר בבוקר',services(),opts);scheduled.state.revision++;
+ const stale=await advanceBooking(scheduled.state,'השנייה',services(),opts);assert.equal(stale.state.data.when_hour,undefined);assert.equal(stale.create,undefined);
+ const svc=services();svc.resolveAddress=async()=>({error:'ambiguous',candidates:[{address:'הרצל 10, תל אביב',city:'תל אביב',lat:32.08,lng:34.78}]});
+ state=(await advanceBooking(state,'איסוף: הרצל 10 תל אביב',svc,opts)).state;assert.equal(state.phase,'address_choice');
+ assert.equal((await advanceBooking(state,'ok',svc,opts)).state.data.pickup,undefined);
+ state.revision++;assert.equal((await advanceBooking(state,'הראשונה',svc,opts)).state.data.pickup,undefined);
+});
+
+
+test('mixed confirmation words and menu numbers clarify without creating an order',async()=>{
+ for (const phase of ['review','address_review']) for (const text of ['אישור 2','confirm 2','אישור 1','confirm 1','כתובות 2','addresses 2','2 אישור','2 confirm','אישור 2.']) {
+  const state=await review(); state.phase=phase; state.revision=2; state.menu={kind:phase,phase,revision:2};
+  let modelCalls=0,quoteCalls=0; const svc=services();
+  svc.conversationModel=async()=>{modelCalls++;return null;};
+  svc.quote=async()=>{quoteCalls++;return {price:50,currency:'ILS',review:false};};
+  const before=structuredClone(state);
+  const result=await advanceBooking(state,text,svc,opts);
+  assert.equal(result.create,undefined,`${phase}: ${text} must not create`);
+  assert.deepEqual(result.state,before); assert.equal(modelCalls,0);assert.equal(quoteCalls,0);
+  assert.match(result.reply,/בחרו אפשרות אחת|choose one option/i);
+ }
+});

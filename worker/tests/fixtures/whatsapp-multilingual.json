@@ -1,0 +1,8 @@
+[
+ {"id":"he","language":"he","greeting":"שלום","text":"אני רוצה לשלוח מפתחות איסוף: דיזנגוף 10 תל אביב מסירה: ביאליק 2 רמת גן מחר בבוקר","quotes":{"size":"מפתחות","pickup":"דיזנגוף 10 תל אביב","dropoff":"ביאליק 2 רמת גן","schedule":"מחר בבוקר"}},
+ {"id":"ar","language":"ar","greeting":"مرحبا","text":"أريد إرسال مفاتيح من ديزنغوف 10 تل أبيب إلى بياليك 2 رمات غان غدًا صباحًا","quotes":{"size":"مفاتيح","pickup":"ديزنغوف 10 تل أبيب","dropoff":"بياليك 2 رمات غان","schedule":"غدًا صباحًا"}},
+ {"id":"ru","language":"ru","greeting":"Здравствуйте","text":"Мне нужно отправить ключи из Дизенгоф 10 Тель-Авив в Бялик 2 Рамат-Ган завтра утром","quotes":{"size":"ключи","pickup":"Дизенгоф 10 Тель-Авив","dropoff":"Бялик 2 Рамат-Ган","schedule":"завтра утром"}},
+ {"id":"fr","language":"fr","greeting":"Bonjour","text":"Je veux envoyer clés de Dizengoff 10 Tel Aviv à Bialik 2 Ramat Gan demain matin","quotes":{"size":"clés","pickup":"Dizengoff 10 Tel Aviv","dropoff":"Bialik 2 Ramat Gan","schedule":"demain matin"}},
+ {"id":"en","language":"en","greeting":"Hello","text":"I need to send keys from Dizengoff 10 Tel Aviv to Bialik 2 Ramat Gan tomorrow morning","quotes":{"size":"keys","pickup":"Dizengoff 10 Tel Aviv","dropoff":"Bialik 2 Ramat Gan","schedule":"tomorrow morning"}},
+ {"id":"mixed","language":"ru","greeting":"Привет","text":"Можно отправить מפתחות from הרצל 15 תל אביב to ביאליק 2 רמת גן завтра утром","quotes":{"size":"מפתחות","pickup":"הרצל 15 תל אביב","dropoff":"ביאליק 2 רמת גן","schedule":"завтра утром"}}
+]

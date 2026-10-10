@@ -410,3 +410,49 @@ version 2. Verify with `node scripts/validate-continuation-followon-schema.mjs
 --config <staging-config>`. See `MIGRATIONS.md` for the exact commands and guards.
 After merge, apply missing migrations before any separately authorized production
 deployment; this change does not authorize production deployment or activation.
+
+An explicitly approved version-3 conversation retry additionally requires migration
+`043_whatsapp_continuation_retry.sql` and the exact-definition validator
+`node scripts/validate-continuation-retry-schema.mjs --config <staging-config>`.
+It preserves both previous grants, $0.9051 aggregate reservations/cushion, and the
+original $2 cap. Five interpretations remain allowed in the original model pool.
+Review the fixed failure notice and bounded supervisor policy before deployment;
+all live gates remain separate. Migration 043 must be included in the operator's
+after-merge/before-deploy checklist; no production deployment is authorized.
+
+The authorized October 10 Sol-low staging rehearsal uses migration 044 and the
+frozen `outputs/wrangler.sol.*.toml` configurations. Deploy OFF, verify schema,
+install the temporary staging key, issue the immutable grant OFF, arm both
+shutdown processes, then connect the callback and activate. Production remains
+unchanged. Grant, quota, model and expiry checks run before provider IO; the
+controller removes the temporary key and deploys the frozen OFF bundle at stop.
+
+### Voice and five-language booking (local preparation only)
+
+See [voice/multilingual implementation and proposed $1.65 test allowance](../docs/WHATSAPP_VOICE_MULTILINGUAL.md).
+No default runtime config enables this work. Local tests mock OpenAI, Twilio and
+Maps; real speech quality is pending. OGG/Opus, PCM WAV and MP3 input is capped at
+2 MiB / 60 seconds. A voice note enters the existing draft only after disclosed
+consent, a separately approved audio allowance and successful bounded transcription.
+Spoken final confirmation asks for the displayed number by text.
+
+After merge, include migration 045 in the operator's before-deploy checklist.
+Exact staging/future production commands and verification are in `MIGRATIONS.md`.
+No remote migration, deployment, paid test or expanded grant is authorized by this
+local implementation. Prior grants and model caps remain unchanged.
+
+### Authorized 15-minute voice test (10 October 2026)
+
+Apply migrations 045 and 046 to staging before the bounded voice test:
+```sh
+npx wrangler d1 execute edenmish-staging --remote --config wrangler.staging.toml --file migrations/045_whatsapp_voice_budget.sql
+npx wrangler d1 execute edenmish-staging --remote --config wrangler.staging.toml --file migrations/046_whatsapp_voice_session.sql
+```
+Verify `SELECT COUNT(*) FROM whatsapp_continuation_voice_grants;` and
+`SELECT COUNT(*) FROM whatsapp_voice_grants;` before separate operator issuance.
+Migration 046 retains the expired unused v4 predecessor and enforces a fresh
+$1.65 ceiling: 24 inbound/outbound, 12 Sol calls, 4 address lookups, with $0.03
+reserved for six audio calls and $0.25 contingency. Window maximum 900 seconds.
+Production is not authorized. If promoted later, the corresponding command is
+`npx wrangler d1 execute edenmish --remote --file migrations/046_whatsapp_voice_session.sql`
+after prerequisite 045 and before deploying. Do not execute it for this test.
