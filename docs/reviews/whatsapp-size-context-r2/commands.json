@@ -1,0 +1,72 @@
+[
+  {
+    "name": "focused-validator",
+    "cwd": ".",
+    "command": [
+      "node",
+      "--test",
+      "worker/tests/whatsapp-booking-quotes.test.js",
+      "worker/tests/whatsapp-size-context-review.test.js",
+      "worker/tests/whatsapp-size-context.test.js",
+      "worker/tests/whatsapp-live-regressions.test.js"
+    ],
+    "startedAt": "2026-10-10T16:06:04.502324+00:00",
+    "exitCode": 0,
+    "log": "focused-validator.log"
+  },
+  {
+    "name": "worker",
+    "cwd": "worker",
+    "command": [
+      "npm",
+      "test"
+    ],
+    "startedAt": "2026-10-10T16:06:04.798204+00:00",
+    "exitCode": 0,
+    "log": "worker.log"
+  },
+  {
+    "name": "supervisor",
+    "cwd": ".",
+    "command": [
+      "python3",
+      "worker/scripts/test-whatsapp-session-supervision.py"
+    ],
+    "startedAt": "2026-10-10T16:06:32.526268+00:00",
+    "exitCode": 0,
+    "log": "supervisor.log"
+  },
+  {
+    "name": "storefront",
+    "cwd": "storefront",
+    "command": [
+      "npm",
+      "test"
+    ],
+    "startedAt": "2026-10-10T16:06:32.854191+00:00",
+    "exitCode": 0,
+    "log": "storefront.log"
+  },
+  {
+    "name": "storefront-syntax",
+    "cwd": "storefront",
+    "command": [
+      "npm",
+      "run",
+      "syntax-check"
+    ],
+    "startedAt": "2026-10-10T16:06:33.085514+00:00",
+    "exitCode": 0,
+    "log": "storefront-syntax.log"
+  },
+  {
+    "name": "worker-syntax",
+    "cwd": ".",
+    "command": [
+      "node --check <each worker/src/*.js and worker/scripts/*.mjs>"
+    ],
+    "exitCode": 0,
+    "files": 70,
+    "log": "worker-syntax.log"
+  }
+]

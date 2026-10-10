@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   normalizeAddressText,
+  businessAddressSuggestions,
   resolveBusinessAddress,
   validateBusinessBatchAddresses,
 } from '../src/business-address.js';
@@ -248,4 +249,29 @@ describe('business batch address validation', () => {
     assert.equal(row.delivery_lng, 34.78);
     assert.deepEqual(row.errors, []);
   });
+});
+
+
+test('optional map choices retain house/city/country/coordinate safeguards and a three-choice bound', () => {
+  const wrongCountry=place(); wrongCountry.addressComponents.at(-1).longText='France';
+  const outside=place(); outside.location.latitude=48;
+  const noLocation=place(); delete noLocation.location;
+  const good=place({route:'בני משה',number:'16'});
+  const candidates=businessAddressSuggestions('16','תל אביב',[
+    place({number:'17'}),place({number:'16',city:'רמת גן'}),wrongCountry,outside,noLocation,
+    good,good,...['אחד','שניים','שלושה'].map(route=>place({route,number:'16'}))
+  ]);
+  assert.equal(candidates.length,3);
+  assert.equal(candidates[0].address,'בני משה 16, תל אביב-יפו');
+  assert.ok(candidates.every(candidate=>candidate.address.includes('16, תל אביב')));
+});
+
+test('booking candidates from text search avoid extra provider calls and remain explicit choices',async()=>{
+ let requests=0;
+ const row={delivery_street:'bni mosh',delivery_house_number:'16',delivery_city:'תל אביב',errors:[],corrections:[]};
+ await validateBusinessBatchAddresses([row],{apiKey:'synthetic',offerSuggestions:true,fetchImpl:async()=>{
+  requests++;return Response.json({places:[place({route:'בני משה',number:'16'})]});
+ }});
+ assert.equal(requests,1);assert.ok(row.errors.length);assert.equal(row.delivery_address,undefined);
+ assert.equal(row.address_candidates[0].address,'בני משה 16, תל אביב-יפו');
 });

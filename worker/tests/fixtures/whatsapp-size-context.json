@@ -1,0 +1,7 @@
+[
+ {"id":"alternative","text":"מעטפה קטנה או חבילה בינונית","reason":"size_context_ambiguous"},
+ {"id":"overweight","text":"מעטפה קטנה במשקל 10 ק״ג","reason":"size_context_ambiguous"},
+ {"id":"heavy","text":"מעטפה קטנה וכבדה","reason":"size_context_ambiguous"},
+ {"id":"absence","text":"אין לי מעטפה קטנה","reason":"quote_negated"},
+ {"id":"qualified-negation","text":"זה לא באמת מעטפה קטנה","reason":"quote_negated"}
+]

@@ -128,6 +128,56 @@ into the staging Worker. See `CI_CD.md` for one-time setup.
 
 ---
 
+## Google Cloud project association (recorded 2026-10-10)
+
+At **2026-10-10 18:17 UTC**, Tal reported finding the Google Cloud project
+**Six Elements Altiora - WWW** (`gen-lang-client-0008834106`). Subsequent
+read-only browser inspection on the same date independently confirmed these
+credential-list entries in that project:
+
+| Credential display name | Non-secret resource ID | Listed API restriction |
+|---|---|---|
+| EdenMish production business batch Places | `edenmish-production-batch-places` | Places API (New) |
+| EdenMish staging business batch Places | `edenmish-staging-batch-places-v2` | Places API (New) |
+
+Both entries showed **Available**. The same project also contains the service
+accounts **EdenMish Route Optimization Production** and **EdenMish Route
+Optimization Staging**. API restrictions were read from the credential list;
+application restrictions were not inspected. The project ID already appears as
+`GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID` in `worker/wrangler.toml` and
+`worker/wrangler.staging.toml`.
+
+Read-only browser inspection also reconfirmed this project's linkage to
+**My Maps Billing Account**, marked **Paid account**, with **Israel (IL)** as the
+payment-profile country and **ILS** account reporting. This verifies project and
+billing metadata, not cardholder identity or final tax treatment. Payment
+ownership remains user-reported.
+
+Sources: [Google credential inventory](https://console.cloud.google.com/apis/credentials?project=gen-lang-client-0008834106)
+and [project billing linkage](https://console.cloud.google.com/billing/linkedaccount?project=gen-lang-client-0008834106).
+The local browser evidence record is
+`/Users/tal/Documents/Codex/2026-10-09/task-3/edenmish-google-project-confirmed-2026-10-10.md`.
+
+The staging provisioning workflow maps the GitHub `staging` environment secret
+`STAGING_GOOGLE_PLACES_SERVER_KEY` to the Worker secret `GOOGLE_PLACES_SERVER_KEY`.
+**Still unverified:** whether the exact currently deployed staging secret comes
+from `edenmish-staging-batch-places-v2`, and whether it matches that documented
+provisioning source. Production's exact deployed credential association is also
+unverified. Named credentials in the project do not establish either linkage.
+
+The minimal remaining non-secret owner confirmation for the staging linkage is:
+"The current staging Worker `GOOGLE_PLACES_SERVER_KEY` was provisioned from
+`edenmish-staging-batch-places-v2` in `gen-lang-client-0008834106`."
+Record any such confirmation as owner-attested unless a non-secret provisioning
+record independently establishes it. Do not retrieve or compare key strings to
+fill this documentation gap.
+
+No secret values or card details were read or compared. This record changes
+documentation only; it does not authorize provisioning, deployment, billing
+changes, paid tests or WhatsApp activation.
+
+---
+
 ## Cloudflare Pages secrets and variables (canonical storefront)
 
 | Secret | Purpose | Required Google services |

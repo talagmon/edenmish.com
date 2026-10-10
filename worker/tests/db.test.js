@@ -51,8 +51,9 @@ describe('order persistence', () => {
     assert.equal(insert.args[17], 10);
     assert.equal(insert.args[18], 'standard');
     assert.equal(insert.args[19], 'medium');
-    assert.equal(insert.args.at(-2), 1);
-    assert.equal(insert.args.at(-1), 1_721_000_000_000);
+    assert.equal(insert.args.at(-3), 1);
+    assert.equal(insert.args.at(-2), 1_721_000_000_000);
+    assert.equal(insert.args.at(-1), 'website');
   });
 });
 

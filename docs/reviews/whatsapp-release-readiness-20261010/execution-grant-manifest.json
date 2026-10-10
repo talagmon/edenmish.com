@@ -1,0 +1,142 @@
+{
+  "id": "edenmish-release-smoke-20261010-r1",
+  "state": "PREPARED_OFFLINE_VERIFIED_NOT_AUTHORIZED",
+  "networkCallsMade": 0,
+  "grantIssued": false,
+  "scope": "staging-conversation-only",
+  "identities": {
+    "sender": "+97233826779",
+    "recipient": "existing-approved-owner-only; exact number in private coordination manifest",
+    "publicNumberUntouched": true
+  },
+  "model": {
+    "id": "gpt-6.1-sol",
+    "effort": "low",
+    "tier": "default",
+    "store": false,
+    "tools": false,
+    "history": false,
+    "maxOutputIncludingReasoning": 1024,
+    "maxRequestBytes": 8192,
+    "inputTokenEngineeringAllowance": 16384,
+    "callTimeoutMs": 10000,
+    "responseBytes": 32768,
+    "countingCalls": 0,
+    "retries": 0
+  },
+  "preflight": {
+    "maxCalls": 1,
+    "reservationMicros": 56320,
+    "requestSha256": "0bc34140b6fde49c5efe294fddbe0fb3227a7ae9301ce7f073a8ae77ff928ff3",
+    "requireAllExpectedFields": true,
+    "stopOnFailure": true,
+    "keyInProcessOnly": true
+  },
+  "handset": {
+    "durationMs": 900000,
+    "startPolicy": "coordinator announces exact future Israel interval after setup; immutable once issued",
+    "inbound": 8,
+    "outbound": 8,
+    "model": 1,
+    "mapsNetworkRequests": 2,
+    "audio": 0,
+    "retries": 0,
+    "oneGrantOnly": true,
+    "requiredNewGrantVersion": 6,
+    "reusePriorGrant": false
+  },
+  "money": {
+    "originalCapMicros": 2000000,
+    "earlierCheckpointHeldMicros": 1078748,
+    "laterRetainedHoldsMicros": [
+      78848,
+      77528,
+      121120,
+      280000
+    ],
+    "retainedTotalMicros": 1636244,
+    "releasedMicros": 0,
+    "remainingBeforeMicros": 363756,
+    "preflightMicros": 56320,
+    "handsetModelMicros": 56320,
+    "inboundMicros": 82400,
+    "outboundMicros": 90400,
+    "mapsMicros": 64000,
+    "audioMicros": 0,
+    "plannedNewMicros": 349440,
+    "requestedAllocationMicros": 350000,
+    "forecastAggregateWithFullAllocationMicros": 1986244,
+    "remainingAfterFullAllocationMicros": 13756,
+    "priorCushionsRetainedMicros": 780000,
+    "extraAggregateAuthorizationMicros": 0
+  },
+  "grantContract": {
+    "id": "edenmish-luna-pilot-20261009-a:quote-v2-handset-6",
+    "historicalMicrosAfterPreflight": 912564,
+    "historicalModelMicrosAfterPreflight": 707864,
+    "feeCushionMicros": 780000,
+    "maxNewSpentMicros": 293120,
+    "maxNewModelMicros": 56320,
+    "maxAggregateMicros": 2000000,
+    "predecessorVersion": 5,
+    "predecessorStoppedReason": "model_uncertain",
+    "predecessorSpentMicros": 121120,
+    "predecessorModelMicros": 56320,
+    "immutableHistoryRequired": true,
+    "perOperationReserveBeforeIO": true,
+    "noRefunds": true
+  },
+  "failureNotice": {
+    "text": "לא הצלחתי לעבד את הפרטים. האוטומציה נעצרה. אפשר לפנות לנציג להמשך.",
+    "maxSends": 1,
+    "withinOutboundQuota": true,
+    "maxGraceMs": 30000,
+    "neverAfterExpiry": true,
+    "operatorStopSuppresses": true,
+    "noRetry": true
+  },
+  "activationGates": {
+    "explicitApproval": false,
+    "currentSourceFrozen": true,
+    "newGrantEnforcementImplementedAndTested": true,
+    "preflightRealSemanticPass": false,
+    "mandatoryFeesBoundedByRetainedCushion": false,
+    "ephemeralKeyInstalled": false,
+    "newGrantVerified": false,
+    "primarySupervisorReady": false,
+    "independentWatchdogReady": false,
+    "browserCallbackVerified": false,
+    "fixedFutureWindowAnnounced": false
+  },
+  "prohibited": [
+    "production changes",
+    "orders",
+    "payments",
+    "customer emails",
+    "driver dispatch",
+    "wallet spending",
+    "voice/transcription",
+    "templates",
+    "marketing",
+    "private transcript access",
+    "persistent key retention",
+    "unapproved retries"
+  ],
+  "terminalReply": {
+    "maxExistingSendMs": 10000,
+    "withinOutboundQuota": true,
+    "withinWindowOnly": true,
+    "operatorStopSuppresses": true,
+    "noNewSendOnCleanup": true,
+    "noRetry": true
+  },
+  "verification": {
+    "workerTests": 1254,
+    "storefrontTests": 175,
+    "legacySupervisorTests": 8,
+    "independentCliTests": 16,
+    "newV6Tests": 57,
+    "realProviderCallsThisPreparation": 0
+  },
+  "runtimeSourceSha256": "d4b2aeb5503e6e86536ea7da1c698cd9af4c37bbfd589d1aba4a3a0d4118e6c1"
+}

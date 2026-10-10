@@ -3,6 +3,7 @@
 CREATE TABLE IF NOT EXISTS orders (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   token TEXT NOT NULL UNIQUE,
+  source_channel TEXT NOT NULL DEFAULT 'website',
   status TEXT NOT NULL DEFAULT 'received',
   name TEXT, phone TEXT, customer_type TEXT,
   pickup TEXT, pickup_detail TEXT, pickup_lat REAL, pickup_lng REAL, pickup_city TEXT,
@@ -681,3 +682,500 @@ INSERT OR IGNORE INTO pricing_rules (name, value) VALUES
   ('urgent_pct','25'),
   ('max_km','25'),
   ('price_threshold','200');
+-- Disabled incoming booking adapter. No raw inbound message bodies retained.
+CREATE TABLE IF NOT EXISTS whatsapp_booking_conversations (
+  id TEXT PRIMARY KEY,
+  sender_key TEXT NOT NULL UNIQUE,
+  provider TEXT NOT NULL,
+  recipient TEXT,
+  state_json TEXT NOT NULL,
+  phase TEXT NOT NULL,
+  order_token TEXT NOT NULL UNIQUE,
+  order_id INTEGER REFERENCES orders(id),
+  last_event_at INTEGER NOT NULL DEFAULT 0,
+  last_customer_at INTEGER NOT NULL DEFAULT 0,
+  consent_at INTEGER,
+  confirmed_at INTEGER,
+  confirmed_revision INTEGER,
+  confirmed_price INTEGER,
+  checkout_started_at INTEGER,
+  lock_id TEXT,
+  lock_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS whatsapp_booking_events (
+  event_key TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL,
+  outcome TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS whatsapp_booking_replies (
+  id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL REFERENCES whatsapp_booking_conversations(id),
+  body TEXT,
+  state TEXT NOT NULL DEFAULT 'pending',
+  provider_ref TEXT,
+  kind TEXT NOT NULL DEFAULT 'prompt',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS whatsapp_booking_replies_pending ON whatsapp_booking_replies(state, created_at);
+CREATE INDEX IF NOT EXISTS whatsapp_booking_events_expiry ON whatsapp_booking_events(created_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS whatsapp_booking_reply_provider ON whatsapp_booking_replies(provider_ref) WHERE provider_ref IS NOT NULL;
+
+-- Sanitized signed delivery receipts survive callback-before-send-response races.
+CREATE TABLE IF NOT EXISTS whatsapp_booking_receipts (
+  provider_ref TEXT PRIMARY KEY,
+  rank INTEGER NOT NULL,
+  applied_rank INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+-- Bounded staging pilot only. No message bodies, addresses, phone numbers or keys.
+CREATE TABLE IF NOT EXISTS whatsapp_pilot_budgets (
+  pilot_id TEXT PRIMARY KEY,
+  binding_hash TEXT NOT NULL,
+  started_at INTEGER,
+  expires_at INTEGER,
+  attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts BETWEEN 0 AND 20),
+  charged_micros INTEGER NOT NULL DEFAULT 0 CHECK(charged_micros BETWEEN 0 AND 500000),
+  lock_id TEXT,
+  stopped_reason TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS whatsapp_pilot_model_attempts (
+  id TEXT PRIMARY KEY,
+  pilot_id TEXT NOT NULL REFERENCES whatsapp_pilot_budgets(pilot_id),
+  status TEXT NOT NULL CHECK(status IN ('pending','settled','uncertain')),
+  charged_micros INTEGER NOT NULL CHECK(charged_micros BETWEEN 0 AND 300000),
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  outcome TEXT,
+  readiness_case TEXT,
+  http_status INTEGER,
+  elapsed_ms INTEGER,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS whatsapp_pilot_model_attempts_pilot ON whatsapp_pilot_model_attempts(pilot_id, created_at);
+-- Explicit versioned continuation; never rewrites the original stopped ledger.
+-- One grant per original run, no chat/phone/key data, no retention cleanup.
+CREATE TABLE IF NOT EXISTS whatsapp_continuation_grants (
+  id TEXT PRIMARY KEY,
+  pilot_id TEXT NOT NULL UNIQUE REFERENCES whatsapp_pilot_budgets(pilot_id),
+  version INTEGER NOT NULL CHECK(version=1),
+  binding_hash TEXT NOT NULL,
+  history_hash TEXT NOT NULL,
+  starts_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL CHECK(expires_at>starts_at AND expires_at-starts_at<=1800000),
+  historical_micros INTEGER NOT NULL CHECK(historical_micros=300000),
+  fee_cushion_micros INTEGER NOT NULL CHECK(fee_cushion_micros=500000),
+  spent_micros INTEGER NOT NULL DEFAULT 0 CHECK(spent_micros>=0),
+  model_micros INTEGER NOT NULL DEFAULT 0 CHECK(model_micros BETWEEN 0 AND 180000),
+  inbound INTEGER NOT NULL DEFAULT 0 CHECK(inbound BETWEEN 0 AND 10),
+  outbound INTEGER NOT NULL DEFAULT 0 CHECK(outbound BETWEEN 0 AND 10),
+  address INTEGER NOT NULL DEFAULT 0 CHECK(address BETWEEN 0 AND 3),
+  model INTEGER NOT NULL DEFAULT 0 CHECK(model BETWEEN 0 AND 6),
+  lock_id TEXT,
+  stopped_reason TEXT,
+  created_at INTEGER NOT NULL,
+  CHECK(historical_micros+model_micros<=500000),
+  CHECK(historical_micros+fee_cushion_micros+spent_micros<=2000000)
+);
+CREATE TABLE IF NOT EXISTS whatsapp_continuation_operations (
+  id TEXT PRIMARY KEY,
+  grant_id TEXT NOT NULL REFERENCES whatsapp_continuation_grants(id),
+  kind TEXT NOT NULL CHECK(kind IN ('inbound','outbound','address','model')),
+  status TEXT NOT NULL CHECK(status IN ('pending','settled','uncertain')),
+  reserved_micros INTEGER NOT NULL CHECK(reserved_micros>0),
+  outcome TEXT,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  created_at INTEGER NOT NULL,
+  finished_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS whatsapp_continuation_operations_grant ON whatsapp_continuation_operations(grant_id,kind);
+-- One explicitly approved second window, only after an unused expired v1 grant.
+-- Original tables are untouched; original historical holds/cushion apply once.
+CREATE TABLE IF NOT EXISTS whatsapp_continuation_followon_grants (
+  id TEXT PRIMARY KEY,
+  pilot_id TEXT NOT NULL UNIQUE REFERENCES whatsapp_pilot_budgets(pilot_id),
+  version INTEGER NOT NULL CHECK(version=2),
+  binding_hash TEXT NOT NULL,
+  history_hash TEXT NOT NULL,
+  starts_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL CHECK(expires_at>starts_at AND expires_at-starts_at<=1800000),
+  historical_micros INTEGER NOT NULL CHECK(historical_micros=300000),
+  fee_cushion_micros INTEGER NOT NULL CHECK(fee_cushion_micros=500000),
+  spent_micros INTEGER NOT NULL DEFAULT 0 CHECK(spent_micros>=0),
+  model_micros INTEGER NOT NULL DEFAULT 0 CHECK(model_micros BETWEEN 0 AND 180000),
+  inbound INTEGER NOT NULL DEFAULT 0 CHECK(inbound BETWEEN 0 AND 10),
+  outbound INTEGER NOT NULL DEFAULT 0 CHECK(outbound BETWEEN 0 AND 10),
+  address INTEGER NOT NULL DEFAULT 0 CHECK(address BETWEEN 0 AND 3),
+  model INTEGER NOT NULL DEFAULT 0 CHECK(model BETWEEN 0 AND 6),
+  lock_id TEXT,
+  stopped_reason TEXT,
+  created_at INTEGER NOT NULL,
+  CHECK(historical_micros+model_micros<=500000),
+  CHECK(historical_micros+fee_cushion_micros+spent_micros<=2000000)
+);
+CREATE TABLE IF NOT EXISTS whatsapp_continuation_followon_operations (
+  id TEXT PRIMARY KEY,
+  grant_id TEXT NOT NULL REFERENCES whatsapp_continuation_followon_grants(id),
+  kind TEXT NOT NULL CHECK(kind IN ('inbound','outbound','address','model')),
+  status TEXT NOT NULL CHECK(status IN ('pending','settled','uncertain')),
+  reserved_micros INTEGER NOT NULL CHECK(reserved_micros>0),
+  outcome TEXT,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  created_at INTEGER NOT NULL,
+  finished_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS whatsapp_continuation_followon_operations_grant ON whatsapp_continuation_followon_operations(grant_id,kind);
+
+-- Reject issuance races or an attempt to carry unrecorded predecessor spend.
+CREATE TRIGGER IF NOT EXISTS whatsapp_followon_unused_predecessor
+BEFORE INSERT ON whatsapp_continuation_followon_grants
+WHEN NOT EXISTS (
+  SELECT 1 FROM whatsapp_continuation_grants p
+  WHERE p.pilot_id=NEW.pilot_id AND p.id=NEW.pilot_id||':quote-v2-handset-1'
+    AND p.version=1 AND p.expires_at<=NEW.created_at AND p.expires_at<=NEW.starts_at
+    AND p.lock_id IS NULL AND p.stopped_reason IS NULL
+    AND p.spent_micros=0 AND p.model_micros=0 AND p.inbound=0 AND p.outbound=0 AND p.address=0 AND p.model=0
+    AND p.historical_micros=NEW.historical_micros AND p.fee_cushion_micros=NEW.fee_cushion_micros
+    AND NOT EXISTS(SELECT 1 FROM whatsapp_continuation_operations o WHERE o.grant_id=p.id)
+)
+BEGIN SELECT RAISE(ABORT,'unused expired predecessor required'); END;
+-- Once linked, freeze the zero-use predecessor so the original aggregate cap
+-- cannot be bypassed by racing an old deployment or modifying its history.
+CREATE TRIGGER IF NOT EXISTS whatsapp_followon_freeze_predecessor_update
+BEFORE UPDATE ON whatsapp_continuation_grants
+WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_followon_grants WHERE pilot_id=OLD.pilot_id)
+BEGIN SELECT RAISE(ABORT,'predecessor retained'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_followon_freeze_predecessor_delete
+BEFORE DELETE ON whatsapp_continuation_grants
+WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_followon_grants WHERE pilot_id=OLD.pilot_id)
+BEGIN SELECT RAISE(ABORT,'predecessor retained'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_followon_freeze_predecessor_operation
+BEFORE INSERT ON whatsapp_continuation_operations
+WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_grants p JOIN whatsapp_continuation_followon_grants f ON p.pilot_id=f.pilot_id WHERE p.id=NEW.grant_id)
+BEGIN SELECT RAISE(ABORT,'predecessor retained'); END;
+
+-- One separately approved third window after the stopped October 9 rehearsal.
+-- Exact predecessor holds are carried forward; no reset or refund.
+CREATE TABLE IF NOT EXISTS whatsapp_continuation_retry_grants (
+  id TEXT PRIMARY KEY,
+  pilot_id TEXT NOT NULL UNIQUE REFERENCES whatsapp_pilot_budgets(pilot_id),
+  version INTEGER NOT NULL CHECK(version=3),
+  binding_hash TEXT NOT NULL,
+  history_hash TEXT NOT NULL,
+  starts_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL CHECK(expires_at>starts_at AND expires_at-starts_at<=1800000),
+  historical_micros INTEGER NOT NULL CHECK(historical_micros=405100),
+  historical_model_micros INTEGER NOT NULL CHECK(historical_model_micros=330000),
+  fee_cushion_micros INTEGER NOT NULL CHECK(fee_cushion_micros=500000),
+  spent_micros INTEGER NOT NULL DEFAULT 0 CHECK(spent_micros>=0),
+  model_micros INTEGER NOT NULL DEFAULT 0 CHECK(model_micros BETWEEN 0 AND 150000),
+  inbound INTEGER NOT NULL DEFAULT 0 CHECK(inbound BETWEEN 0 AND 10),
+  outbound INTEGER NOT NULL DEFAULT 0 CHECK(outbound BETWEEN 0 AND 10),
+  address INTEGER NOT NULL DEFAULT 0 CHECK(address BETWEEN 0 AND 3),
+  model INTEGER NOT NULL DEFAULT 0 CHECK(model BETWEEN 0 AND 5),
+  lock_id TEXT,
+  stopped_reason TEXT,
+  created_at INTEGER NOT NULL,
+  CHECK(historical_model_micros+model_micros<=500000),
+  CHECK(historical_micros+fee_cushion_micros+spent_micros<=2000000)
+);
+CREATE TABLE IF NOT EXISTS whatsapp_continuation_retry_operations (
+  id TEXT PRIMARY KEY,
+  grant_id TEXT NOT NULL REFERENCES whatsapp_continuation_retry_grants(id),
+  kind TEXT NOT NULL CHECK(kind IN ('inbound','outbound','address','model')),
+  status TEXT NOT NULL CHECK(status IN ('pending','settled','uncertain')),
+  reserved_micros INTEGER NOT NULL CHECK(reserved_micros>0),
+  outcome TEXT,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  created_at INTEGER NOT NULL,
+  finished_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS whatsapp_continuation_retry_operations_grant ON whatsapp_continuation_retry_operations(grant_id,kind);
+
+-- Issuance cannot race old work or conceal reservations. Previous stops remain.
+CREATE TRIGGER IF NOT EXISTS whatsapp_retry_stopped_predecessor
+BEFORE INSERT ON whatsapp_continuation_retry_grants
+WHEN NOT EXISTS (
+ SELECT 1 FROM whatsapp_continuation_followon_grants p
+ WHERE p.pilot_id=NEW.pilot_id AND p.id=NEW.pilot_id||':quote-v2-handset-2'
+ AND p.version=2 AND p.expires_at<=NEW.created_at AND p.expires_at<=NEW.starts_at
+ AND p.lock_id IS NULL AND p.stopped_reason='provider_uncertain'
+ AND p.historical_micros=300000 AND p.fee_cushion_micros=500000
+ AND p.spent_micros=105100 AND p.model_micros=30000
+ AND p.inbound=4 AND p.outbound=3 AND p.address=0 AND p.model=1
+ AND (SELECT COUNT(*) FROM whatsapp_continuation_followon_operations o WHERE o.grant_id=p.id)=8
+ AND (SELECT SUM(reserved_micros) FROM whatsapp_continuation_followon_operations o WHERE o.grant_id=p.id)=105100
+ AND (SELECT COUNT(*) FROM whatsapp_continuation_followon_operations o WHERE o.grant_id=p.id AND o.kind='inbound' AND o.status='settled' AND o.reserved_micros=10300)=4
+ AND (SELECT COUNT(*) FROM whatsapp_continuation_followon_operations o WHERE o.grant_id=p.id AND o.kind='outbound' AND o.status='settled' AND o.reserved_micros=11300)=3
+ AND (SELECT COUNT(*) FROM whatsapp_continuation_followon_operations o WHERE o.grant_id=p.id AND o.kind='model' AND o.status='uncertain' AND o.reserved_micros=30000 AND o.finished_at IS NOT NULL)=1
+)
+BEGIN SELECT RAISE(ABORT,'exact stopped predecessor required'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_retry_freeze_grants_update
+BEFORE UPDATE ON whatsapp_continuation_followon_grants
+WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_retry_grants WHERE pilot_id=OLD.pilot_id)
+BEGIN SELECT RAISE(ABORT,'predecessor retained'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_retry_freeze_grants_delete
+BEFORE DELETE ON whatsapp_continuation_followon_grants
+WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_retry_grants WHERE pilot_id=OLD.pilot_id)
+BEGIN SELECT RAISE(ABORT,'predecessor retained'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_retry_freeze_operations_update
+BEFORE UPDATE ON whatsapp_continuation_followon_operations
+WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_retry_grants WHERE pilot_id=(SELECT pilot_id FROM whatsapp_continuation_followon_grants WHERE id=OLD.grant_id))
+BEGIN SELECT RAISE(ABORT,'predecessor retained'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_retry_freeze_operations_delete
+BEFORE DELETE ON whatsapp_continuation_followon_operations
+WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_retry_grants WHERE pilot_id=(SELECT pilot_id FROM whatsapp_continuation_followon_grants WHERE id=OLD.grant_id))
+BEGIN SELECT RAISE(ABORT,'predecessor retained'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_retry_freeze_operations_insert
+BEFORE INSERT ON whatsapp_continuation_followon_operations
+WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_retry_grants WHERE pilot_id=(SELECT pilot_id FROM whatsapp_continuation_followon_grants WHERE id=NEW.grant_id))
+BEGIN SELECT RAISE(ABORT,'predecessor retained'); END;
+
+-- One separately approved Sol-low fourth window after the stopped third session.
+-- Historical value includes 235224 microdollars of retained offline Sol reservations.
+-- Exact predecessor holds are carried forward; no reset or refund.
+CREATE TABLE IF NOT EXISTS whatsapp_continuation_sol_grants (
+  id TEXT PRIMARY KEY,
+  pilot_id TEXT NOT NULL UNIQUE REFERENCES whatsapp_pilot_budgets(pilot_id),
+  version INTEGER NOT NULL CHECK(version=4),
+  binding_hash TEXT NOT NULL,
+  history_hash TEXT NOT NULL,
+  starts_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL CHECK(expires_at>starts_at AND expires_at-starts_at<=900000),
+  historical_micros INTEGER NOT NULL CHECK(historical_micros=735124),
+  historical_model_micros INTEGER NOT NULL CHECK(historical_model_micros=595224),
+  fee_cushion_micros INTEGER NOT NULL CHECK(fee_cushion_micros=500000),
+  spent_micros INTEGER NOT NULL DEFAULT 0 CHECK(spent_micros>=0),
+  model_micros INTEGER NOT NULL DEFAULT 0 CHECK(model_micros BETWEEN 0 AND 225280),
+  inbound INTEGER NOT NULL DEFAULT 0 CHECK(inbound BETWEEN 0 AND 12),
+  outbound INTEGER NOT NULL DEFAULT 0 CHECK(outbound BETWEEN 0 AND 12),
+  address INTEGER NOT NULL DEFAULT 0 CHECK(address BETWEEN 0 AND 3),
+  model INTEGER NOT NULL DEFAULT 0 CHECK(model BETWEEN 0 AND 4),
+  lock_id TEXT,
+  stopped_reason TEXT,
+  created_at INTEGER NOT NULL,
+  CHECK(historical_model_micros+model_micros<=820504),
+  CHECK(historical_micros+fee_cushion_micros+spent_micros<=2000000)
+);
+CREATE TABLE IF NOT EXISTS whatsapp_continuation_sol_operations (
+  id TEXT PRIMARY KEY,
+  grant_id TEXT NOT NULL REFERENCES whatsapp_continuation_sol_grants(id),
+  kind TEXT NOT NULL CHECK(kind IN ('inbound','outbound','address','model')),
+  status TEXT NOT NULL CHECK(status IN ('pending','settled','uncertain')),
+  reserved_micros INTEGER NOT NULL CHECK(reserved_micros>0),
+  outcome TEXT,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  created_at INTEGER NOT NULL,
+  finished_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS whatsapp_continuation_sol_operations_grant ON whatsapp_continuation_sol_operations(grant_id,kind);
+
+-- Issuance cannot race old work or conceal reservations. Previous stops remain.
+CREATE TRIGGER IF NOT EXISTS whatsapp_sol_stopped_predecessor
+BEFORE INSERT ON whatsapp_continuation_sol_grants
+WHEN NOT EXISTS (
+ SELECT 1 FROM whatsapp_continuation_retry_grants p
+ WHERE p.pilot_id=NEW.pilot_id AND p.id=NEW.pilot_id||':quote-v2-handset-3'
+ AND p.version=3 AND p.expires_at<=NEW.created_at AND p.expires_at<=NEW.starts_at
+ AND p.lock_id IS NULL AND p.stopped_reason='model_uncertain'
+ AND p.historical_micros=405100 AND p.historical_model_micros=330000 AND p.fee_cushion_micros=500000
+ AND p.spent_micros=94800 AND p.model_micros=30000
+ AND p.inbound=3 AND p.outbound=3 AND p.address=0 AND p.model=1
+ AND (SELECT COUNT(*) FROM whatsapp_continuation_retry_operations o WHERE o.grant_id=p.id)=7
+ AND (SELECT SUM(reserved_micros) FROM whatsapp_continuation_retry_operations o WHERE o.grant_id=p.id)=94800
+ AND (SELECT COUNT(*) FROM whatsapp_continuation_retry_operations o WHERE o.grant_id=p.id AND o.kind='inbound' AND o.status='settled' AND o.reserved_micros=10300)=3
+ AND (SELECT COUNT(*) FROM whatsapp_continuation_retry_operations o WHERE o.grant_id=p.id AND o.kind='outbound' AND o.status='settled' AND o.reserved_micros=11300)=3
+ AND (SELECT COUNT(*) FROM whatsapp_continuation_retry_operations o WHERE o.grant_id=p.id AND o.kind='model' AND o.status='uncertain' AND o.reserved_micros=30000 AND o.finished_at IS NOT NULL)=1
+)
+BEGIN SELECT RAISE(ABORT,'exact stopped predecessor required'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_sol_freeze_grants_update
+BEFORE UPDATE ON whatsapp_continuation_retry_grants
+WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_sol_grants WHERE pilot_id=OLD.pilot_id)
+BEGIN SELECT RAISE(ABORT,'predecessor retained'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_sol_freeze_grants_delete
+BEFORE DELETE ON whatsapp_continuation_retry_grants
+WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_sol_grants WHERE pilot_id=OLD.pilot_id)
+BEGIN SELECT RAISE(ABORT,'predecessor retained'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_sol_freeze_operations_update
+BEFORE UPDATE ON whatsapp_continuation_retry_operations
+WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_sol_grants WHERE pilot_id=(SELECT pilot_id FROM whatsapp_continuation_retry_grants WHERE id=OLD.grant_id))
+BEGIN SELECT RAISE(ABORT,'predecessor retained'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_sol_freeze_operations_delete
+BEFORE DELETE ON whatsapp_continuation_retry_operations
+WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_sol_grants WHERE pilot_id=(SELECT pilot_id FROM whatsapp_continuation_retry_grants WHERE id=OLD.grant_id))
+BEGIN SELECT RAISE(ABORT,'predecessor retained'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_sol_freeze_operations_insert
+BEFORE INSERT ON whatsapp_continuation_retry_operations
+WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_sol_grants WHERE pilot_id=(SELECT pilot_id FROM whatsapp_continuation_retry_grants WHERE id=NEW.grant_id))
+BEGIN SELECT RAISE(ABORT,'predecessor retained'); END;
+
+-- Separately issued audio allowance. No grant is created by customer traffic.
+CREATE TABLE IF NOT EXISTS whatsapp_voice_grants (
+ id TEXT PRIMARY KEY, binding_hash TEXT NOT NULL,
+ starts_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
+ max_calls INTEGER NOT NULL CHECK(max_calls BETWEEN 1 AND 6),
+ approved_micros INTEGER NOT NULL CHECK(approved_micros BETWEEN 5000 AND 30000),
+ used_calls INTEGER NOT NULL DEFAULT 0 CHECK(used_calls BETWEEN 0 AND max_calls),
+ reserved_micros INTEGER NOT NULL DEFAULT 0 CHECK(reserved_micros BETWEEN 0 AND approved_micros),
+ stopped INTEGER NOT NULL DEFAULT 0 CHECK(stopped IN(0,1)),
+ CHECK(expires_at>starts_at AND expires_at-starts_at<=900000)
+);
+CREATE TABLE IF NOT EXISTS whatsapp_voice_attempts (
+ event_key TEXT PRIMARY KEY, grant_id TEXT NOT NULL REFERENCES whatsapp_voice_grants(id),
+ created_at INTEGER NOT NULL, outcome TEXT NOT NULL DEFAULT 'pending' CHECK(outcome IN('pending','ok','failed')),
+ seconds REAL, CHECK(seconds IS NULL OR (seconds>0 AND seconds<=60))
+);
+CREATE TRIGGER IF NOT EXISTS whatsapp_voice_reserve BEFORE INSERT ON whatsapp_voice_attempts BEGIN
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM whatsapp_voice_grants WHERE id=NEW.grant_id AND stopped=0
+ AND starts_at<=NEW.created_at AND expires_at>NEW.created_at AND used_calls<max_calls
+ AND reserved_micros+5000<=approved_micros) THEN RAISE(ABORT,'voice_budget_closed') END;
+ UPDATE whatsapp_voice_grants SET used_calls=used_calls+1,reserved_micros=reserved_micros+5000 WHERE id=NEW.grant_id;
+END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_voice_immutable BEFORE UPDATE ON whatsapp_voice_grants
+WHEN NEW.id!=OLD.id OR NEW.binding_hash!=OLD.binding_hash OR NEW.starts_at!=OLD.starts_at OR NEW.expires_at!=OLD.expires_at
+ OR NEW.max_calls!=OLD.max_calls OR NEW.approved_micros!=OLD.approved_micros OR NEW.used_calls<OLD.used_calls
+ OR NEW.reserved_micros<OLD.reserved_micros OR NEW.stopped<OLD.stopped
+BEGIN SELECT RAISE(ABORT,'voice_allowance_is_immutable'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_voice_no_delete BEFORE DELETE ON whatsapp_voice_grants BEGIN SELECT RAISE(ABORT,'voice_allowance_is_retained'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_voice_attempt_no_delete BEFORE DELETE ON whatsapp_voice_attempts BEGIN SELECT RAISE(ABORT,'voice_attempt_is_retained'); END;
+
+-- Fresh $1.65 voice test; historical holds retained outside the new allowance.
+CREATE TABLE IF NOT EXISTS whatsapp_continuation_voice_grants (
+  id TEXT PRIMARY KEY,
+  pilot_id TEXT NOT NULL UNIQUE REFERENCES whatsapp_pilot_budgets(pilot_id),
+  version INTEGER NOT NULL CHECK(version=5),
+  binding_hash TEXT NOT NULL,
+  history_hash TEXT NOT NULL,
+  starts_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL CHECK(expires_at>starts_at AND expires_at-starts_at<=900000),
+  historical_micros INTEGER NOT NULL CHECK(historical_micros=735124),
+  historical_model_micros INTEGER NOT NULL CHECK(historical_model_micros=595224),
+  fee_cushion_micros INTEGER NOT NULL CHECK(fee_cushion_micros=280000),
+  spent_micros INTEGER NOT NULL DEFAULT 0 CHECK(spent_micros>=0),
+  model_micros INTEGER NOT NULL DEFAULT 0 CHECK(model_micros BETWEEN 0 AND 675840),
+  inbound INTEGER NOT NULL DEFAULT 0 CHECK(inbound BETWEEN 0 AND 24),
+  outbound INTEGER NOT NULL DEFAULT 0 CHECK(outbound BETWEEN 0 AND 24),
+  address INTEGER NOT NULL DEFAULT 0 CHECK(address BETWEEN 0 AND 4),
+  model INTEGER NOT NULL DEFAULT 0 CHECK(model BETWEEN 0 AND 12),
+  lock_id TEXT,
+  stopped_reason TEXT,
+  created_at INTEGER NOT NULL,
+  CHECK(historical_model_micros+model_micros<=1271064),
+  CHECK(historical_micros+fee_cushion_micros+spent_micros<=2385124)
+);
+CREATE TABLE IF NOT EXISTS whatsapp_continuation_voice_operations (
+  id TEXT PRIMARY KEY,
+  grant_id TEXT NOT NULL REFERENCES whatsapp_continuation_voice_grants(id),
+  kind TEXT NOT NULL CHECK(kind IN ('inbound','outbound','address','model')),
+  status TEXT NOT NULL CHECK(status IN ('pending','settled','uncertain')),
+  reserved_micros INTEGER NOT NULL CHECK(reserved_micros>0),
+  outcome TEXT,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  created_at INTEGER NOT NULL,
+  finished_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS whatsapp_continuation_voice_operations_grant ON whatsapp_continuation_voice_operations(grant_id,kind);
+
+CREATE TRIGGER IF NOT EXISTS whatsapp_voice_session_predecessor BEFORE INSERT ON whatsapp_continuation_voice_grants
+WHEN NOT EXISTS (SELECT 1 FROM whatsapp_continuation_sol_grants p WHERE p.pilot_id=NEW.pilot_id
+AND p.id=NEW.pilot_id||':quote-v2-handset-4' AND p.version=4 AND p.expires_at<=NEW.created_at AND p.expires_at<=NEW.starts_at
+AND p.lock_id IS NULL AND p.stopped_reason IS NULL AND p.historical_micros=735124 AND p.historical_model_micros=595224
+AND p.fee_cushion_micros=500000 AND p.spent_micros=0 AND p.model_micros=0 AND p.inbound=0 AND p.outbound=0 AND p.address=0 AND p.model=0
+AND NOT EXISTS(SELECT 1 FROM whatsapp_continuation_sol_operations o WHERE o.grant_id=p.id))
+BEGIN SELECT RAISE(ABORT,'unused expired Sol predecessor required'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_voice_session_freeze_grants_update BEFORE UPDATE ON whatsapp_continuation_sol_grants WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_voice_grants WHERE pilot_id=OLD.pilot_id) BEGIN SELECT RAISE(ABORT,'predecessor retained'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_voice_session_freeze_grants_delete BEFORE DELETE ON whatsapp_continuation_sol_grants WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_voice_grants WHERE pilot_id=OLD.pilot_id) BEGIN SELECT RAISE(ABORT,'predecessor retained'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_voice_session_freeze_operations_insert BEFORE INSERT ON whatsapp_continuation_sol_operations WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_voice_grants WHERE pilot_id=(SELECT pilot_id FROM whatsapp_continuation_sol_grants WHERE id=NEW.grant_id)) BEGIN SELECT RAISE(ABORT,'predecessor retained'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_voice_session_freeze_operations_update BEFORE UPDATE ON whatsapp_continuation_sol_operations WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_voice_grants WHERE pilot_id=(SELECT pilot_id FROM whatsapp_continuation_sol_grants WHERE id=OLD.grant_id)) BEGIN SELECT RAISE(ABORT,'predecessor retained'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_voice_session_freeze_operations_delete BEFORE DELETE ON whatsapp_continuation_sol_operations WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_voice_grants WHERE pilot_id=(SELECT pilot_id FROM whatsapp_continuation_sol_grants WHERE id=OLD.grant_id)) BEGIN SELECT RAISE(ABORT,'predecessor retained'); END;
+
+-- Fresh immutable text-only v6. All earlier holds and both fee cushions retained.
+-- No grant is created by migration; proof and authenticated issuance are separate.
+CREATE TABLE IF NOT EXISTS whatsapp_review_preflight (
+ id TEXT PRIMARY KEY CHECK(id='edenmish-release-smoke-20261010-r1'),
+ request_sha256 TEXT NOT NULL CHECK(request_sha256='0bc34140b6fde49c5efe294fddbe0fb3227a7ae9301ce7f073a8ae77ff928ff3'),
+ source_sha256 TEXT NOT NULL CHECK(length(source_sha256)=64 AND source_sha256 NOT GLOB '*[^a-f0-9]*'),
+ reserved_micros INTEGER NOT NULL CHECK(reserved_micros=56320),
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','matched','failed')),
+ created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL CHECK(expires_at>created_at AND expires_at-created_at<=3600000),
+ finished_at INTEGER CHECK(finished_at IS NULL OR (finished_at>=created_at AND finished_at<expires_at)),
+ input_tokens INTEGER CHECK(input_tokens BETWEEN 0 AND 16384),
+ cached_tokens INTEGER CHECK(cached_tokens>=0 AND cached_tokens<=input_tokens),
+ output_tokens INTEGER CHECK(output_tokens BETWEEN 0 AND 1024),
+ reasoning_tokens INTEGER CHECK(reasoning_tokens>=0 AND reasoning_tokens<=output_tokens),
+ CHECK(status!='matched' OR (finished_at IS NOT NULL AND input_tokens IS NOT NULL AND cached_tokens IS NOT NULL AND output_tokens IS NOT NULL AND reasoning_tokens IS NOT NULL))
+);
+CREATE TRIGGER IF NOT EXISTS whatsapp_review_preflight_insert BEFORE INSERT ON whatsapp_review_preflight
+WHEN NEW.status!='pending' OR NEW.finished_at IS NOT NULL OR NEW.input_tokens IS NOT NULL OR NEW.output_tokens IS NOT NULL OR NEW.cached_tokens IS NOT NULL OR NEW.reasoning_tokens IS NOT NULL
+BEGIN SELECT RAISE(ABORT,'preflight must reserve before IO'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_review_preflight_update BEFORE UPDATE ON whatsapp_review_preflight
+WHEN OLD.status!='pending' OR NEW.id!=OLD.id OR NEW.request_sha256!=OLD.request_sha256 OR NEW.source_sha256!=OLD.source_sha256
+ OR NEW.reserved_micros!=OLD.reserved_micros OR NEW.created_at!=OLD.created_at OR NEW.expires_at!=OLD.expires_at OR NEW.status='pending'
+BEGIN SELECT RAISE(ABORT,'preflight proof immutable'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_review_preflight_delete BEFORE DELETE ON whatsapp_review_preflight BEGIN SELECT RAISE(ABORT,'preflight hold retained'); END;
+CREATE TABLE IF NOT EXISTS whatsapp_continuation_review_grants (
+ id TEXT PRIMARY KEY, pilot_id TEXT NOT NULL UNIQUE REFERENCES whatsapp_pilot_budgets(pilot_id),
+ version INTEGER NOT NULL CHECK(version=6), binding_hash TEXT NOT NULL, history_hash TEXT NOT NULL,
+ starts_at INTEGER NOT NULL, expires_at INTEGER NOT NULL CHECK(expires_at>starts_at AND expires_at-starts_at<=900000),
+ historical_micros INTEGER NOT NULL CHECK(historical_micros=912564),
+ historical_model_micros INTEGER NOT NULL CHECK(historical_model_micros=707864),
+ fee_cushion_micros INTEGER NOT NULL CHECK(fee_cushion_micros=780000),
+ spent_micros INTEGER NOT NULL DEFAULT 0 CHECK(spent_micros BETWEEN 0 AND 293120),
+ model_micros INTEGER NOT NULL DEFAULT 0 CHECK(model_micros BETWEEN 0 AND 56320),
+ inbound INTEGER NOT NULL DEFAULT 0 CHECK(inbound BETWEEN 0 AND 8),
+ outbound INTEGER NOT NULL DEFAULT 0 CHECK(outbound BETWEEN 0 AND 8),
+ address INTEGER NOT NULL DEFAULT 0 CHECK(address BETWEEN 0 AND 2),
+ model INTEGER NOT NULL DEFAULT 0 CHECK(model BETWEEN 0 AND 1),
+ lock_id TEXT, stopped_reason TEXT, created_at INTEGER NOT NULL,
+ CHECK(historical_model_micros+model_micros<=764184),
+ CHECK(historical_micros+fee_cushion_micros+spent_micros<=1986244)
+);
+CREATE TABLE IF NOT EXISTS whatsapp_continuation_review_operations (
+ id TEXT PRIMARY KEY, grant_id TEXT NOT NULL REFERENCES whatsapp_continuation_review_grants(id),
+ kind TEXT NOT NULL CHECK(kind IN ('inbound','outbound','address','model')),
+ status TEXT NOT NULL CHECK(status IN ('pending','settled','uncertain')),
+ reserved_micros INTEGER NOT NULL CHECK(reserved_micros>0), outcome TEXT,
+ input_tokens INTEGER, output_tokens INTEGER, created_at INTEGER NOT NULL, finished_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS whatsapp_continuation_review_operations_grant ON whatsapp_continuation_review_operations(grant_id,kind);
+CREATE TRIGGER IF NOT EXISTS whatsapp_review_predecessor BEFORE INSERT ON whatsapp_continuation_review_grants
+WHEN NOT EXISTS(SELECT 1 FROM whatsapp_continuation_voice_grants p WHERE p.pilot_id=NEW.pilot_id AND p.version=5
+ AND p.id=NEW.pilot_id||':quote-v2-handset-5' AND p.expires_at<=NEW.created_at AND p.expires_at<=NEW.starts_at
+ AND p.lock_id IS NULL AND p.stopped_reason='model_uncertain' AND p.historical_micros=735124 AND p.historical_model_micros=595224
+ AND p.fee_cushion_micros=280000 AND p.spent_micros=121120 AND p.model_micros=56320 AND p.inbound=3 AND p.outbound=3 AND p.address=0 AND p.model=1)
+ OR NOT EXISTS(SELECT 1 FROM whatsapp_review_preflight p WHERE p.status='matched' AND p.finished_at<=NEW.created_at AND p.expires_at>=NEW.expires_at)
+BEGIN SELECT RAISE(ABORT,'closed predecessor and successful bounded preflight required'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_review_grant_update BEFORE UPDATE ON whatsapp_continuation_review_grants
+WHEN NEW.id!=OLD.id OR NEW.pilot_id!=OLD.pilot_id OR NEW.version!=OLD.version OR NEW.binding_hash!=OLD.binding_hash OR NEW.history_hash!=OLD.history_hash
+ OR NEW.starts_at!=OLD.starts_at OR NEW.expires_at!=OLD.expires_at OR NEW.created_at!=OLD.created_at
+ OR NEW.historical_micros!=OLD.historical_micros OR NEW.historical_model_micros!=OLD.historical_model_micros OR NEW.fee_cushion_micros!=OLD.fee_cushion_micros
+ OR NEW.spent_micros<OLD.spent_micros OR NEW.model_micros<OLD.model_micros OR NEW.inbound<OLD.inbound OR NEW.outbound<OLD.outbound
+ OR NEW.address<OLD.address OR NEW.model<OLD.model OR (OLD.stopped_reason IS NOT NULL AND NEW.stopped_reason IS NULL)
+BEGIN SELECT RAISE(ABORT,'review allowance immutable'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_review_grant_delete BEFORE DELETE ON whatsapp_continuation_review_grants BEGIN SELECT RAISE(ABORT,'review grant retained'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_review_operation_update BEFORE UPDATE ON whatsapp_continuation_review_operations
+WHEN OLD.status!='pending' OR NEW.id!=OLD.id OR NEW.grant_id!=OLD.grant_id OR NEW.kind!=OLD.kind OR NEW.reserved_micros!=OLD.reserved_micros OR NEW.created_at!=OLD.created_at
+BEGIN SELECT RAISE(ABORT,'review operation immutable'); END;
+CREATE TRIGGER IF NOT EXISTS whatsapp_review_operation_delete BEFORE DELETE ON whatsapp_continuation_review_operations BEGIN SELECT RAISE(ABORT,'review operation retained'); END;
+CREATE TRIGGER IF NOT EXISTS review_freeze_whatsapp_continuation_voice_grants_insert BEFORE INSERT ON whatsapp_continuation_voice_grants WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_review_grants) BEGIN SELECT RAISE(ABORT,'prior history retained'); END;
+CREATE TRIGGER IF NOT EXISTS review_freeze_whatsapp_continuation_voice_grants_update BEFORE UPDATE ON whatsapp_continuation_voice_grants WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_review_grants) BEGIN SELECT RAISE(ABORT,'prior history retained'); END;
+CREATE TRIGGER IF NOT EXISTS review_freeze_whatsapp_continuation_voice_grants_delete BEFORE DELETE ON whatsapp_continuation_voice_grants WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_review_grants) BEGIN SELECT RAISE(ABORT,'prior history retained'); END;
+CREATE TRIGGER IF NOT EXISTS review_freeze_whatsapp_continuation_voice_operations_insert BEFORE INSERT ON whatsapp_continuation_voice_operations WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_review_grants) BEGIN SELECT RAISE(ABORT,'prior history retained'); END;
+CREATE TRIGGER IF NOT EXISTS review_freeze_whatsapp_continuation_voice_operations_update BEFORE UPDATE ON whatsapp_continuation_voice_operations WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_review_grants) BEGIN SELECT RAISE(ABORT,'prior history retained'); END;
+CREATE TRIGGER IF NOT EXISTS review_freeze_whatsapp_continuation_voice_operations_delete BEFORE DELETE ON whatsapp_continuation_voice_operations WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_review_grants) BEGIN SELECT RAISE(ABORT,'prior history retained'); END;
+CREATE TRIGGER IF NOT EXISTS review_freeze_whatsapp_voice_grants_insert BEFORE INSERT ON whatsapp_voice_grants WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_review_grants) BEGIN SELECT RAISE(ABORT,'prior history retained'); END;
+CREATE TRIGGER IF NOT EXISTS review_freeze_whatsapp_voice_grants_update BEFORE UPDATE ON whatsapp_voice_grants WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_review_grants) BEGIN SELECT RAISE(ABORT,'prior history retained'); END;
+CREATE TRIGGER IF NOT EXISTS review_freeze_whatsapp_voice_grants_delete BEFORE DELETE ON whatsapp_voice_grants WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_review_grants) BEGIN SELECT RAISE(ABORT,'prior history retained'); END;
+CREATE TRIGGER IF NOT EXISTS review_freeze_whatsapp_voice_attempts_insert BEFORE INSERT ON whatsapp_voice_attempts WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_review_grants) BEGIN SELECT RAISE(ABORT,'prior history retained'); END;
+CREATE TRIGGER IF NOT EXISTS review_freeze_whatsapp_voice_attempts_update BEFORE UPDATE ON whatsapp_voice_attempts WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_review_grants) BEGIN SELECT RAISE(ABORT,'prior history retained'); END;
+CREATE TRIGGER IF NOT EXISTS review_freeze_whatsapp_voice_attempts_delete BEFORE DELETE ON whatsapp_voice_attempts WHEN EXISTS(SELECT 1 FROM whatsapp_continuation_review_grants) BEGIN SELECT RAISE(ABORT,'prior history retained'); END;

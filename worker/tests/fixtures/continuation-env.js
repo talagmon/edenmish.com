@@ -1,0 +1,15 @@
+import {reserveLunaPilotModel,finishLunaPilotModel} from '../../src/whatsapp-pilot-budget.js';
+export async function prepareContinuation(DB, now){
+ const usage={input_tokens:1000,output_tokens:50,total_tokens:1050};
+ const e={DB,BOOKING_URL:'https://staging.edenmish.com',WHATSAPP_BOOKING_MODE:'conversation_only',WHATSAPP_BOOKING_PILOT_PROFILE:'luna-v1',WHATSAPP_BOOKING_PILOT_BUDGET_READY:'on',
+ WHATSAPP_BOOKING_PROVIDER:'twilio',AUTO_DRIVER_DISPATCH:'off',TWILIO_RECIPIENT_POLICY:'allowlist',TWILIO_RECIPIENT_ALLOWLIST:'+972541234567',TWILIO_BOOKING_FROM:'whatsapp:+15551234567',TWILIO_ACCOUNT_SID:'AC'+'1'.repeat(32),TWILIO_AUTH_TOKEN:'synthetic-only',SESSION_SECRET:'test-session-secret',
+ WHATSAPP_BOOKING_ENABLED:'off',WHATSAPP_BOOKING_SEND_ENABLED:'off',WHATSAPP_BOOKING_MODEL_ENABLED:'off',WHATSAPP_BOOKING_STORAGE_READY:'on',WHATSAPP_BOOKING_PRIVACY_APPROVED:'on',
+ WHATSAPP_BOOKING_MODEL_PRIVACY_APPROVED:'on',WHATSAPP_BOOKING_MODEL_EVAL_APPROVED:'on',WHATSAPP_BOOKING_MODEL_SPEND_APPROVED:'on',WHATSAPP_BOOKING_MODEL:'gpt-6-luna',WHATSAPP_BOOKING_OPENAI_API_KEY:'sk-synthetic-test-only',
+ WHATSAPP_BOOKING_PILOT_ID:'edenmish-luna-offline-grant',WHATSAPP_BOOKING_READINESS_APPROVED:'on',WHATSAPP_BOOKING_READINESS_EXPIRES_AT:new Date(now+3600000).toISOString()};
+ const a=await reserveLunaPilotModel(e,now,true,'small_item');await finishLunaPilotModel(e,a,{outcome:'transport_failure'},now);
+ const b=await reserveLunaPilotModel({...e,WHATSAPP_BOOKING_READINESS_ATTEMPT:'2',WHATSAPP_BOOKING_READINESS_ADDITIONAL_APPROVED:'on'},now,true,'small_item');await finishLunaPilotModel(e,b,{outcome:'readiness_mismatch'},now);
+ const c=await reserveLunaPilotModel({...e,WHATSAPP_BOOKING_READINESS_ATTEMPT:'3',WHATSAPP_BOOKING_READINESS_QUOTE_V2_APPROVED:'on'},now,true,'small_item');await finishLunaPilotModel(e,c,{outcome:'valid_proposal',usage},now);
+ Object.assign(e,{WHATSAPP_BOOKING_READINESS_APPROVED:'off',WHATSAPP_BOOKING_READINESS_ADDITIONAL_APPROVED:'off',WHATSAPP_BOOKING_READINESS_QUOTE_V2_APPROVED:'off',
+ WHATSAPP_BOOKING_CONTINUATION_SCHEMA_READY:'on',WHATSAPP_BOOKING_CONTINUATION_VERSION:'1',WHATSAPP_BOOKING_CONTINUATION_ID:e.WHATSAPP_BOOKING_PILOT_ID+':quote-v2-handset-1',WHATSAPP_BOOKING_CONTINUATION_APPROVED:'on',WHATSAPP_BOOKING_CONTINUATION_COST_REVIEW:'bounded-v1',WHATSAPP_BOOKING_CONTINUATION_COSTS_UNKNOWN:'off',
+ WHATSAPP_BOOKING_CONTINUATION_START:new Date(now).toISOString(),WHATSAPP_BOOKING_CONTINUATION_END:new Date(now+1800000).toISOString()});return e;
+}

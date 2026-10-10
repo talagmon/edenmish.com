@@ -1,0 +1,19 @@
+
+> edenmish-storefront@0.2.0 syntax-check
+> python3 scripts/syntax-check.py
+
+  ✓ 404.html script[0]
+  ✓ about.html script[0]
+  ✓ booking.html script[0]
+  ✓ business-account.html script[0]
+  ✓ cancel.html script[0]
+  ✓ dash.html script[0]
+  ✓ delivered.html script[0]
+  ✓ error.html script[0]
+  ✓ index.html script[0]
+  ✓ payment-failed.html script[0]
+  ✓ success.html script[0]
+  ✓ thank-you.html script[0]
+  ✓ track.html script[0]
+
+✓ All scripts pass syntax check
