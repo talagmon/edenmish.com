@@ -3,7 +3,7 @@
 .booking-cinematic .order-main{max-width:1320px;padding-inline:28px}
 .booking-cinematic .order-shell{width:100%;max-width:none;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(320px,1fr);gap:20px 32px;align-items:start}
 .booking-cinematic .order-hero{grid-column:1/-1;padding-bottom:0}
-.booking-cinematic .order-shell>.order-stack{grid-column:1;grid-row:2;min-width:0}
+.booking-cinematic .order-shell>.order-stack{grid-column:1;grid-row:2;min-width:0;align-content:start}
 .booking-cinematic .order-title{font-size:30px}
 .booking-cinematic .order-progress{top:84px}
 .booking-cinematic .action-dock{max-width:1240px}
