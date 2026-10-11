@@ -125,7 +125,19 @@ export function validateBookingProposal(raw, text, now, onReject = () => {}, col
       // hour or date that the customer never supplied. All final validation and
       // address resolution still run in the canonical conversation core.
       if (item.field === 'size') {
-        const contextReason = sizeContextRejection(text, source);
+        // Separately grounded, non-overlapping notes can complete an item phrase.
+        // This is not permission to skip an arbitrary suffix: the intervening
+        // text must be exactly 'with' and the joint phrase must parse in full.
+        let contextSource = source;
+        const notesField = raw.fields.find(field => field.field === 'notes');
+        const notesSource = notesField && sourceEvidence(text, notesField.quote, 'notes', () => {});
+        if (notesSource && notesSource.start >= source.end && /^\s+עם\s+$/u.test(text.slice(source.end, notesSource.start))) {
+          const joint = extractBookingText(text.slice(source.start, notesSource.end), now);
+          if (joint?.entries?.some(([key, value]) => key === 'notes' && value === notesSource.value)) {
+            contextSource = { ...source, contentsEnd: notesSource.end };
+          }
+        }
+        const contextReason = sizeContextRejection(text, contextSource);
         if (contextReason) return reject(contextReason);
         // Preserve the legacy Hebrew single-word result; other languages use
         // multilingual normalization before the canonical size validator.

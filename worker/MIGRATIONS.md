@@ -1422,3 +1422,45 @@ npx wrangler d1 execute edenmish --remote --file migrations/047_whatsapp_review_
 Before any future production adoption, independently redesign/review the
 single-history freeze and have the operator apply the approved migration after
 merge and before deployment. No production migration is part of this task.
+
+### 048 — fresh r2/v7 six-exchange review (prepared locally; not applied)
+
+Adds separate immutable `whatsapp_review_r2_preflight`,
+`whatsapp_continuation_review_r2_grants` and operations tables. The first proof
+reservation requires the pinned failed r1 ($0.056320 retained) and zero v6
+grants/operations. Reservation immediately freezes r1/v6 and earlier history,
+including if r2 later fails. No row is reset, no grant is issued by migration.
+The matched proof must cover the entire fixed 15-minute window.
+
+V7 allows six inbound, six outbound segments, one Sol-low call and two Maps
+attempts, no audio. New preflight plus handset reservations total $0.306240;
+all historical holds/cushions bring the total to $1.998804 of the original $2.
+Approval must explicitly transfer the unused $0.293680 v6 allocation and add
+$0.012560 unallocated margin. See the reviewed [v7 runbook](../docs/reviews/whatsapp-review-r2-20261011/V7_RUNBOOK.md).
+
+Only after combined approval, from `worker`:
+```sh
+npx wrangler d1 execute edenmish-staging --remote --config <private-reviewed-off-config.json> --file migrations/048_whatsapp_review_r2_session.sql
+```
+Verify before reservation:
+```sql
+SELECT id,status,reserved_micros FROM whatsapp_review_preflight;
+SELECT COUNT(*) FROM whatsapp_continuation_review_grants;
+SELECT COUNT(*) FROM whatsapp_continuation_review_operations;
+SELECT COUNT(*) FROM whatsapp_review_r2_preflight;
+SELECT COUNT(*) FROM whatsapp_continuation_review_r2_grants;
+SELECT COUNT(*) FROM whatsapp_continuation_review_r2_operations;
+```
+Require the pinned failed r1 row; all five new/unused table counts must be zero.
+Replay must preserve existing rows and history fingerprints. Never replay a
+proof/provider attempt whose outcome is uncertain.
+
+This migration is for this dedicated staging history, not production. The
+repository-required future production command is documented only:
+```sh
+npx wrangler d1 execute edenmish --remote --file migrations/048_whatsapp_review_r2_session.sql
+```
+It is **not authorized or appropriate with this single-history freeze policy**.
+Any future production adoption requires a separately reviewed redesign. The
+operator must apply that approved migration after merge and before deployment.
+No production migration or deployment belongs to this test.

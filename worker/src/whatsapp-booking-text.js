@@ -6,6 +6,13 @@ const address = `([א-תA-Za-z'׳״" .-]{2,70}?\\s+\\d{1,5}[א-תa-z]?)\\s*,?\\s
 const clarification = 'לא הצלחתי להבין את כל הפרטים בוודאות. כתבו פרטים מדויקים בלי חלופות, למשל: חבילה קטנה מדיזנגוף 10, תל אביב לביאליק 2, רמת גן מחר בשעה 11. אפשר גם שם שדה ונקודתיים, או נציג.';
 
 export function extractBookingText(text, now) {
+  // A complete, bounded contents phrase. An envelope can imply small; parcels
+  // and boxes still need an explicit size. Only one outer item is supported.
+  // Do not discard unknown contents, quantity, weight, negation or dimensions.
+  const contentsItem = /^(?:(?:אני (?:צריך|צריכה|רוצה) לשלוח|לשלוח)\s+)?(?:1\s+)?(מעטפה|חבילה|קופסה)(?:\s+(קטנה|בינונית))?(?:\s+(?:אחת|1))?\s+עם\s+(מסמך|מסמכים|מכתב|מכתבים|מפתח|מפתחות)[.!]?$/u.exec(text.trim());
+  if (contentsItem && (contentsItem[1] === 'מעטפה' || contentsItem[2])) {
+    return { entries: [['size', contentsItem[2] === 'בינונית' ? 'medium' : 'small'], ['notes', contentsItem[3]]] };
+  }
   // Accept the complete source item phrase, not just its size adjective. Anchor
   // the whole phrase so negation, alternatives and weight limits are not lost.
   const sizedItem = /^(?:(?:אני (?:צריך|צריכה|רוצה) לשלוח|לשלוח)\s+)?((?:מעטפה|חבילה|קופסה)\s+(קטנה|בינונית)|פריט\s+(קטן|בינוני))[.!]?$/u.exec(text.trim());

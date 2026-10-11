@@ -474,3 +474,25 @@ not a general production rollout migration. The exact future production command
 and required operator-after-merge reminder are in `MIGRATIONS.md`; do not run it
 for this test. No publication, remote migration, deployment, key operation or
 paid test has occurred as part of this preparation.
+
+### Prepared r2/v7 six-exchange review — local only
+
+The failed r1 preflight remains immutable and its full reservation remains held.
+Migration048 and the separate `scripts/whatsapp-review-r2-*` package prepare one
+fresh preflight and a conditional six-exchange, text-only staging test. V6 cannot
+be reopened or consume its transferred allocation after r2 reservation.
+
+Before any remote work, obtain one combined approval covering publication to
+the existing draft PR, staging-only migration/OFF deployment, the $0.306240
+allocation transfer and the bounded conditional test. Then follow the exact
+[v7 operator runbook](../docs/reviews/whatsapp-review-r2-20261011/V7_RUNBOOK.md):
+verify source/history pins, apply048, stage OFF, pass one strict synthetic
+preflight, arm two shutdown owners, coordinate one fresh grant and callback,
+and activate only within the announced window. Temporary-key cleanup and
+browser-verified callback removal are mandatory completion steps.
+
+Migration048 must precede the approved staging deployment. Production remains
+excluded; the required future migration command and after-merge reminder are
+documented in `MIGRATIONS.md`, subject to redesign of its staging-only freeze.
+Partial text and mocked audio transcripts have offline coverage. This one-model
+text test does not validate general multi-turn understanding or actual audio.
