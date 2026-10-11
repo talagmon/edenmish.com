@@ -106,7 +106,8 @@
     "primarySupervisorReady": false,
     "independentWatchdogReady": false,
     "browserCallbackVerified": false,
-    "fixedFutureWindowAnnounced": false
+    "fixedFutureWindowAnnounced": false,
+    "workerVariableCapacityVerified": true
   },
   "prohibited": [
     "production changes",
@@ -131,12 +132,13 @@
     "noRetry": true
   },
   "verification": {
-    "workerTests": 1254,
+    "workerTests": 1261,
     "storefrontTests": 175,
     "legacySupervisorTests": 8,
-    "independentCliTests": 16,
-    "newV6Tests": 57,
-    "realProviderCallsThisPreparation": 0
+    "independentCliTests": 17,
+    "newV6Tests": 64,
+    "realProviderCallsThisPreparation": 0,
+    "rc3ActualConfigPreparationTests": 6
   },
-  "runtimeSourceSha256": "d4b2aeb5503e6e86536ea7da1c698cd9af4c37bbfd589d1aba4a3a0d4118e6c1"
+  "runtimeSourceSha256": "9463b47cce9e4ff77e49cb3640f6ae67789187f4d1a30630d14862b7a9de835f"
 }

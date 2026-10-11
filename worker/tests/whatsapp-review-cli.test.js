@@ -1,6 +1,6 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import {mkdtempSync,readFileSync,writeFileSync,rmSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';import {execFileSync} from 'node:child_process';
-import {prepare} from '../scripts/whatsapp-review-prepare.mjs';import {createAdapter,sourceFingerprint,validateExecutionApproval,verifyDeploymentSurface} from '../scripts/whatsapp-review-cli.mjs';import {CONTRACT,sha256} from '../scripts/whatsapp-review-runner.mjs';
-function setup(t){const dir=mkdtempSync(join(tmpdir(),'review-cli-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));const now=Date.now()+60000,base={name:CONTRACT.worker,compatibility_date:'2024-11-01',routes:[{pattern:'find-staging.edenmish.com',custom_domain:true},{pattern:'ops-staging.edenmish.com',custom_domain:true}],d1_databases:[{binding:'DB',database_name:'edenmish-staging',database_id:CONTRACT.database}],vars:{BOOKING_URL:'https://staging.edenmish.com'}};prepare({base,plan:{recipient:'+972500000001',startsAt:now,endsAt:now+900000},directory:dir});const a=JSON.parse(readFileSync(join(dir,'approval.json')));Object.assign(a,{approved:true,approvedAt:Date.now()-1000,approvalExpiresAt:now+3600000,feesBounded:true,maxAdditionalMandatoryFeeMicros:780000,feeEvidence:'synthetic',priorHistorySha256:sha256(JSON.stringify(Array.from({length:14},()=>[])))});let vars=JSON.parse(readFileSync(a.configPath)).vars,key=false,afterDeploy=null,afterFinalRead=null,stopped=null,alive=true;const calls=[];
+import {prepare} from '../scripts/whatsapp-review-prepare.mjs';import {createAdapter,sourceFingerprint,validateExecutionApproval,verifyDeploymentSurface,verifyVariableCapacity} from '../scripts/whatsapp-review-cli.mjs';import {CONTRACT,sha256} from '../scripts/whatsapp-review-runner.mjs';
+function setup(t){const dir=mkdtempSync(join(tmpdir(),'review-cli-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));const now=Date.now()+60000,base=JSON.parse(readFileSync(new URL('./fixtures/review-off-config.json',import.meta.url)));prepare({base,plan:{recipient:'+972500000001',startsAt:now,endsAt:now+900000},directory:dir});const a=JSON.parse(readFileSync(join(dir,'approval.json')));Object.assign(a,{approved:true,approvedAt:Date.now()-1000,approvalExpiresAt:now+3600000,feesBounded:true,maxAdditionalMandatoryFeeMicros:780000,feeEvidence:'synthetic',priorHistorySha256:sha256(JSON.stringify(Array.from({length:14},()=>[])))});let vars=JSON.parse(readFileSync(a.configPath)).vars,key=false,afterDeploy=null,afterFinalRead=null,stopped=null,alive=true;const calls=[];
  for(const [i,kind] of ['primary','watchdog'].entries())writeFileSync(join(dir,kind+'.json'),JSON.stringify({kind,at:Date.now(),endsAt:a.endsAt,pid:90000+i,sourceSha256:a.sourceSha256,grantId:CONTRACT.grantId}),{mode:0o600});
  const command=async(file,args,options)=>{calls.push({args:[...args],input:options.input?'present':null});let value;
   if(args.includes('deployments'))value=[{created_on:'2026-10-10',versions:[{version_id:'synthetic-version',percentage:100}]}];
@@ -33,3 +33,13 @@ test('grant stop during deployment prevents START and triggers cleanup',async t=
 test('dead supervisor during deployment prevents START and triggers cleanup',async t=>{const h=activationSetup(t);h.setAfterDeploy(()=>h.dead());await assert.rejects(()=>h.io.activate(),/activation_unconfirmed/);assert.ok(h.calls.some(c=>c.args.includes('delete')));});
 
 test('final grant read crossing expiry never reports START',async t=>{const h=activationSetup(t);h.setAfterFinalRead(()=>t.mock.timers.setTime(h.a.endsAt));await assert.rejects(()=>h.io.activate(),/activation_unconfirmed/);assert.ok(h.calls.some(c=>c.args.includes('delete')));});
+
+test('binding capacity includes existing secrets and reserves the temporary key without depending on Paid',t=>{
+ const h=setup(t),vars=JSON.parse(readFileSync(h.a.configPath)).vars;
+ const names=n=>Array.from({length:n},(_,i)=>'SYNTHETIC_SECRET_'+i);
+ assert.equal(verifyVariableCapacity(vars,names(10)),63);
+ assert.equal(verifyVariableCapacity(vars,names(11)),64);
+ assert.equal(verifyVariableCapacity(vars,[...names(10),'WHATSAPP_BOOKING_OPENAI_API_KEY']),63);
+ assert.throws(()=>verifyVariableCapacity(vars,names(12)),/capacity/);
+ assert.throws(()=>verifyVariableCapacity(vars,undefined),/count/);
+});

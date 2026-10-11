@@ -3,11 +3,13 @@ const code=`
 import worker from './src/index.js';import {makeSession} from './src/integrations.js';
 import {prepareReviewSession} from './tests/fixtures/review-session-env.js';
 import {voiceProfileEnvironment} from './src/whatsapp-booking-voice-profile.js';
+import {REVIEW_PROFILE_NAME,REVIEW_PROFILE_VALUES} from './src/whatsapp-booking-review-profile.js';
 import {issueContinuationGrant,continuationCanProceed,reserveContinuation,finishContinuation,stopContinuation,failureNoticeText,claimContinuationFailureNotice,continuationFailureNoticeCanSend,finishContinuationFailureNotice} from './src/whatsapp-continuation.js';
 export default {async fetch(req,{DB}){
  let now=Date.now()+100;const originalNow=Date.now;Date.now=()=>now;
  try{
- const e=await prepareReviewSession(DB,now),mode=new URL(req.url).pathname;
+ const e=await prepareReviewSession(DB,now,{identity:{WHATSAPP_BOOKING_PILOT_ID:'edenmish-luna-pilot-20261009-a'}}),mode=new URL(req.url).pathname;
+ e.WHATSAPP_BOOKING_REVIEW_PROFILE=REVIEW_PROFILE_NAME;for(const k of Object.keys(REVIEW_PROFILE_VALUES))delete e[k];
  const tables=['whatsapp_pilot_budgets','whatsapp_pilot_model_attempts','whatsapp_continuation_grants','whatsapp_continuation_operations','whatsapp_continuation_followon_grants','whatsapp_continuation_followon_operations','whatsapp_continuation_retry_grants','whatsapp_continuation_retry_operations','whatsapp_continuation_sol_grants','whatsapp_continuation_sol_operations','whatsapp_continuation_voice_grants','whatsapp_continuation_voice_operations','whatsapp_voice_grants','whatsapp_voice_attempts'];
  const history=async()=>JSON.stringify(await Promise.all(tables.map(async t=>(await DB.prepare('SELECT * FROM '+t+' ORDER BY 1').all()).results)));
  const before=await history();const token=await makeSession(e);

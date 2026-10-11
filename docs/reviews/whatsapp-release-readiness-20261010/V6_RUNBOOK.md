@@ -16,6 +16,27 @@ copy of the reviewed staging Wrangler configuration (no secret values), a privat
 plan containing `recipient`, future `startsAt` and `endsAt` milliseconds, and a
 new private output directory. If converting the existing TOML, use `tomllib` and
 write JSON directly to a mode600 file; never print configuration/allowlist data.
+Use the verified RC3 OFF JSON as the base, with explicit `triggers:{crons:[]}`.
+Preparation restores the fixed v6 booking profile only in this separately gated
+path. It validates all three outputs before writing; email recipients and generic
+templates stay empty, routing/dispatch/voice stay OFF. The approval file stays
+unapproved. The standalone RC3 OFF deployment remains unchanged.
+
+The generator uses one fixed non-secret `WHATSAPP_BOOKING_REVIEW_PROFILE` for
+11 v6 prerequisites. Worker entry expands this recognized profile only in the
+text-only v6 scope; an unknown profile or conflicting explicit setting disables
+automation. Flags, approval, source, window and ledger checks remain separate.
+No secret or unrelated binding is consolidated.
+
+The compact configuration has **52 plain variables**, plus ten verified existing
+secrets and one reserved temporary model-key slot: **63 total**. This fits even
+Workers Free's 64-variable limit ([official limits](https://developers.cloudflare.com/workers/platform/limits/#environment-variables)).
+The CLI re-counts current secret binding names before setup/activation and refuses
+more than64; it never deletes an unrelated binding to make room. Read-only API
+metadata confirms both account and Worker usage model `standard`; subscription
+billing permissions do not expose the exact billing plan. The compact path needs
+no paid-plan assumption, upgrade or billing permission. See [capacity receipt](variable-capacity.json).
+
 No start time is chosen here: the coordinator announces a future 15-minute
 Israel interval after setup is ready. Proof validity is one hour; include setup
 and the whole handset window within it. Never shift an issued window.

@@ -1,7 +1,7 @@
 import {prepareContinuation} from './continuation-env.js';
 import {issueContinuationGrant,reserveContinuation,finishContinuation} from '../../src/whatsapp-continuation.js';
-export async function prepareSolSession(DB,now){
- const e=await prepareContinuation(DB,now-10800000);
+export async function prepareSolSession(DB,now,options){
+ const e=await prepareContinuation(DB,now-10800000,options);
  if(!await issueContinuationGrant(e,now-10800000))throw new Error('fixture first');
  for(const [version,at,ins] of [[2,now-7200000,4],[3,now-3600000,3]]){
   Object.assign(e,{WHATSAPP_BOOKING_ENABLED:'off',WHATSAPP_BOOKING_SEND_ENABLED:'off',WHATSAPP_BOOKING_MODEL_ENABLED:'off',WHATSAPP_BOOKING_CONTINUATION_VERSION:String(version),WHATSAPP_BOOKING_CONTINUATION_ID:e.WHATSAPP_BOOKING_PILOT_ID+':quote-v2-handset-'+version,
