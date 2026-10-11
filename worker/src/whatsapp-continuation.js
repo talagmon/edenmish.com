@@ -24,12 +24,16 @@ export const REVIEW_PREFLIGHT = Object.freeze({id:'edenmish-release-smoke-202610
 export const REVIEW_R2_SESSION = Object.freeze({...REVIEW_SESSION,version:7,inbound:6,outbound:6,
   historicalMicros:968884,historicalModelMicros:764184,runMicros:1998804,modelPoolMicros:820504});
 export const REVIEW_R2_PREFLIGHT = Object.freeze({...REVIEW_PREFLIGHT,id:'edenmish-release-smoke-20261011-r2'});
+export const REVIEW_R3_SESSION = Object.freeze({...REVIEW_R2_SESSION,version:8,inbound:5,outbound:5,address:0,
+  historicalMicros:1025204,historicalModelMicros:820504,runMicros:1969524,modelPoolMicros:876824});
+export const REVIEW_R3_PREFLIGHT = Object.freeze({...REVIEW_PREFLIGHT,id:'edenmish-release-smoke-20261011-r3'});
+const reviewR3 = env => env.WHATSAPP_BOOKING_CONTINUATION_VERSION==='8';
 const reviewR2 = env => env.WHATSAPP_BOOKING_CONTINUATION_VERSION==='7';
-const reviewSession = env => ['6','7'].includes(env.WHATSAPP_BOOKING_CONTINUATION_VERSION);
-const reviewProof = env => reviewR2(env)?REVIEW_R2_PREFLIGHT:REVIEW_PREFLIGHT;
-const reviewAuthorization = env => reviewR2(env)?'release-smoke-030624-v2':'release-smoke-035-v1';
+const reviewSession = env => ['6','7','8'].includes(env.WHATSAPP_BOOKING_CONTINUATION_VERSION);
+const reviewProof = env => reviewR3(env)?REVIEW_R3_PREFLIGHT:reviewR2(env)?REVIEW_R2_PREFLIGHT:REVIEW_PREFLIGHT;
+const reviewAuthorization = env => reviewR3(env)?'release-smoke-022064-v3':reviewR2(env)?'release-smoke-030624-v2':'release-smoke-035-v1';
 const voiceSession = env => env.WHATSAPP_BOOKING_CONTINUATION_VERSION==='5';
-export const solSession = env => ['4','5','6','7'].includes(env.WHATSAPP_BOOKING_CONTINUATION_VERSION);
+export const solSession = env => ['4','5','6','7','8'].includes(env.WHATSAPP_BOOKING_CONTINUATION_VERSION);
 export function solUsageUpperMicros(usage) {
   const n=usage?.input_tokens,o=usage?.output_tokens,c=usage?.input_tokens_details?.cached_tokens,r=usage?.output_tokens_details?.reasoning_tokens;
   if(![n,o,c,r].every(Number.isSafeInteger)||n<0||o<0||c<0||r<0||c>n||r>o
@@ -44,14 +48,14 @@ const COST = Object.freeze({ inbound: 10300, outbound: 11300, address: 32000, mo
 const costs = env => solSession(env)?{...COST,model:SOL_SESSION.modelMicros}:COST;
 const FLAGS = ['WHATSAPP_BOOKING_ENABLED','WHATSAPP_BOOKING_SEND_ENABLED','WHATSAPP_BOOKING_MODEL_ENABLED'];
 export const continuationSelected = env => !!(env.WHATSAPP_BOOKING_CONTINUATION_ID || env.WHATSAPP_BOOKING_CONTINUATION_VERSION);
-const retry = env => ['3','4','5','6','7'].includes(env.WHATSAPP_BOOKING_CONTINUATION_VERSION);
-const followon = env => ['2','3','4','5','6','7'].includes(env.WHATSAPP_BOOKING_CONTINUATION_VERSION);
+const retry = env => ['3','4','5','6','7','8'].includes(env.WHATSAPP_BOOKING_CONTINUATION_VERSION);
+const followon = env => ['2','3','4','5','6','7','8'].includes(env.WHATSAPP_BOOKING_CONTINUATION_VERSION);
 const historicalModel = (env,row) => retry(env)?row.historical_model_micros:row.historical_micros;
 const historicalModelColumn = env => retry(env)?'historical_model_micros':'historical_micros';
-const limits = env => reviewR2(env)?REVIEW_R2_SESSION:reviewSession(env)?REVIEW_SESSION:voiceSession(env)?VOICE_SESSION:solSession(env)?SOL_SESSION:retry(env)?{...CONTINUATION,version:3,model:5}:followon(env)?{...CONTINUATION,version:2}:CONTINUATION;
-const grantTable = env => reviewR2(env)?'whatsapp_continuation_review_r2_grants':reviewSession(env)?'whatsapp_continuation_review_grants':voiceSession(env)?'whatsapp_continuation_voice_grants':solSession(env)?'whatsapp_continuation_sol_grants':retry(env)?'whatsapp_continuation_retry_grants':followon(env)?'whatsapp_continuation_followon_grants':'whatsapp_continuation_grants';
-const operationTable = env => reviewR2(env)?'whatsapp_continuation_review_r2_operations':reviewSession(env)?'whatsapp_continuation_review_operations':voiceSession(env)?'whatsapp_continuation_voice_operations':solSession(env)?'whatsapp_continuation_sol_operations':retry(env)?'whatsapp_continuation_retry_operations':followon(env)?'whatsapp_continuation_followon_operations':'whatsapp_continuation_operations';
-const grantId = env => `${env.WHATSAPP_BOOKING_PILOT_ID}:quote-v2-handset-${reviewR2(env)?7:reviewSession(env)?6:voiceSession(env)?5:solSession(env)?4:retry(env)?3:followon(env)?2:1}`;
+const limits = env => reviewR3(env)?REVIEW_R3_SESSION:reviewR2(env)?REVIEW_R2_SESSION:reviewSession(env)?REVIEW_SESSION:voiceSession(env)?VOICE_SESSION:solSession(env)?SOL_SESSION:retry(env)?{...CONTINUATION,version:3,model:5}:followon(env)?{...CONTINUATION,version:2}:CONTINUATION;
+const grantTable = env => reviewR3(env)?'whatsapp_continuation_review_r3_grants':reviewR2(env)?'whatsapp_continuation_review_r2_grants':reviewSession(env)?'whatsapp_continuation_review_grants':voiceSession(env)?'whatsapp_continuation_voice_grants':solSession(env)?'whatsapp_continuation_sol_grants':retry(env)?'whatsapp_continuation_retry_grants':followon(env)?'whatsapp_continuation_followon_grants':'whatsapp_continuation_grants';
+const operationTable = env => reviewR3(env)?'whatsapp_continuation_review_r3_operations':reviewR2(env)?'whatsapp_continuation_review_r2_operations':reviewSession(env)?'whatsapp_continuation_review_operations':voiceSession(env)?'whatsapp_continuation_voice_operations':solSession(env)?'whatsapp_continuation_sol_operations':retry(env)?'whatsapp_continuation_retry_operations':followon(env)?'whatsapp_continuation_followon_operations':'whatsapp_continuation_operations';
+const grantId = env => `${env.WHATSAPP_BOOKING_PILOT_ID}:quote-v2-handset-${reviewR3(env)?8:reviewR2(env)?7:reviewSession(env)?6:voiceSession(env)?5:solSession(env)?4:retry(env)?3:followon(env)?2:1}`;
 const opId = (env, kind, key) => `${grantId(env)}:${kind}:${key}`;
 const changes = r => Number(r?.meta?.changes || 0);
 async function hash(value) {
@@ -68,7 +72,7 @@ function config(env, now, issuing = false) {
       && /^[a-f0-9]{64}$/.test(env.WHATSAPP_BOOKING_REVIEW_SOURCE_SHA256 || '')
       && env.WHATSAPP_BOOKING_REVIEW_AUTHORIZATION===reviewAuthorization(env)))
     && (!voiceSession(env) || (env.WHATSAPP_BOOKING_CONTINUATION_VOICE_SCHEMA_READY==='on' && env.WHATSAPP_BOOKING_MODE==='conversation_only'))
-    && ['1','2','3','4','5','6','7'].includes(env.WHATSAPP_BOOKING_CONTINUATION_VERSION)
+    && ['1','2','3','4','5','6','7','8'].includes(env.WHATSAPP_BOOKING_CONTINUATION_VERSION)
     && (!env.WHATSAPP_BOOKING_FAILURE_NOTICE_POLICY || ['off','one-shot-v1'].includes(env.WHATSAPP_BOOKING_FAILURE_NOTICE_POLICY))
     && env.WHATSAPP_BOOKING_CONTINUATION_ID===grantId(env)
     && env.WHATSAPP_BOOKING_CONTINUATION_SCHEMA_READY==='on'
@@ -167,7 +171,7 @@ async function history(env,now=Date.now()) {
   if(audio.length!==1 || audio[0].used_calls!==0 || audio[0].reserved_micros!==0 || audio[0].approved_micros!==30000
     || audio[0].expires_at>now || audioAttempts?.n!==0)return null;
   let priorReview = [];
-  if (reviewR2(env)) {
+  if (reviewR2(env) || reviewR3(env)) {
     const failed = await env.DB.prepare('SELECT * FROM whatsapp_review_preflight WHERE id=?').bind(REVIEW_PREFLIGHT.id).first();
     const counts = await env.DB.prepare('SELECT (SELECT COUNT(*) FROM whatsapp_continuation_review_grants) AS grants, (SELECT COUNT(*) FROM whatsapp_continuation_review_operations) AS operations').first();
     if (!failed || failed.status!=='failed' || failed.reserved_micros!==56320 || failed.request_sha256!==REVIEW_PREFLIGHT.requestHash
@@ -176,13 +180,22 @@ async function history(env,now=Date.now()) {
       || counts?.grants!==0 || counts?.operations!==0) return null;
     priorReview = [failed,counts,{unusedAllocationTransferredMicros:293680,previouslyUnallocatedMicros:12560}];
   }
-  const spec=reviewProof(env),table=reviewR2(env)?'whatsapp_review_r2_preflight':'whatsapp_review_preflight';
+  if (reviewR3(env)) {
+    const failedR2 = await env.DB.prepare('SELECT * FROM whatsapp_review_r2_preflight WHERE id=?').bind(REVIEW_R2_PREFLIGHT.id).first();
+    const countsR2 = await env.DB.prepare('SELECT (SELECT COUNT(*) FROM whatsapp_continuation_review_r2_grants) AS grants, (SELECT COUNT(*) FROM whatsapp_continuation_review_r2_operations) AS operations').first();
+    if (!failedR2 || failedR2.status!=='failed' || failedR2.reserved_micros!==56320 || failedR2.request_sha256!==REVIEW_R2_PREFLIGHT.requestHash
+      || failedR2.source_sha256!=='531f995ae64dd7f64f61fcebf864cfa68f2cf9b31f3e08a92c3a28a3a821682d'
+      || !Number.isSafeInteger(failedR2.finished_at) || failedR2.finished_at<failedR2.created_at || failedR2.finished_at>now
+      || countsR2?.grants!==0 || countsR2?.operations!==0) return null;
+    priorReview = [failedR2,countsR2,...priorReview,{unusedV7TransferredMicros:220640,unusedV7ParkedMicros:29280,additionalUnallocatedMicros:0}];
+  }
+  const spec=reviewProof(env),table=reviewR3(env)?'whatsapp_review_r3_preflight':reviewR2(env)?'whatsapp_review_r2_preflight':'whatsapp_review_preflight';
   const proof=await env.DB.prepare(`SELECT * FROM ${table} WHERE id=?`).bind(spec.id).first();
   if(!proof || proof.status!=='matched' || proof.request_sha256!==spec.requestHash
     || proof.source_sha256!==env.WHATSAPP_BOOKING_REVIEW_SOURCE_SHA256 || proof.reserved_micros!==spec.reservedMicros
     || !Number.isSafeInteger(proof.finished_at) || proof.finished_at<proof.created_at || proof.finished_at>now
     || proof.finished_at>=proof.expires_at || now>=proof.expires_at || proof.created_at<fifth.expires_at
-    || reviewR2(env) && (proof.created_at<priorReview[0].finished_at || proof.expires_at<Date.parse(env.WHATSAPP_BOOKING_CONTINUATION_END)))return null;
+    || (reviewR2(env) || reviewR3(env)) && (proof.created_at<priorReview[0].finished_at || proof.expires_at<Date.parse(env.WHATSAPP_BOOKING_CONTINUATION_END)))return null;
   return hash([voiceHistory,fifth,fifthOps,audio,...priorReview,proof,{allCushionsRetainedMicros:780000}]);
 }
 // Authenticated operator issuance only; customer processing never calls this.
@@ -192,7 +205,7 @@ export async function issueContinuationGrant(env,now=Date.now()) {
   const historical=await history(env,now);if(!historical)return false;
   const result=await env.DB.prepare(`INSERT OR IGNORE INTO ${grantTable(env)}
     (id,pilot_id,version,binding_hash,history_hash,starts_at,expires_at,historical_micros,fee_cushion_micros,created_at${retry(env)?',historical_model_micros':''})
-    VALUES (?,?,?,?,?,?,?,${reviewR2(env)?968884:reviewSession(env)?912564:solSession(env)?735124:retry(env)?405100:300000},${limits(env).feeCushionMicros},?${reviewR2(env)?',764184':reviewSession(env)?',707864':solSession(env)?',595224':retry(env)?',330000':''})`).bind(grantId(env),env.WHATSAPP_BOOKING_PILOT_ID,Number(env.WHATSAPP_BOOKING_CONTINUATION_VERSION),await binding(env),historical,
+    VALUES (?,?,?,?,?,?,?,${reviewR3(env)?1025204:reviewR2(env)?968884:reviewSession(env)?912564:solSession(env)?735124:retry(env)?405100:300000},${limits(env).feeCushionMicros},?${reviewR3(env)?',820504':reviewR2(env)?',764184':reviewSession(env)?',707864':solSession(env)?',595224':retry(env)?',330000':''})`).bind(grantId(env),env.WHATSAPP_BOOKING_PILOT_ID,Number(env.WHATSAPP_BOOKING_CONTINUATION_VERSION),await binding(env),historical,
       Date.parse(env.WHATSAPP_BOOKING_CONTINUATION_START),Date.parse(env.WHATSAPP_BOOKING_CONTINUATION_END),now).run();
   return changes(result)===1;
 }

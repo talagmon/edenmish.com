@@ -496,3 +496,11 @@ excluded; the required future migration command and after-merge reminder are
 documented in `MIGRATIONS.md`, subject to redesign of its staging-only freeze.
 Partial text and mocked audio transcripts have offline coverage. This one-model
 text test does not validate general multi-turn understanding or actual audio.
+
+The r3/v8 WhatsApp review adds migration049 (see `MIGRATIONS.md`) and guarded
+`whatsapp-review-r3-*` operator scripts. Local preparation does not authorize
+publication, migration, deployment, key entry or paid calls. Use the combined
+[approval proposal](../docs/reviews/whatsapp-semantic-diagnostics-20261011/NEXT_EXECUTION_PROPOSAL.md).
+The production checklist must not blindly apply this staging-history-specific
+migration; any separately approved applicable migration runs after merge and
+before runtime deployment. Production remains outside this review scope.

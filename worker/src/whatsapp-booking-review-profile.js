@@ -1,6 +1,7 @@
 // Fixed non-secret v6 prerequisites. Compact deployment avoids depending on a
 // paid-plan variable allowance; expiry, approval, keys and ledger checks remain
 // separate. No profile enables the three automation flags by itself.
+export const REVIEW_R3_PROFILE_NAME='v8-text-20261011';
 export const REVIEW_R2_PROFILE_NAME='v7-text-20261011';
 export const REVIEW_PROFILE_NAME='v6-text-20261010';
 export const REVIEW_PROFILE_VALUES=Object.freeze({
@@ -14,7 +15,8 @@ export const REVIEW_PROFILE_VALUES=Object.freeze({
 export function reviewProfileEnvironment(env){
  if(env.WHATSAPP_BOOKING_REVIEW_PROFILE===undefined)return env;
  const valid=((env.WHATSAPP_BOOKING_REVIEW_PROFILE===REVIEW_PROFILE_NAME && env.WHATSAPP_BOOKING_CONTINUATION_VERSION==='6')
-  || (env.WHATSAPP_BOOKING_REVIEW_PROFILE===REVIEW_R2_PROFILE_NAME && env.WHATSAPP_BOOKING_CONTINUATION_VERSION==='7'))
+  || (env.WHATSAPP_BOOKING_REVIEW_PROFILE===REVIEW_R2_PROFILE_NAME && env.WHATSAPP_BOOKING_CONTINUATION_VERSION==='7')
+  || (env.WHATSAPP_BOOKING_REVIEW_PROFILE===REVIEW_R3_PROFILE_NAME && env.WHATSAPP_BOOKING_CONTINUATION_VERSION==='8'))
   && env.WHATSAPP_BOOKING_MODE==='conversation_only'
   && env.WHATSAPP_BOOKING_VOICE_PROFILE==='off'
   && Object.entries(REVIEW_PROFILE_VALUES).every(([k,v])=>env[k]===undefined||env[k]===v);

@@ -1464,3 +1464,32 @@ It is **not authorized or appropriate with this single-history freeze policy**.
 Any future production adoption requires a separately reviewed redesign. The
 operator must apply that approved migration after merge and before deployment.
 No production migration or deployment belongs to this test.
+
+### 049 — fresh r3 proof and v8 text-only continuation (approval pending)
+
+Add immutable `whatsapp_review_r3_preflight`, v8 grant/operation tables and
+history-freeze triggers. Retain both failed proof reservations and require zero
+v6/v7 activity; no grant is created. New scope5in/5out/1model/0Maps,15min.
+Current preparation is local only. Never alter047/048 or reopen an old proof.
+
+After explicit combined approval only, target **edenmish-staging** with the
+reviewed r3 operator CLI `migrate` action (pinned private staging configuration).
+It executes049 once without assuming a JSON response for a file migration, then
+compares every r3 table/index/trigger SQL definition with the local schema,
+checks new ledgers empty and verifies the unchanged prior-history hash. Any
+uncertain result requires read-only diagnosis, never an automatic replay.
+
+Verification query:
+```sql
+SELECT name,type,sql FROM sqlite_master WHERE name LIKE '%review_r3%' AND sql IS NOT NULL ORDER BY name;
+SELECT (SELECT COUNT(*) FROM whatsapp_review_r3_preflight) AS proofs,
+       (SELECT COUNT(*) FROM whatsapp_continuation_review_r3_grants) AS grants,
+       (SELECT COUNT(*) FROM whatsapp_continuation_review_r3_operations) AS operations;
+```
+
+Repository-required production command reference (NOT authorized; this migration
+is specific to the retained staging test history and must not be applied to
+production as part of this task):
+`npx wrangler d1 execute edenmish --remote --file=./migrations/049_whatsapp_review_r3_session.sql`.
+After any separately approved future merge/deployment, operator must evaluate
+migration applicability and apply applicable migrations before deploying runtime.

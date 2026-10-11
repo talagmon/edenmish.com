@@ -1,5 +1,6 @@
 // v7 orchestration: pure policy + injected IO. No IO at import and no retries.
 import {createHash} from 'node:crypto';
+import {fixedFixtureSemantics} from './whatsapp-review-fixture-oracle.mjs';
 import {bookingModelEnvelope} from '../src/whatsapp-booking-openai.js';
 import {validateBookingProposal} from '../src/whatsapp-booking-model.js';
 import {solUsageUpperMicros,REVIEW_R2_PREFLIGHT} from '../src/whatsapp-continuation.js';
@@ -43,7 +44,7 @@ export async function runPreflight({approval,sourceHash,proposal,key,io,clock=Da
  if(expires-created<900000)fail('setup_window_short');
  const proof={id:CONTRACT.id,request_sha256:REVIEW_R2_PREFLIGHT.requestHash,source_sha256:sourceHash,reserved_micros:56320,created_at:created,expires_at:expires};
  if(!await io.reserve(proof))fail('reservation_uncertain_no_retry');
- let status='failed',reason='transport_failure',usage=null,providerMs=null;const controller=new AbortController();
+ let status='failed',reason='transport_failure',usage=null,providerMs=null,semantics=null;const controller=new AbortController();
  const start=clock();let timer;
  try{
   await io.assertOff(approval,sourceHash);verifyApproval(approval,sourceHash,clock());
@@ -56,15 +57,15 @@ export async function runPreflight({approval,sourceHash,proposal,key,io,clock=Da
   let rejection;const text=JSON.parse(request.payload.input[0].content).customer_message;
   const accepted=validateBookingProposal(raw,text,proposal.now,r=>{rejection=r;},request.syntheticState.data);
   if(!accepted)fail(rejection?'proposal_rejected:'+rejection:'proposal_schema');
-  const sort=rows=>JSON.stringify([...rows].sort(([a],[b])=>a.localeCompare(b)));
-  if(raw.version!==4||!accepted.replyStyle||accepted.intent!=='update'||sort(accepted.entries)!==sort(request.expectedEntries)||accepted.replyLanguage!=='he')fail('semantic_mismatch');
+  semantics=fixedFixtureSemantics(raw,accepted,request,proposal.now);
+  if(!semantics.matched)fail('semantic_mismatch');
   await io.assertOff(approval,sourceHash);status='matched';reason='all_expected_fields';
  }catch(e){reason=e.reason||e.category||'transport_failure';}
  finally{clearTimeout(timer);controller.abort();key=null;}
  const finished=clock(),record={status,finished_at:finished,input_tokens:usage?.input_tokens??null,cached_tokens:usage?.input_tokens_details?.cached_tokens??null,output_tokens:usage?.output_tokens??null,reasoning_tokens:usage?.output_tokens_details?.reasoning_tokens??null};
  if(finished>=expires){status='failed';reason='expired';record.status='failed';record.finished_at=null;}
  try{if(!await io.finish(record))fail('finish_unverified');}catch{status='pending';reason='finish_unverified_no_retry';}
- return {status,reason,providerLatencyMs:providerMs,endToEndMs:clock()-start,reservedMicros:56320,usage:record.input_tokens===null?null:{input:record.input_tokens,cached:record.cached_tokens,output:record.output_tokens,reasoning:record.reasoning_tokens},secretPersisted:false};
+ return {status,reason,providerLatencyMs:providerMs,endToEndMs:clock()-start,reservedMicros:56320,usage:record.input_tokens===null?null:{input:record.input_tokens,cached:record.cached_tokens,output:record.output_tokens,reasoning:record.reasoning_tokens},secretPersisted:false,...(semantics?{semantics}: {})};
 }
 export function supervisionDecision(snapshot,now,window){
  const stop=reason=>({action:'stop',reason,deadline:window.endsAt});

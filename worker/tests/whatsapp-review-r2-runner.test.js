@@ -29,3 +29,30 @@ test('old approval or undeclared allocation transfer cannot authorize r2',()=>{
  for(const patch of [{authorization:'release-smoke-035-v1'},{transferredUnusedMicros:0},{additionalUnallocatedMicros:0},{failedPreflightReservedMicros:0},{retainedMicros:1636244},{allocationMicros:350000}])assert.throws(()=>verifyApproval({...approval(),...patch},hash,NOW));
  assert.equal(1692564+306240,1998804);assert.ok(1998804<=2000000);
 });
+
+test('runner attaches only value-free mismatch fields after strict acceptance',async()=>{
+ const h=harness();h.io.fetch=async()=>{const e=envelope(),raw=JSON.parse(e.output[0].content[0].text);raw.fields.pop();e.output[0].content[0].text=JSON.stringify(raw);return Response.json(e);};
+ const r=await h.run();assert.equal(r.status,'failed');assert.equal(r.reason,'semantic_mismatch');assert.deepEqual(r.semantics.missingFields,['pickup_detail']);assert.equal(r.semantics.checks.exactEntries,false);
+ for(const [,value] of proposal.requests[0].expectedEntries)assert.ok(!JSON.stringify(r).includes(JSON.stringify(value)));
+ assert.equal(h.counts().record.status,'failed');await assert.rejects(h.run,/reservation_uncertain/);
+});
+test('runner reports version/style mismatch without exposing proposal or relaxing acceptance',async()=>{
+ const h=harness();h.io.fetch=async()=>{const e=envelope(),raw=JSON.parse(e.output[0].content[0].text);raw.version=3;delete raw.reply_style;e.output[0].content[0].text=JSON.stringify(raw);return Response.json(e);};
+ const r=await h.run();assert.equal(r.status,'failed');assert.equal(r.semantics.checks.versionV4,false);assert.equal(r.semantics.checks.replyStylePresent,false);assert.equal(r.semantics.checks.exactEntries,true);
+});
+test('no semantic report exists for strict evidence rejection',async()=>{
+ const h=harness();h.io.fetch=async()=>{const e=envelope(),raw=JSON.parse(e.output[0].content[0].text);raw.fields[2].quote='fabricated address';e.output[0].content[0].text=JSON.stringify(raw);return Response.json(e);};
+ const r=await h.run();assert.equal(r.status,'failed');assert.match(r.reason,/proposal_rejected:/);assert.equal(r.semantics,undefined);assert.ok(!JSON.stringify(r).includes('fabricated address'));
+});
+test('matched semantics cannot override uncertain durable settlement',async()=>{
+ const h=harness();h.io.finish=async()=>false;const r=await h.run();assert.equal(r.status,'pending');assert.equal(r.reason,'finish_unverified_no_retry');assert.equal(r.semantics.matched,true);await assert.rejects(h.run,/reservation_uncertain/);
+});
+
+test('runner accepts only pinned full source equivalence and reports the differing field names',async()=>{
+ const h=harness();h.io.fetch=async()=>{const e=envelope(),r=JSON.parse(e.output[0].content[0].text);r.fields.find(x=>x.field==='size').quote='מעטפה קטנה עם מסמכים';r.fields.find(x=>x.field==='notes').quote='מעטפה קטנה עם מסמכים';r.fields.find(x=>x.field==='pickup_detail').quote='באיסוף אצל השומר.';r.fields.find(x=>x.field==='dropoff_detail').quote='לנועה.';e.output[0].content[0].text=JSON.stringify(r);return Response.json(e);};
+ const r=await h.run();assert.equal(r.status,'matched');assert.equal(r.semantics.checks.exactEntries,false);assert.equal(r.semantics.equivalentEntries,true);assert.deepEqual(r.semantics.equivalentFields,['dropoff_detail','notes','pickup_detail']);assert.equal(h.counts().record.status,'matched');await assert.rejects(h.run,/reservation_uncertain/);
+});
+test('runner does not treat omitted morning instruction as equivalent',async()=>{
+ const h=harness();h.io.fetch=async()=>{const e=envelope(),r=JSON.parse(e.output[0].content[0].text);r.fields.find(x=>x.field==='schedule').quote='מחר';e.output[0].content[0].text=JSON.stringify(r);return Response.json(e);};
+ const r=await h.run();assert.equal(r.status,'failed');assert.equal(r.reason,'semantic_mismatch');assert.deepEqual(r.semantics.valueMismatchFields,['schedule']);assert.equal(r.semantics.equivalentEntries,false);
+});
