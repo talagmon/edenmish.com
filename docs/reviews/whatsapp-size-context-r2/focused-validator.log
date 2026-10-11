@@ -1,0 +1,1804 @@
+TAP version 13
+# Subtest: quoted evidence / english / english_keys
+ok 1 - quoted evidence / english / english_keys
+  ---
+  duration_ms: 16.345542
+  type: 'test'
+  ...
+# Subtest: quoted evidence / english / english_envelop_typo
+ok 2 - quoted evidence / english / english_envelop_typo
+  ---
+  duration_ms: 2.464375
+  type: 'test'
+  ...
+# Subtest: quoted evidence / english / english_mixed_small_items
+ok 3 - quoted evidence / english / english_mixed_small_items
+  ---
+  duration_ms: 0.153958
+  type: 'test'
+  ...
+# Subtest: quoted evidence / hebrew / hebrew_keys
+ok 4 - quoted evidence / hebrew / hebrew_keys
+  ---
+  duration_ms: 3.401084
+  type: 'test'
+  ...
+# Subtest: quoted evidence / hebrew / hebrew_envelope
+ok 5 - quoted evidence / hebrew / hebrew_envelope
+  ---
+  duration_ms: 0.238708
+  type: 'test'
+  ...
+# Subtest: quoted evidence / hebrew / hebrew_small
+ok 6 - quoted evidence / hebrew / hebrew_small
+  ---
+  duration_ms: 0.519417
+  type: 'test'
+  ...
+# Subtest: quoted evidence / english / english_medium
+ok 7 - quoted evidence / english / english_medium
+  ---
+  duration_ms: 0.863958
+  type: 'test'
+  ...
+# Subtest: quoted evidence / english / english_daypart
+ok 8 - quoted evidence / english / english_daypart
+  ---
+  duration_ms: 16.169166
+  type: 'test'
+  ...
+# Subtest: quoted evidence / english / english_tommorrow_typo
+ok 9 - quoted evidence / english / english_tommorrow_typo
+  ---
+  duration_ms: 0.549833
+  type: 'test'
+  ...
+# Subtest: quoted evidence / hebrew / hebrew_daypart
+ok 10 - quoted evidence / hebrew / hebrew_daypart
+  ---
+  duration_ms: 0.916833
+  type: 'test'
+  ...
+# Subtest: quoted evidence / hebrew / hebrew_exact_time
+ok 11 - quoted evidence / hebrew / hebrew_exact_time
+  ---
+  duration_ms: 0.273208
+  type: 'test'
+  ...
+# Subtest: quoted evidence / english / english_public_typo_route
+ok 12 - quoted evidence / english / english_public_typo_route
+  ---
+  duration_ms: 1
+  type: 'test'
+  ...
+# Subtest: quoted evidence / hebrew / hebrew_attached_route_prefixes
+ok 13 - quoted evidence / hebrew / hebrew_attached_route_prefixes
+  ---
+  duration_ms: 0.755708
+  type: 'test'
+  ...
+# Subtest: quoted evidence / hebrew / hebrew_corrected_address
+ok 14 - quoted evidence / hebrew / hebrew_corrected_address
+  ---
+  duration_ms: 0.071125
+  type: 'test'
+  ...
+# Subtest: quoted evidence / overlap / size_and_notes_share_item
+ok 15 - quoted evidence / overlap / size_and_notes_share_item
+  ---
+  duration_ms: 1.0145
+  type: 'test'
+  ...
+# Subtest: quoted evidence / unicode / unicode_name_composed
+ok 16 - quoted evidence / unicode / unicode_name_composed
+  ---
+  duration_ms: 0.111125
+  type: 'test'
+  ...
+# Subtest: quoted evidence / unicode / unicode_name_decomposed
+ok 17 - quoted evidence / unicode / unicode_name_decomposed
+  ---
+  duration_ms: 0.051375
+  type: 'test'
+  ...
+# Subtest: quoted evidence / unicode / unicode_hebrew_marks
+ok 18 - quoted evidence / unicode / unicode_hebrew_marks
+  ---
+  duration_ms: 0.046042
+  type: 'test'
+  ...
+# Subtest: quoted evidence / unicode / unicode_emoji_before_item
+ok 19 - quoted evidence / unicode / unicode_emoji_before_item
+  ---
+  duration_ms: 0.107334
+  type: 'test'
+  ...
+# Subtest: quoted evidence / unicode / unicode_zwj_notes
+ok 20 - quoted evidence / unicode / unicode_zwj_notes
+  ---
+  duration_ms: 0.04625
+  type: 'test'
+  ...
+# Subtest: quoted evidence / unicode / unicode_modifier_cut
+ok 21 - quoted evidence / unicode / unicode_modifier_cut
+  ---
+  duration_ms: 0.045875
+  type: 'test'
+  ...
+# Subtest: quoted evidence / unicode / unicode_combining_cut
+ok 22 - quoted evidence / unicode / unicode_combining_cut
+  ---
+  duration_ms: 0.022875
+  type: 'test'
+  ...
+# Subtest: quoted evidence / unicode / unicode_rewritten_absent
+ok 23 - quoted evidence / unicode / unicode_rewritten_absent
+  ---
+  duration_ms: 0.027166
+  type: 'test'
+  ...
+# Subtest: quoted evidence / repeated / unicode_equivalent_repeat
+ok 24 - quoted evidence / repeated / unicode_equivalent_repeat
+  ---
+  duration_ms: 0.021458
+  type: 'test'
+  ...
+# Subtest: quoted evidence / whitespace / whitespace_message_edges
+ok 25 - quoted evidence / whitespace / whitespace_message_edges
+  ---
+  duration_ms: 0.053833
+  type: 'test'
+  ...
+# Subtest: quoted evidence / whitespace / whitespace_quote_edges
+ok 26 - quoted evidence / whitespace / whitespace_quote_edges
+  ---
+  duration_ms: 0.054917
+  type: 'test'
+  ...
+# Subtest: quoted evidence / whitespace / whitespace_quote_invented_edges
+ok 27 - quoted evidence / whitespace / whitespace_quote_invented_edges
+  ---
+  duration_ms: 0.01925
+  type: 'test'
+  ...
+# Subtest: quoted evidence / whitespace / whitespace_internal_exact
+ok 28 - quoted evidence / whitespace / whitespace_internal_exact
+  ---
+  duration_ms: 0.0445
+  type: 'test'
+  ...
+# Subtest: quoted evidence / whitespace / whitespace_internal_rewritten
+ok 29 - quoted evidence / whitespace / whitespace_internal_rewritten
+  ---
+  duration_ms: 0.019208
+  type: 'test'
+  ...
+# Subtest: quoted evidence / whitespace / whitespace_nbsp_exact
+ok 30 - quoted evidence / whitespace / whitespace_nbsp_exact
+  ---
+  duration_ms: 0.080292
+  type: 'test'
+  ...
+# Subtest: quoted evidence / whitespace / whitespace_nbsp_rewritten
+ok 31 - quoted evidence / whitespace / whitespace_nbsp_rewritten
+  ---
+  duration_ms: 0.021583
+  type: 'test'
+  ...
+# Subtest: quoted evidence / repeated / whitespace_repeated_variants
+ok 32 - quoted evidence / repeated / whitespace_repeated_variants
+  ---
+  duration_ms: 0.02025
+  type: 'test'
+  ...
+# Subtest: quoted evidence / whitespace / whitespace_newline_in_quote
+ok 33 - quoted evidence / whitespace / whitespace_newline_in_quote
+  ---
+  duration_ms: 0.019292
+  type: 'test'
+  ...
+# Subtest: quoted evidence / whitespace / whitespace_tab_in_quote
+ok 34 - quoted evidence / whitespace / whitespace_tab_in_quote
+  ---
+  duration_ms: 0.019708
+  type: 'test'
+  ...
+# Subtest: quoted evidence / whitespace / whitespace_line_separator
+ok 35 - quoted evidence / whitespace / whitespace_line_separator
+  ---
+  duration_ms: 0.018292
+  type: 'test'
+  ...
+# Subtest: quoted evidence / repeated / repeated_exact
+ok 36 - quoted evidence / repeated / repeated_exact
+  ---
+  duration_ms: 0.01875
+  type: 'test'
+  ...
+# Subtest: quoted evidence / repeated / repeated_case_variants
+ok 37 - quoted evidence / repeated / repeated_case_variants
+  ---
+  duration_ms: 0.024125
+  type: 'test'
+  ...
+# Subtest: quoted evidence / repeated / repeated_quote_whitespace_cannot_select
+ok 38 - quoted evidence / repeated / repeated_quote_whitespace_cannot_select
+  ---
+  duration_ms: 0.019
+  type: 'test'
+  ...
+# Subtest: quoted evidence / repeated / repeated_hebrew
+ok 39 - quoted evidence / repeated / repeated_hebrew
+  ---
+  duration_ms: 0.018834
+  type: 'test'
+  ...
+# Subtest: quoted evidence / repeated / repeated_overlapping
+ok 40 - quoted evidence / repeated / repeated_overlapping
+  ---
+  duration_ms: 0.018666
+  type: 'test'
+  ...
+# Subtest: quoted evidence / repeated / repeated_address
+ok 41 - quoted evidence / repeated / repeated_address
+  ---
+  duration_ms: 0.01875
+  type: 'test'
+  ...
+# Subtest: quoted evidence / repeated / repeated_unique_longer_phrase
+ok 42 - quoted evidence / repeated / repeated_unique_longer_phrase
+  ---
+  duration_ms: 0.045667
+  type: 'test'
+  ...
+# Subtest: quoted evidence / overlap / same_evidence_conflicting_roles
+ok 43 - quoted evidence / overlap / same_evidence_conflicting_roles
+  ---
+  duration_ms: 0.059875
+  type: 'test'
+  ...
+# Subtest: quoted evidence / overlap / same_address_both_roles
+ok 44 - quoted evidence / overlap / same_address_both_roles
+  ---
+  duration_ms: 0.076375
+  type: 'test'
+  ...
+# Subtest: quoted evidence / overlap / partly_overlapping_fields
+ok 45 - quoted evidence / overlap / partly_overlapping_fields
+  ---
+  duration_ms: 0.063333
+  type: 'test'
+  ...
+# Subtest: quoted evidence / overlap / duplicate_field
+ok 46 - quoted evidence / overlap / duplicate_field
+  ---
+  duration_ms: 0.0435
+  type: 'test'
+  ...
+# Subtest: quoted evidence / field_mismatch / size_pronoun_observed_failure
+ok 47 - quoted evidence / field_mismatch / size_pronoun_observed_failure
+  ---
+  duration_ms: 0.054792
+  type: 'test'
+  ...
+# Subtest: quoted evidence / field_mismatch / size_address_mismatch
+ok 48 - quoted evidence / field_mismatch / size_address_mismatch
+  ---
+  duration_ms: 0.327709
+  type: 'test'
+  ...
+# Subtest: quoted evidence / field_mismatch / size_mixed_large_item
+ok 49 - quoted evidence / field_mismatch / size_mixed_large_item
+  ---
+  duration_ms: 0.045542
+  type: 'test'
+  ...
+# Subtest: quoted evidence / field_mismatch / email_item_mismatch
+ok 50 - quoted evidence / field_mismatch / email_item_mismatch
+  ---
+  duration_ms: 0.077417
+  type: 'test'
+  ...
+# Subtest: quoted evidence / field_mismatch / schedule_item_mismatch
+ok 51 - quoted evidence / field_mismatch / schedule_item_mismatch
+  ---
+  duration_ms: 0.08675
+  type: 'test'
+  ...
+# Subtest: quoted evidence / english / valid_email
+ok 52 - quoted evidence / english / valid_email
+  ---
+  duration_ms: 0.110958
+  type: 'test'
+  ...
+# Subtest: quoted evidence / field_mismatch / email_substring
+ok 53 - quoted evidence / field_mismatch / email_substring
+  ---
+  duration_ms: 0.0325
+  type: 'test'
+  ...
+# Subtest: quoted evidence / grounding / item_subword
+ok 54 - quoted evidence / grounding / item_subword
+  ---
+  duration_ms: 0.026792
+  type: 'test'
+  ...
+# Subtest: quoted evidence / grounding / name_subword
+ok 55 - quoted evidence / grounding / name_subword
+  ---
+  duration_ms: 0.02825
+  type: 'test'
+  ...
+# Subtest: quoted evidence / grounding / apostrophe_subword
+ok 56 - quoted evidence / grounding / apostrophe_subword
+  ---
+  duration_ms: 0.041917
+  type: 'test'
+  ...
+# Subtest: quoted evidence / english / apostrophe_whole_name
+ok 57 - quoted evidence / english / apostrophe_whole_name
+  ---
+  duration_ms: 0.04
+  type: 'test'
+  ...
+# Subtest: quoted evidence / hallucination / invented_corrected_street
+ok 58 - quoted evidence / hallucination / invented_corrected_street
+  ---
+  duration_ms: 0.01775
+  type: 'test'
+  ...
+# Subtest: quoted evidence / hallucination / invented_missing_city
+ok 59 - quoted evidence / hallucination / invented_missing_city
+  ---
+  duration_ms: 0.016917
+  type: 'test'
+  ...
+# Subtest: quoted evidence / hallucination / invented_size_class
+ok 60 - quoted evidence / hallucination / invented_size_class
+  ---
+  duration_ms: 0.016375
+  type: 'test'
+  ...
+# Subtest: quoted evidence / hallucination / invented_translation
+ok 61 - quoted evidence / hallucination / invented_translation
+  ---
+  duration_ms: 0.016375
+  type: 'test'
+  ...
+# Subtest: quoted evidence / hallucination / invented_capitalization
+ok 62 - quoted evidence / hallucination / invented_capitalization
+  ---
+  duration_ms: 0.015834
+  type: 'test'
+  ...
+# Subtest: quoted evidence / negation / negated_size
+ok 63 - quoted evidence / negation / negated_size
+  ---
+  duration_ms: 0.040167
+  type: 'test'
+  ...
+# Subtest: quoted evidence / negation / corrected_size
+ok 64 - quoted evidence / negation / corrected_size
+  ---
+  duration_ms: 0.042792
+  type: 'test'
+  ...
+# Subtest: quoted evidence / negation / negated_hebrew_item
+ok 65 - quoted evidence / negation / negated_hebrew_item
+  ---
+  duration_ms: 0.04225
+  type: 'test'
+  ...
+# Subtest: quoted evidence / negation / corrected_hebrew_item
+ok 66 - quoted evidence / negation / corrected_hebrew_item
+  ---
+  duration_ms: 0.051458
+  type: 'test'
+  ...
+# Subtest: quoted evidence / bounds / empty_quote
+ok 67 - quoted evidence / bounds / empty_quote
+  ---
+  duration_ms: 0.016584
+  type: 'test'
+  ...
+# Subtest: quoted evidence / bounds / blank_quote
+ok 68 - quoted evidence / bounds / blank_quote
+  ---
+  duration_ms: 0.0165
+  type: 'test'
+  ...
+# Subtest: quoted evidence / bounds / non_string_quote
+ok 69 - quoted evidence / bounds / non_string_quote
+  ---
+  duration_ms: 0.015708
+  type: 'test'
+  ...
+# Subtest: quoted evidence / bounds / quote_at_limit
+ok 70 - quoted evidence / bounds / quote_at_limit
+  ---
+  duration_ms: 0.10525
+  type: 'test'
+  ...
+# Subtest: quoted evidence / bounds / quote_over_limit
+ok 71 - quoted evidence / bounds / quote_over_limit
+  ---
+  duration_ms: 0.016542
+  type: 'test'
+  ...
+# Subtest: quoted evidence / bounds / message_over_limit
+ok 72 - quoted evidence / bounds / message_over_limit
+  ---
+  duration_ms: 0.014792
+  type: 'test'
+  ...
+# Subtest: quoted evidence / unicode / bidi_override
+ok 73 - quoted evidence / unicode / bidi_override
+  ---
+  duration_ms: 0.016041
+  type: 'test'
+  ...
+# Subtest: quoted evidence / authority / line_injection
+ok 74 - quoted evidence / authority / line_injection
+  ---
+  duration_ms: 0.016458
+  type: 'test'
+  ...
+# Subtest: quoted evidence / authority / unsupported_field
+ok 75 - quoted evidence / authority / unsupported_field
+  ---
+  duration_ms: 0.017417
+  type: 'test'
+  ...
+# Subtest: quoted evidence / authority / unsupported_intent
+ok 76 - quoted evidence / authority / unsupported_intent
+  ---
+  duration_ms: 0.0175
+  type: 'test'
+  ...
+# Subtest: quoted evidence / authority / payment_as_untrusted_note
+ok 77 - quoted evidence / authority / payment_as_untrusted_note
+  ---
+  duration_ms: 0.043875
+  type: 'test'
+  ...
+# Subtest: quoted evidence / compatibility / legacy_observed_offsets
+ok 78 - quoted evidence / compatibility / legacy_observed_offsets
+  ---
+  duration_ms: 0.017125
+  type: 'test'
+  ...
+# Subtest: quoted evidence / compatibility / mixed_v2_offsets
+ok 79 - quoted evidence / compatibility / mixed_v2_offsets
+  ---
+  duration_ms: 0.017667
+  type: 'test'
+  ...
+# Subtest: quoted evidence / compatibility / future_version
+ok 80 - quoted evidence / compatibility / future_version
+  ---
+  duration_ms: 0.027916
+  type: 'test'
+  ...
+# Subtest: v2 schema exposes quotes only, and the offline corpus has bounded distinct cases
+ok 81 - v2 schema exposes quotes only, and the offline corpus has bounded distinct cases
+  ---
+  duration_ms: 0.102166
+  type: 'test'
+  ...
+# Subtest: unpaired surrogates and empty/malformed quote properties fail closed
+ok 82 - unpaired surrogates and empty/malformed quote properties fail closed
+  ---
+  duration_ms: 0.048166
+  type: 'test'
+  ...
+# Subtest: rejection diagnostics leave every corpus acceptance result unchanged and expose fixed codes only
+ok 83 - rejection diagnostics leave every corpus acceptance result unchanged and expose fixed codes only
+  ---
+  duration_ms: 2.845166
+  type: 'test'
+  ...
+# Subtest: synthetic rejected proposals distinguish shape, intent, evidence and typed-value failures
+ok 84 - synthetic rejected proposals distinguish shape, intent, evidence and typed-value failures
+  ---
+  duration_ms: 0.362416
+  type: 'test'
+  ...
+# Subtest: signed SM audio reaches the media pipeline with grounded message identity
+ok 85 - signed SM audio reaches the media pipeline with grounded message identity
+  ---
+  duration_ms: 20.269208
+  type: 'test'
+  ...
+# Subtest: signed MM audio reaches the media pipeline with grounded message identity
+ok 86 - signed MM audio reaches the media pipeline with grounded message identity
+  ---
+  duration_ms: 1.429958
+  type: 'test'
+  ...
+# Subtest: media IDs do not weaken signature, account, sender, allowlist or identity checks
+ok 87 - media IDs do not weaken signature, account, sender, allowlist or identity checks
+  ---
+  duration_ms: 5.331542
+  type: 'test'
+  ...
+# Subtest: Hebrew item phrase מעטפה קטנה preserves the source description
+ok 88 - Hebrew item phrase מעטפה קטנה preserves the source description
+  ---
+  duration_ms: 21.46075
+  type: 'test'
+  ...
+# Subtest: Hebrew item phrase חבילה קטנה preserves the source description
+ok 89 - Hebrew item phrase חבילה קטנה preserves the source description
+  ---
+  duration_ms: 0.467
+  type: 'test'
+  ...
+# Subtest: Hebrew item phrase קופסה קטנה preserves the source description
+ok 90 - Hebrew item phrase קופסה קטנה preserves the source description
+  ---
+  duration_ms: 0.391125
+  type: 'test'
+  ...
+# Subtest: Hebrew item phrase פריט קטן preserves the source description
+ok 91 - Hebrew item phrase פריט קטן preserves the source description
+  ---
+  duration_ms: 0.214459
+  type: 'test'
+  ...
+# Subtest: Hebrew item phrase מעטפה בינונית preserves the source description
+ok 92 - Hebrew item phrase מעטפה בינונית preserves the source description
+  ---
+  duration_ms: 0.197166
+  type: 'test'
+  ...
+# Subtest: Hebrew item phrase חבילה בינונית preserves the source description
+ok 93 - Hebrew item phrase חבילה בינונית preserves the source description
+  ---
+  duration_ms: 0.345834
+  type: 'test'
+  ...
+# Subtest: Hebrew item phrase פריט בינוני preserves the source description
+ok 94 - Hebrew item phrase פריט בינוני preserves the source description
+  ---
+  duration_ms: 0.439625
+  type: 'test'
+  ...
+# Subtest: synthetic Hebrew request advances in Hebrew with the item retained and no order
+ok 95 - synthetic Hebrew request advances in Hebrew with the item retained and no order
+  ---
+  duration_ms: 12.997625
+  type: 'test'
+  ...
+# Subtest: Hebrew size evidence still rejects negation, alternatives, weight and unsupported large items
+ok 96 - Hebrew size evidence still rejects negation, alternatives, weight and unsupported large items
+  ---
+  duration_ms: 2.723416
+  type: 'test'
+  ...
+# Subtest: review context he-reject-0: reject grounded quote
+ok 97 - review context he-reject-0: reject grounded quote
+  ---
+  duration_ms: 18.737958
+  type: 'test'
+  ...
+# Subtest: review context he-reject-0: typed draft is unchanged
+ok 98 - review context he-reject-0: typed draft is unchanged
+  ---
+  duration_ms: 17.035917
+  type: 'test'
+  ...
+# Subtest: review context he-reject-1: reject grounded quote
+ok 99 - review context he-reject-1: reject grounded quote
+  ---
+  duration_ms: 0.116875
+  type: 'test'
+  ...
+# Subtest: review context he-reject-1: typed draft is unchanged
+ok 100 - review context he-reject-1: typed draft is unchanged
+  ---
+  duration_ms: 2.070208
+  type: 'test'
+  ...
+# Subtest: review context he-reject-2: reject grounded quote
+ok 101 - review context he-reject-2: reject grounded quote
+  ---
+  duration_ms: 0.114042
+  type: 'test'
+  ...
+# Subtest: review context he-reject-2: typed draft is unchanged
+ok 102 - review context he-reject-2: typed draft is unchanged
+  ---
+  duration_ms: 1.712625
+  type: 'test'
+  ...
+# Subtest: review context he-reject-3: reject grounded quote
+ok 103 - review context he-reject-3: reject grounded quote
+  ---
+  duration_ms: 0.118291
+  type: 'test'
+  ...
+# Subtest: review context he-reject-3: typed draft is unchanged
+ok 104 - review context he-reject-3: typed draft is unchanged
+  ---
+  duration_ms: 0.503083
+  type: 'test'
+  ...
+# Subtest: review context he-reject-4: reject grounded quote
+ok 105 - review context he-reject-4: reject grounded quote
+  ---
+  duration_ms: 0.274083
+  type: 'test'
+  ...
+# Subtest: review context he-reject-4: typed draft is unchanged
+ok 106 - review context he-reject-4: typed draft is unchanged
+  ---
+  duration_ms: 0.641958
+  type: 'test'
+  ...
+# Subtest: review context he-reject-5: reject grounded quote
+ok 107 - review context he-reject-5: reject grounded quote
+  ---
+  duration_ms: 0.226584
+  type: 'test'
+  ...
+# Subtest: review context he-reject-5: typed draft is unchanged
+ok 108 - review context he-reject-5: typed draft is unchanged
+  ---
+  duration_ms: 0.31225
+  type: 'test'
+  ...
+# Subtest: review context he-reject-6: reject grounded quote
+ok 109 - review context he-reject-6: reject grounded quote
+  ---
+  duration_ms: 0.050125
+  type: 'test'
+  ...
+# Subtest: review context he-reject-6: typed draft is unchanged
+ok 110 - review context he-reject-6: typed draft is unchanged
+  ---
+  duration_ms: 0.294541
+  type: 'test'
+  ...
+# Subtest: review context he-reject-7: reject grounded quote
+ok 111 - review context he-reject-7: reject grounded quote
+  ---
+  duration_ms: 0.043875
+  type: 'test'
+  ...
+# Subtest: review context he-reject-7: typed draft is unchanged
+ok 112 - review context he-reject-7: typed draft is unchanged
+  ---
+  duration_ms: 0.250875
+  type: 'test'
+  ...
+# Subtest: review context he-reject-8: reject grounded quote
+ok 113 - review context he-reject-8: reject grounded quote
+  ---
+  duration_ms: 0.046167
+  type: 'test'
+  ...
+# Subtest: review context he-reject-8: typed draft is unchanged
+ok 114 - review context he-reject-8: typed draft is unchanged
+  ---
+  duration_ms: 0.444916
+  type: 'test'
+  ...
+# Subtest: review context he-reject-9: reject grounded quote
+ok 115 - review context he-reject-9: reject grounded quote
+  ---
+  duration_ms: 0.055375
+  type: 'test'
+  ...
+# Subtest: review context he-reject-9: typed draft is unchanged
+ok 116 - review context he-reject-9: typed draft is unchanged
+  ---
+  duration_ms: 0.342458
+  type: 'test'
+  ...
+# Subtest: review context he-reject-10: reject grounded quote
+ok 117 - review context he-reject-10: reject grounded quote
+  ---
+  duration_ms: 0.052834
+  type: 'test'
+  ...
+# Subtest: review context he-reject-10: typed draft is unchanged
+ok 118 - review context he-reject-10: typed draft is unchanged
+  ---
+  duration_ms: 0.777667
+  type: 'test'
+  ...
+# Subtest: review context he-reject-11: reject grounded quote
+ok 119 - review context he-reject-11: reject grounded quote
+  ---
+  duration_ms: 0.491167
+  type: 'test'
+  ...
+# Subtest: review context he-reject-11: typed draft is unchanged
+ok 120 - review context he-reject-11: typed draft is unchanged
+  ---
+  duration_ms: 0.511875
+  type: 'test'
+  ...
+# Subtest: review context he-reject-12: reject grounded quote
+ok 121 - review context he-reject-12: reject grounded quote
+  ---
+  duration_ms: 0.170375
+  type: 'test'
+  ...
+# Subtest: review context he-reject-12: typed draft is unchanged
+ok 122 - review context he-reject-12: typed draft is unchanged
+  ---
+  duration_ms: 0.257708
+  type: 'test'
+  ...
+# Subtest: review context fr-review-alternative: reject grounded quote
+ok 123 - review context fr-review-alternative: reject grounded quote
+  ---
+  duration_ms: 1.190667
+  type: 'test'
+  ...
+# Subtest: review context fr-review-alternative: typed draft is unchanged
+ok 124 - review context fr-review-alternative: typed draft is unchanged
+  ---
+  duration_ms: 0.8155
+  type: 'test'
+  ...
+# Subtest: review context en-review-negation: reject grounded quote
+ok 125 - review context en-review-negation: reject grounded quote
+  ---
+  duration_ms: 0.099709
+  type: 'test'
+  ...
+# Subtest: review context en-review-negation: typed draft is unchanged
+ok 126 - review context en-review-negation: typed draft is unchanged
+  ---
+  duration_ms: 0.631
+  type: 'test'
+  ...
+# Subtest: review context en-alternative: reject grounded quote
+ok 127 - review context en-alternative: reject grounded quote
+  ---
+  duration_ms: 0.079917
+  type: 'test'
+  ...
+# Subtest: review context en-alternative: typed draft is unchanged
+ok 128 - review context en-alternative: typed draft is unchanged
+  ---
+  duration_ms: 0.313583
+  type: 'test'
+  ...
+# Subtest: review context en-negative: reject grounded quote
+ok 129 - review context en-negative: reject grounded quote
+  ---
+  duration_ms: 0.058375
+  type: 'test'
+  ...
+# Subtest: review context en-negative: typed draft is unchanged
+ok 130 - review context en-negative: typed draft is unchanged
+  ---
+  duration_ms: 0.257417
+  type: 'test'
+  ...
+# Subtest: review context en-correction: reject grounded quote
+ok 131 - review context en-correction: reject grounded quote
+  ---
+  duration_ms: 1.46175
+  type: 'test'
+  ...
+# Subtest: review context en-correction: typed draft is unchanged
+ok 132 - review context en-correction: typed draft is unchanged
+  ---
+  duration_ms: 0.259875
+  type: 'test'
+  ...
+# Subtest: review context en-weight: reject grounded quote
+ok 133 - review context en-weight: reject grounded quote
+  ---
+  duration_ms: 0.045416
+  type: 'test'
+  ...
+# Subtest: review context en-weight: typed draft is unchanged
+ok 134 - review context en-weight: typed draft is unchanged
+  ---
+  duration_ms: 0.264875
+  type: 'test'
+  ...
+# Subtest: review context en-valid-note: accept grounded quote
+ok 135 - review context en-valid-note: accept grounded quote
+  ---
+  duration_ms: 0.509625
+  type: 'test'
+  ...
+# Subtest: review context en-valid-note: typed draft is advanced
+ok 136 - review context en-valid-note: typed draft is advanced
+  ---
+  duration_ms: 0.375791
+  type: 'test'
+  ...
+# Subtest: review context en-bare: accept grounded quote
+ok 137 - review context en-bare: accept grounded quote
+  ---
+  duration_ms: 0.055333
+  type: 'test'
+  ...
+# Subtest: review context en-bare: typed draft is advanced
+ok 138 - review context en-bare: typed draft is advanced
+  ---
+  duration_ms: 0.192333
+  type: 'test'
+  ...
+# Subtest: review context fr-alternative: reject grounded quote
+ok 139 - review context fr-alternative: reject grounded quote
+  ---
+  duration_ms: 0.061083
+  type: 'test'
+  ...
+# Subtest: review context fr-alternative: typed draft is unchanged
+ok 140 - review context fr-alternative: typed draft is unchanged
+  ---
+  duration_ms: 0.27425
+  type: 'test'
+  ...
+# Subtest: review context fr-negative: reject grounded quote
+ok 141 - review context fr-negative: reject grounded quote
+  ---
+  duration_ms: 0.647041
+  type: 'test'
+  ...
+# Subtest: review context fr-negative: typed draft is unchanged
+ok 142 - review context fr-negative: typed draft is unchanged
+  ---
+  duration_ms: 0.462375
+  type: 'test'
+  ...
+# Subtest: review context fr-correction: reject grounded quote
+ok 143 - review context fr-correction: reject grounded quote
+  ---
+  duration_ms: 0.099292
+  type: 'test'
+  ...
+# Subtest: review context fr-correction: typed draft is unchanged
+ok 144 - review context fr-correction: typed draft is unchanged
+  ---
+  duration_ms: 0.348625
+  type: 'test'
+  ...
+# Subtest: review context fr-weight: reject grounded quote
+ok 145 - review context fr-weight: reject grounded quote
+  ---
+  duration_ms: 0.079959
+  type: 'test'
+  ...
+# Subtest: review context fr-weight: typed draft is unchanged
+ok 146 - review context fr-weight: typed draft is unchanged
+  ---
+  duration_ms: 0.281125
+  type: 'test'
+  ...
+# Subtest: review context fr-valid-note: accept grounded quote
+ok 147 - review context fr-valid-note: accept grounded quote
+  ---
+  duration_ms: 0.069083
+  type: 'test'
+  ...
+# Subtest: review context fr-valid-note: typed draft is advanced
+ok 148 - review context fr-valid-note: typed draft is advanced
+  ---
+  duration_ms: 0.254708
+  type: 'test'
+  ...
+# Subtest: review context fr-bare: accept grounded quote
+ok 149 - review context fr-bare: accept grounded quote
+  ---
+  duration_ms: 0.045375
+  type: 'test'
+  ...
+# Subtest: review context fr-bare: typed draft is advanced
+ok 150 - review context fr-bare: typed draft is advanced
+  ---
+  duration_ms: 0.162333
+  type: 'test'
+  ...
+# Subtest: review context ru-alternative: reject grounded quote
+ok 151 - review context ru-alternative: reject grounded quote
+  ---
+  duration_ms: 0.065584
+  type: 'test'
+  ...
+# Subtest: review context ru-alternative: typed draft is unchanged
+ok 152 - review context ru-alternative: typed draft is unchanged
+  ---
+  duration_ms: 0.266
+  type: 'test'
+  ...
+# Subtest: review context ru-negative: reject grounded quote
+ok 153 - review context ru-negative: reject grounded quote
+  ---
+  duration_ms: 0.332875
+  type: 'test'
+  ...
+# Subtest: review context ru-negative: typed draft is unchanged
+ok 154 - review context ru-negative: typed draft is unchanged
+  ---
+  duration_ms: 0.266542
+  type: 'test'
+  ...
+# Subtest: review context ru-correction: reject grounded quote
+ok 155 - review context ru-correction: reject grounded quote
+  ---
+  duration_ms: 1.080792
+  type: 'test'
+  ...
+# Subtest: review context ru-correction: typed draft is unchanged
+ok 156 - review context ru-correction: typed draft is unchanged
+  ---
+  duration_ms: 0.324625
+  type: 'test'
+  ...
+# Subtest: review context ru-weight: reject grounded quote
+ok 157 - review context ru-weight: reject grounded quote
+  ---
+  duration_ms: 0.050625
+  type: 'test'
+  ...
+# Subtest: review context ru-weight: typed draft is unchanged
+ok 158 - review context ru-weight: typed draft is unchanged
+  ---
+  duration_ms: 0.25525
+  type: 'test'
+  ...
+# Subtest: review context ru-valid-note: accept grounded quote
+ok 159 - review context ru-valid-note: accept grounded quote
+  ---
+  duration_ms: 0.087792
+  type: 'test'
+  ...
+# Subtest: review context ru-valid-note: typed draft is advanced
+ok 160 - review context ru-valid-note: typed draft is advanced
+  ---
+  duration_ms: 0.241875
+  type: 'test'
+  ...
+# Subtest: review context ru-bare: accept grounded quote
+ok 161 - review context ru-bare: accept grounded quote
+  ---
+  duration_ms: 0.123208
+  type: 'test'
+  ...
+# Subtest: review context ru-bare: typed draft is advanced
+ok 162 - review context ru-bare: typed draft is advanced
+  ---
+  duration_ms: 0.140667
+  type: 'test'
+  ...
+# Subtest: review context ar-alternative: reject grounded quote
+ok 163 - review context ar-alternative: reject grounded quote
+  ---
+  duration_ms: 0.074375
+  type: 'test'
+  ...
+# Subtest: review context ar-alternative: typed draft is unchanged
+ok 164 - review context ar-alternative: typed draft is unchanged
+  ---
+  duration_ms: 0.348375
+  type: 'test'
+  ...
+# Subtest: review context ar-negative: reject grounded quote
+ok 165 - review context ar-negative: reject grounded quote
+  ---
+  duration_ms: 0.065208
+  type: 'test'
+  ...
+# Subtest: review context ar-negative: typed draft is unchanged
+ok 166 - review context ar-negative: typed draft is unchanged
+  ---
+  duration_ms: 0.324416
+  type: 'test'
+  ...
+# Subtest: review context ar-correction: reject grounded quote
+ok 167 - review context ar-correction: reject grounded quote
+  ---
+  duration_ms: 0.052292
+  type: 'test'
+  ...
+# Subtest: review context ar-correction: typed draft is unchanged
+ok 168 - review context ar-correction: typed draft is unchanged
+  ---
+  duration_ms: 0.260292
+  type: 'test'
+  ...
+# Subtest: review context ar-weight: reject grounded quote
+ok 169 - review context ar-weight: reject grounded quote
+  ---
+  duration_ms: 0.060084
+  type: 'test'
+  ...
+# Subtest: review context ar-weight: typed draft is unchanged
+ok 170 - review context ar-weight: typed draft is unchanged
+  ---
+  duration_ms: 0.254041
+  type: 'test'
+  ...
+# Subtest: review context ar-valid-note: accept grounded quote
+ok 171 - review context ar-valid-note: accept grounded quote
+  ---
+  duration_ms: 0.143125
+  type: 'test'
+  ...
+# Subtest: review context ar-valid-note: typed draft is advanced
+ok 172 - review context ar-valid-note: typed draft is advanced
+  ---
+  duration_ms: 0.260375
+  type: 'test'
+  ...
+# Subtest: review context ar-bare: accept grounded quote
+ok 173 - review context ar-bare: accept grounded quote
+  ---
+  duration_ms: 0.046334
+  type: 'test'
+  ...
+# Subtest: review context ar-bare: typed draft is advanced
+ok 174 - review context ar-bare: typed draft is advanced
+  ---
+  duration_ms: 0.153166
+  type: 'test'
+  ...
+# Subtest: review context he-positive-0: accept grounded quote
+ok 175 - review context he-positive-0: accept grounded quote
+  ---
+  duration_ms: 1.888167
+  type: 'test'
+  ...
+# Subtest: review context he-positive-0: typed draft is advanced
+ok 176 - review context he-positive-0: typed draft is advanced
+  ---
+  duration_ms: 1.374083
+  type: 'test'
+  ...
+# Subtest: review context he-positive-1: accept grounded quote
+ok 177 - review context he-positive-1: accept grounded quote
+  ---
+  duration_ms: 0.115
+  type: 'test'
+  ...
+# Subtest: review context he-positive-1: typed draft is advanced
+ok 178 - review context he-positive-1: typed draft is advanced
+  ---
+  duration_ms: 0.348375
+  type: 'test'
+  ...
+# Subtest: review context he-positive-2: accept grounded quote
+ok 179 - review context he-positive-2: accept grounded quote
+  ---
+  duration_ms: 0.074
+  type: 'test'
+  ...
+# Subtest: review context he-positive-2: typed draft is advanced
+ok 180 - review context he-positive-2: typed draft is advanced
+  ---
+  duration_ms: 0.280708
+  type: 'test'
+  ...
+# Subtest: review context he-positive-3: accept grounded quote
+ok 181 - review context he-positive-3: accept grounded quote
+  ---
+  duration_ms: 0.059458
+  type: 'test'
+  ...
+# Subtest: review context he-positive-3: typed draft is advanced
+ok 182 - review context he-positive-3: typed draft is advanced
+  ---
+  duration_ms: 0.24725
+  type: 'test'
+  ...
+# Subtest: review context he-positive-4: accept grounded quote
+ok 183 - review context he-positive-4: accept grounded quote
+  ---
+  duration_ms: 0.050625
+  type: 'test'
+  ...
+# Subtest: review context he-positive-4: typed draft is advanced
+ok 184 - review context he-positive-4: typed draft is advanced
+  ---
+  duration_ms: 0.221208
+  type: 'test'
+  ...
+# Subtest: review context he-positive-5: accept grounded quote
+ok 185 - review context he-positive-5: accept grounded quote
+  ---
+  duration_ms: 0.049541
+  type: 'test'
+  ...
+# Subtest: review context he-positive-5: typed draft is advanced
+ok 186 - review context he-positive-5: typed draft is advanced
+  ---
+  duration_ms: 0.217666
+  type: 'test'
+  ...
+# Subtest: review context he-positive-6: accept grounded quote
+ok 187 - review context he-positive-6: accept grounded quote
+  ---
+  duration_ms: 0.044958
+  type: 'test'
+  ...
+# Subtest: review context he-positive-6: typed draft is advanced
+ok 188 - review context he-positive-6: typed draft is advanced
+  ---
+  duration_ms: 0.679042
+  type: 'test'
+  ...
+# Subtest: review context he-positive-7: accept grounded quote
+ok 189 - review context he-positive-7: accept grounded quote
+  ---
+  duration_ms: 0.083167
+  type: 'test'
+  ...
+# Subtest: review context he-positive-7: typed draft is advanced
+ok 190 - review context he-positive-7: typed draft is advanced
+  ---
+  duration_ms: 0.309709
+  type: 'test'
+  ...
+# Subtest: review context mixed-alternative: reject grounded quote
+ok 191 - review context mixed-alternative: reject grounded quote
+  ---
+  duration_ms: 0.05725
+  type: 'test'
+  ...
+# Subtest: review context mixed-alternative: typed draft is unchanged
+ok 192 - review context mixed-alternative: typed draft is unchanged
+  ---
+  duration_ms: 0.270458
+  type: 'test'
+  ...
+# Subtest: review context mixed-negation: reject grounded quote
+ok 193 - review context mixed-negation: reject grounded quote
+  ---
+  duration_ms: 0.049875
+  type: 'test'
+  ...
+# Subtest: review context mixed-negation: typed draft is unchanged
+ok 194 - review context mixed-negation: typed draft is unchanged
+  ---
+  duration_ms: 0.247292
+  type: 'test'
+  ...
+# Subtest: review context mixed-time: accept grounded quote
+ok 195 - review context mixed-time: accept grounded quote
+  ---
+  duration_ms: 0.067416
+  type: 'test'
+  ...
+# Subtest: review context mixed-time: typed draft is advanced
+ok 196 - review context mixed-time: typed draft is advanced
+  ---
+  duration_ms: 0.25
+  type: 'test'
+  ...
+# Subtest: review context en-contact: accept grounded quote
+ok 197 - review context en-contact: accept grounded quote
+  ---
+  duration_ms: 0.063875
+  type: 'test'
+  ...
+# Subtest: review context en-contact: typed draft is advanced
+ok 198 - review context en-contact: typed draft is advanced
+  ---
+  duration_ms: 0.279167
+  type: 'test'
+  ...
+# Subtest: review context fr-time: accept grounded quote
+ok 199 - review context fr-time: accept grounded quote
+  ---
+  duration_ms: 0.1025
+  type: 'test'
+  ...
+# Subtest: review context fr-time: typed draft is advanced
+ok 200 - review context fr-time: typed draft is advanced
+  ---
+  duration_ms: 0.290333
+  type: 'test'
+  ...
+# Subtest: review context ru-contact: accept grounded quote
+ok 201 - review context ru-contact: accept grounded quote
+  ---
+  duration_ms: 0.067083
+  type: 'test'
+  ...
+# Subtest: review context ru-contact: typed draft is advanced
+ok 202 - review context ru-contact: typed draft is advanced
+  ---
+  duration_ms: 0.229667
+  type: 'test'
+  ...
+# Subtest: review context ar-time: accept grounded quote
+ok 203 - review context ar-time: accept grounded quote
+  ---
+  duration_ms: 0.049333
+  type: 'test'
+  ...
+# Subtest: review context ar-time: typed draft is advanced
+ok 204 - review context ar-time: typed draft is advanced
+  ---
+  duration_ms: 0.195292
+  type: 'test'
+  ...
+# Subtest: review context en-trailing-no: reject grounded quote
+ok 205 - review context en-trailing-no: reject grounded quote
+  ---
+  duration_ms: 0.045083
+  type: 'test'
+  ...
+# Subtest: review context en-trailing-no: typed draft is unchanged
+ok 206 - review context en-trailing-no: typed draft is unchanged
+  ---
+  duration_ms: 0.19175
+  type: 'test'
+  ...
+# Subtest: review context en-trailing-correct: reject grounded quote
+ok 207 - review context en-trailing-correct: reject grounded quote
+  ---
+  duration_ms: 0.040167
+  type: 'test'
+  ...
+# Subtest: review context en-trailing-correct: typed draft is unchanged
+ok 208 - review context en-trailing-correct: typed draft is unchanged
+  ---
+  duration_ms: 0.193042
+  type: 'test'
+  ...
+# Subtest: review context fr-trailing-no: reject grounded quote
+ok 209 - review context fr-trailing-no: reject grounded quote
+  ---
+  duration_ms: 0.0445
+  type: 'test'
+  ...
+# Subtest: review context fr-trailing-no: typed draft is unchanged
+ok 210 - review context fr-trailing-no: typed draft is unchanged
+  ---
+  duration_ms: 0.212417
+  type: 'test'
+  ...
+# Subtest: review context ru-trailing-no: reject grounded quote
+ok 211 - review context ru-trailing-no: reject grounded quote
+  ---
+  duration_ms: 0.059916
+  type: 'test'
+  ...
+# Subtest: review context ru-trailing-no: typed draft is unchanged
+ok 212 - review context ru-trailing-no: typed draft is unchanged
+  ---
+  duration_ms: 0.20575
+  type: 'test'
+  ...
+# Subtest: review context ar-trailing-no: reject grounded quote
+ok 213 - review context ar-trailing-no: reject grounded quote
+  ---
+  duration_ms: 0.035042
+  type: 'test'
+  ...
+# Subtest: review context ar-trailing-no: typed draft is unchanged
+ok 214 - review context ar-trailing-no: typed draft is unchanged
+  ---
+  duration_ms: 0.185542
+  type: 'test'
+  ...
+# Subtest: review context en-correct-replacement: accept grounded quote
+ok 215 - review context en-correct-replacement: accept grounded quote
+  ---
+  duration_ms: 0.046417
+  type: 'test'
+  ...
+# Subtest: review context en-correct-replacement: typed draft is advanced
+ok 216 - review context en-correct-replacement: typed draft is advanced
+  ---
+  duration_ms: 0.186375
+  type: 'test'
+  ...
+# Subtest: review context fr-correct-replacement: accept grounded quote
+ok 217 - review context fr-correct-replacement: accept grounded quote
+  ---
+  duration_ms: 0.050625
+  type: 'test'
+  ...
+# Subtest: review context fr-correct-replacement: typed draft is advanced
+ok 218 - review context fr-correct-replacement: typed draft is advanced
+  ---
+  duration_ms: 0.184292
+  type: 'test'
+  ...
+# Subtest: review context ru-correct-replacement: accept grounded quote
+ok 219 - review context ru-correct-replacement: accept grounded quote
+  ---
+  duration_ms: 0.046208
+  type: 'test'
+  ...
+# Subtest: review context ru-correct-replacement: typed draft is advanced
+ok 220 - review context ru-correct-replacement: typed draft is advanced
+  ---
+  duration_ms: 0.185333
+  type: 'test'
+  ...
+# Subtest: review context ar-correct-replacement: accept grounded quote
+ok 221 - review context ar-correct-replacement: accept grounded quote
+  ---
+  duration_ms: 0.04125
+  type: 'test'
+  ...
+# Subtest: review context ar-correct-replacement: typed draft is advanced
+ok 222 - review context ar-correct-replacement: typed draft is advanced
+  ---
+  duration_ms: 0.189333
+  type: 'test'
+  ...
+# Subtest: review context he-reject-0-adjective: reject grounded quote
+ok 223 - review context he-reject-0-adjective: reject grounded quote
+  ---
+  duration_ms: 0.046209
+  type: 'test'
+  ...
+# Subtest: review context he-reject-0-adjective: typed draft is unchanged
+ok 224 - review context he-reject-0-adjective: typed draft is unchanged
+  ---
+  duration_ms: 0.688333
+  type: 'test'
+  ...
+# Subtest: review context he-reject-1-adjective: reject grounded quote
+ok 225 - review context he-reject-1-adjective: reject grounded quote
+  ---
+  duration_ms: 0.0565
+  type: 'test'
+  ...
+# Subtest: review context he-reject-1-adjective: typed draft is unchanged
+ok 226 - review context he-reject-1-adjective: typed draft is unchanged
+  ---
+  duration_ms: 0.284458
+  type: 'test'
+  ...
+# Subtest: review context he-reject-2-adjective: reject grounded quote
+ok 227 - review context he-reject-2-adjective: reject grounded quote
+  ---
+  duration_ms: 0.045417
+  type: 'test'
+  ...
+# Subtest: review context he-reject-2-adjective: typed draft is unchanged
+ok 228 - review context he-reject-2-adjective: typed draft is unchanged
+  ---
+  duration_ms: 0.213708
+  type: 'test'
+  ...
+# Subtest: review context he-reject-3-adjective: reject grounded quote
+ok 229 - review context he-reject-3-adjective: reject grounded quote
+  ---
+  duration_ms: 0.042959
+  type: 'test'
+  ...
+# Subtest: review context he-reject-3-adjective: typed draft is unchanged
+ok 230 - review context he-reject-3-adjective: typed draft is unchanged
+  ---
+  duration_ms: 0.204333
+  type: 'test'
+  ...
+# Subtest: review context he-reject-4-adjective: reject grounded quote
+ok 231 - review context he-reject-4-adjective: reject grounded quote
+  ---
+  duration_ms: 0.038958
+  type: 'test'
+  ...
+# Subtest: review context he-reject-4-adjective: typed draft is unchanged
+ok 232 - review context he-reject-4-adjective: typed draft is unchanged
+  ---
+  duration_ms: 0.199791
+  type: 'test'
+  ...
+# Subtest: review context he-reject-5-adjective: reject grounded quote
+ok 233 - review context he-reject-5-adjective: reject grounded quote
+  ---
+  duration_ms: 0.032833
+  type: 'test'
+  ...
+# Subtest: review context he-reject-5-adjective: typed draft is unchanged
+ok 234 - review context he-reject-5-adjective: typed draft is unchanged
+  ---
+  duration_ms: 0.205708
+  type: 'test'
+  ...
+# Subtest: review context he-reject-6-adjective: reject grounded quote
+ok 235 - review context he-reject-6-adjective: reject grounded quote
+  ---
+  duration_ms: 0.0355
+  type: 'test'
+  ...
+# Subtest: review context he-reject-6-adjective: typed draft is unchanged
+ok 236 - review context he-reject-6-adjective: typed draft is unchanged
+  ---
+  duration_ms: 0.186666
+  type: 'test'
+  ...
+# Subtest: review context he-reject-7-adjective: reject grounded quote
+ok 237 - review context he-reject-7-adjective: reject grounded quote
+  ---
+  duration_ms: 0.031
+  type: 'test'
+  ...
+# Subtest: review context he-reject-7-adjective: typed draft is unchanged
+ok 238 - review context he-reject-7-adjective: typed draft is unchanged
+  ---
+  duration_ms: 0.182583
+  type: 'test'
+  ...
+# Subtest: review context he-reject-8-adjective: reject grounded quote
+ok 239 - review context he-reject-8-adjective: reject grounded quote
+  ---
+  duration_ms: 0.0325
+  type: 'test'
+  ...
+# Subtest: review context he-reject-8-adjective: typed draft is unchanged
+ok 240 - review context he-reject-8-adjective: typed draft is unchanged
+  ---
+  duration_ms: 0.182917
+  type: 'test'
+  ...
+# Subtest: review context he-reject-9-adjective: reject grounded quote
+ok 241 - review context he-reject-9-adjective: reject grounded quote
+  ---
+  duration_ms: 0.035833
+  type: 'test'
+  ...
+# Subtest: review context he-reject-9-adjective: typed draft is unchanged
+ok 242 - review context he-reject-9-adjective: typed draft is unchanged
+  ---
+  duration_ms: 0.192625
+  type: 'test'
+  ...
+# Subtest: review context he-reject-10-adjective: reject grounded quote
+ok 243 - review context he-reject-10-adjective: reject grounded quote
+  ---
+  duration_ms: 0.038208
+  type: 'test'
+  ...
+# Subtest: review context he-reject-10-adjective: typed draft is unchanged
+ok 244 - review context he-reject-10-adjective: typed draft is unchanged
+  ---
+  duration_ms: 0.188375
+  type: 'test'
+  ...
+# Subtest: review context he-reject-11-adjective: reject grounded quote
+ok 245 - review context he-reject-11-adjective: reject grounded quote
+  ---
+  duration_ms: 0.037334
+  type: 'test'
+  ...
+# Subtest: review context he-reject-11-adjective: typed draft is unchanged
+ok 246 - review context he-reject-11-adjective: typed draft is unchanged
+  ---
+  duration_ms: 0.206167
+  type: 'test'
+  ...
+# Subtest: review context he-reject-12-adjective: reject grounded quote
+ok 247 - review context he-reject-12-adjective: reject grounded quote
+  ---
+  duration_ms: 0.03675
+  type: 'test'
+  ...
+# Subtest: review context he-reject-12-adjective: typed draft is unchanged
+ok 248 - review context he-reject-12-adjective: typed draft is unchanged
+  ---
+  duration_ms: 0.17825
+  type: 'test'
+  ...
+# Subtest: review context he-positive-0-adjective: accept grounded quote
+ok 249 - review context he-positive-0-adjective: accept grounded quote
+  ---
+  duration_ms: 0.057542
+  type: 'test'
+  ...
+# Subtest: review context he-positive-0-adjective: typed draft is advanced
+ok 250 - review context he-positive-0-adjective: typed draft is advanced
+  ---
+  duration_ms: 0.231166
+  type: 'test'
+  ...
+# Subtest: review context he-positive-1-adjective: accept grounded quote
+ok 251 - review context he-positive-1-adjective: accept grounded quote
+  ---
+  duration_ms: 0.0525
+  type: 'test'
+  ...
+# Subtest: review context he-positive-1-adjective: typed draft is advanced
+ok 252 - review context he-positive-1-adjective: typed draft is advanced
+  ---
+  duration_ms: 0.206084
+  type: 'test'
+  ...
+# Subtest: review context he-positive-2-adjective: accept grounded quote
+ok 253 - review context he-positive-2-adjective: accept grounded quote
+  ---
+  duration_ms: 0.050833
+  type: 'test'
+  ...
+# Subtest: review context he-positive-2-adjective: typed draft is advanced
+ok 254 - review context he-positive-2-adjective: typed draft is advanced
+  ---
+  duration_ms: 0.200667
+  type: 'test'
+  ...
+# Subtest: review context he-positive-3-adjective: accept grounded quote
+ok 255 - review context he-positive-3-adjective: accept grounded quote
+  ---
+  duration_ms: 0.051209
+  type: 'test'
+  ...
+# Subtest: review context he-positive-3-adjective: typed draft is advanced
+ok 256 - review context he-positive-3-adjective: typed draft is advanced
+  ---
+  duration_ms: 0.218625
+  type: 'test'
+  ...
+# Subtest: review context he-positive-4-adjective: accept grounded quote
+ok 257 - review context he-positive-4-adjective: accept grounded quote
+  ---
+  duration_ms: 0.040958
+  type: 'test'
+  ...
+# Subtest: review context he-positive-4-adjective: typed draft is advanced
+ok 258 - review context he-positive-4-adjective: typed draft is advanced
+  ---
+  duration_ms: 0.186209
+  type: 'test'
+  ...
+# Subtest: review context he-positive-5-adjective: accept grounded quote
+ok 259 - review context he-positive-5-adjective: accept grounded quote
+  ---
+  duration_ms: 0.04575
+  type: 'test'
+  ...
+# Subtest: review context he-positive-5-adjective: typed draft is advanced
+ok 260 - review context he-positive-5-adjective: typed draft is advanced
+  ---
+  duration_ms: 0.538958
+  type: 'test'
+  ...
+# Subtest: review context he-positive-6-adjective: accept grounded quote
+ok 261 - review context he-positive-6-adjective: accept grounded quote
+  ---
+  duration_ms: 0.065917
+  type: 'test'
+  ...
+# Subtest: review context he-positive-6-adjective: typed draft is advanced
+ok 262 - review context he-positive-6-adjective: typed draft is advanced
+  ---
+  duration_ms: 0.245209
+  type: 'test'
+  ...
+# Subtest: review context he-positive-7-adjective: accept grounded quote
+ok 263 - review context he-positive-7-adjective: accept grounded quote
+  ---
+  duration_ms: 0.0575
+  type: 'test'
+  ...
+# Subtest: review context he-positive-7-adjective: typed draft is advanced
+ok 264 - review context he-positive-7-adjective: typed draft is advanced
+  ---
+  duration_ms: 0.221458
+  type: 'test'
+  ...
+# Subtest: review context fr-bare-retraction: reject grounded quote
+ok 265 - review context fr-bare-retraction: reject grounded quote
+  ---
+  duration_ms: 0.044125
+  type: 'test'
+  ...
+# Subtest: review context fr-bare-retraction: typed draft is unchanged
+ok 266 - review context fr-bare-retraction: typed draft is unchanged
+  ---
+  duration_ms: 0.247
+  type: 'test'
+  ...
+# Subtest: review context en-multiple-owned-items: reject grounded quote
+ok 267 - review context en-multiple-owned-items: reject grounded quote
+  ---
+  duration_ms: 0.043625
+  type: 'test'
+  ...
+# Subtest: review context en-multiple-owned-items: typed draft is unchanged
+ok 268 - review context en-multiple-owned-items: typed draft is unchanged
+  ---
+  duration_ms: 0.23175
+  type: 'test'
+  ...
+# Subtest: Claude alternative: omitted context rejects מעטפה קטנה
+ok 269 - Claude alternative: omitted context rejects מעטפה קטנה
+  ---
+  duration_ms: 16.890125
+  type: 'test'
+  ...
+# Subtest: Claude alternative: omitted context rejects קטנה
+ok 270 - Claude alternative: omitted context rejects קטנה
+  ---
+  duration_ms: 1.905416
+  type: 'test'
+  ...
+# Subtest: Claude alternative: typed turn never writes omitted size or item notes
+ok 271 - Claude alternative: typed turn never writes omitted size or item notes
+  ---
+  duration_ms: 15.019625
+  type: 'test'
+  ...
+# Subtest: Claude overweight: omitted context rejects מעטפה קטנה
+ok 272 - Claude overweight: omitted context rejects מעטפה קטנה
+  ---
+  duration_ms: 0.192959
+  type: 'test'
+  ...
+# Subtest: Claude overweight: omitted context rejects קטנה
+ok 273 - Claude overweight: omitted context rejects קטנה
+  ---
+  duration_ms: 0.102333
+  type: 'test'
+  ...
+# Subtest: Claude overweight: typed turn never writes omitted size or item notes
+ok 274 - Claude overweight: typed turn never writes omitted size or item notes
+  ---
+  duration_ms: 1.223625
+  type: 'test'
+  ...
+# Subtest: Claude heavy: omitted context rejects מעטפה קטנה
+ok 275 - Claude heavy: omitted context rejects מעטפה קטנה
+  ---
+  duration_ms: 0.101208
+  type: 'test'
+  ...
+# Subtest: Claude heavy: omitted context rejects קטנה
+ok 276 - Claude heavy: omitted context rejects קטנה
+  ---
+  duration_ms: 0.073041
+  type: 'test'
+  ...
+# Subtest: Claude heavy: typed turn never writes omitted size or item notes
+ok 277 - Claude heavy: typed turn never writes omitted size or item notes
+  ---
+  duration_ms: 0.890584
+  type: 'test'
+  ...
+# Subtest: Claude absence: omitted context rejects מעטפה קטנה
+ok 278 - Claude absence: omitted context rejects מעטפה קטנה
+  ---
+  duration_ms: 2.076166
+  type: 'test'
+  ...
+# Subtest: Claude absence: omitted context rejects קטנה
+ok 279 - Claude absence: omitted context rejects קטנה
+  ---
+  duration_ms: 1.46525
+  type: 'test'
+  ...
+# Subtest: Claude absence: typed turn never writes omitted size or item notes
+ok 280 - Claude absence: typed turn never writes omitted size or item notes
+  ---
+  duration_ms: 0.499625
+  type: 'test'
+  ...
+# Subtest: Claude qualified-negation: omitted context rejects מעטפה קטנה
+ok 281 - Claude qualified-negation: omitted context rejects מעטפה קטנה
+  ---
+  duration_ms: 0.073334
+  type: 'test'
+  ...
+# Subtest: Claude qualified-negation: omitted context rejects קטנה
+ok 282 - Claude qualified-negation: omitted context rejects קטנה
+  ---
+  duration_ms: 0.059958
+  type: 'test'
+  ...
+# Subtest: Claude qualified-negation: typed turn never writes omitted size or item notes
+ok 283 - Claude qualified-negation: typed turn never writes omitted size or item notes
+  ---
+  duration_ms: 0.389875
+  type: 'test'
+  ...
+# Subtest: size context rejects qualifier: מעטפה קטנה, או חבילה בינונית
+ok 284 - size context rejects qualifier: מעטפה קטנה, או חבילה בינונית
+  ---
+  duration_ms: 3.923666
+  type: 'test'
+  ...
+# Subtest: size context rejects qualifier: מעטפה קטנה. במשקל 10.5 ק״ג
+ok 285 - size context rejects qualifier: מעטפה קטנה. במשקל 10.5 ק״ג
+  ---
+  duration_ms: 0.060792
+  type: 'test'
+  ...
+# Subtest: size context rejects qualifier: במשקל 10 קג מעטפה קטנה
+ok 286 - size context rejects qualifier: במשקל 10 קג מעטפה קטנה
+  ---
+  duration_ms: 0.049041
+  type: 'test'
+  ...
+# Subtest: size context rejects qualifier: מעטפה קטנה 10ק״ג
+ok 287 - size context rejects qualifier: מעטפה קטנה 10ק״ג
+  ---
+  duration_ms: 0.044667
+  type: 'test'
+  ...
+# Subtest: size context rejects qualifier: מעטפה קטנה — וכבדה
+ok 288 - size context rejects qualifier: מעטפה קטנה — וכבדה
+  ---
+  duration_ms: 0.045208
+  type: 'test'
+  ...
+# Subtest: size context rejects qualifier: אין לי בכלל מעטפה קטנה
+ok 289 - size context rejects qualifier: אין לי בכלל מעטפה קטנה
+  ---
+  duration_ms: 0.051375
+  type: 'test'
+  ...
+# Subtest: size context rejects qualifier: זו לא ממש מעטפה קטנה
+ok 290 - size context rejects qualifier: זו לא ממש מעטפה קטנה
+  ---
+  duration_ms: 0.049625
+  type: 'test'
+  ...
+# Subtest: size context rejects qualifier: מעטפה קטנה אין לי
+ok 291 - size context rejects qualifier: מעטפה קטנה אין לי
+  ---
+  duration_ms: 5.039625
+  type: 'test'
+  ...
+# Subtest: size context rejects qualifier: מעטפה קטנה אלא חבילה בינונית
+ok 292 - size context rejects qualifier: מעטפה קטנה אלא חבילה בינונית
+  ---
+  duration_ms: 2.014416
+  type: 'test'
+  ...
+# Subtest: affirmative size context remains accepted: אפשר בעברית? אני רוצה לשלוח מעטפה קטנה.
+ok 293 - affirmative size context remains accepted: אפשר בעברית? אני רוצה לשלוח מעטפה קטנה.
+  ---
+  duration_ms: 1.090333
+  type: 'test'
+  ...
+# Subtest: affirmative size context remains accepted: אין מעלית. אני רוצה לשלוח מעטפה קטנה.
+ok 294 - affirmative size context remains accepted: אין מעלית. אני רוצה לשלוח מעטפה קטנה.
+  ---
+  duration_ms: 0.107375
+  type: 'test'
+  ...
+# Subtest: affirmative size context remains accepted: מעטפה קטנה. אין מעלית בכתובת האיסוף.
+ok 295 - affirmative size context remains accepted: מעטפה קטנה. אין מעלית בכתובת האיסוף.
+  ---
+  duration_ms: 0.090458
+  type: 'test'
+  ...
+# Subtest: affirmative size context remains accepted: לא מעטפה גדולה אלא מעטפה קטנה
+ok 296 - affirmative size context remains accepted: לא מעטפה גדולה אלא מעטפה קטנה
+  ---
+  duration_ms: 0.062792
+  type: 'test'
+  ...
+# Subtest: affirmative size context remains accepted: מעטפה קטנה לאיסוף מדיזנגוף 10 תל אביב
+ok 297 - affirmative size context remains accepted: מעטפה קטנה לאיסוף מדיזנגוף 10 תל אביב
+  ---
+  duration_ms: 0.070375
+  type: 'test'
+  ...
+# Subtest: affirmative size context remains accepted: מפתחות מדיזנגוף 10 תל אביב לביאליק 2 רמת גן
+ok 298 - affirmative size context remains accepted: מפתחות מדיזנגוף 10 תל אביב לביאליק 2 רמת גן
+  ---
+  duration_ms: 0.128375
+  type: 'test'
+  ...
+# Subtest: a bad size invalidates the entire proposal, including explicitly proposed notes
+ok 299 - a bad size invalidates the entire proposal, including explicitly proposed notes
+  ---
+  duration_ms: 0.067375
+  type: 'test'
+  ...
+1..299
+# tests 299
+# suites 0
+# pass 299
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 155.301209

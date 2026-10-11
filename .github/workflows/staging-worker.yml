@@ -370,6 +370,9 @@ jobs:
           else
             echo "Business delivery exception migration 038 is already applied."
           fi
+      - name: Apply staging booking migration only when wholly absent and verify readiness
+        working-directory: worker
+        run: node scripts/validate-booking-schema.mjs --database edenmish-staging --config wrangler.staging.generated.toml --apply-staging
       - name: Verify remote driver schema readiness
         working-directory: worker
         run: node scripts/validate-driver-schema.mjs --database edenmish-staging --config wrangler.staging.generated.toml
@@ -385,7 +388,9 @@ jobs:
           node --input-type=module -e 'import { writeFileSync } from "node:fs"; writeFileSync("/tmp/edenmish-staging-secrets.json", JSON.stringify({ OPS_PIN: process.env.STAGING_OPS_PIN, SESSION_SECRET: process.env.STAGING_SESSION_SECRET, DRIVER_ONE_TIME_CODE: process.env.STAGING_DRIVER_ONE_TIME_CODE, GOOGLE_PLACES_SERVER_KEY: process.env.STAGING_GOOGLE_PLACES_SERVER_KEY, GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON: process.env.STAGING_GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON, SENDGRID_API_KEY: process.env.STAGING_SENDGRID_API_KEY, APNS_TEAM_ID: process.env.STAGING_APNS_TEAM_ID, APNS_KEY_ID: process.env.STAGING_APNS_KEY_ID, APNS_PRIVATE_KEY_P8: process.env.STAGING_APNS_PRIVATE_KEY_P8 }), { mode: 0o600 });'
       - name: Deploy staging Worker
         working-directory: worker
-        run: npx wrangler deploy --config wrangler.staging.generated.toml --secrets-file /tmp/edenmish-staging-secrets.json
+        run: |
+          node --input-type=module -e 'import { assertStagingConfig } from "./scripts/staging-safety.mjs"; assertStagingConfig("wrangler.staging.generated.toml");'
+          npx wrangler deploy --config wrangler.staging.generated.toml --secrets-file /tmp/edenmish-staging-secrets.json
       - name: Remove temporary secret file
         if: always()
         run: rm -f /tmp/edenmish-staging-secrets.json

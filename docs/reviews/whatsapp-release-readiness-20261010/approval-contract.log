@@ -1,0 +1,2 @@
+{"contractChecks":"pass","syntheticFlow":{"turns":7,"models":1,"mapsHttpRequests":2,"outboundSegments":7,"orders":0,"phases":["consent","collect","address_choice","collect","address_review","review","handoff"]},"networkCalls":0,"activationPermitted":false}
+{"terminalReplyBoundaryChecks":"pass","networkCalls":0}

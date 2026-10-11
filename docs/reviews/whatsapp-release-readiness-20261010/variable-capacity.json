@@ -1,0 +1,32 @@
+{
+  "checkedAt": "2026-10-10T20:32:04.397Z",
+  "version": "0a601f86-f6dd-4548-89dc-7b8f2162c96c",
+  "databaseMatches": true,
+  "plainVariables": 36,
+  "secretVariables": 10,
+  "temporaryModelKeyPresent": false,
+  "automationOff": true,
+  "accountSettings": {
+    "keys": [
+      "default_usage_model",
+      "green_compute"
+    ],
+    "defaultUsageModel": "standard"
+  },
+  "workerUsageModel": "standard",
+  "subscriptionListVerified": false,
+  "subscriptionErrorCode": 10000,
+  "entitlementsVerified": true,
+  "billingTierVerified": false,
+  "variableEntitlementExposed": false,
+  "compactPlainVariables": 52,
+  "existingSecretsPreserved": 10,
+  "temporarySecretReserved": 1,
+  "compactTotal": 63,
+  "conservativeLimit": 64,
+  "headroom": 1,
+  "paidPlanRequired": false,
+  "remoteMutations": 0,
+  "secretValuesRead": false,
+  "limitsSource": "https://developers.cloudflare.com/workers/platform/limits/#environment-variables"
+}

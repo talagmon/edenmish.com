@@ -1,0 +1,108 @@
+TAP version 13
+# (node:30206) ExperimentalWarning: The MockTimers API is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: offline preparation is OFF/unapproved, exclusive and private; no real identities
+ok 1 - offline preparation is OFF/unapproved, exclusive and private; no real identities
+  ---
+  duration_ms: 11.95225
+  type: 'test'
+  ...
+# Subtest: CLI checks metadata, durable proof INSERT, and settled proof without message body reads
+ok 2 - CLI checks metadata, durable proof INSERT, and settled proof without message body reads
+  ---
+  duration_ms: 6.859083
+  type: 'test'
+  ...
+# Subtest: cleanup is idempotent, stops ledger first, pins OFF config, removes only named temporary key
+ok 3 - cleanup is idempotent, stops ledger first, pins OFF config, removes only named temporary key
+  ---
+  duration_ms: 8.737584
+  type: 'test'
+  ...
+# Subtest: cleanup config drift cannot deploy changed bundle; stop/key cleanup still attempted
+ok 4 - cleanup config drift cannot deploy changed bundle; stop/key cleanup still attempted
+  ---
+  duration_ms: 4.157958
+  type: 'test'
+  ...
+# Subtest: temporary key install requires proof/OFF and passes only stdin
+ok 5 - temporary key install requires proof/OFF and passes only stdin
+  ---
+  duration_ms: 6.910416
+  type: 'test'
+  ...
+# Subtest: activation refuses absent supervisor heartbeat before deploy
+ok 6 - activation refuses absent supervisor heartbeat before deploy
+  ---
+  duration_ms: 6.96475
+  type: 'test'
+  ...
+# Subtest: hidden key helper refuses getpass echo fallback before reading input
+ok 7 - hidden key helper refuses getpass echo fallback before reading input
+  ---
+  duration_ms: 34.827666
+  type: 'test'
+  ...
+# Subtest: emergency stop permits source drift but normal operations refuse it
+ok 8 - emergency stop permits source drift but normal operations refuse it
+  ---
+  duration_ms: 5.208958
+  type: 'test'
+  ...
+# Subtest: source drift suppresses OFF deploy but cannot block grant/key cleanup
+ok 9 - source drift suppresses OFF deploy but cannot block grant/key cleanup
+  ---
+  duration_ms: 7.486833
+  type: 'test'
+  ...
+# Subtest: expired or ownerless key handoff cannot write a secret
+ok 10 - expired or ownerless key handoff cannot write a secret
+  ---
+  duration_ms: 5.206667
+  type: 'test'
+  ...
+# Subtest: key install requires both live shutdown owners
+ok 11 - key install requires both live shutdown owners
+  ---
+  duration_ms: 6.394416
+  type: 'test'
+  ...
+# Subtest: production routes/build hooks/extra resources rejected offline
+ok 12 - production routes/build hooks/extra resources rejected offline
+  ---
+  duration_ms: 4.069583
+  type: 'test'
+  ...
+# Subtest: mocked activation verifies fresh grant and supervisors after deployment
+ok 13 - mocked activation verifies fresh grant and supervisors after deployment
+  ---
+  duration_ms: 9.762166
+  type: 'test'
+  ...
+# Subtest: grant stop during deployment prevents START and triggers cleanup
+ok 14 - grant stop during deployment prevents START and triggers cleanup
+  ---
+  duration_ms: 10.212333
+  type: 'test'
+  ...
+# Subtest: dead supervisor during deployment prevents START and triggers cleanup
+ok 15 - dead supervisor during deployment prevents START and triggers cleanup
+  ---
+  duration_ms: 9.491083
+  type: 'test'
+  ...
+# Subtest: final grant read crossing expiry never reports START
+ok 16 - final grant read crossing expiry never reports START
+  ---
+  duration_ms: 11.056208
+  type: 'test'
+  ...
+1..16
+# tests 16
+# suites 0
+# pass 16
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 201.345583

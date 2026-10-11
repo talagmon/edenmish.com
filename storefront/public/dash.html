@@ -84,6 +84,7 @@ var LIVE = ["to_pickup","to_dropoff"];
 var ACTIVE = ["to_pickup","picked_up","to_dropoff"];
 var NEXT = {paid:"to_pickup",to_pickup:"picked_up",picked_up:"to_dropoff"};
 var NEXTLBL = {paid:"אשר יציאה לאיסוף",to_pickup:"אשר איסוף ✓",picked_up:"אשר יציאה למסירה"};
+var whatsappBookingEnabled = false;
 var orders = [], coupons = [], driverInvitations = [], driverInviteLatest = null, webhookHealth = null, driverDispatch = null, activeOrder = null, podOrderId = null, sigCtx = null, sigDrawing = false, sigHas = false, watchId = null, gpsOrderId = null, gpsState = "idle", activeFilter = "active", currentView = "queue";
 
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
@@ -180,6 +181,7 @@ async function refresh(){
   if(!r.ok) return showTransientError("לא ניתן לרענן כרגע. בדקו את החיבור ונסו שוב.");
   var payload = await r.json();
   orders = payload.orders || [];
+  whatsappBookingEnabled = !!(payload.integrations && (payload.integrations.whatsapp_booking_storage || payload.integrations.whatsapp_booking));
   webhookHealth = payload.integrations && payload.integrations.shopify_webhooks || null;
   try{
     var dr = await api("/api/ops/driver");
@@ -323,10 +325,54 @@ function viewTabsHtml(){
 }
 function headerActionsHtml(){
   return '<div class="flex gap-2 shrink-0">'+
+    (whatsappBookingEnabled ? '<button onclick="showWhatsAppBookings()" class="glass-card px-2.5 py-2 rounded-lg text-secondary" aria-label="בקשות WhatsApp">WhatsApp</button>' : '')+
     '<button onclick="showDriverAccess()" class="glass-card px-2.5 py-2 rounded-lg text-secondary hover:text-primary flex items-center gap-1" title="חיבור אפליקציית נהג" aria-label="חיבור אפליקציית נהג"><span class="material-symbols-outlined">qr_code_2</span><span class="hidden sm:inline text-label-sm font-label-bold">חיבור נהג</span></button>'+
     '<button onclick="refresh()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-primary" title="רענון" aria-label="רענון"><span class="material-symbols-outlined">refresh</span></button>'+
     '<button onclick="logout()" class="glass-card p-2 rounded-lg text-on-surface-variant hover:text-error" title="התנתקות" aria-label="התנתקות"><span class="material-symbols-outlined">logout</span></button>'+
   '</div>';
+}
+async function showWhatsAppBookings(){
+  var existing=document.getElementById("whatsapp-bookings-dialog");
+  if(existing)existing.remove();
+  var overlay=document.createElement("div");
+  overlay.id="whatsapp-bookings-dialog";
+  overlay.className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-xl p-4 overflow-y-auto";
+  overlay.setAttribute("role","dialog");overlay.setAttribute("aria-modal","true");overlay.setAttribute("aria-label","בקשות WhatsApp");
+  var panel=document.createElement("div");panel.className="glass-card rounded-2xl p-stack-lg max-w-md mx-auto space-y-stack-md";overlay.appendChild(panel);
+  var title=document.createElement("h2");title.textContent="בקשות WhatsApp";title.className="text-primary font-headline-md";panel.appendChild(title);
+  var close=document.createElement("button");close.textContent="סגירה";close.className="text-secondary p-2";close.onclick=function(){overlay.remove();};panel.appendChild(close);
+  var hint=document.createElement("p");hint.textContent="לפני מענה ידני יש לעצור אוטומציה. בקשות בטיפול אנושי נשארות מושהות. סגירה מפנה מקום לשיחה חדשה ואינה מבטלת הזמנה.";panel.appendChild(hint);
+  var list=document.createElement("div");list.textContent="טוען…";panel.appendChild(list);document.body.appendChild(overlay);close.focus();
+  overlay.addEventListener("keydown",function(event){if(event.key==="Escape")overlay.remove();});
+  try{
+    var response=await api("/api/ops/whatsapp/bookings");
+    if(!response.ok)throw new Error("load");
+    var result=await response.json();list.textContent="";
+    if(result.disabled)hint.textContent="האוטומציה כבויה. אפשר לבדוק בקשות קיימות ולעצור או לסגור שיחה לפי כללי הטיפול. סגירת שיחה אינה מבטלת הזמנה או קישור תשלום.";
+    var labels={consent:"ממתין להסכמה",collect:"איסוף פרטים",address_review:"אישור כתובות",review:"אישור הצעה",creating:"יצירת הזמנה",booked:"נוצרה הזמנה",handoff:"דורש טיפול אנושי",closed:"נסגרה"};
+    if(!result.bookings.length)list.textContent="אין בקשות כרגע.";
+    result.bookings.forEach(function(row){
+      var card=document.createElement("section");card.className="glass-card rounded-xl p-4 my-3";
+      var heading=document.createElement("h3");heading.textContent=(labels[row.phase]||row.phase)+(row.order_id?" · הזמנה #"+row.order_id:"");card.appendChild(heading);
+      var contact=document.createElement("p");contact.textContent=row.recipient||"פרטי השיחה נמחקו";contact.dir="ltr";card.appendChild(contact);
+      var data={};try{data=JSON.parse(row.state_json).data||{};}catch(e){}
+      var fields={name:"שם",email:"אימייל",pickup:"איסוף",pickup_city:"עיר איסוף",pickup_detail:"פרטי איסוף",dropoff:"מסירה",dropoff_city:"עיר מסירה",dropoff_detail:"פרטי מסירה",when_text:"מועד",notes:"הערות"};
+      Object.keys(fields).forEach(function(key){if(data[key]){var line=document.createElement("p");line.textContent=fields[key]+": "+data[key];card.appendChild(line);}});
+      if(row.phase!=="closed"){
+        var action=document.createElement("button");action.className="text-secondary p-3";
+        action.textContent=row.phase==="handoff"?"סגירת שיחה (לא ביטול הזמנה)":"עצירת אוטומציה וטיפול אנושי";
+        action.onclick=async function(){
+          action.disabled=true;
+          try{
+            var res=await api("/api/ops/whatsapp/bookings/"+encodeURIComponent(row.id)+"/"+(row.phase==="handoff"?"close":"pause"),{method:"POST",body:"{}"});
+            if(!res.ok){action.disabled=false;return showTransientError("לא בוצע שינוי. ייתכן שתהליך פעיל או שניסיון תשלום דורש בירור. ביטול ההזמנה במערכת אינו מבטל קישור תשלום. בדקו את ההזמנה.");}
+            await showWhatsAppBookings();
+          }catch(e){action.disabled=false;showTransientError("לא ניתן לאשר שהפעולה הושלמה. רעננו לפני פעולה נוספת.");}
+        };card.appendChild(action);
+      }
+      list.appendChild(card);
+    });
+  }catch(e){list.textContent="לא ניתן לטעון בקשות. סגרו ונסו שוב לאחר התחברות למרכז הבקרה.";}
 }
 function showDriverAccess(){
   if(document.querySelector(".driver-access-overlay"))return;

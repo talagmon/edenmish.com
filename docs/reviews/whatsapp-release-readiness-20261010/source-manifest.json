@@ -1,0 +1,119 @@
+{
+  "base": "c6e4e5c5023833fab7df7ae6996a4b01e56657cc",
+  "deployed": false,
+  "files": [
+    {
+      "path": "docs/WHATSAPP_BOOKING_MODEL.md",
+      "sha256": "f6fe0be577659215037ab3a28821b834a3b355beb2c113dea237c2dfc1e12d30"
+    },
+    {
+      "path": "docs/WHATSAPP_OPERATIONS.md",
+      "sha256": "416b406414f0d06438c74f0778cd1f875144830c6c56a74b09fdea7c1417854c"
+    },
+    {
+      "path": "docs/WHATSAPP_VOICE_MULTILINGUAL.md",
+      "sha256": "1f0799617af5c5e1177a52a1e539e2ef0992f7c8797b022d3908989123c73860"
+    },
+    {
+      "path": "storefront/public/dash.html",
+      "sha256": "e1280a162264d1de11a08996d0293378fe76c179a9462b7d5393cdb1ffdeb7a4"
+    },
+    {
+      "path": "storefront/tests/frontend.test.js",
+      "sha256": "4ab9d36efe31c2be18c476adeab8794a0a03defa1d7c425ab4f0ee5aff074859"
+    },
+    {
+      "path": "worker/MIGRATIONS.md",
+      "sha256": "d82ae0966f6618616eff37c69c4616a79baa05d98f6574fae66f6bdafc65cd09"
+    },
+    {
+      "path": "worker/README.md",
+      "sha256": "e1de491d77ea17fcaa1390b56ed3494d4b7f4e93ab1d35ec4dedc7f35433260c"
+    },
+    {
+      "path": "worker/migrations/047_whatsapp_review_session.sql",
+      "sha256": "fdd61ea1f4e454134197e8f4e86763691d6e99003138f6aa6a79127473203874"
+    },
+    {
+      "path": "worker/schema.sql",
+      "sha256": "d3ea29116e77a4af61c6d0f09e43e01befc49ecc4ef6912d4a1d539871b8e332"
+    },
+    {
+      "path": "worker/scripts/whatsapp-review-cli.mjs",
+      "sha256": "a56d16f43e8a96f824f73a3f3bd61bd5c409f549668eaf71db8db6ef78579d82"
+    },
+    {
+      "path": "worker/scripts/whatsapp-review-key-entry.py",
+      "sha256": "aa3fcd197b2a975f488219236be1ac69c3a6ca8fb23a71a08d3c0d05b1042e1e"
+    },
+    {
+      "path": "worker/scripts/whatsapp-review-prepare.mjs",
+      "sha256": "1d9d470d1142394cae4ffd19111627aa4e803eaa7073fa679319760915d7f3bb"
+    },
+    {
+      "path": "worker/scripts/whatsapp-review-runner.mjs",
+      "sha256": "17def8be152b63d7dfb961045ae1b926869d3cd05da6ed6b63781dd3220503cb"
+    },
+    {
+      "path": "worker/src/index.js",
+      "sha256": "59c1c6dbc8739806af97b82a43acdce50b7b6ee80c967631bc3f4ff85c2e43fe"
+    },
+    {
+      "path": "worker/src/whatsapp-booking-i18n.js",
+      "sha256": "b0ca7698dbf469a63d81c45aa2c799cdc523763050e6338e9ef32db4a3c1a236"
+    },
+    {
+      "path": "worker/src/whatsapp-booking-store.js",
+      "sha256": "761cd0af89b40e2242476d28b5a4c42c58d93c6fd97684857ba8dd38a3d3fe37"
+    },
+    {
+      "path": "worker/src/whatsapp-booking-twilio.js",
+      "sha256": "88b0e4db6d285dd29a56f829a46b48dc824bc4e2c1b2e982166c596d532fd45c"
+    },
+    {
+      "path": "worker/src/whatsapp-booking-voice-profile.js",
+      "sha256": "9e048e72cb4a79c7986b4070a662b5ccd31c3097f31797aa710311b10814a612"
+    },
+    {
+      "path": "worker/src/whatsapp-booking.js",
+      "sha256": "a32d69f9e86833e6a15d19d0bb8ea7decab59b5e4a39a70896633835301ae64c"
+    },
+    {
+      "path": "worker/src/whatsapp-continuation.js",
+      "sha256": "3a0da446f5725bcd6f773f880fc886926b0865cf3bc7be81e56e4d2ab69199a8"
+    },
+    {
+      "path": "worker/tests/fixtures/review-session-env.js",
+      "sha256": "144fbc7328b4dee3d3b03c3577ea20744dbb680fa4ea4da1424a3042f9b5705b"
+    },
+    {
+      "path": "worker/tests/whatsapp-booking-model.test.js",
+      "sha256": "b89efb16c95e9fa485c956aa2e99693e23d8ba783e3f26d44b1a2b3dae46bbc3"
+    },
+    {
+      "path": "worker/tests/whatsapp-booking-usability.test.js",
+      "sha256": "572de782eaeb02ae6b3bcdeee19c42882cb9b1ff94331114f9ba7e3b8e7ad652"
+    },
+    {
+      "path": "worker/tests/whatsapp-booking.test.js",
+      "sha256": "77169402a035d4b1a7598ab5f9dc15a59ab83bce0b320226a3bfd81e7a2cf59d"
+    },
+    {
+      "path": "worker/tests/whatsapp-review-cli.test.js",
+      "sha256": "82dcbfb3195b66d5453741b0ab790af69d462070331e70ae9a8f8f591a86e4ed"
+    },
+    {
+      "path": "worker/tests/whatsapp-review-runner.test.js",
+      "sha256": "62ad782b2cb92d058e038c90f20ef765cf3d8257e9d529b91d2ab09457bae18b"
+    },
+    {
+      "path": "worker/tests/whatsapp-review-session.test.js",
+      "sha256": "7c70f3e4a2d679dc65be04188049b457605530ed18bbcf2bc7b1ba4d7228763b"
+    },
+    {
+      "path": "worker/tests/whatsapp-review-worker.test.js",
+      "sha256": "b7282ffdc810a34c07455c4fd9a63d904e207e678ffa73d223d3c167ad25fa63"
+    }
+  ],
+  "runtimeSourceSha256": "d4b2aeb5503e6e86536ea7da1c698cd9af4c37bbfd589d1aba4a3a0d4118e6c1"
+}
