@@ -1,3 +1,4 @@
+import { installTestSchema } from './helpers/install-schema.js';
 import {test} from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {fileURLToPath} from 'node:url';import {build} from 'esbuild';import {Miniflare} from 'miniflare';
 const code=`
 import worker from './src/index.js';import {makeSession} from './src/integrations.js';
@@ -44,7 +45,7 @@ export default {async fetch(req,{DB}){
 }};`;
 for(const mode of ['race','rollback','notice'])test('actual Worker entry + D1 v6 '+mode,async t=>{
  const bundle=await build({stdin:{contents:code,resolveDir:fileURLToPath(new URL('..',import.meta.url))},bundle:true,write:false,format:'esm',platform:'browser'});
- const mf=new Miniflare({modules:true,compatibilityDate:'2024-11-01',script:bundle.outputFiles[0].text,d1Databases:['DB'],outboundService:()=>{throw Error('no network');}});t.after(()=>mf.dispose());const db=await mf.getD1Database('DB');await db.exec(readFileSync(new URL('../schema.sql',import.meta.url),'utf8').replace(/--[^\n]*/g,'').replace(/\n/g,' '));const r=await(await mf.dispatchFetch('http://localhost/'+mode)).json();
+ const mf=new Miniflare({modules:true,compatibilityDate:'2024-11-01',script:bundle.outputFiles[0].text,d1Databases:['DB'],outboundService:()=>{throw Error('no network');}});t.after(()=>mf.dispose());const db=await mf.getD1Database('DB');await installTestSchema(db, readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));const r=await(await mf.dispatchFetch('http://localhost/'+mode)).json();
  assert.equal(r.issued,201);assert.equal(r.duplicate,409);assert.equal(r.active,true);assert.equal(r.voice,'off');assert.equal(r.multilingual,'on');assert.equal(r.historyUnchanged,true);assert.equal(r.orders,0);
  if(mode==='race'){assert.equal(r.modelWinners,1);assert.equal(r.inboundWinners,8);assert.equal(r.outboundWinners,1);assert.equal(r.grant.model,1);assert.equal(r.grant.outbound,8);}else if(mode==='rollback'){assert.equal(r.failed,true);assert.equal(r.grant.spent_micros,0);assert.equal(r.grant.model,0);assert.equal(r.grant.lock_id,null);}else{assert.equal(r.translationRejected,true);assert.equal(r.noticeWinners,1);assert.equal(r.canSend,true);assert.equal(r.late,false);assert.equal(r.stopped,false);assert.equal(r.notice.status,'uncertain');}
 });

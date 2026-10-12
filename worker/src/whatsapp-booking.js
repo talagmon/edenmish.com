@@ -105,6 +105,10 @@ function displayAddress(data, key) {
   return city && !data[key].endsWith(city) ? `${data[key]}, ${city}` : data[key];
 }
 function summary(state, phone) {
+  const notice=state.quote?.rehearsal_run_id ? (state.language==='en'?'Real ₪1 payment rehearsal only. No pickup or delivery will occur.\n':'בדיקת תשלום אמיתי בסך ₪1 בלבד. לא יבוצעו איסוף או מסירה.\n') : '';
+  return notice+summaryCore(state,phone);
+}
+function summaryCore(state, phone) {
   const d = state.data;
   const q = state.quote;
   if (['ar','ru','fr'].includes(state.language)) {

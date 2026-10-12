@@ -1572,3 +1572,49 @@ schedule must be verified before readiness; D1 does not autonomously expire rows
 No raw payload is placed on the external queue or returned in diagnostics. Review
 `docs/reviews/whatsapp-full-sol-booking-20261011/durable-execution.md` for privacy,
 crash recovery, bounded wake-ups and provisioning requirements.
+
+### 052_payment_rehearsal_hold.sql
+
+**Purpose:** Adds an immutable payment-rehearsal run marker and closure timestamp.
+Marked canonical orders stay visible and retain real payment records, while DB
+triggers and dispatch filtering block assignment, physical status/proof/GPS writes
+and order deletion. No public rehearsal registration or price override is enabled.
+
+**Future production command — only after explicit release approval and merge,
+before deploying code that reads these columns:**
+```bash
+wrangler d1 execute edenmish --remote --file=./migrations/052_payment_rehearsal_hold.sql
+```
+This command has NOT been run. Use the separately reviewed dedicated staging
+configuration for any approved staging migration; do not infer account/DB IDs.
+Run once; ALTER ADD COLUMN is not idempotent. Fresh DBs use schema.sql only.
+
+**Read-only verification:**
+```sql
+PRAGMA table_info(orders);
+SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'rehearsal_%';
+SELECT id, rehearsal_run_id, rehearsal_created_at, rehearsal_closed_at,
+       payment_status, shopify_order_id
+FROM orders WHERE rehearsal_run_id IS NOT NULL;
+```
+
+## 053 — payment rehearsal single-use capability (local preparation)
+
+Apply after052. Adds immutable authenticated run authority, one-way order/charge
+claims, four-attempt email ceiling and atomic canonical-insert dispatch hold.
+No grant is seeded. The endpoint issues only the frozen configured run with all
+live flags OFF; no customer request can mint it.
+
+Dedicated staging command after explicit deployment approval (not executed):
+`wrangler d1 execute edenmish-staging --remote --file=./migrations/053_payment_rehearsal_capability.sql --config=<reviewed-dedicated-account-config>`.
+A future production migration, if separately approved after merge, is:
+`wrangler d1 execute edenmish --remote --file=./migrations/053_payment_rehearsal_capability.sql`.
+Never use the production command for this rehearsal. Verify:
+`SELECT name FROM sqlite_master WHERE name IN ('payment_rehearsal_runs','rehearsal_claimed_order_hold','rehearsal_run_immutable');`
+and `SELECT COUNT(*) FROM payment_rehearsal_runs;` (zero before approved issuance).
+
+The dedicated database's setup budget blocker remains intact. The separate
+`provisioning/payment-rehearsal-release.sql.template` is an UNAPPROVED proposal for
+$1.25 additional provider allowance. It preserves the original $1.805204 holds and
+setup history. Placeholder CHECK constraints prevent executing it as supplied.
+It is not a production migration or approval to increase a budget.

@@ -1,3 +1,4 @@
+import { installTestSchema } from './helpers/install-schema.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -30,7 +31,7 @@ test('real workerd/D1 Sol grant routes notes, suppresses duplicates and creates 
    return Response.json({model:p.model,service_tier:'default',status:'completed',usage:{input_tokens:871,output_tokens:98,total_tokens:969,input_tokens_details:{cached_tokens:0},output_tokens_details:{reasoning_tokens:0}},output:[{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:JSON.stringify({version:2,intent:'update',fields:[{field:'size',quote:'מפתחות'}],topic:null,clarify_field:null})}]}]});
   }
   assert.equal(new URL(req.url).hostname,'api.twilio.com');sends++;return Response.json({sid:'SM'+String(sends).repeat(32)});
- }});t.after(()=>mf.dispose());const db=await mf.getD1Database('DB');await db.exec(readFileSync(new URL('../schema.sql',import.meta.url),'utf8').replace(/--[^\n]*/g,'').replace(/\n/g,' '));
+ }});t.after(()=>mf.dispose());const db=await mf.getD1Database('DB');await installTestSchema(db, readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));
  const r=await(await mf.dispatchFetch('http://localhost/check')).json();
  assert.equal(r.issued,true);assert.equal(r.active,true);assert.equal(r.expired,false);assert.equal(models,1);assert.equal(sends,4);
  assert.equal(r.grant.model_micros,56320);assert.equal(r.grant.inbound,4);assert.equal(r.grant.outbound,4);assert.equal(r.state.data.notes,'מפתחות');assert.equal(r.orders.n,0);

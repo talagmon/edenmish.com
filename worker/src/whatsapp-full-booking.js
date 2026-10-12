@@ -1,3 +1,4 @@
+import { rehearsalSelected, rehearsalSpec, activeRehearsal, REHEARSAL_ORIGIN } from './payment-rehearsal-capability.js';
 import { BOOKING_DEADLINES } from './whatsapp-booking-deadlines.js';
 import { safeBookingRejection } from './whatsapp-booking-diagnostics.js';
 // Independent full-booking authority. No provider IO, credentials in storage,
@@ -30,10 +31,12 @@ export function fullBookingSpec(env) {
       || raw.recipients.some(phone => typeof phone !== 'string' || !/^\+972[1-9]\d{7,8}$/.test(phone))
       || new Set(raw.recipients).size !== raw.recipients.length) return null;
     const booking = new URL(raw.booking_url), webhook = new URL(raw.webhook_url);
-    if (booking.origin !== raw.booking_url || booking.origin !== (raw.environment==='staging'?'https://staging.edenmish.com':'https://edenmish.com')
+    const isolated=rehearsalSelected(env);
+    if(isolated && (!rehearsalSpec(env)||raw.environment!=='staging'||raw.recipients.length!==1||raw.recipients[0]!==rehearsalSpec(env).phone||raw.starts_at!==rehearsalSpec(env).starts_at||raw.expires_at!==rehearsalSpec(env).expires_at))return null;
+    if (booking.origin !== raw.booking_url || booking.origin !== (isolated?REHEARSAL_ORIGIN:raw.environment==='staging'?'https://staging.edenmish.com':'https://edenmish.com')
       || webhook.protocol !== 'https:' || webhook.username || webhook.password || webhook.search || webhook.hash
       || webhook.pathname !== '/webhooks/twilio/booking'
-      || webhook.hostname !== (raw.environment==='staging'?'ops-staging.edenmish.com':'find.edenmish.com')) return null;
+      || webhook.hostname !== (isolated?new URL(REHEARSAL_ORIGIN).hostname:raw.environment==='staging'?'ops-staging.edenmish.com':'find.edenmish.com')) return null;
     // Canonical property order makes immutable bindings independent of JSON order.
     return Object.fromEntries(FIELDS.map(key => [key,key==='recipients'?[...raw.recipients].sort():['limits','costs'].includes(key)?Object.fromEntries(KINDS.map(kind=>[kind,raw[key][kind]])):raw[key]]));
   } catch { return null; }
@@ -61,6 +64,7 @@ async function hash(value) { return [...new Uint8Array(await crypto.subtle.diges
 async function binding(spec) { return {grant:await hash(spec),root:await hash(rootSpec(spec))}; }
 export async function fullBookingCanProceed(env, now=Date.now) {
   const clock=clockFor(now); now=clock();
+  if(rehearsalSelected(env) && !await activeRehearsal(env,null,now))return false;
   const spec = configuration(env,now,false); if (!spec || !env.DB) return false;
   try {
     const hashes = await binding(spec);

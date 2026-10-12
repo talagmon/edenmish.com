@@ -1,3 +1,4 @@
+import { installTestSchema } from './helpers/install-schema.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -62,7 +63,7 @@ async function run(t,{mode='ok',index=0}={}) {
   assert.equal(url.pathname,'/v1/responses');const p=await req.json();assert.equal(p.model,'gpt-6.1-sol');assert.equal(p.reasoning.effort,'low');assert.equal(p.text.format.schema.properties.version.enum[0],4);assert.equal(p.max_output_tokens,1024);assert.ok(new TextEncoder().encode(JSON.stringify(p)).byteLength<=8192);assert.deepEqual(p.text.format.schema.properties.reply_style.enum,['friendly','brief','guided']);
   assert.equal(JSON.parse(p.input[0].content).customer_message,c.text);
   return Response.json({model:p.model,service_tier:'default',status:'completed',usage:{input_tokens:1300,output_tokens:200,total_tokens:1500,input_tokens_details:{cached_tokens:0},output_tokens_details:{reasoning_tokens:0}},output:[{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:JSON.stringify({version:4,reply_style:'friendly',reply_language:c.language,intent:'update',fields:Object.entries(c.quotes).map(([field,quote])=>({field,quote})),topic:null,clarify_field:null})}]}]});
- }});t.after(()=>mf.dispose());const db=await mf.getD1Database('DB');await db.exec(readFileSync(new URL('../schema.sql',import.meta.url),'utf8').replace(/--[^\n]*/g,'').replace(/\n/g,' '));
+ }});t.after(()=>mf.dispose());const db=await mf.getD1Database('DB');await installTestSchema(db, readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));
  const response=await mf.dispatchFetch('http://localhost/run?mode='+mode+'&case='+index);assert.equal(response.status,200,response.status===200?'':await response.text());return {r:await response.json(),seen,db};
 }
 for(const [index,c] of cases.entries())test(`real Worker voice + Sol + D1: ${c.id}, duplicate suppressed, no order`,async t=>{

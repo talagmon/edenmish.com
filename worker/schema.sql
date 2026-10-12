@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS orders (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   token TEXT NOT NULL UNIQUE,
   source_channel TEXT NOT NULL DEFAULT 'website',
+  rehearsal_run_id TEXT, rehearsal_created_at INTEGER, rehearsal_closed_at INTEGER,
   status TEXT NOT NULL DEFAULT 'received',
   name TEXT, phone TEXT, customer_type TEXT,
   pickup TEXT, pickup_detail TEXT, pickup_lat REAL, pickup_lng REAL, pickup_city TEXT,
@@ -1526,3 +1527,89 @@ WHEN NEW.id!=OLD.id OR NEW.grant_id!=OLD.grant_id OR NEW.conversation_id!=OLD.co
  OR (NEW.payload_cipher IS NOT NULL AND NEW.payload_cipher IS NOT OLD.payload_cipher)
  OR (OLD.state NOT IN ('pending','processing') AND NEW.state!=OLD.state)
 BEGIN SELECT RAISE(ABORT,'booking job cannot rewind'); END;
+
+-- Migration 052: payment-rehearsal dispatch hold and retained audit.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_rehearsal_run ON orders(rehearsal_run_id) WHERE rehearsal_run_id IS NOT NULL;
+CREATE TRIGGER IF NOT EXISTS rehearsal_identity_immutable
+BEFORE UPDATE ON orders WHEN OLD.rehearsal_run_id IS NOT NULL AND (
+ NEW.rehearsal_run_id IS NOT OLD.rehearsal_run_id OR NEW.rehearsal_created_at IS NOT OLD.rehearsal_created_at
+ OR (OLD.rehearsal_closed_at IS NOT NULL AND NEW.rehearsal_closed_at IS NOT OLD.rehearsal_closed_at)
+ OR (NEW.rehearsal_closed_at IS NOT NULL AND NEW.rehearsal_closed_at<OLD.rehearsal_created_at))
+BEGIN SELECT RAISE(ABORT,'rehearsal identity is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS rehearsal_hold_update
+BEFORE UPDATE ON orders WHEN NEW.rehearsal_run_id IS NOT NULL AND (
+ NEW.status IN ('to_pickup','picked_up','to_dropoff','delivered','failed')
+ OR NEW.picked_up_at IS NOT NULL OR NEW.delivered_at IS NOT NULL
+ OR NEW.retained_by_driver IS NOT NULL OR NEW.pending_redelivery_json IS NOT NULL
+ OR NEW.price IS NOT 1 OR NEW.currency IS NOT 'ILS'
+ OR NEW.business_account_id IS NOT NULL OR NEW.wallet_reservation_id IS NOT NULL
+ OR COALESCE(NEW.discount_amount,0)!=0 OR NEW.discount_code IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'payment rehearsal dispatch hold'); END;
+CREATE TRIGGER IF NOT EXISTS rehearsal_hold_insert
+BEFORE INSERT ON orders WHEN NEW.rehearsal_run_id IS NOT NULL
+BEGIN SELECT RAISE(ABORT,'register payment rehearsal after canonical creation'); END;
+CREATE TRIGGER IF NOT EXISTS rehearsal_keep_order
+BEFORE DELETE ON orders WHEN OLD.rehearsal_run_id IS NOT NULL
+BEGIN SELECT RAISE(ABORT,'payment rehearsal audit must be retained'); END;
+CREATE TRIGGER IF NOT EXISTS rehearsal_hold_driver_assignments_insert
+BEFORE INSERT ON driver_assignments WHEN EXISTS(SELECT 1 FROM orders WHERE id=NEW.order_id AND rehearsal_run_id IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'payment rehearsal dispatch hold'); END;
+CREATE TRIGGER IF NOT EXISTS rehearsal_hold_driver_assignments_update
+BEFORE UPDATE ON driver_assignments WHEN EXISTS(SELECT 1 FROM orders WHERE id=NEW.order_id AND rehearsal_run_id IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'payment rehearsal dispatch hold'); END;
+CREATE TRIGGER IF NOT EXISTS rehearsal_hold_driver_route_stops_insert
+BEFORE INSERT ON driver_route_stops WHEN EXISTS(SELECT 1 FROM orders WHERE id=NEW.order_id AND rehearsal_run_id IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'payment rehearsal dispatch hold'); END;
+CREATE TRIGGER IF NOT EXISTS rehearsal_hold_driver_route_stops_update
+BEFORE UPDATE ON driver_route_stops WHEN EXISTS(SELECT 1 FROM orders WHERE id=NEW.order_id AND rehearsal_run_id IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'payment rehearsal dispatch hold'); END;
+CREATE TRIGGER IF NOT EXISTS rehearsal_hold_driver_task_proofs_insert
+BEFORE INSERT ON driver_task_proofs WHEN EXISTS(SELECT 1 FROM orders WHERE id=NEW.order_id AND rehearsal_run_id IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'payment rehearsal dispatch hold'); END;
+CREATE TRIGGER IF NOT EXISTS rehearsal_hold_driver_task_proofs_update
+BEFORE UPDATE ON driver_task_proofs WHEN EXISTS(SELECT 1 FROM orders WHERE id=NEW.order_id AND rehearsal_run_id IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'payment rehearsal dispatch hold'); END;
+CREATE TRIGGER IF NOT EXISTS rehearsal_hold_delivery_proofs_insert
+BEFORE INSERT ON delivery_proofs WHEN EXISTS(SELECT 1 FROM orders WHERE id=NEW.order_id AND rehearsal_run_id IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'payment rehearsal dispatch hold'); END;
+CREATE TRIGGER IF NOT EXISTS rehearsal_hold_delivery_proofs_update
+BEFORE UPDATE ON delivery_proofs WHEN EXISTS(SELECT 1 FROM orders WHERE id=NEW.order_id AND rehearsal_run_id IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'payment rehearsal dispatch hold'); END;
+CREATE TRIGGER IF NOT EXISTS rehearsal_hold_gps_pings_insert
+BEFORE INSERT ON gps_pings WHEN EXISTS(SELECT 1 FROM orders WHERE id=NEW.order_id AND rehearsal_run_id IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'payment rehearsal dispatch hold'); END;
+CREATE TRIGGER IF NOT EXISTS rehearsal_hold_gps_pings_update
+BEFORE UPDATE ON gps_pings WHEN EXISTS(SELECT 1 FROM orders WHERE id=NEW.order_id AND rehearsal_run_id IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'payment rehearsal dispatch hold'); END;
+
+-- Migration 053: single-use payment rehearsal capability
+-- One immutable, authenticated rehearsal authority. Never populated by customer traffic.
+CREATE TABLE payment_rehearsal_runs (
+ id TEXT PRIMARY KEY, config_json TEXT NOT NULL, starts_at INTEGER NOT NULL,
+ expires_at INTEGER NOT NULL CHECK(expires_at>starts_at AND expires_at-starts_at<=1800000),
+ created_at INTEGER NOT NULL, stopped_at INTEGER, order_token TEXT UNIQUE,
+ charge_attempt_at INTEGER, email_attempts INTEGER NOT NULL DEFAULT 0 CHECK(email_attempts BETWEEN 0 AND 4)
+);
+CREATE TRIGGER rehearsal_run_immutable BEFORE UPDATE ON payment_rehearsal_runs
+WHEN NEW.id IS NOT OLD.id OR NEW.config_json IS NOT OLD.config_json
+ OR NEW.starts_at IS NOT OLD.starts_at OR NEW.expires_at IS NOT OLD.expires_at OR NEW.created_at IS NOT OLD.created_at
+ OR (OLD.stopped_at IS NOT NULL AND NEW.stopped_at IS NOT OLD.stopped_at)
+ OR (OLD.order_token IS NOT NULL AND NEW.order_token IS NOT OLD.order_token)
+ OR (OLD.charge_attempt_at IS NOT NULL AND NEW.charge_attempt_at IS NOT OLD.charge_attempt_at)
+ OR NEW.email_attempts<OLD.email_attempts
+BEGIN SELECT RAISE(ABORT,'rehearsal run is immutable'); END;
+CREATE TRIGGER rehearsal_run_keep BEFORE DELETE ON payment_rehearsal_runs
+BEGIN SELECT RAISE(ABORT,'rehearsal run audit must be retained'); END;
+-- Hold installation is in the SAME SQLite statement as canonical order INSERT.
+-- No interval in which a committed rehearsal order is unmarked exists.
+CREATE TRIGGER rehearsal_claimed_order_hold AFTER INSERT ON orders
+WHEN EXISTS(SELECT 1 FROM payment_rehearsal_runs WHERE order_token=NEW.token)
+BEGIN
+ SELECT RAISE(ABORT,'rehearsal order ineligible') WHERE NEW.source_channel IS NOT 'whatsapp'
+  OR NEW.status IS NOT 'priced' OR NEW.payment_status IS NOT 'none'
+  OR EXISTS(SELECT 1 FROM payment_rehearsal_runs WHERE order_token=NEW.token
+    AND (stopped_at IS NOT NULL OR NEW.created_at<starts_at OR NEW.created_at>=expires_at));
+ UPDATE orders SET rehearsal_run_id=(SELECT id FROM payment_rehearsal_runs WHERE order_token=NEW.token),
+  rehearsal_created_at=NEW.created_at WHERE id=NEW.id;
+ INSERT INTO status_history(order_id,status,at,note) VALUES(NEW.id,NEW.status,NEW.created_at,'payment_rehearsal_registered:capability');
+END;

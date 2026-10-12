@@ -1,3 +1,4 @@
+import { installTestSchema } from './helpers/install-schema.js';
 import {test} from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {fileURLToPath} from 'node:url';import {build} from 'esbuild';import {Miniflare} from 'miniflare';
 test('voice session quotas, concurrent duplicate, immutable history and exact expiry',async t=>{
 const bundle=await build({stdin:{contents:`
@@ -18,6 +19,6 @@ for(const kind of ['inbound','outbound','address','model']){counts[kind]??=0;for
 let audioCalls=0;for(let i=0;i<8;i++)try{await DB.prepare('INSERT INTO whatsapp_voice_attempts(event_key,grant_id,created_at) VALUES(?,?,?)').bind('event'+i,e.WHATSAPP_BOOKING_VOICE_GRANT_ID,now).run();audioCalls++;}catch{}
 const grant=await DB.prepare('SELECT * FROM whatsapp_continuation_voice_grants').first();
 return Response.json({issued,duplicate,frozen,ready,audioReady,counts,audioCalls,grant,expired:await continuationCanProceed(e,now+900000),audioExpired:await voiceCanProceed(e,now+900000),total:grant.spent_micros+280000});}};`,resolveDir:fileURLToPath(new URL('..',import.meta.url))},bundle:true,write:false,format:'esm',platform:'browser'});
-const mf=new Miniflare({modules:true,compatibilityDate:'2024-11-01',script:bundle.outputFiles[0].text,d1Databases:['DB'],outboundService:()=>{throw Error('No paid requests');}});t.after(()=>mf.dispose());const db=await mf.getD1Database('DB');await db.exec(readFileSync(new URL('../schema.sql',import.meta.url),'utf8').replace(/--[^\n]*/g,'').replace(/\n/g,' '));
+const mf=new Miniflare({modules:true,compatibilityDate:'2024-11-01',script:bundle.outputFiles[0].text,d1Databases:['DB'],outboundService:()=>{throw Error('No paid requests');}});t.after(()=>mf.dispose());const db=await mf.getD1Database('DB');await installTestSchema(db, readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));
 const r=await(await mf.dispatchFetch('http://localhost/check')).json();assert.equal(r.issued,true);assert.equal(r.duplicate,false);assert.equal(r.frozen,true);assert.equal(r.ready,true);assert.equal(r.audioReady,true);assert.deepEqual(r.counts,{inbound:24,outbound:24,address:4,model:12});assert.equal(r.audioCalls,6);assert.equal(r.expired,false);assert.equal(r.audioExpired,false);assert.equal(r.total,1602240);assert.ok(r.total<=1650000);assert.equal(r.grant.historical_micros,735124);
 });

@@ -1,3 +1,4 @@
+import { createRehearsalDraftOrder } from './payment-rehearsal-shopify.js';
 // Payment boundary — single place where the charge mechanism lives.
 //
 // Today (Path 1): Shopify Draft Order → customer pays in Shopify checkout
@@ -35,7 +36,9 @@ export async function createCharge(env, order, priceNis, options = {}) {
   }
 
   // Immediate capture via Shopify Draft Order + PayPlus app.
-  const draft = options.purpose === 'redelivery'
+  const draft = order.rehearsal_run_id
+    ? await createRehearsalDraftOrder(env, order, priceNis, options)
+    : options.purpose === 'redelivery'
     ? await createRedeliveryDraftOrder(env, order, priceNis, options.reference)
     : await createDraftOrder(env, order, priceNis);
   if (!draft) return null;

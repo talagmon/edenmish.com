@@ -183,6 +183,7 @@ export function buildDispatchTasks(orders) {
   const blockedOrderIds = [];
   const pickupGroups = new Map();
   for (const order of orders || []) {
+    if (order.rehearsal_run_id) continue;
     const result = routeTasksForOrder(order);
     tasks.push(...result.tasks);
     if (result.blocked) blockedOrderIds.push(Number(order.id));
@@ -426,6 +427,7 @@ async function eligibleOrders(DB, shiftId = null, now = Date.now()) {
     WHERE (status IN ('paid','to_pickup','picked_up','to_dropoff')
         OR (status = 'failed'
           AND retained_by_driver IN ('return_to_origin','hold_for_redelivery','redelivery')))
+      AND rehearsal_run_id IS NULL
       AND (status NOT IN ('paid','to_pickup')
         OR when_date IS NULL OR TRIM(when_date) = '' OR when_date <= ?)
       AND (? IS NULL OR NOT EXISTS (

@@ -628,3 +628,37 @@ from worker/, following050 and target verification. Verify051 tables/guards and 
 periodic recovery/cleanup schedule before readiness. Review queue settings,
 additional infrastructure costs, ciphertext retention and independent shutdown
 in `docs/reviews/whatsapp-full-sol-booking-20261011/durable-execution.md`.
+
+### Payment rehearsal marker and dispatch hold (local preparation)
+
+Migration052 must run after an approved merge and before deploying this code.
+Future production command: `wrangler d1 execute edenmish --remote --file=./migrations/052_payment_rehearsal_hold.sql`.
+No remote migration or production deployment is authorized by this note.
+
+The internal `markPaymentRehearsal` helper marks an unpaid canonical1ILS order
+before Draft Order creation. It has no public/API registration endpoint. Existing
+customer input cannot enable it. A marked order receives normal signed payment
+reconciliation and remains in Ops with a Hebrew test/no-delivery badge. Automatic
+routing and all physical operations remain held, including direct DB guards.
+Authenticated Ops closure archives only the rehearsal presentation; paid state,
+Shopify references and accounting remain. The Ops board excludes tests from its
+delivery counters and keeps a closed-test audit section.
+
+This is not yet an enabled real-payment rehearsal: dedicated Shopify product and
+exact gross calculation, an authenticated bounded creation capability, verified
+notification recipients, provider/fee allowance and driver identity/device are
+separate prerequisites. There is no dispatch-hold release in this release. Driver
+handset preview/push and any simulated execution need their own reviewed path;
+never generate physical-delivery timestamps for a payment-only rehearsal.
+
+### Protected ₪1 rehearsal — locally prepared, no deployment authorization
+
+See `docs/PAYMENT_REHEARSAL.md` from the repository root. Requires migrations052
+and053 after merge and before separately approved runtime deployment. Public
+production behavior is unchanged when PAYMENT_REHEARSAL_CONFIG is absent.
+A selected rehearsal configuration admits only the dedicated private host and
+reviewed channel/Ops/tracking endpoints; removing it is not a supported activation
+strategy. Shopify webhook auto-registration is OFF; the separately approved
+callback is `/webhooks/shopify/rehearsal`.
+No driver credentials, push credentials, generic notification templates, wallets,
+manual-paid actions, production routes or physical statuses are needed for this run.

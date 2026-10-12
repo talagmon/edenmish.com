@@ -1,3 +1,4 @@
+import { installTestSchema } from './helpers/install-schema.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -82,7 +83,7 @@ for(const path of ['/failure-notice','/proposal-rejection'])test(path+' real wor
   if(sends===4)assert.equal(new URLSearchParams(await request.text()).get('Body'),'לא הצלחתי לעבד את הפרטים. האוטומציה נעצרה. אפשר לפנות לנציג להמשך.');
   return Response.json({sid:'SM'+String(sends).repeat(32)});
  }});t.after(()=>mf.dispose());const db=await mf.getD1Database('DB');
- await db.exec(readFileSync(new URL('../schema.sql',import.meta.url),'utf8').replace(/--[^\n]*/g,'').replace(/\n/g,' '));
+ await installTestSchema(db, readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));
  const r=await(await mf.dispatchFetch('http://localhost'+path)).json();
  assert.equal(count,1);assert.equal(generation,1);assert.equal(sends,4);assert.equal(r.grant.stopped_reason,'model_uncertain');
  assert.equal(r.grant.spent_micros,116400);assert.equal(r.grant.historical_micros+r.grant.fee_cushion_micros+r.grant.spent_micros,916400);

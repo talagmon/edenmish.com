@@ -1,3 +1,4 @@
+import { installTestSchema } from './helpers/install-schema.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -44,7 +45,7 @@ export default {async fetch(req,{DB}){
 test('actual Workerd/D1 full grant, trigger quota race and slow-turn correction fencing without network',async t=>{
  const bundle=await build({stdin:{contents:code,resolveDir:fileURLToPath(new URL('..',import.meta.url))},bundle:true,write:false,format:'esm',platform:'browser'});
  const mf=new Miniflare({modules:true,compatibilityDate:'2024-11-01',script:bundle.outputFiles[0].text,d1Databases:['DB'],outboundService:()=>{throw Error('Unexpected network');}});t.after(()=>mf.dispose());
- const db=await mf.getD1Database('DB');await db.exec(readFileSync(new URL('../schema.sql',import.meta.url),'utf8').replace(/--[^\n]*/g,'').replace(/\n/g,' '));
+ const db=await mf.getD1Database('DB');await installTestSchema(db, readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));
  const response=await mf.dispatchFetch('http://localhost/');const body=await response.text();assert.equal(response.status,200,body);const result=JSON.parse(body);
  assert.equal(result.unauthorized,401,body);assert.equal(result.issued,201);assert.equal(result.winners,1);
  assert.equal(result.newer.busy,true);assert.equal(result.stale.superseded,true);assert.equal(result.state.data.size,undefined);
@@ -77,7 +78,7 @@ test('actual Workerd queue binding wakes the durable consumer and sends once fro
   assert.equal(req.method,'POST');assert.match(req.url,/api\.twilio\.com.*Messages\.json$/);sends++;
   return Response.json({sid:'SM'+'8'.repeat(32)});
  }});t.after(()=>mf.dispose());
- const db=await mf.getD1Database('DB');await db.exec(readFileSync(new URL('../schema.sql',import.meta.url),'utf8').replace(/--[^\n]*/g,'').replace(/\n/g,' '));
+ const db=await mf.getD1Database('DB');await installTestSchema(db, readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));
  const accepted=await(await mf.dispatchFetch('http://localhost/')).json();assert.equal(accepted.issued,true);assert.equal(accepted.status,200);
  let state;
  for(let i=0;i<100;i++){state=await(await mf.dispatchFetch('http://localhost/status')).json();if(state.jobs[0]?.state==='done')break;await new Promise(resolve=>setTimeout(resolve,20));}
@@ -107,7 +108,7 @@ export default {async fetch(req,{DB}){
 test('actual Workerd/D1 minute maintenance expires ciphertext, cascades safe metadata and preserves uncertain invoice with DB alone',async t=>{
  const bundle=await build({stdin:{contents:maintenanceCode,resolveDir:fileURLToPath(new URL('..',import.meta.url))},bundle:true,write:false,format:'esm',platform:'browser'});
  const mf=new Miniflare({modules:true,compatibilityDate:'2024-11-01',script:bundle.outputFiles[0].text,d1Databases:['DB'],outboundService:()=>{assert.fail('maintenance must never call any provider');}});t.after(()=>mf.dispose());
- const db=await mf.getD1Database('DB');await db.exec(readFileSync(new URL('../schema.sql',import.meta.url),'utf8').replace(/--[^\n]*/g,'').replace(/\n/g,' '));
+ const db=await mf.getD1Database('DB');await installTestSchema(db, readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));
  const response=await mf.dispatchFetch('http://localhost/');const text=await response.text();assert.equal(response.status,200,text);const result=JSON.parse(text);
  assert.deepEqual(result.before,result.after);assert.equal(result.before.held_micros,10300);assert.equal(result.jobs,0);assert.equal(result.ingress,0);
  assert.equal(result.conversations.length,1);const row=result.conversations[0];assert.equal(row.id,'uncertain');assert.equal(row.recipient,null);assert.deepEqual(JSON.parse(row.state_json),{phase:'handoff',data:{}});assert.equal(row.sender_key,'hash-retained');assert.equal(row.order_token,'invoice-token-retained');assert.ok(row.checkout_started_at);assert.deepEqual(result.fences,[{conversation_id:'uncertain'}]);

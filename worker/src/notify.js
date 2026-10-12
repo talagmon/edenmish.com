@@ -1,3 +1,4 @@
+import { rehearsalSelected, activeRehearsal } from './payment-rehearsal-capability.js';
 // Notification layer (PR8). Wraps the existing sendEmail with a durable audit
 // trail (D1 `notifications` table) and is the future home for WhatsApp/SMS.
 //
@@ -20,6 +21,18 @@ const sanitizeError = (e) => {
 // notifyEmail(env, db, { orderId, template, recipient, subject, html, text })
 // Returns { ok: boolean, skipped?: boolean, id?: number|null, error?: string }.
 export async function notifyEmail(env, db, { orderId, template, recipient, subject, html, text }) {
+  if(rehearsalSelected(env)) {
+    try {
+      const r=await activeRehearsal(env);
+      if(!r || !env.SENDGRID_API_KEY || ![r.email,r.ops_email].includes(recipient)
+        || !['ops_new_order','customer_payment_confirmation','ops_payment_received','customer_otp'].includes(template))return {ok:false,skipped:true};
+      const claim=await db.prepare(`UPDATE payment_rehearsal_runs SET email_attempts=email_attempts+1 WHERE id=? AND stopped_at IS NULL AND expires_at>? AND email_attempts<4
+        AND EXISTS(SELECT 1 FROM orders WHERE id=? AND rehearsal_run_id=payment_rehearsal_runs.id AND rehearsal_closed_at IS NULL) RETURNING id`).bind(r.run_id,Date.now(),orderId).first();
+      if(!claim)return {ok:false,skipped:true};
+      subject='[בדיקת תשלום — ללא משלוח] '+subject;
+      html='<p dir="rtl">בדיקת תשלום אמיתי בלבד. אין לבצע איסוף או מסירה.</p>'+html;
+    } catch {return {ok:false,skipped:true};}
+  }
   const configuredSubject = emailSubjectForEnv(env, subject);
   // 1. Best-effort audit row (pending). Never blocks the send if D1 hiccups.
   let id = null;
@@ -65,6 +78,7 @@ export async function notifyEmail(env, db, { orderId, template, recipient, subje
 // Approved-template WhatsApp send. Recipient values are never retained in the
 // audit table, and the supported classes have no dynamic provider components.
 export async function notifyWhatsApp(env, db, { orderId, messageClass, recipient }) {
+  if(rehearsalSelected(env)) return {ok:false,skipped:true,error:'rehearsal_templates_disabled'};
   let id = null;
   try {
     id = await createNotificationAttempt(db, {

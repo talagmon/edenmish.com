@@ -1,0 +1,31 @@
+-- PREPARED ONLY. Not executable until an explicitly approved provider-budget increase
+-- and the future immutable full-grant root binding are substituted by the guarded helper.
+-- Dedicated account ff2cbcb36e2b4be21324d46455825824 / DB c0f226e7-74ba-48ee-b6b1-a9df6efb7449 only.
+-- Apply atomically while runtime flags OFF, incoming callback blank and queue paused.
+-- Never change/delete eden_setup_authority/accounting or closed pilot records.
+CREATE TABLE eden_rehearsal_release_approval (
+ id INTEGER PRIMARY KEY CHECK(id=1),
+ approval_sha256 TEXT NOT NULL CHECK(length(approval_sha256)=64 AND approval_sha256 NOT GLOB '*[^0-9a-f]*'),
+ root_binding TEXT NOT NULL CHECK(length(root_binding)=64 AND root_binding NOT GLOB '*[^0-9a-f]*'),
+ prior_cap_micros INTEGER NOT NULL CHECK(prior_cap_micros=2000000),
+ retained_micros INTEGER NOT NULL CHECK(retained_micros=1805204),
+ additional_cap_micros INTEGER NOT NULL CHECK(additional_cap_micros=1250000),
+ setup_verified INTEGER NOT NULL CHECK(setup_verified=1)
+);
+INSERT INTO eden_rehearsal_release_approval
+ SELECT 1,'__APPROVAL_SHA256__','__APPROVED_ROOT_BINDING_SHA256__',2000000,1805204,1250000,
+  (SELECT count(*) FROM eden_setup_authority WHERE id=1 AND provider_cap_micros=2000000 AND provider_retained_micros=1805204)
+   * (SELECT count(*)=0 FROM whatsapp_full_booking_budgets);
+CREATE TRIGGER eden_rehearsal_release_no_update BEFORE UPDATE ON eden_rehearsal_release_approval
+BEGIN SELECT RAISE(ABORT,'rehearsal release approval immutable'); END;
+CREATE TRIGGER eden_rehearsal_release_no_delete BEFORE DELETE ON eden_rehearsal_release_approval
+BEGIN SELECT RAISE(ABORT,'rehearsal release approval retained'); END;
+CREATE TRIGGER eden_rehearsal_release_no_replace BEFORE INSERT ON eden_rehearsal_release_approval
+WHEN EXISTS(SELECT 1 FROM eden_rehearsal_release_approval)
+BEGIN SELECT RAISE(ABORT,'rehearsal release approval exists'); END;
+DROP TRIGGER eden_setup_block_full_budget;
+CREATE TRIGGER eden_setup_block_full_budget BEFORE INSERT ON whatsapp_full_booking_budgets
+WHEN NEW.environment IS NOT 'staging' OR NEW.budget_id IS NOT 'edenmish-rehearsal-budget-20261012-a'
+ OR NEW.cap_micros IS NOT 3250000 OR NEW.retained_micros IS NOT 1805204
+ OR NEW.binding_hash IS NOT (SELECT root_binding FROM eden_rehearsal_release_approval WHERE id=1)
+BEGIN SELECT RAISE(ABORT,'provider budget outside approved rehearsal carry-forward'); END;
