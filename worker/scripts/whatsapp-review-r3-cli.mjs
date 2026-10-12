@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Guarded operator CLI. No automatic activation, grant issuance or chat sends.
+import {stageTimings} from '../src/whatsapp-stage-timing.js';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync,writeFileSync,readdirSync,statSync,mkdirSync} from 'node:fs';
 import {resolve,dirname,join} from 'node:path';import {fileURLToPath} from 'node:url';import {execFile} from 'node:child_process';import {promisify} from 'node:util';
@@ -46,19 +47,26 @@ export function configSafe(c,a,{off=false,cleanup=false}={}){
  if(cleanup&&(v.WHATSAPP_BOOKING_CONTINUATION_START||v.WHATSAPP_BOOKING_CONTINUATION_END))throw Error('cleanup_window_must_be_blank');
 }
 const sqlValue=v=>v===null?'NULL':typeof v==='number'&&Number.isSafeInteger(v)?String(v):"'"+String(v).replaceAll("'","''")+"'";
+export async function parallelRemoteReads(metadata,historyHash){
+ const results=await Promise.allSettled([Promise.resolve().then(metadata),Promise.resolve().then(historyHash)]);
+ if(results.some(r=>r.status!=='fulfilled'))throw Error('remote_reads_unverified');
+ return results.map(r=>r.value);
+}
 export function createAdapter(a,hash,{command=exec,fetchImpl=globalThis.fetch,isAlive=pid=>process.kill(pid,0)}={}){
+ const timings=stageTimings();
  const cfg=privateJson(a.configPath);configSafe(cfg,a);if(sha256(readFileSync(a.configPath))!==a.configSha256)throw Error('off_config_pin_required');
  const env={PATH:process.env.PATH,HOME:process.env.HOME,TMPDIR:process.env.TMPDIR||'/tmp',WRANGLER_SEND_METRICS:'false',WRANGLER_WRITE_LOGS:'false',CI:'true'};
  async function wrangler(args,{json=true,config=a.configPath,input}={}){try{const r=await command(process.execPath,[join(worker,'node_modules/wrangler/bin/wrangler.js'),...args,'--config',config,...(json?['--json']:[])],{cwd:worker,env,timeout:60000,maxBuffer:4000000,...(input?{input}:{})});return json?JSON.parse(r.stdout):true;}catch{throw Error('staging_command_unconfirmed');}}
  async function sql(command){const rows=await wrangler(['d1','execute','edenmish-staging','--remote','--command',command]);if(!Array.isArray(rows)||rows.some(r=>r.success===false))throw Error('ledger_unconfirmed');return rows;}
- async function metadata(){const list=await wrangler(['deployments','list','--name',CONTRACT.worker]);const deployments=Array.isArray(list)?list:list.deployments;const latest=deployments?.sort((a,b)=>b.created_on.localeCompare(a.created_on))[0];if(latest?.versions?.length!==1||latest.versions[0].percentage!==100)throw Error('deployment_unverified');const version=await wrangler(['versions','view',latest.versions[0].version_id,'--name',CONTRACT.worker]);const bindings=version.resources?.bindings;if(!Array.isArray(bindings))throw Error('bindings_unverified');const vars=Object.fromEntries(bindings.filter(b=>b.type==='plain_text').map(b=>[b.name,b.text]));return {vars,secretNames:bindings.filter(b=>b.type==='secret_text').map(b=>b.name),keyPresent:bindings.some(b=>b.name==='WHATSAPP_BOOKING_OPENAI_API_KEY'),database:bindings.find(b=>b.name==='DB')?.id,version:version.id};}
- async function historyHash(){const results=await sql(histories.map(t=>`SELECT * FROM ${t} ORDER BY 1;`).join('\n'));if(results.length!==histories.length||results.some(r=>!Array.isArray(r.results)))throw Error('history_incomplete');return sha256(JSON.stringify(results.map(r=>r.results)));}
+ async function metadata(){const list=await timings.measure('deployments_list',()=>wrangler(['deployments','list','--name',CONTRACT.worker]));const deployments=Array.isArray(list)?list:list.deployments;const latest=deployments?.sort((a,b)=>b.created_on.localeCompare(a.created_on))[0];if(latest?.versions?.length!==1||latest.versions[0].percentage!==100)throw Error('deployment_unverified');const version=await timings.measure('version_view',()=>wrangler(['versions','view',latest.versions[0].version_id,'--name',CONTRACT.worker]));const bindings=version.resources?.bindings;if(!Array.isArray(bindings))throw Error('bindings_unverified');const vars=Object.fromEntries(bindings.filter(b=>b.type==='plain_text').map(b=>[b.name,b.text]));return {vars,secretNames:bindings.filter(b=>b.type==='secret_text').map(b=>b.name),keyPresent:bindings.some(b=>b.name==='WHATSAPP_BOOKING_OPENAI_API_KEY'),database:bindings.find(b=>b.name==='DB')?.id,version:version.id};}
+ async function historyHash(){const results=await timings.measure('history_read',()=>sql(histories.map(t=>`SELECT * FROM ${t} ORDER BY 1;`).join('\n')));if(results.length!==histories.length||results.some(r=>!Array.isArray(r.results)))throw Error('history_incomplete');return timings.measure('history_hash',()=>sha256(JSON.stringify(results.map(r=>r.results))));}
  async function verifyRemote({off=false,keyAbsent=false,window=false}={}){
-  if(sourceFingerprint()!==hash)throw Error('source_changed');const m=await metadata(),v=m.vars;
+  if(await timings.measure('source_fingerprint',()=>sourceFingerprint())!==hash)throw Error('source_changed');
+  const [m,historical]=await parallelRemoteReads(metadata,historyHash),v=m.vars;
   configSafe({...cfg,vars:v},a,{off});verifyVariableCapacity(v,m.secretNames);
   if(m.database!==CONTRACT.database||v.WHATSAPP_BOOKING_REVIEW_SOURCE_SHA256!==hash||v.WHATSAPP_BOOKING_CONTINUATION_VERSION!=='8'||v.WHATSAPP_BOOKING_REVIEW_AUTHORIZATION!=='release-smoke-022064-v3'||v.WHATSAPP_BOOKING_MULTILINGUAL_ENABLED!=='on'||v.WHATSAPP_BOOKING_MODEL!=='gpt-6.1-sol'||v.WHATSAPP_BOOKING_REASONING_EFFORT!=='low'||keyAbsent&&m.keyPresent)throw Error('remote_scope_unverified');
   if(window&&(Date.parse(v.WHATSAPP_BOOKING_CONTINUATION_START)!==a.startsAt||Date.parse(v.WHATSAPP_BOOKING_CONTINUATION_END)!==a.endsAt||flags.some(k=>!['on','off'].includes(v[k]))||new Set(flags.map(k=>v[k])).size!==1))throw Error('remote_window_unverified');
-  if(await historyHash()!==a.priorHistorySha256)throw Error('history_changed');return m;
+  if(historical!==a.priorHistorySha256)throw Error('history_changed');return m;
  }
  function owners(){const now=Date.now(),pids=[];for(const kind of ['primary','watchdog']){const h=privateJson(join(a.stateDirectory,kind+'.json'));if(h.kind!==kind||h.sourceSha256!==hash||h.grantId!==CONTRACT.grantId||h.endsAt!==a.endsAt||h.at>now||now-h.at>15000||h.pid===process.pid||!Number.isSafeInteger(h.pid)||h.pid<=0)throw Error('supervisor_unverified');isAlive(h.pid);pids.push(h.pid);}if(new Set(pids).size!==2)throw Error('independent_watchdog_required');}
  async function accountVerified(){const m=await metadata();verifyVariableCapacity(cfg.vars,m.secretNames);if(m.database!==CONTRACT.database||await historyHash()!==a.priorHistorySha256)throw Error('account_history_unverified');return m;}
@@ -78,7 +86,7 @@ export function createAdapter(a,hash,{command=exec,fetchImpl=globalThis.fetch,is
   try{const m=await metadata();results.keyAbsent=!m.keyPresent;verifyIsolation(m.vars);results.flagsOff=flags.every(k=>m.vars[k]==='off')&&m.vars.AUTO_DRIVER_DISPATCH==='off'&&m.vars.WHATSAPP_BOOKING_VOICE_PROFILE==='off'&&!m.vars.WHATSAPP_BOOKING_CONTINUATION_START&&!m.vars.WHATSAPP_BOOKING_CONTINUATION_END;}catch{}
   return results;
  }
- return {fetch:fetchImpl,metadata,historyHash,cleanup,
+ return {fetch:fetchImpl,metadata,historyHash,cleanup,timings:()=>timings.snapshot(),
   deployOff:async()=>{configSafe(cfg,a,{off:true});if(sourceFingerprint()!==hash)throw Error('source_changed');await accountVerified();await wrangler(['deploy'],{json:false});await verifyRemote({off:true,keyAbsent:true});},
   migrate:async()=>{if(sourceFingerprint()!==hash)throw Error('source_changed');const m=await accountVerified();if(flags.some(k=>m.vars[k]!=='off'))throw Error('off_required');await wrangler(['d1','execute','edenmish-staging','--remote','--file',join(worker,'migrations/049_whatsapp_review_r3_session.sql')],{json:false});await verifyMigration();await accountVerified();},
   installKey:async key=>{if(Date.now()>=a.startsAt)throw Error('key_install_window');owners();await verifyRemote({off:true,keyAbsent:true,window:true});const rows=await sql(`SELECT status,source_sha256,expires_at FROM whatsapp_review_r3_preflight WHERE id=${sqlValue(CONTRACT.id)};`);const p=rows[0]?.results?.[0];if(p?.status!=='matched'||p.source_sha256!==hash||p.expires_at<a.endsAt||!/^sk-[A-Za-z0-9_-]{12,}$/.test(key||''))throw Error('key_install_gate');try{if(Date.now()>=a.startsAt)throw Error('key_install_window');owners();await wrangler(['secret','put','WHATSAPP_BOOKING_OPENAI_API_KEY','--name',CONTRACT.worker],{json:false,input:key+'\n'});if(!(await metadata()).keyPresent||Date.now()>=a.startsAt)throw Error('key_install_unverified');owners();}catch{await cleanup('setup_failed');throw Error('key_install_unverified');}},

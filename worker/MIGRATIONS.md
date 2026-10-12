@@ -1493,3 +1493,82 @@ production as part of this task):
 `npx wrangler d1 execute edenmish --remote --file=./migrations/049_whatsapp_review_r3_session.sql`.
 After any separately approved future merge/deployment, operator must evaluate
 migration applicability and apply applicable migrations before deploying runtime.
+
+
+## 050 — Independent full WhatsApp booking authority
+
+`050_whatsapp_full_booking.sql` creates the disabled-by-default full-booking budget
+root, immutable grants, retained operation holds, and transient conversation
+fence/ingress tables. It issues no grant and changes no activation flags. Fresh
+`schema.sql` includes the same definitions; existing databases need migration 050
+before code relies on `WHATSAPP_BOOKING_FULL_SCHEMA_READY=on`. Follow the migration
+order above and verify the target environment. Do not apply the fresh schema to
+an existing database.
+
+After a separately approved merge/deployment, the production operator command
+from `worker/` is:
+
+```bash
+wrangler d1 execute edenmish --remote --file=./migrations/050_whatsapp_full_booking.sql
+```
+
+This is documentation only; the local implementation task authorizes no remote
+migration or deployment. Staging requires its explicitly approved database/config
+selection. Before activation, verify:
+
+```sql
+SELECT name FROM sqlite_master WHERE type='table' AND name IN (
+ 'whatsapp_full_booking_budgets','whatsapp_full_booking_grants',
+ 'whatsapp_full_booking_operations','whatsapp_booking_full_fences',
+ 'whatsapp_booking_full_ingress'
+) ORDER BY name;
+SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'whatsapp_full_%' ORDER BY name;
+SELECT COUNT(*) AS issued_grants FROM whatsapp_full_booking_grants;
+```
+
+All five tables and budget/grant/hold/fence protection triggers must exist; a
+fresh migration leaves `issued_grants=0`. Stop/expiry never refund root allocations
+or operation holds. Root/grant/operation tables deliberately prohibit deletion;
+conversation retention may remove only the transient fence/ingress rows. No
+customer message bodies, keys or provider raw output belong in this ledger.
+
+
+Migration050's transient ingress rows also carry `deadline_at`, a positive epoch
+millisecond deadline no later than first receipt (`created_at`) plus 30000ms.
+The existing immutable-ingress trigger preserves it across retries. An already
+elapsed grant/session deadline is allowed to be persisted so runtime fails
+closed. This field is included in the unactivated local migration and fresh
+schema; no deployed legacy grant or history row is rewritten by this change.
+
+## 051 — Durable WhatsApp admission and recoverable execution
+
+`051_whatsapp_durable_booking.sql` adds an encrypted, bounded transient inbox and
+its immutable identity/deadline guard. Apply after050 and before enabling the
+new `execution: durable-v1` profile. It provisions no queue, schedule, key or grant.
+Fresh `schema.sql` already includes it. Do not reapply schema.sql to an existing DB.
+
+Exact production command reference, NOT executed or authorized by local work:
+
+```bash
+wrangler d1 execute edenmish --remote --file=./migrations/051_whatsapp_durable_booking.sql
+```
+
+Run only after a separately approved merge and before an authorized deployment.
+For staging, use its explicitly approved config and verified staging database UUID;
+never substitute production. Verify without selecting ciphertext or customer rows:
+
+```sql
+SELECT name FROM sqlite_master WHERE name IN (
+ 'whatsapp_booking_jobs','whatsapp_booking_job_immutable',
+ 'whatsapp_booking_jobs_pending','whatsapp_booking_jobs_conversation'
+) ORDER BY name;
+PRAGMA table_info(whatsapp_booking_jobs);
+SELECT state, COUNT(*) AS jobs FROM whatsapp_booking_jobs GROUP BY state;
+```
+
+Ciphertext is purged on terminal transitions and by recovery cleanup, including
+when runtime flags/config/key have been removed. A periodic recovery/cleanup
+schedule must be verified before readiness; D1 does not autonomously expire rows.
+No raw payload is placed on the external queue or returned in diagnostics. Review
+`docs/reviews/whatsapp-full-sol-booking-20261011/durable-execution.md` for privacy,
+crash recovery, bounded wake-ups and provisioning requirements.

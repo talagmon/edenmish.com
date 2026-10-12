@@ -74,3 +74,16 @@ test('r3 transfer cannot consume parked allowance or unallocated margin',()=>{
  assert.equal(approval().retainedMicros+approval().allocationMicros+approval().parkedUnusedMicros+1196,approval().originalCapMicros);
 });
 test('zero-Maps scope stops any address operation instead of charging a spare allowance',()=>{const s=snap();add(s,'address');assert.equal(decide(s).reason,'budget_invalid');});
+
+for(const valid of [true,false])test('late response retains only verified usage; failed hold and no semantic revival '+valid,async()=>{
+ let now=NOW,checks=0;const h=harness();h.io.assertOff=async()=>{if(++checks===2)now+=4343;};h.io.fetch=async()=>{now+=6001;const e=envelope();if(!valid)e.usage.total_tokens++;e.usage.private='never retained';return Response.json(e);};
+ const r=await runPreflight({approval:approval(),sourceHash:hash,proposal,key:'sk-synthetic-only-key',io:h.io,clock:()=>now,timingClock:()=>now});
+ assert.equal(r.status,'failed');assert.equal(r.reason,'timeout');assert.equal(r.reservedMicros,56320);assert.equal(r.semantics,undefined);
+ assert.equal(r.usage?.input??null,valid?16384:null);assert.equal(h.counts().record.status,'failed');
+ assert.equal(r.stageTimings.presend_off.totalMs,4343);assert.equal(r.stageTimings.transport.totalMs,6001);assert.equal(r.stageTimings.semantics,undefined);
+ assert.ok(!JSON.stringify(r).includes('never retained'));await assert.rejects(h.run,/reservation_uncertain/);
+});
+test('final verification crossing approval expiry cannot report matched',async()=>{
+ let now=NOW,checks=0;const h=harness();h.io.assertOff=async()=>{if(++checks===3)now=NOW+3600000;};
+ const r=await runPreflight({approval:approval(),sourceHash:hash,proposal,key:'sk-synthetic-only-key',io:h.io,clock:()=>now});assert.equal(r.status,'failed');assert.equal(r.reason,'expired');assert.equal(r.reservedMicros,56320);
+});

@@ -1,3 +1,4 @@
+import {stageTimings} from '../src/whatsapp-stage-timing.js';
 // v8 orchestration: pure policy + injected IO. No IO at import and no retries.
 import {createHash} from 'node:crypto';
 import {fixedFixtureSemantics} from './whatsapp-review-fixture-oracle.mjs';
@@ -37,41 +38,49 @@ async function boundedJson(response){
  }finally{reader.releaseLock();}
 }
 // reserve is an exclusive durable INSERT. Unknown reservation/write stops forever.
-export async function runPreflight({approval,sourceHash,proposal,key,io,clock=Date.now}){
- const fullStart=clock();verifyApproval(approval,sourceHash,clock());const {request,body}=verifyRequest(proposal);
+export async function runPreflight({approval,sourceHash,proposal,key,io,clock=Date.now,timingClock=()=>performance.now()}){
+ const timings=stageTimings(timingClock);const fullStart=clock();verifyApproval(approval,sourceHash,clock());const {request,body}=verifyRequest(proposal);
  if(!/^sk-[A-Za-z0-9_-]{12,}$/.test(key||''))fail('key_unverified');
- await io.assertOff(approval,sourceHash);
+ await timings.measure('initial_off',()=>io.assertOff(approval,sourceHash));
  const created=clock(),expires=Math.min(created+3600000,approval.approvalExpiresAt);
  if(expires-created<900000)fail('setup_window_short');
  const proof={id:CONTRACT.id,request_sha256:REVIEW_R3_PREFLIGHT.requestHash,source_sha256:sourceHash,reserved_micros:56320,created_at:created,expires_at:expires};
- if(!await io.reserve(proof))fail('reservation_uncertain_no_retry');
+ if(!await timings.measure('reservation',()=>io.reserve(proof)))fail('reservation_uncertain_no_retry');
  let status='failed',reason='transport_failure',usage=null,providerMs=null,semantics=null,transportMs=null,responseDiagnostic=null;const controller=new AbortController();
  // Legacy providerLatencyMs includes the post-reservation OFF check; transportLatencyMs
  // isolates fetch plus bounded response read, not provider-only compute. End-to-end
  // starts after initial OFF/reservation and includes settlement. No customer latency claim.
  const start=clock();let timer;
  try{
-  await io.assertOff(approval,sourceHash);verifyApproval(approval,sourceHash,clock());
+  await timings.measure('presend_off',()=>io.assertOff(approval,sourceHash));verifyApproval(approval,sourceHash,clock());
   const transportStart=clock();
   const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(Object.assign(new Error('timeout'),{reason:'timeout'}));},10000);});
-  const operation=(async()=>{const response=await io.fetch('https://api.openai.com/v1/responses',{method:'POST',redirect:'manual',signal:controller.signal,headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body});return boundedJson(response);})();
-  const result=await Promise.race([operation,timeout]);providerMs=clock()-start;transportMs=clock()-transportStart;
+  const operation=async()=>{const response=await io.fetch('https://api.openai.com/v1/responses',{method:'POST',redirect:'manual',signal:controller.signal,headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body});return boundedJson(response);};
+  const result=await timings.measure('transport',()=>Promise.race([operation(),timeout]));providerMs=clock()-start;transportMs=clock()-transportStart;
   responseDiagnostic={status:['completed','incomplete','failed','cancelled'].includes(result?.status)?result.status:'other',incompleteReason:result?.incomplete_details===null||result?.incomplete_details===undefined?null:['max_output_tokens','content_filter'].includes(result.incomplete_details.reason)?result.incomplete_details.reason:'other',errorPresent:!!result?.error};
+  // Verify bounded accounting even when the deadline rejects the response. Diagnostic
+  // usage never changes failed status, refunds the reservation or accepts late content.
+  await timings.measure('usage_validation',()=>{
+    if(result.model==='gpt-6.1-sol'&&result.service_tier==='default'&&solUsageUpperMicros(result.usage)!==null){
+      const u=result.usage;usage={input_tokens:u.input_tokens,output_tokens:u.output_tokens,
+        input_tokens_details:{cached_tokens:u.input_tokens_details.cached_tokens},output_tokens_details:{reasoning_tokens:u.output_tokens_details.reasoning_tokens}};
+    }
+  });
   if(controller.signal.aborted||providerMs>=10000||clock()>=expires)fail('timeout');
-  if(result.model!=='gpt-6.1-sol'||result.service_tier!=='default'||solUsageUpperMicros(result.usage)===null)fail('usage_unverified');
-  usage=result.usage;let raw;try{raw=JSON.parse(bookingModelEnvelope(result));}catch(e){fail(e.category||'proposal_json');}
+  if(!usage)fail('usage_unverified');
+  let raw;try{raw=await timings.measure('envelope',()=>JSON.parse(bookingModelEnvelope(result)));}catch(e){fail(e.category||'proposal_json');}
   let rejection;const text=JSON.parse(request.payload.input[0].content).customer_message;
-  const accepted=validateBookingProposal(raw,text,proposal.now,r=>{rejection=r;},request.syntheticState.data);
+  const accepted=await timings.measure('proposal_validation',()=>validateBookingProposal(raw,text,proposal.now,r=>{rejection=r;},request.syntheticState.data));
   if(!accepted)fail(rejection?'proposal_rejected:'+rejection:'proposal_schema');
-  semantics=fixedFixtureSemantics(raw,accepted,request,proposal.now);
+  semantics=await timings.measure('semantics',()=>fixedFixtureSemantics(raw,accepted,request,proposal.now));
   if(!semantics.matched)fail('semantic_mismatch');
-  await io.assertOff(approval,sourceHash);status='matched';reason='all_expected_fields';
+  await timings.measure('final_off',()=>io.assertOff(approval,sourceHash));verifyApproval(approval,sourceHash,clock());if(clock()>=expires)fail('expired');status='matched';reason='all_expected_fields';
  }catch(e){reason=e.reason||e.category||'transport_failure';}
  finally{clearTimeout(timer);controller.abort();key=null;}
  const finished=clock(),record={status,finished_at:finished,input_tokens:usage?.input_tokens??null,cached_tokens:usage?.input_tokens_details?.cached_tokens??null,output_tokens:usage?.output_tokens??null,reasoning_tokens:usage?.output_tokens_details?.reasoning_tokens??null};
  if(finished>=expires){status='failed';reason='expired';record.status='failed';record.finished_at=null;}
- try{if(!await io.finish(record))fail('finish_unverified');}catch{status='pending';reason='finish_unverified_no_retry';}
- return {status,reason,providerLatencyMs:providerMs,transportLatencyMs:transportMs,responseDiagnostic,preflightTotalMs:clock()-fullStart,endToEndMs:clock()-start,reservedMicros:56320,usage:record.input_tokens===null?null:{input:record.input_tokens,cached:record.cached_tokens,output:record.output_tokens,reasoning:record.reasoning_tokens},secretPersisted:false,...(semantics?{semantics}: {})};
+ try{if(!await timings.measure('settlement',()=>io.finish(record)))fail('finish_unverified');}catch{status='pending';reason='finish_unverified_no_retry';}
+ return {status,reason,stageTimings:timings.snapshot(),operatorTimings:io.timings?.()??null,providerLatencyMs:providerMs,transportLatencyMs:transportMs,responseDiagnostic,preflightTotalMs:clock()-fullStart,endToEndMs:clock()-start,reservedMicros:56320,usage:record.input_tokens===null?null:{input:record.input_tokens,cached:record.cached_tokens,output:record.output_tokens,reasoning:record.reasoning_tokens},secretPersisted:false,...(semantics?{semantics}: {})};
 }
 export function supervisionDecision(snapshot,now,window){
  const stop=reason=>({action:'stop',reason,deadline:window.endsAt});

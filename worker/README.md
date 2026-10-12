@@ -504,3 +504,127 @@ publication, migration, deployment, key entry or paid calls. Use the combined
 The production checklist must not blindly apply this staging-history-specific
 migration; any separately approved applicable migration runs after merge and
 before runtime deployment. Production remains outside this review scope.
+
+
+### Independent Sol full-booking profile (local implementation, disabled)
+
+Migration050 is required before deploying code that uses the independent full
+booking profile; see `MIGRATIONS.md` for the exact operator command and verification.
+Do not enable `WHATSAPP_BOOKING_FULL_SCHEMA_READY` until it is verified. No remote
+migration, key operation, provider request or deployment is authorized by this
+local implementation. The profile is selected only by the presence of
+`WHATSAPP_BOOKING_FULL_CONFIG`; malformed selected configuration fails closed.
+It must never fall back to a legacy pilot or to a generic runtime API key.
+
+`worker/src/whatsapp-full-booking.js` parses an exact JSON contract (unknown keys
+are rejected): `version:1`, `environment` (`staging` or `production`), `budget_id`,
+`grant_id`, `source_sha256` (64 lowercase hex), `starts_at`/`expires_at` (epoch
+milliseconds, at most 24 hours apart), `budget_micros`, `retained_micros`,
+`allocation_micros`, `limits:{inbound,outbound,address,model}`, `account_sid`,
+`sender` (`whatsapp:+...`), `recipients` (1–10 unique Israeli E.164 allowlisted
+numbers), `booking_url`, `webhook_url`, and the exact model/cost fields below.
+
+- `model:gpt-6.1-sol`, `reasoning_effort:low`, `service_tier:default`;
+  `max_output_tokens:1024`, `input_tokens:16384`, `request_bytes:8192`,
+  `soft_timeout_ms:10000`, `transport_timeout_ms:20000`, `timeout_ms:30000`.
+- `costs:{inbound:10300,outbound:11300,address:32000,model:56320}` in USD
+  microdollars. These are fixed conservative reservations, not refunds based on
+  a provider's observed bill. Count ceilings are configurable only downward
+  within 1000 inbound/outbound and 100 address/model operations; allocation may
+  impose a tighter limit.
+- Staging origins are `https://staging.edenmish.com` and
+  `https://ops-staging.edenmish.com/webhooks/twilio/booking`; production uses
+  `https://edenmish.com` and `https://find.edenmish.com/webhooks/twilio/booking`.
+  Exact account, sender, webhook, booking origin and recipient list must match
+  the deployed non-secret configuration.
+
+Issuance requires an authenticated Ops caller passing exactly
+`{version:1,grant_id,budget_id,source_sha256,approve:true}` matching the configured
+specification, with booking/send/model switches all `off`. The module itself is
+an internal authority helper, not an HTTP authentication boundary. It permits
+issuance without a key and never enables a switch. It requires `FULL_APPROVED`,
+`FULL_SCHEMA_READY`, `STORAGE_READY`, `PRIVACY_APPROVED` (all prefixed
+`WHATSAPP_BOOKING_`) and `WHATSAPP_BOOKING_MULTILINGUAL_ENABLED=on`, with mode
+`full` and the pinned model/effort. Live readiness additionally requires all
+booking/send/model switches `on`, all model privacy/evaluation/spend approvals,
+Twilio/session secrets, and **only** `WHATSAPP_BOOKING_FULL_OPENAI_API_KEY` as the
+scoped model key. Pilot, continuation, readiness and voice configurations conflict
+with this profile. Full mode is text-only; multilingual consent discloses the
+model processing without claiming that voice processing is enabled.
+
+The first issuance creates an immutable root per environment. It permanently
+reserves each grant's entire allocation against the original cap and retained
+allowance; unused allocations remain held after expiry or stop. Each operation
+also reserves its fixed cost atomically against the grant and records a unique
+idempotency key. A duplicate returns false in pending, successful and uncertain
+states; it never grants permission for repeated external IO. Changing grant IDs,
+budget IDs, caps, retained allowance or source configuration cannot reset the
+original root. Exact-cap operations already reserved may finish; `canProceed`
+does not confuse an exhausted remaining balance with revocation of that hold.
+
+Async APIs accept a clock function (default `Date.now`) for fresh post-await time
+checks; numeric timestamps are supported for deterministic local tests. Runtime
+callers should pass the clock function, not a previously sampled number. Every
+external IO boundary must still check the current grant and conversation fence.
+Diagnostics retain fixed outcome/rejection enums, bounded usage/duration numbers
+and whitelisted stage aggregates only. No raw messages, proposals, errors, keys
+or arbitrary provider fields are stored. Local coverage is in
+`tests/whatsapp-full-booking.test.js`; synthetic grants there are not approvals
+for any real spending. No deployment allocation is supplied by this module.
+
+
+#### Customer and operator deadlines (local full profile only)
+
+The full profile's three timing fields participate in its immutable grant hash.
+The 10-second threshold is a diagnostic warning, not permission to retry or stop
+an otherwise valid response. Model transport has at most 20 seconds, clipped to
+the remaining 30-second customer turn. The customer deadline starts at first
+webhook receipt and is stored as `whatsapp_booking_full_ingress.deadline_at`,
+clipped to grant expiry and the 24-hour messaging window; retries reuse it.
+`softLatencyWarning` is boolean; `modelLatencyMs` and `turnLatencyMs` are bounded
+integers from 0 through 60000 in the sanitized diagnostic sink.
+
+`whatsapp-booking-deadlines.js` exports the frozen `BOOKING_DEADLINES` policy and
+`withBookingDeadline(operation,{timeoutMs,clock,signal})`. Operations receive a
+linked abort signal, absolute `deadlineAt` and fresh `remainingMs()`. A timer
+bounds hung work; a post-return clock check rejects late results even before the
+timer callback runs. Nested helper calls inherit the earlier deadline from the
+parent helper's signal. Callers must pass the signal into cancellable IO and
+check authority before irreversible effects; JavaScript cannot undo effects an
+operation completed before cancellation.
+
+The separate local `runBookingPreflight({prepare,run,settle},{clock,signal})`
+helper gives operators 60 seconds total, including preparation and settlement.
+Its single run uses the customer 30-second limit clipped to the remaining outer
+time. It never retries or restarts a timer. A run timeout can be settled within
+the remaining outer budget; once the overall deadline expires it starts no late
+cleanup. Durable unconfirmed holds remain reserved. The helper performs no IO
+itself and is not wired to paid calls or CLI activation by this change.
+
+Existing closed pilot/continuation grants retain their original deadlines.
+Old full-profile configuration does not silently acquire the longer deadline:
+changed timing fields require a separately approved configuration/grant binding.
+Live activation, actual key use and any paid verification remain separate future
+approval gates; the tests here use synthetic operations only.
+
+### Durable admission prerequisite for the full profile
+
+The new full profile requires migration051 after050, `execution: durable-v1`,
+`WHATSAPP_BOOKING_DURABLE_READY=on` and a `WHATSAPP_BOOKING_QUEUE` producer binding.
+Missing readiness or binding fails closed. There is no synchronous full-profile
+fallback. No queue/binding/schedule is provisioned by this repository change.
+
+The signed Twilio resource is verified, then D1 atomically commits the encrypted
+job, inbound hold and conversation fence. The webhook acknowledges after durable
+admission/publication rather than waiting for model/address/checkout/send work.
+Queue messages carry only version and opaque job ID. The consumer uses the same
+canonical services and original30s turn deadline. Duplicate/queue retries cannot
+repeat a billable operation. Ambiguous provider acceptance pauses automation and
+retains holds; completed draft/outbox work can resume only never-attempted sends.
+
+Before separately authorized production deployment, run after merge:
+`wrangler d1 execute edenmish --remote --file=./migrations/051_whatsapp_durable_booking.sql`
+from worker/, following050 and target verification. Verify051 tables/guards and a
+periodic recovery/cleanup schedule before readiness. Review queue settings,
+additional infrastructure costs, ciphertext retention and independent shutdown
+in `docs/reviews/whatsapp-full-sol-booking-20261011/durable-execution.md`.

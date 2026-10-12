@@ -6,7 +6,8 @@ import { selectBookingLanguage, explicitLanguage, localizedCommand, multilingual
 import { proposeBookingTurn, hasSensitiveBookingText } from './whatsapp-booking-model.js';
 import { bookingLanguage, bookingSay, bookingQuestion, bookingFact, isBookingLanguageRequest, HANDOFF_EN } from './whatsapp-booking-copy.js';
 import { extractBookingText } from './whatsapp-booking-text.js';
-import { normalizeIlPhone, scheduleError } from './validate.js';
+import { normalizeIlPhone } from './validate.js';
+import { bookingScheduleError } from './whatsapp-booking-schedule.js';
 import { validateEmailAddress } from './email-validation.js';
 import { zoneOf, GUSH_DAN } from './pricing.js';
 import { validateBusinessBatchAddresses } from './business-address.js';
@@ -73,13 +74,16 @@ export function parseSchedule(text, now = Date.now()) {
     .replace(/ (?:at|בשעה|ב-?|à|в|الساعة)\s*/i, ' ');
   const match = /^(\d{4}-\d{2}-\d{2})\s+(\d{1,2})(?::00)?$/.exec(input);
   if (!match) return null;
-  const date = new Date(match[1] + 'T00:00:00Z');
-  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== match[1]) return null;
   const hour = Number(match[2]);
-  const local = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23', minute: '2-digit' }).format(now);
-  if (`${match[1]} ${String(hour).padStart(2, '0')}:00` <= local || date.getTime() > now + 30 * SESSION_WINDOW) return null;
-  if (scheduleError('standard', date.getUTCDay(), hour)) return null;
+  if (bookingScheduleError(match[1], hour, now)) return null;
   return { when_date: match[1], when_hour: hour, when_text: `${match[1]} ${String(hour).padStart(2, '0')}:00 · שעון ישראל` };
+}
+
+export function resetBookingSchedule(state) {
+  state.phase = 'collect'; state.quote = null; state.editing_field = 'schedule'; state.revision++;
+  for (const key of ['schedule', 'when_date', 'when_hour', 'when_text']) delete state.data[key];
+  for (const key of ['schedule_preference', 'menu', 'edit_menu', 'terms_accepted_at']) delete state[key];
+  return { state, reply: bookingQuestion(state, 'schedule') };
 }
 
 export async function resolveBookingAddress(text, env, { fetchImpl } = {}) {
@@ -125,7 +129,7 @@ async function advanceBookingCore(current, text, services, { phone, now = Date.n
     state.phase = 'handoff'; return { state, reply: bookingSay(state,HANDOFF,HANDOFF_EN) };
   }
   if (state.phase === 'consent') {
-    if(state.multilingual && !/^(מתחילים|start)$/.test(c)){state.audio_disclosure_shown=true;return {state,reply:multilingualConsent(state.language)};}
+    if(state.multilingual && !/^(מתחילים|start)$/.test(c)){state.audio_disclosure_shown=!state.full_grant_id;return {state,reply:multilingualConsent(state.language,{voice:!state.full_grant_id})};}
     if (!/^(מתחילים|start)$/.test(c)) return { state, reply: bookingSay(state, 'היי, אני העוזר הדיגיטלי של EdenMish להזמנת משלוח רגיל ללקוח פרטי; נשמור פרטי הזמנה ונצטרך אימייל למעקב ולאימות.\nלהסכמה ולהתחלה כתבו מתחילים, או נציג לעזרה — בלי פרטי כרטיס, תעודות או מידע רגיש.\nפרטיות: https://edenmish.com/privacy.html', 'Hi, I’m the EdenMish digital assistant for standard private deliveries; email is needed for tracking and verification. To consent to collecting booking details, reply start — please never send card numbers or sensitive documents.\nPrivacy: https://edenmish.com/privacy.html\nAsk for a person: human') };
     state.phase = 'collect'; state.consent_at = now;
     if(state.multilingual && state.audio_disclosure_shown && state.menu?.kind==='consent')state.audio_consent_at=now;
@@ -151,8 +155,7 @@ async function advanceBookingCore(current, text, services, { phone, now = Date.n
   } else if (state.phase === 'review' && (c === `אישור ${state.revision}` || c === `confirm ${state.revision}`)) {
     const input = orderInput(state.data, phone);
     if (!parseSchedule(state.data.schedule, now)) {
-      state.phase = 'collect'; delete state.data.schedule; state.quote = null;
-      return { state, reply: QUESTIONS.schedule };
+      return resetBookingSchedule(state);
     }
     const quote = await services.quote(input);
     if (!quote || quote.review || !Number.isFinite(quote.price)) { state.phase = 'handoff'; return { state, reply: HANDOFF }; }
@@ -212,9 +215,9 @@ async function advanceBookingCore(current, text, services, { phone, now = Date.n
         state.data.email = validated.email;
       } else if (key === 'schedule') {
         const preference = schedulingPreference(state, value, now);
+        for (const key of ['when_date', 'when_hour', 'when_text']) delete state.data[key];
         if (preference) {
           state.schedule_preference = preference; state.editing_field = 'schedule'; delete state.edit_menu;
-          for (const key of ['when_date', 'when_hour', 'when_text']) delete state.data[key];
           continue;
         }
         const schedule = parseSchedule(value, now);

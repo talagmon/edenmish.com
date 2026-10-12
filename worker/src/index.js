@@ -1,3 +1,7 @@
+import { acceptDurableBookingEvent, consumeBookingQueue, recoverBookingJobs } from './whatsapp-booking-jobs.js';
+import { BOOKING_MAINTENANCE_CRON, cleanupDurableBookings } from './whatsapp-booking-maintenance.js';
+import { BOOKING_DEADLINES } from './whatsapp-booking-deadlines.js';
+import { fullBookingSelected, fullBookingReady, fullBookingCanProceed, fullBookingSpec, issueFullBookingGrant, stopFullBookingGrant, finishFullBookingOperation } from './whatsapp-full-booking.js';
 import { voiceProfileEnvironment } from './whatsapp-booking-voice-profile.js';
 import { transcribeBookingAudio } from './whatsapp-booking-audio.js';
 import { continuationSelected, continuationCanProceed, finishContinuation, issueContinuationGrant } from './whatsapp-continuation.js';
@@ -5,6 +9,7 @@ import { runLunaPilotReadiness, validReadinessRequest } from './whatsapp-pilot-r
 import { lunaPilot } from './whatsapp-pilot-budget.js';
 import { readTwilioBookingEvent, applyTwilioBookingStatus } from './whatsapp-booking-twilio.js';
 import { bookingEnabled, resolveBookingAddress, QUOTE_TTL } from './whatsapp-booking.js';
+import { bookingScheduleError } from './whatsapp-booking-schedule.js';
 import { conversationOnlyPilot, reservePilotOperation } from './whatsapp-booking-pilot.js';
 import { bookingPilotOpsPage } from './whatsapp-booking-ops.js';
 import { createOpenAIBookingModel } from './whatsapp-booking-openai.js';
@@ -609,16 +614,37 @@ function isTrustedOpsMutationOrigin(req, env) {
   }
 }
 
-function bookingServices(env, ctx) {
+function bookingServices(env, ctx, scope = null) {
+  let addressOrdinal = 0;
+  const active = async () => !fullBookingSelected(env) || !!scope && await fullBookingCanProceed(env) && await scope.canProceed() && fullBookingReady(env);
   return {
+    forEvent: (eventId, fence) => bookingServices(env,ctx,{...fence,eventId}),
     multilingual: env.WHATSAPP_BOOKING_MULTILINGUAL_ENABLED === 'on',
     transcribeAudio: (event,eventKey) => transcribeBookingAudio(env,event,eventKey),
     conversationModelForEvent: eventId => bookingEnabled(env) && (!conversationOnlyPilot(env) || lunaPilot(env)) ? createOpenAIBookingModel(env,{eventId}) : undefined,
-    conversationModel: bookingEnabled(env) && (!conversationOnlyPilot(env) || lunaPilot(env)) ? createOpenAIBookingModel(env) : undefined,
+    conversationModel: bookingEnabled(env) && (!conversationOnlyPilot(env) || lunaPilot(env)) ? createOpenAIBookingModel(env,scope ? {eventId:scope.eventId,eventCanProceed:active,turnStartedAt:scope.turnStartedAt,deadlineAt:scope.deadlineAt} : {}) : undefined,
     resolveAddress: (text) => resolveBookingAddress(text, env, { fetchImpl: async (...args) => {
-      const operationKey=crypto.randomUUID();
+      const operationKey=fullBookingSelected(env) ? `${scope?.eventId}:address:${addressOrdinal++}` : crypto.randomUUID();
+      if (!await active()) throw new Error('booking_stopped');
       if (!await reservePilotOperation(env, 'address',Date.now(),operationKey)) throw new Error('pilot_address_limit');
       if (conversationOnlyPilot(env) && !bookingEnabled(env)) throw new Error('pilot_expired');
+      if (fullBookingSelected(env)) {
+        try {
+          if (!await active()) throw new Error('booking_stopped');
+          const remaining=scope.deadlineAt-Date.now();
+          if(remaining<=0)throw new Error('booking_stopped');
+          const [url,options={}] = args;
+          const deadlineSignal=AbortSignal.timeout(Math.min(BOOKING_DEADLINES.customerMs,remaining));
+          const response=await fetch(url,{...options,signal:options.signal?AbortSignal.any([options.signal,deadlineSignal]):deadlineSignal});
+          const settled=await finishFullBookingOperation(env,'address',operationKey,response.ok);
+          if (!settled) { await response.body?.cancel(); throw new Error('booking_settlement_unconfirmed'); }
+          if (!response.ok || !await active()) { await response.body?.cancel(); throw new Error('booking_stopped'); }
+          return response;
+        } catch {
+          await finishFullBookingOperation(env,'address',operationKey,false);
+          throw new Error('booking_address_failed');
+        }
+      }
       if (!continuationSelected(env)) return fetch(...args);
       try {
         if (!await continuationCanProceed(env)) throw new Error('continuation_stopped');
@@ -633,6 +659,7 @@ function bookingServices(env, ctx) {
     } }),
     order: (token) => getOrderByToken(env.DB, token),
     quote: async (input) => {
+      if (!await active()) throw new Error('booking_stopped');
       const quote = await authoritativeQuote(env, input);
       if (quote.review) return quote;
       const automatic = await findAutomaticCoupon(env.DB, quote.price, couponIdentity(input, null));
@@ -644,10 +671,11 @@ function bookingServices(env, ctx) {
     },
     create: async ({ input, expectedPrice, quoteAt }, identity) => {
       if (conversationOnlyPilot(env)) return { error: 'conversation_only_pilot' };
+      if (!await active()) return { error: 'whatsapp_stopped' };
       const request = new Request('https://find.edenmish.com/api/orders', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
       });
-      bookingRequests.set(request, { ...identity, expectedPrice, quoteAt });
+      bookingRequests.set(request, { ...identity, expectedPrice, quoteAt, ...(fullBookingSelected(env)?{canProceed:active}:{}) });
       return (await worker.fetch(request, env, ctx)).json();
     },
   };
@@ -1336,6 +1364,7 @@ const worker = {
 
     if (path === '/api/orders' && req.method === 'POST') {
       if (booking) {
+        if (booking.canProceed && !await booking.canProceed()) return json({error:'whatsapp_stopped'},409);
         const existing = await getOrderByToken(env.DB, booking.token);
         if (existing) return json({ order_id: existing.id, payment_url: existing.payment_url, price: existing.price, idempotent: true });
       }
@@ -1537,6 +1566,13 @@ const worker = {
         }, 409, cors);
       }
 
+      // Quote/coupon lookups may cross a scheduling boundary after the chat
+      // confirmation. Reject before reserving promotions, inserting an order or
+      // creating checkout; this scoped gate leaves existing website policy alone.
+      if (booking?.canProceed && !await booking.canProceed()) return json({error:'whatsapp_stopped'},409);
+      if (booking && bookingScheduleError(b.when_date, hour, Date.now())) {
+        return json({ error: 'whatsapp_schedule_changed' }, 409, cors);
+      }
       if (booking && (isReview || Date.now() - booking.quoteAt >= QUOTE_TTL
         || Number(coupon ? coupon.price : pr.price) !== booking.expectedPrice)) {
         return json({ error: 'whatsapp_quote_changed' }, 409, cors);
@@ -1679,6 +1715,25 @@ const worker = {
             return json({ order_id: existingOrder.id, token: existingOrder.token, tracking_url: trackingUrl(env, existingOrder.token), status: existingOrder.status, price: existingOrder.price, wallet: true, idempotent: true }, 200, cors);
           }
         }
+      }
+
+      // Promotion reservation is another awaited boundary. Recheck immediately
+      // before the first order effect, and release only this attempt's new claim.
+      // A failed/uncertain cleanup must keep the conversation's checkout tombstone
+      // and hand off instead of advertising that retrying is safe.
+      const bookingStopped = booking?.canProceed && !await booking.canProceed();
+      if (booking && (bookingStopped || bookingScheduleError(b.when_date, hour, Date.now()))) {
+        if (promotionClaimCreated) {
+          try {
+            if (!promotionClaim?.id) throw new Error('missing_claim');
+            await releaseFirstDeliveryClaim(env.DB, promotionClaim.id);
+            const remaining = await env.DB.prepare('SELECT id FROM first_delivery_promotion_claims WHERE id = ?').bind(promotionClaim.id).first();
+            if (remaining) throw new Error('claim_not_released');
+          } catch {
+            return json({ error: 'whatsapp_schedule_cleanup_ambiguous' }, 503, cors);
+          }
+        }
+        return json({ error: bookingStopped ? 'whatsapp_stopped' : 'whatsapp_schedule_changed' }, 409, cors);
       }
 
       // 1. Create the D1 order. For exact-price orders a Shopify Draft Order is created
@@ -1894,6 +1949,7 @@ const worker = {
           // Discount breakdown (discount_code, etc.) is shown on the Shopify
           // checkout via applied_discount and in D1 for the booking/success/tracking
           // pages and emails.
+          if (booking?.canProceed && !await booking.canProceed()) return json({error:'whatsapp_stopped',order_id:created.id},409);
           const charge = await createCharge(env, { ...b, id: created.id, token, price: finalPrice, ...discountFields }, finalPrice);
           if (charge && charge.checkoutUrl) {
             paymentUrl = charge.checkoutUrl;
@@ -2791,13 +2847,35 @@ const worker = {
       catch { return json({error:'grant_unconfirmed_no_retry'},503); }
     }
 
+    // Full booking grants are a separate, explicit OFF-state operator action.
+    if (path === '/api/ops/whatsapp/full/grant' && req.method === 'POST') {
+      if (!(await isOps(req, env))) return json({error:'unauthorized'},401);
+      if (!isTrustedOpsMutationOrigin(req, env)) return json({error:'untrusted_origin'},403);
+      let input; try { input=await readJson(req); } catch { return json({error:'invalid_request'},400); }
+      try { const issued=await issueFullBookingGrant(env,input); return json({issued},issued?201:409); }
+      catch { return json({error:'grant_unconfirmed_no_retry'},503); }
+    }
+    if (path === '/api/ops/whatsapp/full/stop' && req.method === 'POST') {
+      if (!(await isOps(req, env))) return json({error:'unauthorized'},401);
+      if (!isTrustedOpsMutationOrigin(req, env)) return json({error:'untrusted_origin'},403);
+      try { const stopped=await stopFullBookingGrant(env); return json({stopped},stopped?200:409); }
+      catch { return json({error:'stop_unconfirmed'},503); }
+    }
+    if (path === '/api/ops/whatsapp/full/diagnostics' && req.method === 'GET') {
+      if (!(await isOps(req, env))) return json({error:'unauthorized'},401);
+      const spec=fullBookingSpec(env);
+      if (!spec || env.WHATSAPP_BOOKING_FULL_SCHEMA_READY!=='on') return json({disabled:true,operations:[]});
+      const rows=await env.DB.prepare(`SELECT kind,status,reserved_micros,diagnostics_json,created_at,finished_at FROM whatsapp_full_booking_operations WHERE grant_id=? ORDER BY created_at DESC LIMIT 100`).bind(spec.grant_id).all();
+      return json({disabled:!await fullBookingCanProceed(env),grant_id:spec.grant_id,operations:rows.results||[]});
+    }
+
     // Authenticated operator queue. No phone lookup grants business/wallet access.
     if (path === '/api/ops/whatsapp/bookings' && req.method === 'GET') {
       if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
       if (env.WHATSAPP_BOOKING_STORAGE_READY !== 'on') return json({ disabled: true, bookings: [] });
       // Shutdown must not hide handoffs or prevent authenticated reconciliation.
       // Reading drafts never enables intake, sends, models or checkout.
-      const disabled = !bookingEnabled(env) || (continuationSelected(env) && !await continuationCanProceed(env));
+      const disabled = !bookingEnabled(env) || (fullBookingSelected(env) && !await fullBookingCanProceed(env)) || (continuationSelected(env) && !await continuationCanProceed(env));
       const rows = await env.DB.prepare(`SELECT c.id, c.phase, COALESCE(c.order_id, o.id) AS order_id, c.recipient,
         c.state_json, c.created_at, c.updated_at, c.consent_at, c.confirmed_at, c.confirmed_revision, c.confirmed_price
         FROM whatsapp_booking_conversations c LEFT JOIN orders o ON o.token = c.order_token
@@ -2821,12 +2899,17 @@ const worker = {
 
     // Separate dedicated Twilio booking number; never shares inbound marketing routes.
     if (path === '/webhooks/twilio/booking' && req.method === 'POST') {
+      const turnStartedAt=Date.now();
       if (!bookingEnabled(env) || env.WHATSAPP_BOOKING_PROVIDER !== 'twilio') return json({ error: 'disabled' }, 503);
+      if (fullBookingSelected(env) && !await fullBookingCanProceed(env)) return json({disabled:true},200);
       if (continuationSelected(env) && !await continuationCanProceed(env)) return json({disabled:true},200);
       const parsed = await readTwilioBookingEvent(req, env);
       if (parsed.status !== 200) return json({ error: 'booking_webhook_rejected' }, parsed.status);
-      if (parsed.event) {
-        const result = await processBookingEvent(env, parsed.event, bookingServices(env, ctx));
+      if (parsed.event && fullBookingSelected(env)) {
+        const admitted=await acceptDurableBookingEvent(env,parsed.event,turnStartedAt);
+        if(admitted.status!==200)return json({error:'booking_admission_unavailable'},admitted.status);
+      } else if (parsed.event) {
+        const result = await processBookingEvent(env, parsed.event, bookingServices(env, ctx), turnStartedAt);
         if (result.busy) return json({ error: 'booking_busy' }, 503);
         await sendBookingReplies(env);
       }
@@ -3120,7 +3203,16 @@ const worker = {
 
     return new Response('Not found', { status: 404 });
   },
+  async queue(batch, env, ctx) {
+    await consumeBookingQueue(batch,env,bookingServices(env,ctx));
+  },
   async scheduled(event, env, ctx) {
+    if(event.cron===BOOKING_MAINTENANCE_CRON){
+      ctx.waitUntil(cleanupDurableBookings({DB:env.DB}).then(result=>{
+        console.info('booking_maintenance_complete',result.expiredJobs);
+      }).catch(()=>{console.error('booking_maintenance_failed');}));
+      return;
+    }
     env = voiceProfileEnvironment(env);
     // Runs on every scheduled tick, not only the daily one, so a hold reverts to a return
     // close to its 24h boundary rather than up to a day late.
@@ -3129,7 +3221,7 @@ const worker = {
     const heldPackageAndRouteTask = runHeldPackageAutoReturn(env.DB)
       .then(() => refreshActiveDriverRoute(env, event.scheduledTime || Date.now()));
     const tasks = [
-      cleanupBookings(env).then(() => sendBookingReplies(env)),
+      cleanupBookings(env).then(async () => { await recoverBookingJobs(env); if(!fullBookingSelected(env))await sendBookingReplies(env); }),
       processDeliveryNotificationOutbox(env),
       heldPackageAndRouteTask,
     ];

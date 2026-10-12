@@ -74,6 +74,35 @@ chat, media/voice/location interpretation, proactive WhatsApp tracking and
 marketing are outside this release. Automatic eligible promotions reuse the
 existing coupon engine. No phone match authorizes a business account.
 
+## Scheduling parity
+
+Typed dates, model-grounded date fields, suggested slots and final confirmation
+share `worker/src/whatsapp-booking-schedule.js`. It reuses the canonical operating
+hours and matches the unchanged website's pickup-window policy: at least three
+hours of same-day lead, rounded up to the next whole hour using Israel local
+minutes; future dates require a full three-hour window before closing. The
+website's shorter same-day closing windows remain allowed. For example, at
+10:00 Israel the earliest same-day pickup is 13:00; future weekday starts end at
+17:00 and future Friday starts at 10:00. Saturday remains closed.
+
+An aging confirmation clears the schedule, derived fields, quote and terms
+acceptance, then asks for a new time and a new summary confirmation. The canonical
+order route also rechecks WhatsApp timing after pricing/coupon reads and again
+after promotion reservation, immediately before order creation. If the latter
+check fails, only a claim newly reserved by this attempt is released, with its
+absence verified. A definite rejection can return to schedule selection; failed
+or uncertain claim cleanup retains the checkout tombstone and hands off for
+review. Ambiguous checkout failures retain the existing handoff protections. These checks establish timing
+eligibility only, not available driver capacity or a slot reservation. Website
+policy and payment logic are unchanged.
+
+`worker/tests/whatsapp-booking-schedule.test.js` compares every hour against the
+actual storefront generator across operating days, Israel midnight and UTC-offset
+changes, and tests typed/model corrections, ambiguous dayparts and aging menus.
+The canonical time-race/retry test is in `worker/tests/whatsapp-booking.test.js`.
+All of these checks are local with mocked services; they do not establish live
+end-to-end readiness.
+
 ## Customer journey
 
 1. First message receives a short privacy disclosure. `מתחילים` explicitly starts
@@ -84,7 +113,7 @@ existing coupon engine. No phone match authorizes a business account.
    stop contacts can be supplied in access details, as in the existing website.
 3. Replies can be ordinary answers, multiple labelled lines (`איסוף: דיזנגוף 10,
    תל אביב`), or bounded Hebrew sentences supplying several fields together. For
-   example, `חבילה קטנה מדיזנגוף 10, תל אביב לביאליק 2, רמת גן מחר בשעה 11`
+   example, `חבילה קטנה מדיזנגוף 10, תל אביב לביאליק 2, רמת גן מחר בשעה 10`
    supplies size, both addresses and time. `שמי יעל כהן` and an email can be in the
    same message. Today/tomorrow use the Israel calendar and require an exact whole
    hour; the existing eligibility rules still apply. Vague times, alternatives,
@@ -217,9 +246,13 @@ Normal canonical order/payment notifications continue through existing hooks.
 
 D1 stores one structured draft, recipient for response routing, opaque order token,
 HMAC sender/event identifiers, provider message reference and bounded status data.
-Raw inbound bodies, attachments, secrets, card data and provider error descriptions
-are never intentionally persisted or logged. Probable card-number strings are
-rejected before field storage. Do not enable request-body logging at the edge.
+The legacy channel does not intentionally persist raw inbound bodies. The disabled
+durable full-booking candidate stores a bounded current message and sender in an
+encrypted temporary inbox, including before conversational consent; see
+[durable execution](reviews/whatsapp-full-sol-booking-20261011/durable-execution.md).
+Attachments, secrets, card data and provider error descriptions are not intentionally
+persisted or logged. Probable card-number strings are rejected before field storage.
+Do not enable request-body logging at the edge.
 
 Structured draft/contact data expires after 48 hours; unsent reply bodies expire
 by 24 hours. Outbox/receipt metadata lasts seven days and event tombstones eight
@@ -232,6 +265,15 @@ requires explicit privacy approval. Canonical orders follow existing order reten
 Cleanup runs on the existing cron even after booking/sends are turned off, as long
 as the storage-ready flag remains on. It runs at cron time, not at exact expiry.
 Closing a conversation immediately removes draft/contact data.
+
+The durable candidate reserves the exact `* * * * *` cron for DB-only full-channel
+cleanup before any generic business task. It works with storage/model/send flags
+and credentials absent, does not publish queue messages, and emits fixed-category
+completion/failure diagnostics. No such schedule has been installed. Legacy
+retention above remains separate. Cleanup retains unresolved checkout tombstones
+and linked terminal job metadata; it does not release financial holds. D1 backup
+history can retain previous encrypted rows after current-row deletion, so this is
+not a guarantee of immediate physical or cryptographic erasure.
 
 The existing WhatsApp operations runbook only authorizes narrowly constrained
 proactive templates. **It does not approve the broader customer-initiated booking

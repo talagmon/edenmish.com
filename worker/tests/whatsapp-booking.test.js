@@ -227,8 +227,8 @@ function installNetworkFixtures(env, { chargeFails = false } = {}) {
     const { req } = request(text, id); return { response: await worker.fetch(req, env), id };
   }, messages };
 }
-async function fullReview(env, net) {
-  for (const text of ['hello', 'מתחילים', ...details]) assert.equal((await net.inbound(text)).response.status, 200);
+async function fullReview(env, net, bookingDetails = details) {
+  for (const text of ['hello', 'מתחילים', ...bookingDetails]) assert.equal((await net.inbound(text)).response.status, 200);
   let row = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get();
   assert.equal(row.phase, 'address_review');
   await net.inbound('1');
@@ -403,6 +403,104 @@ test('canonical creation rejects a price race after confirmation recheck, before
   assert.equal(net.counts.charges, 0);
 });
 
+test('canonical scheduling catches aging during confirmation quote and permits a fresh explicitly confirmed time', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: NOW }); // Thursday 11:00 Israel.
+  const env = { ...environment(database()), GOOGLE_PLACES_SERVER_KEY: 'mock', SHOPIFY_SHOP: 'mock.myshopify.com', SHOPIFY_ADMIN_TOKEN: 'mock' };
+  const net = installNetworkFixtures(env);
+  await fullReview(env, net, details.map(value => value === '2026-10-11 11:00' ? '2026-10-08 14:00' : value));
+  const prepare = env.DB.prepare.bind(env.DB); let ruleReads = 0;
+  env.DB.prepare = sql => {
+    const statement = prepare(sql);
+    if (sql === 'SELECT name, value FROM pricing_rules') {
+      const all = statement.all.bind(statement);
+      statement.all = async () => {
+        const result = await all();
+        if (++ruleReads === 1) t.mock.timers.setTime(NOW + 60_000);
+        return result;
+      };
+    }
+    return statement;
+  };
+  const confirmation = await net.inbound('1');
+  assert.equal(env.DB.sqlite.prepare('SELECT COUNT(*) n FROM orders').get().n, 0);
+  assert.equal(net.counts.charges, 0);
+  const row = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get();
+  const state = JSON.parse(row.state_json);
+  assert.equal(row.phase, 'collect'); assert.equal(row.checkout_started_at, null);
+  assert.equal(row.confirmed_at, null); assert.equal(state.quote, null);
+  assert.equal(state.terms_accepted_at, undefined); assert.equal(state.data.when_hour, undefined);
+  assert.equal(state.menu.slots[0], '2026-10-08 15:00');
+  await worker.fetch(request('1', confirmation.id).req, env);
+  assert.equal(net.counts.charges, 0, 'retry of stale confirmation cannot choose or create');
+  await net.inbound('1'); // Select newly displayed 15:00.
+  assert.equal(net.counts.charges, 0);
+  assert.equal(env.DB.sqlite.prepare('SELECT phase FROM whatsapp_booking_conversations').get().phase, 'review');
+  await net.inbound('1'); // Confirm its fresh quote.
+  assert.equal(net.counts.charges, 1);
+  assert.equal(env.DB.sqlite.prepare('SELECT when_hour FROM orders').get().when_hour, 15);
+});
+
+for (const cleanup of ['released', 'delete_fails', 'delete_noop', 'verification_fails']) test(`schedule aging during promotion reservation: ${cleanup}`, async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
+  const env = { ...environment(database()), GOOGLE_PLACES_SERVER_KEY: 'mock', SHOPIFY_SHOP: 'mock.myshopify.com', SHOPIFY_ADMIN_TOKEN: 'mock' };
+  env.DB.sqlite.prepare("UPDATE coupons SET starts_at = ?, ends_at = ? WHERE code = 'FIRST10-2026'").run(NOW - 1, NOW + SESSION_WINDOW);
+  env.DB.sqlite.prepare(`INSERT INTO first_delivery_promotion_claims (coupon_code, customer_key, phone_key, email_key, created_at, updated_at) VALUES ('FIRST10-2026', 'other', '+972549999999', 'other@example.com', ?, ?)`).run(NOW, NOW);
+  const otherClaim = env.DB.sqlite.prepare('SELECT * FROM first_delivery_promotion_claims').get();
+  const net = installNetworkFixtures(env);
+  await fullReview(env, net, details.map(value => value === '2026-10-11 11:00' ? '2026-10-08 14:00' : value));
+  const prepare = env.DB.prepare.bind(env.DB); let insertedId = null, releases = 0;
+  env.DB.prepare = sql => {
+    const statement = prepare(sql);
+    if (sql.trim().startsWith('INSERT INTO first_delivery_promotion_claims')) {
+      const first = statement.first.bind(statement);
+      statement.first = async () => {
+        const claim = await first(); assert.ok(claim); insertedId = claim.id;
+        t.mock.timers.setTime(NOW + 60_000); // 14:00 has now lost its required lead.
+        return claim;
+      };
+    }
+    if (sql === 'DELETE FROM first_delivery_promotion_claims WHERE id = ? AND order_id IS NULL') {
+      const bind = statement.bind.bind(statement), run = statement.run.bind(statement);
+      statement.bind = (...values) => { assert.equal(values[0], insertedId); assert.notEqual(values[0], otherClaim.id); return bind(...values); };
+      statement.run = async () => {
+        releases++;
+        if (cleanup === 'delete_fails') throw new Error('mock uncertain deletion');
+        if (cleanup === 'delete_noop') return { meta: { changes: 0 } };
+        return run();
+      };
+    }
+    if (sql === 'SELECT id FROM first_delivery_promotion_claims WHERE id = ?' && cleanup === 'verification_fails') {
+      statement.first = async () => { throw new Error('mock uncertain verification'); };
+    }
+    return statement;
+  };
+  const confirmation = await net.inbound('1');
+  assert.ok(insertedId); assert.equal(releases, 1);
+  assert.equal(env.DB.sqlite.prepare('SELECT COUNT(*) n FROM orders').get().n, 0);
+  assert.equal(net.counts.charges, 0);
+  assert.deepEqual(env.DB.sqlite.prepare('SELECT * FROM first_delivery_promotion_claims WHERE id = ?').get(otherClaim.id), otherClaim);
+  const row = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get();
+  if (cleanup === 'released') {
+    assert.equal(row.phase, 'collect'); assert.equal(row.checkout_started_at, null);
+    assert.equal(env.DB.sqlite.prepare('SELECT COUNT(*) n FROM first_delivery_promotion_claims').get().n, 1);
+    assert.equal(JSON.parse(row.state_json).menu.slots[0], '2026-10-08 15:00');
+    await worker.fetch(request('1', confirmation.id).req, env);
+    assert.equal(net.counts.charges, 0);
+    await net.inbound('1'); assert.equal(net.counts.charges, 0);
+    await net.inbound('1'); assert.equal(net.counts.charges, 1);
+    assert.equal(env.DB.sqlite.prepare('SELECT when_hour FROM orders').get().when_hour, 15);
+  } else {
+    assert.equal(row.phase, 'handoff'); assert.ok(row.checkout_started_at);
+    const remaining = env.DB.sqlite.prepare('SELECT id FROM first_delivery_promotion_claims WHERE id = ?').get(insertedId);
+    assert.equal(Boolean(remaining), cleanup !== 'verification_fails');
+    await worker.fetch(request('1', confirmation.id).req, env);
+    await net.inbound('1');
+    assert.equal(net.counts.charges, 0); assert.equal(releases, 1);
+    assert.equal((await closeBooking(env.DB, row.id, Date.now())).status, 409);
+    assert.equal(env.DB.sqlite.prepare('SELECT phase FROM whatsapp_booking_conversations').get().phase, 'handoff');
+  }
+});
+
 test('public callers cannot spoof channel source, reserved token or wallet authorization', async () => {
   const env = environment(database());
   const data = (await reviewed()).data;
@@ -415,15 +513,15 @@ test('public callers cannot spoof channel source, reserved token or wallet autho
 
 test('natural Hebrew sentence extracts several fields; ambiguous wording cannot authorize an old quote', async () => {
   const initial = (await advanceBooking(newBooking(), 'מתחילים', services(), { phone, now: NOW })).state;
-  const sentence = 'שלום, אני רוצה לשלוח חבילה קטנה מדיזנגוף 10, תל אביב לביאליק 2, רמת גן מחר בשעה 11, שמי יעל כהן, האימייל שלי yael@example.com';
+  const sentence = 'שלום, אני רוצה לשלוח חבילה קטנה מדיזנגוף 10, תל אביב לביאליק 2, רמת גן מחר בשעה 10, שמי יעל כהן, האימייל שלי yael@example.com';
   const result = await advanceBooking(initial, sentence, services(), { phone, now: NOW });
   assert.equal(result.state.data.size, 'small'); assert.equal(result.state.data.pickup, 'דיזנגוף 10, תל אביב');
-  assert.equal(result.state.data.dropoff, 'ביאליק 2, רמת גן'); assert.equal(result.state.data.schedule, '2026-10-09 11:00');
+  assert.equal(result.state.data.dropoff, 'ביאליק 2, רמת גן'); assert.equal(result.state.data.schedule, '2026-10-09 10:00');
   assert.equal(result.state.data.name, 'יעל כהן'); assert.equal(result.state.data.email, 'yael@example.com');
-  const masculine = await advanceBooking(initial, 'משלוח קטן מדיזנגוף 10, תל אביב לביאליק 2, רמת גן מחר בשעה 11', services(), { phone, now: NOW });
+  const masculine = await advanceBooking(initial, 'משלוח קטן מדיזנגוף 10, תל אביב לביאליק 2, רמת גן מחר בשעה 10', services(), { phone, now: NOW });
   assert.equal(masculine.state.data.size, 'small'); assert.equal(masculine.state.data.pickup, 'דיזנגוף 10, תל אביב');
   assert.match(result.reply, /פרטי גישה ואיש קשר באיסוף/); assert.equal(result.create, undefined);
-  for (const text of ['לא קטן, בינוני', 'חבילה קטנה או בינונית', 'חבילה קטנה מחר בבוקר', sentence + ' אבל רק אחרי שתתקשרו', 'קטן, מחר בשעה 11 או היום בשעה 12', 'שמי דנה ואני רוצה לשלוח חבילה גדולה']) {
+  for (const text of ['לא קטן, בינוני', 'חבילה קטנה או בינונית', 'חבילה קטנה מחר בבוקר', sentence + ' אבל רק אחרי שתתקשרו', 'קטן, מחר בשעה 10 או היום בשעה 12', 'שמי דנה ואני רוצה לשלוח חבילה גדולה']) {
     const state = await reviewed(); const ambiguous = await advanceBooking(state, text, services(), { phone, now: NOW });
     assert.match(ambiguous.reply, /בוודאות/); assert.equal(ambiguous.state.quote, null);
     assert.equal((await advanceBooking(ambiguous.state, `אישור ${state.revision}`, services(), { phone, now: NOW })).create, undefined);
@@ -503,7 +601,7 @@ test('mocked natural conversation reaches one canonical invoice and pauses on hu
     const replies = env.DB.sqlite.prepare("SELECT body FROM whatsapp_booking_replies WHERE state = 'pending' ORDER BY id").all();
     transcript.push(`**Customer:** ${text}\n\n**Assistant:**\n\n${replies.map(r => r.body).join('\n\n') || '(Automation paused; no reply.)'}`);
   }
-  for (const text of ['שלום, אפשר להזמין משלוח?', 'מתחילים', 'אני רוצה לשלוח חבילה קטנה מדיזנגוף 10, תל אביב לביאליק 2, רמת גן מחר בשעה 11, שמי יעל כהן, האימייל שלי yael@example.com', 'קומה 2, דירה 4', 'אין', 'ספר']) await say(text);
+  for (const text of ['שלום, אפשר להזמין משלוח?', 'מתחילים', 'אני רוצה לשלוח חבילה קטנה מדיזנגוף 10, תל אביב לביאליק 2, רמת גן מחר בשעה 10, שמי יעל כהן, האימייל שלי yael@example.com', 'קומה 2, דירה 4', 'אין', 'ספר']) await say(text);
   let row = env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get(); assert.equal(row.phase, 'address_review');
   assert.match(transcript.at(-1), /איסוף: דיזנגוף 10, תל אביב/); assert.match(transcript.at(-1), /מסירה: ביאליק 2, רמת גן/);
   await say('1');
@@ -779,7 +877,7 @@ test('signed continuation conversation counts model and Maps calls, reviews edit
  assert.equal(await issueContinuationGrant(env,NOW),true);
  Object.assign(env,{WHATSAPP_BOOKING_ENABLED:'on',WHATSAPP_BOOKING_SEND_ENABLED:'on',WHATSAPP_BOOKING_MODEL_ENABLED:'on'});
  const net=installNetworkFixtures(env),fallback=globalThis.fetch;let counts=0,models=0,maps=0,sends=0;
- const fields={size:'מפתחות',notes:'מפתחות',pickup:'דיזנגוף 10, תל אביב',dropoff:'ביאליק 2, רמת גן',schedule:'מחר בשעה 11',name:'יעל כהן',email:'yael@example.com',pickup_detail:'קומה 2 דירה 4',dropoff_detail:'אצל השומר'};
+ const fields={size:'מפתחות',notes:'מפתחות',pickup:'דיזנגוף 10, תל אביב',dropoff:'ביאליק 2, רמת גן',schedule:'מחר בשעה 10',name:'יעל כהן',email:'yael@example.com',pickup_detail:'קומה 2 דירה 4',dropoff_detail:'אצל השומר'};
  globalThis.fetch=async(url,init)=>{
   if(String(url).endsWith('/Messages.json'))return Response.json({sid:'SM'+(++sends).toString(16).padStart(32,'0')});
   if(String(url).includes('places.googleapis.com'))maps++;
@@ -792,7 +890,7 @@ test('signed continuation conversation counts model and Maps calls, reviews edit
   }
   return fallback(url,init);
  };
- for(const text of ['שלום','מתחילים','צריך לשלוח מפתחות מדיזנגוף 10, תל אביב לביאליק 2, רמת גן מחר בשעה 11. שמי יעל כהן yael@example.com, באיסוף קומה 2 דירה 4 ובמסירה אצל השומר','1'])assert.equal((await net.inbound(text)).response.status,200);
+ for(const text of ['שלום','מתחילים','צריך לשלוח מפתחות מדיזנגוף 10, תל אביב לביאליק 2, רמת גן מחר בשעה 10. שמי יעל כהן yael@example.com, באיסוף קומה 2 דירה 4 ובמסירה אצל השומר','1'])assert.equal((await net.inbound(text)).response.status,200);
  let row=env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get();assert.equal(row.phase,'review');const revision=JSON.parse(row.state_json).revision;
  await net.inbound('בעצם למסירה ביאליק 4, רמת גן');row=env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get();assert.equal(row.phase,'address_review');assert.ok(JSON.parse(row.state_json).revision>revision);
  await net.inbound('ok');row=env.DB.sqlite.prepare('SELECT * FROM whatsapp_booking_conversations').get();assert.equal(row.phase,'review');

@@ -7,7 +7,11 @@ import {
 } from '../src/shopify-webhooks.js';
 
 const ENV = {
-  SHOPIFY_SHOP: 'example.myshopify.com',
+  SHOPIFY_SHOP: 'edenmish.myshopify.com',
+  SHOPIFY_WEBHOOK_ENVIRONMENT: 'production',
+  SHOPIFY_WEBHOOK_EXPECTED_SHOP: 'edenmish.myshopify.com',
+  SHOPIFY_WEBHOOK_CALLBACK_URL: 'https://find.edenmish.com/webhooks/shopify',
+  SHOPIFY_WEBHOOK_REGISTRATION: 'create',
   SHOPIFY_ADMIN_TOKEN: 'test-token',
   SHOPIFY_API_VERSION: '2026-04',
 };
@@ -122,7 +126,7 @@ describe('Shopify webhook registration', () => {
         if (!options.method) return response({ webhooks: [] });
         const topic = JSON.parse(options.body).webhook.topic;
         if (topic === 'orders/updated') return response({ errors: 'forbidden' }, 403);
-        return response({ webhook: { topic } }, 201);
+        return response({ webhook: JSON.parse(options.body).webhook }, 201);
       },
       logger: quietLogger,
     });

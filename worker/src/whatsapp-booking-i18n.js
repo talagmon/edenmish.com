@@ -449,7 +449,17 @@ export const BOOKING_TRANSLATIONS = {
 };
 export const localCopy = (language, english) => BOOKING_TRANSLATIONS[english]?.[language] || english;
 
-export function multilingualConsent(language) {
+export function multilingualConsent(language, {voice = true} = {}) {
+ if (!voice) {
+  const textOnly={
+   he:'היי, אני העוזר הדיגיטלי של EdenMish להזמנת משלוח רגיל ללקוח פרטי. נשמור פרטי הזמנה; אימייל נדרש למעקב ולאימות. הטקסט שתכתבו יישלח ל-OpenAI להבנת הבקשה. כרגע אפשר להזמין בטקסט בלבד. אין לשלוח פרטי כרטיס או מסמכים רגישים. להסכמה בחרו 1 בתפריט. אפשר לבקש נציג.',
+   en:'Hi, I’m the EdenMish digital assistant for standard private deliveries. We collect booking details; email is needed for tracking and verification. Your text is sent to OpenAI to understand your request. Text booking only for now. Never send card numbers or sensitive documents. To agree, choose 1. You can ask for a person.',
+   ar:'مرحبًا، أنا مساعد EdenMish الرقمي لحجز توصيل عادي للأفراد. نحفظ تفاصيل الحجز ونحتاج البريد الإلكتروني للتتبع والتحقق. يُرسل نصك إلى OpenAI لفهم الطلب. الحجز بالنص فقط حاليًا. لا ترسل بيانات البطاقة أو مستندات حساسة. للموافقة اختر 1، أو اطلب موظفًا.',
+   ru:'Здравствуйте! Я цифровой помощник EdenMish для стандартной доставки частным клиентам. Мы сохраняем данные заказа; почта нужна для отслеживания и проверки. Ваш текст отправляется в OpenAI для понимания запроса. Пока доступен только текст. Не отправляйте данные карт и конфиденциальные документы. Для согласия выберите 1 или попросите сотрудника.',
+   fr:'Bonjour, je suis l’assistant numérique EdenMish pour les livraisons standard aux particuliers. Nous conservons les détails de réservation ; l’e-mail sert au suivi et à la vérification. Votre texte est envoyé à OpenAI pour comprendre la demande. Réservation par texte uniquement pour le moment. N’envoyez pas de données bancaires ni de documents sensibles. Pour accepter, choisissez 1, ou demandez une personne.'};
+  return (textOnly[language]||textOnly.he)+'\nhttps://edenmish.com/privacy.html';
+ }
+
  const copy={
  he:'היי, אני העוזר הדיגיטלי של EdenMish להזמנת משלוח רגיל ללקוח פרטי. נשמור פרטי הזמנה; אימייל נדרש למעקב ולאימות. הודעות קוליות נשלחות ל-OpenAI לתמלול. אין לשלוח פרטי כרטיס או מסמכים רגישים. להסכמה בחרו 1 בתפריט. אפשר לבקש נציג.',
  en:'Hi, I’m the EdenMish digital assistant for standard private deliveries. We collect booking details; email is needed for tracking and verification. Voice notes are sent to OpenAI for transcription. Never send card numbers or sensitive documents. To agree, choose 1 in the menu. You can ask for a person.',

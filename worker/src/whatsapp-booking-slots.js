@@ -1,9 +1,7 @@
 import { multilingualSchedule, normalizeBookingDigits } from './whatsapp-booking-language.js';
 // Suggestions only. Selection and final confirmation still use canonical checks.
-import { scheduleError } from './validate.js';
-export function israelDay(now) {
-  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
-}
+import { bookingScheduleError, israelDay } from './whatsapp-booking-schedule.js';
+export { israelDay } from './whatsapp-booking-schedule.js';
 export function pickupPreference(text, now, knownDate = null) {
   const value = multilingualSchedule(normalizeBookingDigits(text)).trim().toLowerCase().replace(/\s+/g, ' ');
   // Exact Hebrew word-hour grammar only: never infer AM/PM, a date, or a
@@ -41,20 +39,14 @@ export function pickupPreference(text, now, knownDate = null) {
 export function pickupSlotChoices(preference, now) {
   if (!preference?.date) return { slots: [], alternateDay: false };
   const today = israelDay(now);
-  const localTime = new Intl.DateTimeFormat('en-GB', { timeZone:'Asia/Jerusalem', hour:'2-digit', minute:'2-digit', hourCycle:'h23' }).format(now);
-  const [hour, minute] = localTime.split(':').map(Number);
-  // Match the website's three-hour same-day lead and future pickup window.
-  const earliest = Math.ceil((hour*60 + minute + 180)/60);
   const slots = [];
   const start = Date.parse(preference.date + 'T00:00:00Z');
   for (let offset=0; offset<8 && !slots.length; offset++) {
     const date = new Date(start + offset*86400000).toISOString().slice(0,10);
     if (date < today || Date.parse(date+'T00:00:00Z') > now + 30*86400000) continue;
-    const day = new Date(date+'T00:00:00Z').getUTCDay();
-    const close = day === 5 ? 13 : 20;
     for (let h=0; h<24 && slots.length<3; h++) {
       if (preference.hour!=null && h!==preference.hour) continue;
-      if (scheduleError('standard',day,h) || (date===today && h<earliest) || (date!==today && h+3>close)) continue;
+      if (bookingScheduleError(date, h, now)) continue;
       if (preference.period==='morning' && h>=12 || preference.period==='afternoon' && (h<12 || h>=17) || preference.period==='evening' && h<17) continue;
       slots.push(`${date} ${String(h).padStart(2,'0')}:00`);
     }

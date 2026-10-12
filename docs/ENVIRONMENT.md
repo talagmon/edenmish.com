@@ -71,6 +71,10 @@ These are safe to keep in the repo (non-secret configuration):
 | `WHATSAPP_NUMBER` | Eden's WhatsApp number (international format, no `+`) |
 | `OPS_EMAIL` | Eden's ops alert address |
 | `SHOPIFY_SHOP` | Shopify shop domain, e.g. `edenmish.myshopify.com` |
+| `SHOPIFY_WEBHOOK_ENVIRONMENT` | Required registrar environment: `production` or `staging`; missing/invalid values prevent all registrar requests |
+| `SHOPIFY_WEBHOOK_EXPECTED_SHOP` | Required exact match for `SHOPIFY_SHOP`; staging must use an approved isolated shop, never either production alias |
+| `SHOPIFY_WEBHOOK_CALLBACK_URL` | Required exact callback: staging `https://ops-staging.edenmish.com/webhooks/shopify`; production `https://find.edenmish.com/webhooks/shopify` or `https://ops.edenmish.com/webhooks/shopify` |
+| `SHOPIFY_WEBHOOK_REGISTRATION` | `verify` (default) lists subscriptions only; `create` permits missing-topic creation in production. Staging additionally requires an explicit `ensure(env, { allowCreate: true })` provisioning call |
 | `SHOPIFY_API_VERSION` | Shopify Admin API version, e.g. `2026-04`. **Set this explicitly in production** — the code's hardcoded fallback (`2026-04` in `worker/src/integrations.js`) will eventually be deprecated by Shopify, and bumping a var beats redeploying code |
 | `ALLOWED_ORIGINS` | **Required in production.** Comma-separated CORS allowlist. Include every storefront/ops page origin that calls the Worker. Credentialed ops and business-account requests require an explicit origin and cannot use the `*` fallback. Local dev may add `http://127.0.0.1:PORT`. |
 | `AUTO_DRIVER_DISPATCH` | Set to `on` to reconcile the active driver's immutable route revisions from the canonical paid/in-progress order queue on each route poll |
@@ -125,6 +129,35 @@ Staging email is intentionally limited to `qa-staging@edenmish.com`, uses the
 The Worker rejects every other staging recipient before calling SendGrid. Never
 copy production Shopify, payment, webhook, email, or customer-data credentials
 into the staging Worker. See `CI_CD.md` for one-time setup.
+
+### Shopify webhook registrar isolation
+
+The registrar validates its environment, shop, callback and API version before
+any network request or cached-readiness result. Production recognizes only
+`edenmish.myshopify.com` and `r013gt-fc.myshopify.com`; staging rejects both.
+When supplied, `BOOKING_URL` must also match the configured environment's exact
+storefront origin. URL credentials, explicit ports, query strings, fragments and
+alternate callback paths are rejected.
+
+The checked-in production configuration retains its existing `find.edenmish.com`
+creation destination and missing-topic creation behavior. Existing required-topic
+subscriptions to either production `ops` or `find` endpoint remain valid, including
+a mixture of the two. The registrar never rewrites or deletes subscriptions. A
+required-topic subscription to any other destination blocks creation, even if a
+valid duplicate exists. A paginated list blocks readiness/creation until an
+operator resolves it; the registrar does not assume the first page is complete.
+
+Staging defaults to `verify`, with no shop or expected-shop value supplied. Normal
+Worker requests never pass `allowCreate`, so adding staging credentials alone
+cannot register subscriptions. No remote provisioning endpoint is provided by
+this change. Approved future provisioning needs the isolated shop, matching
+expected-shop value, `create` mode and the explicit provisioning call. Creation
+responses must echo the exact topic and callback; redirects are rejected.
+
+These guards isolate subscription registration only. They do not establish
+payment-provider test mode, sandbox product/variant mapping, incoming webhook
+shop identity, or permission to install credentials or run a transaction. Those
+remain separate prerequisites before any payment integration test.
 
 ---
 

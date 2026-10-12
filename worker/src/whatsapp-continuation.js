@@ -1,3 +1,4 @@
+import { continuationHistorySnapshot } from './whatsapp-continuation-snapshot.js';
 import { localCopy } from './whatsapp-booking-i18n.js';
 import { safeBookingRejection } from './whatsapp-booking-diagnostics.js';
 import { lunaPilotConfiguration, lunaPilotBindingHash, lunaUsageUpperMicros } from './whatsapp-pilot-budget.js';
@@ -99,81 +100,81 @@ async function binding(env) {
     ...(solSession(env)?['gpt-6.1-sol','low','no-counting-v1']:[]),
     ...(reviewSession(env)?[env.WHATSAPP_BOOKING_REVIEW_SOURCE_SHA256,reviewProof(env),reviewAuthorization(env)]:[]) ]);
 }
-async function history(env,now=Date.now()) {
-  const root=await env.DB.prepare('SELECT * FROM whatsapp_pilot_budgets WHERE pilot_id=?').bind(env.WHATSAPP_BOOKING_PILOT_ID).first();
-  const rows=(await env.DB.prepare('SELECT * FROM whatsapp_pilot_model_attempts WHERE pilot_id=? ORDER BY id').bind(env.WHATSAPP_BOOKING_PILOT_ID).all()).results || [];
+async function history(env,now=Date.now(),db=env.DB) {
+  const root=await db.prepare('SELECT * FROM whatsapp_pilot_budgets WHERE pilot_id=?').bind(env.WHATSAPP_BOOKING_PILOT_ID).first();
+  const rows=(await db.prepare('SELECT * FROM whatsapp_pilot_model_attempts WHERE pilot_id=? ORDER BY id').bind(env.WHATSAPP_BOOKING_PILOT_ID).all()).results || [];
   const base=`${env.WHATSAPP_BOOKING_PILOT_ID}:readiness:small_item`;
   if (!root || root.binding_hash!==await lunaPilotBindingHash(env) || root.attempts!==3 || root.charged_micros!==300000
     || root.lock_id!==null || root.started_at!==null || root.expires_at!==null || root.stopped_reason!=='transport_failure'
     || rows.length!==3 || rows.some((r,i)=>r.id!==base+['',':2',':3'][i] || r.charged_micros!==100000
       || r.status!==['uncertain','uncertain','settled'][i] || r.outcome!==['transport_failure','readiness_mismatch','valid_proposal'][i])) return null;
   // This run has had no handset use. Earlier, separately authorized IDs are excluded.
-  const counters=(await env.DB.prepare('SELECT key,count FROM rate_limits WHERE key LIKE ? ORDER BY key').bind(`wa-pilot:${env.WHATSAPP_BOOKING_PILOT_ID}:%`).all()).results || [];
+  const counters=(await db.prepare('SELECT key,count FROM rate_limits WHERE key LIKE ? ORDER BY key').bind(`wa-pilot:${env.WHATSAPP_BOOKING_PILOT_ID}:%`).all()).results || [];
   if(counters.some(r=>r.count!==0))return null;
   const original=await hash([root,rows,counters]);
   if(!followon(env))return original;
   // A second, separately approved window is only possible for an UNUSED expired
   // predecessor. Never transfer/refund spend or generalize to repeat windows.
-  const prior=await env.DB.prepare('SELECT * FROM whatsapp_continuation_grants WHERE pilot_id=?').bind(env.WHATSAPP_BOOKING_PILOT_ID).first();
+  const prior=await db.prepare('SELECT * FROM whatsapp_continuation_grants WHERE pilot_id=?').bind(env.WHATSAPP_BOOKING_PILOT_ID).first();
   if(!prior || prior.id!==`${env.WHATSAPP_BOOKING_PILOT_ID}:quote-v2-handset-1` || prior.version!==1
     || prior.history_hash!==original || prior.expires_at>now || prior.lock_id!==null || prior.stopped_reason!==null
     || prior.historical_micros!==300000 || prior.fee_cushion_micros!==500000
     || ['spent_micros','model_micros','inbound','outbound','address','model'].some(k=>prior[k]!==0))return null;
-  const operations=await env.DB.prepare('SELECT COUNT(*) n FROM whatsapp_continuation_operations WHERE grant_id=?').bind(prior.id).first();
+  const operations=await db.prepare('SELECT COUNT(*) n FROM whatsapp_continuation_operations WHERE grant_id=?').bind(prior.id).first();
   if(operations?.n!==0)return null;
   const previousHash=await hash([original,prior]);
   if(!retry(env))return previousHash;
-  const stopped=await env.DB.prepare('SELECT * FROM whatsapp_continuation_followon_grants WHERE pilot_id=?').bind(env.WHATSAPP_BOOKING_PILOT_ID).first();
+  const stopped=await db.prepare('SELECT * FROM whatsapp_continuation_followon_grants WHERE pilot_id=?').bind(env.WHATSAPP_BOOKING_PILOT_ID).first();
   if(!stopped || stopped.id!==`${env.WHATSAPP_BOOKING_PILOT_ID}:quote-v2-handset-2` || stopped.version!==2
     || stopped.history_hash!==previousHash || stopped.expires_at>now || stopped.lock_id!==null || stopped.stopped_reason!=='provider_uncertain'
     || stopped.historical_micros!==300000 || stopped.fee_cushion_micros!==500000 || stopped.spent_micros!==105100 || stopped.model_micros!==30000
     || stopped.inbound!==4 || stopped.outbound!==3 || stopped.address!==0 || stopped.model!==1)return null;
-  const ops=(await env.DB.prepare('SELECT * FROM whatsapp_continuation_followon_operations WHERE grant_id=? ORDER BY id').bind(stopped.id).all()).results || [];
+  const ops=(await db.prepare('SELECT * FROM whatsapp_continuation_followon_operations WHERE grant_id=? ORDER BY id').bind(stopped.id).all()).results || [];
   if(ops.length!==8 || ops.reduce((sum,o)=>sum+o.reserved_micros,0)!==105100
     || ops.filter(o=>o.kind==='inbound' && o.status==='settled' && o.reserved_micros===10300).length!==4
     || ops.filter(o=>o.kind==='outbound' && o.status==='settled' && o.reserved_micros===11300).length!==3
     || ops.filter(o=>o.kind==='model' && o.status==='uncertain' && o.reserved_micros===30000 && o.finished_at!==null).length!==1)return null;
   const retryHistory=await hash([previousHash,stopped,ops]);
   if(!solSession(env))return retryHistory;
-  const third=await env.DB.prepare('SELECT * FROM whatsapp_continuation_retry_grants WHERE pilot_id=?').bind(env.WHATSAPP_BOOKING_PILOT_ID).first();
+  const third=await db.prepare('SELECT * FROM whatsapp_continuation_retry_grants WHERE pilot_id=?').bind(env.WHATSAPP_BOOKING_PILOT_ID).first();
   if(!third || third.id!==`${env.WHATSAPP_BOOKING_PILOT_ID}:quote-v2-handset-3` || third.version!==3
     ||third.history_hash!==retryHistory||third.expires_at>now||third.lock_id!==null||third.stopped_reason!=='model_uncertain'
     ||third.historical_micros!==405100||third.historical_model_micros!==330000||third.fee_cushion_micros!==500000
     ||third.spent_micros!==94800||third.model_micros!==30000||third.inbound!==3||third.outbound!==3||third.address!==0||third.model!==1)return null;
-  const thirdOps=(await env.DB.prepare('SELECT * FROM whatsapp_continuation_retry_operations WHERE grant_id=? ORDER BY id').bind(third.id).all()).results||[];
+  const thirdOps=(await db.prepare('SELECT * FROM whatsapp_continuation_retry_operations WHERE grant_id=? ORDER BY id').bind(third.id).all()).results||[];
   if(thirdOps.length!==7||thirdOps.reduce((sum,o)=>sum+o.reserved_micros,0)!==94800
     ||thirdOps.filter(o=>o.kind==='inbound'&&o.status==='settled'&&o.reserved_micros===10300).length!==3
     ||thirdOps.filter(o=>o.kind==='outbound'&&o.status==='settled'&&o.reserved_micros===11300).length!==3
     ||thirdOps.filter(o=>o.kind==='model'&&o.status==='uncertain'&&o.reserved_micros===30000&&o.finished_at!==null).length!==1)return null;
   const fourthHistory=await hash([retryHistory,third,thirdOps,{offlineModelHoldsMicros:235224}]);
   if(!voiceSession(env) && !reviewSession(env))return fourthHistory;
-  const fourth=await env.DB.prepare('SELECT * FROM whatsapp_continuation_sol_grants WHERE pilot_id=?').bind(env.WHATSAPP_BOOKING_PILOT_ID).first();
+  const fourth=await db.prepare('SELECT * FROM whatsapp_continuation_sol_grants WHERE pilot_id=?').bind(env.WHATSAPP_BOOKING_PILOT_ID).first();
   if(!fourth||fourth.version!==4||fourth.id!==`${env.WHATSAPP_BOOKING_PILOT_ID}:quote-v2-handset-4`
     ||fourth.history_hash!==fourthHistory||fourth.expires_at>now||fourth.lock_id!==null||fourth.stopped_reason!==null
     ||fourth.historical_micros!==735124||fourth.historical_model_micros!==595224||fourth.fee_cushion_micros!==500000
     ||['spent_micros','model_micros','inbound','outbound','address','model'].some(k=>fourth[k]!==0))return null;
-  const fourthOps=await env.DB.prepare('SELECT COUNT(*) n FROM whatsapp_continuation_sol_operations WHERE grant_id=?').bind(fourth.id).first();
+  const fourthOps=await db.prepare('SELECT COUNT(*) n FROM whatsapp_continuation_sol_operations WHERE grant_id=?').bind(fourth.id).first();
   if(fourthOps?.n!==0)return null;
   const voiceHistory=await hash([fourthHistory,fourth,{newAuthorizationMicros:1650000,audioReservedMicros:30000}]);
   if(!reviewSession(env))return voiceHistory;
-  const fifth=await env.DB.prepare('SELECT * FROM whatsapp_continuation_voice_grants WHERE pilot_id=?').bind(env.WHATSAPP_BOOKING_PILOT_ID).first();
+  const fifth=await db.prepare('SELECT * FROM whatsapp_continuation_voice_grants WHERE pilot_id=?').bind(env.WHATSAPP_BOOKING_PILOT_ID).first();
   if(!fifth || fifth.id!==`${env.WHATSAPP_BOOKING_PILOT_ID}:quote-v2-handset-5` || fifth.version!==5
     || fifth.history_hash!==voiceHistory || fifth.expires_at>now || fifth.lock_id!==null || fifth.stopped_reason!=='model_uncertain'
     || fifth.historical_micros!==735124 || fifth.historical_model_micros!==595224 || fifth.fee_cushion_micros!==280000
     || fifth.spent_micros!==121120 || fifth.model_micros!==56320 || fifth.inbound!==3 || fifth.outbound!==3 || fifth.address!==0 || fifth.model!==1)return null;
-  const fifthOps=(await env.DB.prepare('SELECT * FROM whatsapp_continuation_voice_operations WHERE grant_id=? ORDER BY id').bind(fifth.id).all()).results||[];
+  const fifthOps=(await db.prepare('SELECT * FROM whatsapp_continuation_voice_operations WHERE grant_id=? ORDER BY id').bind(fifth.id).all()).results||[];
   if(fifthOps.length!==7 || fifthOps.reduce((n,o)=>n+o.reserved_micros,0)!==121120
     || fifthOps.filter(o=>o.kind==='inbound' && o.status==='settled' && o.reserved_micros===10300).length!==3
     || fifthOps.filter(o=>o.kind==='outbound' && o.status==='settled' && o.reserved_micros===11300).length!==3
     || fifthOps.filter(o=>o.kind==='model' && o.status==='uncertain' && o.reserved_micros===56320 && o.finished_at!==null).length!==1)return null;
-  const audio=(await env.DB.prepare('SELECT * FROM whatsapp_voice_grants ORDER BY id').all()).results||[];
-  const audioAttempts=await env.DB.prepare('SELECT COUNT(*) n FROM whatsapp_voice_attempts').first();
+  const audio=(await db.prepare('SELECT * FROM whatsapp_voice_grants ORDER BY id').all()).results||[];
+  const audioAttempts=await db.prepare('SELECT COUNT(*) n FROM whatsapp_voice_attempts').first();
   if(audio.length!==1 || audio[0].used_calls!==0 || audio[0].reserved_micros!==0 || audio[0].approved_micros!==30000
     || audio[0].expires_at>now || audioAttempts?.n!==0)return null;
   let priorReview = [];
   if (reviewR2(env) || reviewR3(env)) {
-    const failed = await env.DB.prepare('SELECT * FROM whatsapp_review_preflight WHERE id=?').bind(REVIEW_PREFLIGHT.id).first();
-    const counts = await env.DB.prepare('SELECT (SELECT COUNT(*) FROM whatsapp_continuation_review_grants) AS grants, (SELECT COUNT(*) FROM whatsapp_continuation_review_operations) AS operations').first();
+    const failed = await db.prepare('SELECT * FROM whatsapp_review_preflight WHERE id=?').bind(REVIEW_PREFLIGHT.id).first();
+    const counts = await db.prepare('SELECT (SELECT COUNT(*) FROM whatsapp_continuation_review_grants) AS grants, (SELECT COUNT(*) FROM whatsapp_continuation_review_operations) AS operations').first();
     if (!failed || failed.status!=='failed' || failed.reserved_micros!==56320 || failed.request_sha256!==REVIEW_PREFLIGHT.requestHash
       || failed.source_sha256!=='9463b47cce9e4ff77e49cb3640f6ae67789187f4d1a30630d14862b7a9de835f'
       || !Number.isSafeInteger(failed.finished_at) || failed.finished_at<failed.created_at || failed.finished_at>now
@@ -181,8 +182,8 @@ async function history(env,now=Date.now()) {
     priorReview = [failed,counts,{unusedAllocationTransferredMicros:293680,previouslyUnallocatedMicros:12560}];
   }
   if (reviewR3(env)) {
-    const failedR2 = await env.DB.prepare('SELECT * FROM whatsapp_review_r2_preflight WHERE id=?').bind(REVIEW_R2_PREFLIGHT.id).first();
-    const countsR2 = await env.DB.prepare('SELECT (SELECT COUNT(*) FROM whatsapp_continuation_review_r2_grants) AS grants, (SELECT COUNT(*) FROM whatsapp_continuation_review_r2_operations) AS operations').first();
+    const failedR2 = await db.prepare('SELECT * FROM whatsapp_review_r2_preflight WHERE id=?').bind(REVIEW_R2_PREFLIGHT.id).first();
+    const countsR2 = await db.prepare('SELECT (SELECT COUNT(*) FROM whatsapp_continuation_review_r2_grants) AS grants, (SELECT COUNT(*) FROM whatsapp_continuation_review_r2_operations) AS operations').first();
     if (!failedR2 || failedR2.status!=='failed' || failedR2.reserved_micros!==56320 || failedR2.request_sha256!==REVIEW_R2_PREFLIGHT.requestHash
       || failedR2.source_sha256!=='531f995ae64dd7f64f61fcebf864cfa68f2cf9b31f3e08a92c3a28a3a821682d'
       || !Number.isSafeInteger(failedR2.finished_at) || failedR2.finished_at<failedR2.created_at || failedR2.finished_at>now
@@ -190,7 +191,7 @@ async function history(env,now=Date.now()) {
     priorReview = [failedR2,countsR2,...priorReview,{unusedV7TransferredMicros:220640,unusedV7ParkedMicros:29280,additionalUnallocatedMicros:0}];
   }
   const spec=reviewProof(env),table=reviewR3(env)?'whatsapp_review_r3_preflight':reviewR2(env)?'whatsapp_review_r2_preflight':'whatsapp_review_preflight';
-  const proof=await env.DB.prepare(`SELECT * FROM ${table} WHERE id=?`).bind(spec.id).first();
+  const proof=await db.prepare(`SELECT * FROM ${table} WHERE id=?`).bind(spec.id).first();
   if(!proof || proof.status!=='matched' || proof.request_sha256!==spec.requestHash
     || proof.source_sha256!==env.WHATSAPP_BOOKING_REVIEW_SOURCE_SHA256 || proof.reserved_micros!==spec.reservedMicros
     || !Number.isSafeInteger(proof.finished_at) || proof.finished_at<proof.created_at || proof.finished_at>now
@@ -209,8 +210,28 @@ export async function issueContinuationGrant(env,now=Date.now()) {
       Date.parse(env.WHATSAPP_BOOKING_CONTINUATION_START),Date.parse(env.WHATSAPP_BOOKING_CONTINUATION_END),now).run();
   return changes(result)===1;
 }
-async function active(env,now,allowStopped=false) {
+// Advance the logical caller time across awaits, including deterministic fixture clocks.
+// Monotonic elapsed time and a wall-clock high-water mark never move backwards.
+const freshClock=now=>{const wall=Date.now(),mono=performance.now();let elapsed=0;return ()=>{elapsed=Math.max(elapsed,Date.now()-wall,Math.floor(performance.now()-mono));return now+elapsed;};};
+async function activeReviewR3(env,now,allowStopped,fresh){
+  try{
+    const snapshot=await continuationHistorySnapshot(env.DB,env.WHATSAPP_BOOKING_PILOT_ID,[REVIEW_PREFLIGHT.id,REVIEW_R2_PREFLIGHT.id,REVIEW_R3_PREFLIGHT.id]);
+    const historical=await history(env,fresh(),snapshot);if(!historical)return null;
+    snapshot.assertConsumed();
+    const expectedBinding=await binding(env);
+    // Mutable stop/counters/lock are deliberately read AFTER the history transaction.
+    const row=await env.DB.prepare(`SELECT * FROM ${grantTable(env)} WHERE id=?`).bind(grantId(env)).first();
+    now=fresh();
+    if(!continuationReady(env,now)||!row||row.version!==8||row.binding_hash!==expectedBinding||row.history_hash!==historical
+      ||(!allowStopped&&row.stopped_reason)||now<row.starts_at||now>=row.expires_at||now>=snapshot.proofExpiresAt
+      ||row.historical_micros+row.fee_cushion_micros+row.spent_micros>limits(env).runMicros
+      ||historicalModel(env,row)+row.model_micros>limits(env).modelPoolMicros)return null;
+    return row;
+  }catch{return null;}
+}
+async function active(env,now,allowStopped=false,fresh=freshClock(now)) {
   if(!continuationReady(env,now))return null;
+  if(reviewR3(env))return activeReviewR3(env,now,allowStopped,fresh);
   const row=await env.DB.prepare(`SELECT * FROM ${grantTable(env)} WHERE id=?`).bind(grantId(env)).first();
   if(!row || row.version!==Number(env.WHATSAPP_BOOKING_CONTINUATION_VERSION) || row.binding_hash!==await binding(env) || row.history_hash!==await history(env,now)
     || (!allowStopped && row.stopped_reason) || now<row.starts_at || now>=row.expires_at
@@ -227,7 +248,9 @@ export async function stopContinuation(env,reason='operator_stop') {
 }
 export async function reserveContinuation(env,kind,key,now=Date.now()) {
   if(!Object.hasOwn(COST,kind) || !/^[A-Za-z0-9:_-]{1,160}$/.test(key || ''))return null;
-  const row=await active(env,now);if(!row)return null;
+  const fresh=freshClock(now);
+  const row=await active(env,now,false,fresh);if(!row)return null;
+  if(reviewR3(env)){now=fresh();if(!continuationReady(env,now)||now>=row.expires_at)return null;}
   const id=opId(env,kind,key), cost=costs(env)[kind], model=kind==='model';
   // Only allowlisted enum names enter SQL. Reserve and immutable operation insert
   // are one D1 transaction; a duplicate can never authorize repeat provider IO.

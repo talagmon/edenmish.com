@@ -162,7 +162,7 @@ test('provider-neutral boundary accepts JSON text, rejects unbranded adapters an
   const adapter = createOfflineBookingModel(async input => JSON.stringify(proposal(input.customer_message, { size: 'קטן' })));
   assert.equal((await proposeBookingTurn(adapter, state, 'קטן', NOW)).entries[0][1], 'קטן');
   const source = readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
-  assert.match(source, /conversationModel: bookingEnabled\(env\) && \(!conversationOnlyPilot\(env\) \|\| lunaPilot\(env\)\) \? createOpenAIBookingModel\(env\) : undefined/);
+  assert.match(source, /conversationModel: bookingEnabled\(env\) && \(!conversationOnlyPilot\(env\) \|\| lunaPilot\(env\)\) \? createOpenAIBookingModel\(env,scope \? \{eventId:scope.eventId,eventCanProceed:active,turnStartedAt:scope.turnStartedAt,deadlineAt:scope.deadlineAt\} : \{\}\) : undefined/);
   assert.doesNotMatch(source, /createOfflineBookingModel|OPENAI_API_KEY|XAI_API_KEY/);
 });
 
@@ -244,8 +244,8 @@ test('scripted Hebrew example asks missing details, answers a service question a
     return result;
   }
   await say('שלום'); await say('מתחילים');
-  const request = 'יש לי חבילה קטנה, מדיזנגוף 10, תל אביב לביאליק 2, רמת גן מחר בשעה 11';
-  await say(request, { size: 'קטנה', pickup: 'דיזנגוף 10, תל אביב', dropoff: 'ביאליק 2, רמת גן', schedule: 'מחר בשעה 11' });
+  const request = 'יש לי חבילה קטנה, מדיזנגוף 10, תל אביב לביאליק 2, רמת גן מחר בשעה 10';
+  await say(request, { size: 'קטנה', pickup: 'דיזנגוף 10, תל אביב', dropoff: 'ביאליק 2, רמת גן', schedule: 'מחר בשעה 10' });
   assert.equal(transcript.at(-1).includes('על שם מי'), true);
   await say('למה צריך אימייל?', null, 'tracking');
   await say('קוראים לי יעל כהן', { name: 'יעל כהן' });

@@ -1,3 +1,4 @@
+import { BOOKING_DEADLINES, withBookingDeadline } from './whatsapp-booking-deadlines.js';
 import { REPLY_STYLES, CONVERSATION_INSTRUCTIONS } from './whatsapp-booking-conversation.js';
 import { supportedLanguage, multilingualSize, normalizeBookingDigits } from './whatsapp-booking-language.js';
 // Provider-neutral interpretation contract. Transport cannot grant order authority.
@@ -48,9 +49,10 @@ Do not ask for already supplied fields unless the customer is correcting an ambi
 // Keep likely cards/documents and pasted credentials out of both adapters and drafts.
 export const hasSensitiveBookingText = text => /(?:\d[ -]?){13,19}|(?:sk-|shpat_|ghp_)[A-Za-z0-9_-]{12,}|Bearer\s+[A-Za-z0-9._-]{12,}/i.test(normalizeBookingDigits(text));
 const ADAPTER = Symbol('booking-model');
-export function createBookingModel(propose, { timeoutMs = 1500 } = {}) {
+export function createBookingModel(propose, { timeoutMs = 1500, fullDeadline = null } = {}) {
   if (typeof propose !== 'function') throw new TypeError('proposal function required');
-  return Object.freeze({ [ADAPTER]: true, propose, timeoutMs: Math.max(1, Math.min(10000, Number(timeoutMs) || 1500)) });
+  if (fullDeadline && (typeof fullDeadline.clock !== 'function' || !Number.isSafeInteger(fullDeadline.deadlineAt))) throw new TypeError('Invalid full booking deadline');
+  return Object.freeze({ [ADAPTER]: true, propose, ...(fullDeadline ? { fullDeadline: Object.freeze({ ...fullDeadline }) } : {}), timeoutMs: Math.max(1, Math.min(fullDeadline ? BOOKING_DEADLINES.customerMs : 10000, Number(timeoutMs) || 1500)) });
 }
 export const createOfflineBookingModel = createBookingModel;
 const exactKeys = (value, keys) => value && typeof value === 'object' && !Array.isArray(value)
@@ -193,8 +195,16 @@ export async function proposeBookingTurn(adapter, state, text, now) {
   };
   const controller = new AbortController(); let timer;
   try {
-    const timeout = new Promise(resolve => { timer = setTimeout(() => { controller.abort(); resolve(null); }, adapter.timeoutMs); });
-    const raw = await Promise.race([Promise.resolve().then(() => adapter.propose(request, { signal: controller.signal })), timeout]);
+    let raw;
+    if (adapter.fullDeadline) {
+      const { clock, deadlineAt } = adapter.fullDeadline;
+      raw = await withBookingDeadline(({ signal }) => adapter.propose(request, { signal, validationData: state.data }), {
+        timeoutMs: Math.max(0, Math.min(adapter.timeoutMs, deadlineAt - clock())), clock,
+      });
+    } else {
+      const timeout = new Promise(resolve => { timer = setTimeout(() => { controller.abort(); resolve(null); }, adapter.timeoutMs); });
+      raw = await Promise.race([Promise.resolve().then(() => adapter.propose(request, { signal: controller.signal, validationData: state.data })), timeout]);
+    }
     const proposal = validateBookingProposal(raw, text, now, undefined, state.data);
     if(multilingual && (!proposal?.replyLanguage || !proposal?.replyStyle))return null;
     return proposal;

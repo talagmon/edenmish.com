@@ -1,3 +1,6 @@
+import { BOOKING_DEADLINES, withBookingDeadline } from './whatsapp-booking-deadlines.js';
+import { fullBookingSelected, fullBookingReady, fullBookingCanProceed, reserveFullBookingOperation, finishFullBookingOperation } from './whatsapp-full-booking.js';
+import { stageTimings } from './whatsapp-stage-timing.js';
 import { SOL_SESSION, solSession, solUsageUpperMicros, continuationSelected, continuationCanProceed, reserveContinuation, finishContinuation } from './whatsapp-continuation.js';
 import { createBookingModel, validateBookingProposal } from './whatsapp-booking-model.js';
 import { lunaPilot, lunaPilotCanRun, reserveLunaPilotModel, finishLunaPilotModel,
@@ -6,11 +9,14 @@ import { lunaPilot, lunaPilotCanRun, reserveLunaPilotModel, finishLunaPilotModel
 const ENDPOINT = 'https://api.openai.com/v1/responses';
 const MAX_RESPONSE_BYTES = 32768;
 const failure = category => Object.assign(new Error('Booking interpretation failed'), { category });
-async function boundedJson(response) {
+async function boundedJson(response, signal) {
   if (!response.body || Number(response.headers.get('content-length')) > MAX_RESPONSE_BYTES) {
     await response.body?.cancel(); throw failure('response_size');
   }
   const reader = response.body.getReader(); const chunks = []; let size = 0;
+  const abort = () => { void reader.cancel().catch(() => {}); };
+  if (signal?.aborted) abort();
+  else signal?.addEventListener('abort', abort, { once: true });
   try {
     for (;;) {
       const { done, value } = await reader.read();
@@ -23,7 +29,7 @@ async function boundedJson(response) {
     for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
     try { return JSON.parse(new TextDecoder().decode(bytes)); }
     catch { throw failure('response_json'); }
-  } finally { reader.releaseLock(); }
+  } finally { signal?.removeEventListener('abort', abort); reader.releaseLock(); }
 }
 export function bookingModelEnvelope(result) {
   if (result?.status !== 'completed' || result.error || result.incomplete_details
@@ -46,27 +52,36 @@ export function bookingModelEnvelope(result) {
 // Readiness is an internal-only capability: explicit OFF-state approval and
 // expiry are required; no customer webhook can set this option.
 export function createOpenAIBookingModel(env, { fetchImpl = globalThis.fetch, readiness = false,
-  clock = Date.now, onDiagnostic = () => {}, readinessCase = null, acceptProposal = () => true, eventId = null } = {}) {
+  clock = Date.now, timingClock = () => performance.now(), onDiagnostic = () => {}, readinessCase = null, acceptProposal = () => true, eventId = null, turnStartedAt = null, deadlineAt = null, eventCanProceed = async () => true } = {}) {
+  const full = fullBookingSelected(env);
+  if (full && (readiness || !fullBookingReady(env,clock()) || !/^[a-f0-9]{64}$/.test(eventId || '')
+    || !Number.isSafeInteger(turnStartedAt) || !Number.isSafeInteger(deadlineAt) || deadlineAt <= clock()
+    || deadlineAt > turnStartedAt + BOOKING_DEADLINES.customerMs)) return undefined;
   const pilot = lunaPilot(env);
   const continuation = continuationSelected(env);
   if (continuation && (readiness || !pilot || !/^[a-f0-9]{64}$/.test(eventId || ''))) return undefined;
-  const sol = solSession(env);
+  const sol = full || solSession(env);
   const countedMode = readiness || (continuation && !sol);
-  const canProceed = () => continuation ? continuationCanProceed(env,clock()) : lunaPilotCanRun(env,clock(),readiness);
+  const canProceed = () => full ? Promise.all([fullBookingCanProceed(env,clock), eventCanProceed()]).then(values => values.every(Boolean) && fullBookingReady(env,clock()) && clock() < deadlineAt) : continuation ? continuationCanProceed(env,clock()) : lunaPilotCanRun(env,clock(),readiness);
   if (readiness && (!readinessCase || !pilot || !lunaPilotCanRun(env, clock(), true))) return undefined;
   const config = readiness ? { ...env, WHATSAPP_BOOKING_MODEL_ENABLED: 'on', WHATSAPP_BOOKING_MODEL_EVAL_APPROVED: 'on' } : env;
   if (['WHATSAPP_BOOKING_MODEL_ENABLED', 'WHATSAPP_BOOKING_MODEL_PRIVACY_APPROVED',
     'WHATSAPP_BOOKING_MODEL_EVAL_APPROVED', 'WHATSAPP_BOOKING_MODEL_SPEND_APPROVED']
     .some(flag => config[flag] !== 'on')
     || (sol ? config.WHATSAPP_BOOKING_MODEL!=='gpt-6.1-sol' || config.WHATSAPP_BOOKING_REASONING_EFFORT!=='low' : config.WHATSAPP_BOOKING_MODEL!=='gpt-6-luna')
-    || !/^sk-[A-Za-z0-9_-]{12,}$/.test(config.WHATSAPP_BOOKING_OPENAI_API_KEY || '')) return undefined;
-  const key = config.WHATSAPP_BOOKING_OPENAI_API_KEY;
-  return createBookingModel(async (request, { signal }) => {
+    || !/^sk-[A-Za-z0-9_-]{12,}$/.test((full ? config.WHATSAPP_BOOKING_FULL_OPENAI_API_KEY : config.WHATSAPP_BOOKING_OPENAI_API_KEY) || '')) return undefined;
+  const key = full ? config.WHATSAPP_BOOKING_FULL_OPENAI_API_KEY : config.WHATSAPP_BOOKING_OPENAI_API_KEY;
+  return createBookingModel(async (request, { signal, validationData }) => {
+    const timings=(full || env.WHATSAPP_BOOKING_CONTINUATION_VERSION==='8')?stageTimings(timingClock):null;
+    const measure=(name,fn)=>timings?timings.measure(name,fn):fn();
+    let verifiedUsage=null;
     let countedInput = null, proposalRejection = null;
     const syntheticDiagnostic = readiness ? { response_status: null, provider_error_code: null,
       counted_input_tokens: null, output_tokens: null, schema_valid: false, output_structure: null, incomplete_reason: null, synthetic_output: null } : null;
     let attempt = null, result = null, outcome = 'transport_failure', httpStatus = null;
     const started = clock();
+    const latency = () => full ? { softLatencyWarning: clock() - turnStartedAt > BOOKING_DEADLINES.softMs,
+      modelLatencyMs: Math.min(60000, Math.max(0, clock()-started)), turnLatencyMs: Math.min(60000, Math.max(0, clock()-turnStartedAt)) } : {};
     try {
       if (signal.aborted) throw failure('timeout');
       const input = { customer_message: request.customer_message,
@@ -79,11 +94,12 @@ export function createOpenAIBookingModel(env, { fetchImpl = globalThis.fetch, re
       };
       const body = JSON.stringify(payload);
       if (new TextEncoder().encode(body).byteLength > (sol ? SOL_SESSION.requestBytes : countedMode ? LUNA_READINESS_LIMITS.requestBytes : 16000)) throw failure('response_size');
-      if (pilot) {
-        attempt = continuation ? await reserveContinuation(env,'model',eventId,clock()) : await reserveLunaPilotModel(env, clock(), readiness, readinessCase);
+      if (pilot || full) {
+        if (full && !await canProceed()) throw failure('expired');
+        attempt = await measure('model_reservation',()=>full ? reserveFullBookingOperation(env,'model',eventId,clock) : continuation ? reserveContinuation(env,'model',eventId,clock()) : reserveLunaPilotModel(env, clock(), readiness, readinessCase));
         if (!attempt) { outcome = 'pilot_limit'; return null; }
         // Check fresh time AFTER awaited reservation, immediately before IO.
-        if (!await canProceed()) throw failure('expired');
+        if (!await measure('presend_guard',canProceed)) throw failure('expired');
       }
       if (signal.aborted) throw failure('timeout');
       if (countedMode) {
@@ -106,13 +122,14 @@ export function createOpenAIBookingModel(env, { fetchImpl = globalThis.fetch, re
         if (signal.aborted) throw failure('timeout');
         if (!await canProceed()) throw failure('expired');
       }
-      const response = await fetchImpl(ENDPOINT, { method: 'POST', redirect: 'manual', signal,
-        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body });
+      const transport = async transportSignal => {
+        const response = await measure('provider_headers',()=>fetchImpl(ENDPOINT, { method: 'POST', redirect: 'manual', signal: transportSignal,
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body }));
       httpStatus = response.status;
       if (!response.ok) {
         if (readiness) {
           try {
-            const failed = await boundedJson(response);
+            const failed = await boundedJson(response, transportSignal);
             const code = failed?.error?.code;
             if (['invalid_api_key','insufficient_quota','model_not_found','rate_limit_exceeded',
               'invalid_json_schema','unsupported_value','context_length_exceeded'].includes(code)) syntheticDiagnostic.provider_error_code = code;
@@ -120,7 +137,17 @@ export function createOpenAIBookingModel(env, { fetchImpl = globalThis.fetch, re
         } else await response.body?.cancel();
         throw failure('http_error');
       }
-      result = await boundedJson(response);
+      const parsed = await measure('response_body',()=>boundedJson(response, transportSignal));
+      // Preserve known, allowlisted usage even if the enclosing deadline rejects
+      // this completed response. Usage never authorizes applying the proposal.
+      if(timings&&parsed.model==='gpt-6.1-sol'&&parsed.service_tier==='default'&&solUsageUpperMicros(parsed.usage)!==null){
+        const u=parsed.usage;verifiedUsage={input:u.input_tokens,cached:u.input_tokens_details.cached_tokens,output:u.output_tokens,reasoning:u.output_tokens_details.reasoning_tokens};
+      }
+      return parsed;
+      };
+      result = full ? await withBookingDeadline(({ signal: transportSignal }) => transport(transportSignal), {
+        timeoutMs: Math.max(0, Math.min(BOOKING_DEADLINES.transportMs, deadlineAt - clock())), clock, signal,
+      }) : await transport(signal);
       if (readiness) {
         syntheticDiagnostic.response_status = ['completed','incomplete','failed','cancelled'].includes(result.status) ? result.status : 'other';
         syntheticDiagnostic.output_tokens = Number.isSafeInteger(result.usage?.output_tokens) ? result.usage.output_tokens : null;
@@ -135,29 +162,34 @@ export function createOpenAIBookingModel(env, { fetchImpl = globalThis.fetch, re
         if (texts.length===1 && texts[0].text.length<=8000) syntheticDiagnostic.synthetic_output=texts[0].text;
       }
       if (signal.aborted) throw failure('timeout');
-      if (pilot && !await canProceed()) throw failure('expired');
-      if (pilot && (result.model !== (sol ? 'gpt-6.1-sol' : 'gpt-6-luna') || result.service_tier !== 'default' || (sol ? solUsageUpperMicros : lunaUsageUpperMicros)(result.usage) === null)) throw failure('usage_unverified');
+      if ((pilot || full) && !await measure('postresponse_guard',canProceed)) throw failure('expired');
+      if ((pilot || full) && (result.model !== (sol ? 'gpt-6.1-sol' : 'gpt-6-luna') || result.service_tier !== 'default' || (sol ? solUsageUpperMicros : lunaUsageUpperMicros)(result.usage) === null)) throw failure('usage_unverified');
       if (countedMode && (result.usage.input_tokens !== countedInput || result.usage.output_tokens > LUNA_READINESS_LIMITS.outputTokens)) throw failure('usage_unverified');
       const content = bookingModelEnvelope(result);
       if (readiness) syntheticDiagnostic.synthetic_output = content;
       let raw;
       try { raw = JSON.parse(content); } catch { throw failure('proposal_json'); }
-      const proposal = validateBookingProposal(raw, request.customer_message, clock(), reason => { proposalRejection=reason; });
+      const proposal = await measure('strict_proposal',()=>validateBookingProposal(raw, request.customer_message, clock(), reason => { proposalRejection=reason; }, full ? validationData : undefined));
       if (!proposal) throw failure('proposal_schema');
       if (readiness) syntheticDiagnostic.schema_valid = true;
       if (readiness && !acceptProposal(proposal)) throw failure('readiness_mismatch');
       outcome = 'valid_proposal';
-      if (continuation && attempt) {
-        await finishContinuation(env,'model',eventId,{ok:true,usage:result.usage},clock());
-        if (!await canProceed()) return null;
+      if (full && attempt) {
+        const settled=await measure('model_settlement',()=>finishFullBookingOperation(env,'model',eventId,true,{outcome,verifiedUsage,proposalRejection,httpStatus,...latency(),elapsedMs:Math.max(0,clock()-started),stageTimings:timings?.snapshot()},clock));
+        if (!settled) throw failure('settlement_unconfirmed');
+        if (!await measure('final_guard',canProceed)) return null;
+      } else if (continuation && attempt) {
+        await measure('model_settlement',()=>finishContinuation(env,'model',eventId,{ok:true,usage:result.usage},clock()));
+        if (!await measure('final_guard',canProceed)) return null;
       }
       else if (attempt) await finishLunaPilotModel(env, attempt, { outcome, httpStatus, usage: result.usage, elapsedMs: Math.max(0, clock()-started) }, clock());
       return content;
     } catch (error) {
-      outcome = signal.aborted ? 'timeout' : ['http_error','response_size','response_json','response_envelope','refusal',
-        'proposal_json','proposal_schema','usage_unverified','expired','readiness_mismatch','input_token_count','input_limit'].includes(error?.category) ? error.category : 'transport_failure';
+      outcome = signal.aborted || error?.code === 'booking_deadline_exceeded' || error?.code === 'booking_aborted' ? 'timeout' : ['http_error','response_size','response_json','response_envelope','refusal',
+        'proposal_json','proposal_schema','usage_unverified','expired','readiness_mismatch','input_token_count','input_limit','settlement_unconfirmed'].includes(error?.category) ? error.category : 'transport_failure';
       if (attempt) {
-        try { if (continuation) await finishContinuation(env,'model',eventId,{ok:false,diagnostic:{category:outcome,httpStatus,elapsedMs:Math.max(0,clock()-started),countedInput,outputTokens:result?.usage?.output_tokens,proposalRejection}},clock());
+        try { if (full) await measure('model_settlement',()=>finishFullBookingOperation(env,'model',eventId,false,{outcome,verifiedUsage,proposalRejection,httpStatus,...latency(),elapsedMs:Math.max(0,clock()-started),stageTimings:timings?.snapshot()},clock));
+          else if (continuation) await measure('model_settlement',()=>finishContinuation(env,'model',eventId,{ok:false,diagnostic:{category:outcome,httpStatus,elapsedMs:Math.max(0,clock()-started),countedInput,outputTokens:result?.usage?.output_tokens,proposalRejection}},clock()));
           else await finishLunaPilotModel(env, attempt, { outcome, httpStatus, elapsedMs: Math.max(0, clock()-started) }, clock()); }
         catch { /* An unpersisted settlement retains the pending reservation. */ }
       }
@@ -165,7 +197,7 @@ export function createOpenAIBookingModel(env, { fetchImpl = globalThis.fetch, re
     } finally {
       // Customer diagnostics are fixed categories/numbers only. Authenticated fixed
       // synthetic probes may return their bounded answer; never headers/error text.
-      try { onDiagnostic({ outcome, httpStatus, ...(proposalRejection?{proposalRejection}:{}), elapsedMs: Math.max(0, clock()-started), ...(readiness ? { synthetic: syntheticDiagnostic } : {}) }); } catch { /* Diagnostic only. */ }
+      try { onDiagnostic({ outcome, httpStatus, ...latency(), ...(timings?{stageTimings:timings.snapshot(),verifiedUsage}:{}), ...(proposalRejection?{proposalRejection}:{}), elapsedMs: Math.max(0, clock()-started), ...(readiness ? { synthetic: syntheticDiagnostic } : {}) }); } catch { /* Diagnostic only. */ }
     }
-  }, { timeoutMs: pilot ? LUNA_PILOT_LIMITS.timeoutMs : 1500 });
+  }, full ? { timeoutMs: BOOKING_DEADLINES.customerMs, fullDeadline: { clock, deadlineAt } } : { timeoutMs: pilot ? LUNA_PILOT_LIMITS.timeoutMs : 1500 });
 }

@@ -1,9 +1,11 @@
+import { fullBookingSelected, fullBookingReady, reserveFullBookingOperation } from './whatsapp-full-booking.js';
 import { localCopy } from './whatsapp-booking-i18n.js';
 import { continuationSelected, continuationReady, reserveContinuation } from './whatsapp-continuation.js';
 import { lunaPilot, lunaPilotCanRun, ensureLunaPilotBudget, LUNA_PILOT_LIMITS } from './whatsapp-pilot-budget.js';
 // Staging-only conversation pilot. Counts contain no phone, chat or credential.
 export const conversationOnlyPilot = env => env.WHATSAPP_BOOKING_MODE === 'conversation_only';
 export function bookingPilotReady(env, now = Date.now()) {
+  if (fullBookingSelected(env)) return fullBookingReady(env,now);
   if (continuationSelected(env)) return continuationReady(env, now);
   if (env.WHATSAPP_BOOKING_MODE == null || env.WHATSAPP_BOOKING_MODE === 'full') return true;
   if (!conversationOnlyPilot(env)) return false;
@@ -20,6 +22,7 @@ export function bookingPilotReady(env, now = Date.now()) {
 }
 
 export async function reservePilotOperation(env, kind, now = Date.now(), operationKey = null) {
+  if (fullBookingSelected(env)) return !!await reserveFullBookingOperation(env,kind,operationKey,now);
   if (!conversationOnlyPilot(env)) return true;
   if (!bookingPilotReady(env, now)) return false;
   if (continuationSelected(env)) return !!await reserveContinuation(env,kind,operationKey,now);

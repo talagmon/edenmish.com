@@ -3,7 +3,7 @@ import {prepareReviewR2Session} from './fixtures/review-r2-session-env.js';
 import {prepareReviewR3Session} from './fixtures/review-r3-session-env.js';
 import {issueContinuationGrant,continuationCanProceed,reserveContinuation,finishContinuation,stopContinuation,REVIEW_R3_SESSION,REVIEW_R3_PREFLIGHT} from '../src/whatsapp-continuation.js';
 const NOW=Date.parse('2026-10-12T07:00:00Z');
-function db(t,{before049=false}={}){const s=new DatabaseSync(':memory:');t.after(()=>s.close());let schema=readFileSync(new URL('../schema.sql',import.meta.url),'utf8');if(before049){const migration=readFileSync(new URL('../migrations/049_whatsapp_review_r3_session.sql',import.meta.url),'utf8');assert.ok(schema.includes(migration));schema=schema.slice(0,schema.indexOf(migration));}s.exec(schema);return {sqlite:s,prepare(sql){const stmt=s.prepare(sql);let args=[];return {bind(...a){args=a;return this;},async first(){return stmt.get(...args)||null;},async all(){return {results:stmt.all(...args)};},async run(){return {meta:{changes:stmt.run(...args).changes}};}};},async batch(stmts){s.exec('BEGIN');try{const rows=[];for(const stmt of stmts)rows.push(await stmt.run());s.exec('COMMIT');return rows;}catch(e){s.exec('ROLLBACK');throw e;}}};}
+function db(t,{before049=false}={}){const s=new DatabaseSync(':memory:');t.after(()=>s.close());let schema=readFileSync(new URL('../schema.sql',import.meta.url),'utf8');if(before049){const migration=readFileSync(new URL('../migrations/049_whatsapp_review_r3_session.sql',import.meta.url),'utf8');assert.ok(schema.includes(migration));schema=schema.slice(0,schema.indexOf(migration));}s.exec(schema);return {sqlite:s,prepare(sql){const stmt=s.prepare(sql);let args=[];return {bind(...a){args=a;return this;},async first(){return stmt.get(...args)||null;},async all(){return {results:stmt.all(...args)};},async run(){return /^SELECT/.test(sql)?{success:true,results:stmt.all(...args)}:{meta:{changes:stmt.run(...args).changes}};}};},async batch(stmts){s.exec('BEGIN');try{const rows=[];for(const stmt of stmts)rows.push(await stmt.run());s.exec('COMMIT');return rows;}catch(e){s.exec('ROLLBACK');throw e;}}};}
 const on=e=>Object.assign(e,{WHATSAPP_BOOKING_ENABLED:'on',WHATSAPP_BOOKING_SEND_ENABLED:'on',WHATSAPP_BOOKING_MODEL_ENABLED:'on'});
 const usage={input_tokens:16384,output_tokens:1024,total_tokens:17408,input_tokens_details:{cached_tokens:0},output_tokens_details:{reasoning_tokens:1024}};
 test('v8 reserves all retained holds; one grant, exact budgets, replay and deterministic replies after model quota',async t=>{
@@ -29,8 +29,9 @@ test('v8 SQL retains proof, history, quotas, expiry and reserved operation ident
  await finishContinuation(e,'outbound','one',{ok:false},NOW);assert.equal(await continuationCanProceed(e,NOW),false);
 });
 test('expiry after reservation retains failed hold and never revives grant on late success',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:NOW});
  const DB=db(t),e=await prepareReviewR3Session(DB,NOW);await issueContinuationGrant(e,NOW);on(e);const end=NOW+900000;
- assert.ok(await reserveContinuation(e,'model','late',end-1));await finishContinuation(e,'model','late',{ok:true,usage},end);
+ assert.ok(await reserveContinuation(e,'model','late',end-1000));await finishContinuation(e,'model','late',{ok:true,usage},end);
  assert.equal(await continuationCanProceed(e,end-1),false);assert.equal(DB.sqlite.prepare('SELECT model_micros FROM whatsapp_continuation_review_r3_grants').get().model_micros,56320);
 });
 test('proof expiry must cover the complete issued window',async t=>{const DB=db(t),e=await prepareReviewR3Session(DB,NOW,{proofLifetimeMs:120000});assert.equal(await issueContinuationGrant(e,NOW),false);assert.equal(DB.sqlite.prepare('SELECT COUNT(*) n FROM whatsapp_continuation_review_r3_grants').get().n,0);});
@@ -74,4 +75,75 @@ test('migration049 is additive and replay preserves failed r2 and pending r3',as
  assert.equal(DB.sqlite.prepare('SELECT COUNT(*) n FROM whatsapp_review_r3_preflight').get().n,1);
  assert.equal(DB.sqlite.prepare('SELECT COUNT(*) n FROM whatsapp_continuation_review_r3_grants').get().n,0);
  assert.equal(JSON.stringify(DB.sqlite.prepare('SELECT * FROM whatsapp_review_r2_preflight').all()),old);
+});
+
+// Prototype regressions: every guard takes a fresh historical transaction and
+// reads mutable stop/budget state last. Issuance still uses the original walk.
+function traceReads(DB,{afterHistory=()=>{},afterGrant=()=>{},beforeWrite=()=>{},corrupt=null}={}){
+ const counts={singleReads:0,readBatches:0,readStatements:0,writeBatches:0};
+ return {counts,prepare(sql){const stmt=DB.prepare(sql);if(/^SELECT/.test(sql)){
+  const first=stmt.first,all=stmt.all;
+  stmt.first=async()=>{counts.singleReads++;counts.readStatements++;const row=await first();if(sql==='SELECT * FROM whatsapp_continuation_review_r3_grants WHERE id=?')await afterGrant();return row;};
+  stmt.all=async()=>{counts.singleReads++;counts.readStatements++;return all();};
+ }return stmt;},async batch(stmts){if(stmts.length===20){counts.readBatches++;counts.readStatements+=20;const rows=await DB.batch(stmts);if(corrupt)corrupt(rows);await afterHistory();return rows;}counts.writeBatches++;await beforeWrite();return DB.batch(stmts);}};
+}
+test('v8 history hash matches original issuance; 21 statements now use one read batch and one fresh grant read',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:NOW});const DB=db(t),e=await prepareReviewR3Session(DB,NOW);await issueContinuationGrant(e,NOW);on(e);
+ const expected=DB.sqlite.prepare('SELECT history_hash FROM whatsapp_continuation_review_r3_grants').get().history_hash;
+ const traced=traceReads(DB);e.DB=traced;assert.equal(await continuationCanProceed(e,NOW),true);
+ assert.deepEqual(traced.counts,{singleReads:1,readBatches:1,readStatements:21,writeBatches:0});
+ assert.ok(await reserveContinuation(e,'model','counts',NOW));await finishContinuation(e,'model','counts',{ok:true,usage},NOW);
+ assert.deepEqual(traced.counts,{singleReads:3,readBatches:3,readStatements:63,writeBatches:2});
+ assert.equal(DB.sqlite.prepare('SELECT history_hash FROM whatsapp_continuation_review_r3_grants').get().history_hash,expected);
+});
+for(let i=0;i<20;i++)test('v8 failed history result '+i+' rejects without grant read or fallback',async t=>{
+ const DB=db(t),e=await prepareReviewR3Session(DB,NOW);await issueContinuationGrant(e,NOW);on(e);
+ const traced=traceReads(DB,{corrupt:rows=>{rows[i]={success:false,results:[]};}});e.DB=traced;
+ assert.equal(await continuationCanProceed(e,NOW),false);assert.equal(traced.counts.singleReads,0);assert.equal(traced.counts.readBatches,1);
+});
+for(const phase of ['history','grant'])for(const change of ['stop','expiry'])test('fresh '+change+' after awaited '+phase+' prevents reservation',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:NOW});const DB=db(t),e=await prepareReviewR3Session(DB,NOW);await issueContinuationGrant(e,NOW);on(e);
+ const mutate=async()=>{if(change==='stop')await stopContinuation({...e,DB},'operator_stop');else t.mock.timers.setTime(NOW+900000);};
+ const traced=traceReads(DB,{[phase==='history'?'afterHistory':'afterGrant']:mutate});e.DB=traced;
+ assert.equal(await reserveContinuation(e,'model','race',NOW),null);assert.equal(DB.sqlite.prepare('SELECT COUNT(*) n FROM whatsapp_continuation_review_r3_operations').get().n,0);
+});
+test('operator stop after guard before atomic reservation rejects without spending',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:NOW});const DB=db(t),e=await prepareReviewR3Session(DB,NOW);await issueContinuationGrant(e,NOW);on(e);
+ e.DB=traceReads(DB,{beforeWrite:()=>stopContinuation({...e,DB},'operator_stop')});
+ assert.equal(await reserveContinuation(e,'model','cas-stop',NOW),null);assert.equal(DB.sqlite.prepare('SELECT spent_micros FROM whatsapp_continuation_review_r3_grants').get().spent_micros,0);
+});
+test('fresh CAS timestamp includes elapsed read time; subsequent guard closes delayed returned reservation',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:NOW});const DB=db(t),e=await prepareReviewR3Session(DB,NOW);await issueContinuationGrant(e,NOW);on(e);
+ e.DB=traceReads(DB,{afterHistory:()=>t.mock.timers.setTime(NOW+500)});
+ assert.ok(await reserveContinuation(e,'model','fresh-time',NOW));
+ assert.equal(DB.sqlite.prepare('SELECT created_at FROM whatsapp_continuation_review_r3_operations').get().created_at,NOW+500);
+ t.mock.timers.setTime(NOW+900000);assert.equal(await continuationCanProceed(e,Date.now()),false);
+ assert.equal(DB.sqlite.prepare('SELECT model_micros FROM whatsapp_continuation_review_r3_grants').get().model_micros,56320);
+});
+
+import {createOpenAIBookingModel} from '../src/whatsapp-booking-openai.js';
+import {proposeBookingTurn} from '../src/whatsapp-booking-model.js';
+for(const outcome of ['success','invalid-evidence','stop-after-provider','stop-before-provider'])test('v8 model stages, verified usage and guard order '+outcome,async t=>{
+ t.mock.timers.enable({apis:['Date'],now:NOW});const DB=db(t),e=await prepareReviewR3Session(DB,NOW);await issueContinuationGrant(e,NOW);on(e);
+ let calls=0,diagnostic=null;const traced=traceReads(DB);e.DB=traced;
+ if(outcome==='stop-before-provider'){
+  const batch=traced.batch;traced.batch=async stmts=>{const r=await batch(stmts);if(stmts.length===2)await stopContinuation({...e,DB},'operator_stop');return r;};
+ }
+ const model=createOpenAIBookingModel(e,{eventId:'a'.repeat(64),clock:Date.now,onDiagnostic:d=>diagnostic=d,fetchImpl:async()=>{
+  calls++;if(outcome==='stop-after-provider')await stopContinuation({...e,DB},'operator_stop');
+  return Response.json({model:'gpt-6.1-sol',service_tier:'default',status:'completed',usage,output:[{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:JSON.stringify({version:2,intent:'update',fields:[{field:'size',quote:outcome==='invalid-evidence'?'invented':'קטנה'}],topic:null,clarify_field:null})}]}]});
+ }});
+ const proposal=await proposeBookingTurn(model,{phase:'collect',consent_at:NOW,data:{}},'יש לי חבילה קטנה',NOW);
+ assert.equal(!!proposal,outcome==='success');assert.equal(calls,outcome==='stop-before-provider'?0:1);
+ assert.equal(diagnostic.verifiedUsage?.input??null,calls?16384:null);
+ assert.equal(diagnostic.stageTimings.model_reservation.calls,1);assert.equal(diagnostic.stageTimings.presend_guard.calls,1);
+ const op=DB.sqlite.prepare("SELECT * FROM whatsapp_continuation_review_r3_operations WHERE kind='model'").get();assert.equal(op.reserved_micros,56320);assert.equal(op.status,outcome==='success'?'settled':'uncertain');
+ if(outcome==='success')assert.deepEqual(traced.counts,{singleReads:5,readBatches:5,readStatements:105,writeBatches:2});
+ assert.ok(!JSON.stringify(diagnostic).includes('invented'));assert.ok(!JSON.stringify(diagnostic).includes('sk-'));
+});
+
+test('backwards wall clock cannot undo elapsed time observed by guard before CAS',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:NOW});const DB=db(t),e=await prepareReviewR3Session(DB,NOW);await issueContinuationGrant(e,NOW);on(e);
+ e.DB=traceReads(DB,{afterHistory:()=>t.mock.timers.setTime(NOW+500),afterGrant:()=>t.mock.timers.setTime(NOW-500)});
+ assert.ok(await reserveContinuation(e,'model','backwards',NOW));assert.equal(DB.sqlite.prepare('SELECT created_at FROM whatsapp_continuation_review_r3_operations').get().created_at,NOW+500);
 });
