@@ -1,3 +1,4 @@
+import { rehearsalSelected, rehearsalSpec, REHEARSAL_ORIGIN } from './payment-rehearsal-capability.js';
 import { anonKey, clientIp } from './security.js';
 import {
   incrRateLimit,
@@ -143,14 +144,17 @@ async function authenticate(req, env, meta) {
   const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
   if (!token) return null;
   const tokenHash = await sha256Hex(token);
-  return env.DB.prepare(`SELECT s.driver_id, d.display_name, d.locale
+  const session = await env.DB.prepare(`SELECT s.driver_id, d.display_name, d.locale
     FROM driver_sessions s JOIN drivers d ON d.id = s.driver_id
     WHERE s.access_token_hash = ? AND s.installation_id = ?
       AND s.revoked_at IS NULL AND s.access_expires_at > ? AND d.active = 1`)
     .bind(tokenHash, meta.installationId, Date.now()).first();
+  // This role can never become an ordinary driver when rehearsal config is removed.
+  if (!rehearsalSelected(env) && session?.driver_id?.startsWith('drv_rehearsal_')) return null;
+  return session;
 }
 
-async function createSession(req, env, meta) {
+async function createSession(req, env, meta, rehearsal = false) {
   if (!env.SESSION_SECRET) return response({ code: 'driver_auth_unconfigured', message: 'Driver authentication is unavailable.', request_id: meta.requestId }, 503, meta.requestId);
   const rateKey = 'drvlogin:' + await anonKey(env, clientIp(req));
   const rate = await incrRateLimit(env.DB, rateKey, 10 * 60 * 1000);
@@ -163,17 +167,17 @@ async function createSession(req, env, meta) {
   }
 
   const now = Date.now();
-  const invitation = await findUsableDriverInvitation(env, inputCode, now);
+  const invitation = rehearsal ? null : await findUsableDriverInvitation(env, inputCode, now);
   const reviewCode = configuredReviewCode(env);
   const isReviewCredential = !invitation && reviewCode
     ? await constantTimeTextEqual(inputCode, reviewCode) : false;
-  const isLegacyCredential = !invitation && !isReviewCredential
+  const isLegacyCredential = !rehearsal && !invitation && !isReviewCredential
     ? await matchesConfiguredDriverLoginCode(inputCode, configuredLegacyCodes(env)) : false;
   if (!invitation && !isReviewCredential && !isLegacyCredential) {
     return response({ code: 'invalid_credentials', message: 'Invalid credentials.', request_id: meta.requestId }, 401, meta.requestId);
   }
 
-  const driverId = invitation?.driver_id || env.DRIVER_ID || 'drv_eden';
+  const driverId = rehearsal ? await rehearsalDriverID(env) : invitation?.driver_id || env.DRIVER_ID || 'drv_eden';
   const displayName = invitation?.display_name || env.DRIVER_DISPLAY_NAME || 'Eden';
   const locale = invitation?.locale || 'he-IL';
   if (!invitation) {
@@ -218,7 +222,7 @@ async function createSession(req, env, meta) {
   }, 201, meta.requestId);
 }
 
-async function refreshSession(req, env, meta) {
+async function refreshSession(req, env, meta, rehearsal = false) {
   let body;
   try { body = await readJson(req); } catch (error) { return response({ code: error.message, message: 'Invalid request.', request_id: meta.requestId }, error.status || 400, meta.requestId); }
   if (!body || typeof body.refresh_token !== 'string' || body.refresh_token.length < 32) {
@@ -230,7 +234,8 @@ async function refreshSession(req, env, meta) {
     WHERE s.refresh_token_hash = ? AND s.installation_id = ?
       AND s.revoked_at IS NULL AND s.refresh_expires_at > ? AND d.active = 1`)
     .bind(oldRefreshHash, meta.installationId, Date.now()).first();
-  if (!session) return response({ code: 'unauthorized', message: 'Driver session is invalid.', request_id: meta.requestId }, 401, meta.requestId);
+  if (!session || (!rehearsal && session.driver_id.startsWith('drv_rehearsal_'))
+      || (rehearsal && session.driver_id !== await rehearsalDriverID(env))) return response({ code: 'unauthorized', message: 'Driver session is invalid.', request_id: meta.requestId }, 401, meta.requestId);
 
   const now = Date.now();
   const accessToken = randomToken();
@@ -1007,6 +1012,45 @@ async function locationBatch(req, env, auth, meta) {
   return response({ accepted_count: acceptedCount }, 202, meta.requestId);
 }
 
+// Separate private-app read surface. Never projects a rehearsal into a route.
+async function rehearsalDriverID(env) {
+  return 'drv_rehearsal_' + (await sha256Hex(rehearsalSpec(env).run_id)).slice(0,20);
+}
+async function handleRehearsalApp(req, env, path) {
+  const run = rehearsalSpec(env);
+  const origin = new URL(req.url).origin;
+  if (!run || origin !== REHEARSAL_ORIGIN || env.PAYMENT_REHEARSAL_APP_ENABLED !== 'on'
+      || !/^\d{6,12}$/.test(env.DRIVER_REVIEW_CODE || '')
+      || Date.now() >= run.expires_at + 24 * 60 * 60 * 1000) {
+    return response({code:'rehearsal_app_unavailable'}, 403);
+  }
+  const meta = metadata(req);
+  if (meta.error) return response({code:meta.error},400);
+  // A dedicated review credential only. Invitations and legacy codes are excluded.
+  if (path === '/api/driver/v1/session' && req.method === 'POST')
+    return createSession(req, env, meta, true);
+  if (path === '/api/driver/v1/session/refresh' && req.method === 'POST')
+    return refreshSession(req, env, meta, true);
+  if (path !== '/api/driver/v1/rehearsal/order' || req.method !== 'GET')
+    return response({code:'rehearsal_read_only'},403,meta.requestId);
+  const auth = await authenticate(req,env,meta);
+  if (!auth || auth.driver_id !== await rehearsalDriverID(env))
+    return response({code:'unauthorized'},401,meta.requestId);
+  const order = await env.DB.prepare(`SELECT id,rehearsal_run_id,price,currency,
+    payment_status,shopify_order_id,shopify_draft_order_id,rehearsal_closed_at
+    FROM orders WHERE rehearsal_run_id=? ORDER BY id LIMIT 1`).bind(run.run_id).first();
+  if (!order) return response({version:1,run_id:run.run_id,order:null},200,meta.requestId);
+  // Reject corrupt or misbound data; no customer PII, token, invoice URL, or OTP.
+  if (order.rehearsal_run_id !== run.run_id || Number(order.price)!==1 || order.currency!=='ILS')
+    return response({code:'rehearsal_order_invalid'},409,meta.requestId);
+  return response({version:1,run_id:run.run_id,order:{
+    order_id:order.id,payment_status:order.payment_status,amount_minor:100,currency:'ILS',
+    shopify_order_id:order.shopify_order_id ? String(order.shopify_order_id) : null,
+    shopify_draft_order_id:order.shopify_draft_order_id ? String(order.shopify_draft_order_id) : null,
+    archived:order.rehearsal_closed_at != null,dispatch_hold:true,
+  }},200,meta.requestId);
+}
+
 export async function handleDriverApi(
   req,
   env,
@@ -1014,6 +1058,7 @@ export async function handleDriverApi(
   executionContext,
 ) {
   if (!path.startsWith('/api/driver/v1/')) return null;
+  if (rehearsalSelected(env)) return handleRehearsalApp(req, env, path);
   const meta = metadata(req);
   if (meta.error) return response({ code: meta.error, message: 'Required request metadata is invalid.', request_id: meta.requestId }, 400, meta.requestId);
   if (path === '/api/driver/v1/session' && req.method === 'POST') return createSession(req, env, meta);

@@ -1,10 +1,10 @@
 import { rehearsalOpsHtml } from './payment-rehearsal-ops.js';
-import { rehearsalSelected, rehearsalSpec, rehearsalPaymentReferenceMatches, activeRehearsal, claimRehearsalOrder, issueRehearsalRun, stopRehearsal, REHEARSAL_ORIGIN } from './payment-rehearsal-capability.js';
+import { rehearsalSelected, rehearsalSpec, rehearsalPaymentReferenceMatches, activeRehearsal, claimRehearsalOrder, issueRehearsalRun, stopRehearsal, rehearsalStopped, REHEARSAL_ORIGIN } from './payment-rehearsal-capability.js';
 import { closePaymentRehearsal } from './payment-rehearsal.js';
 import { acceptDurableBookingEvent, consumeBookingQueue, recoverBookingJobs } from './whatsapp-booking-jobs.js';
 import { BOOKING_MAINTENANCE_CRON, cleanupDurableBookings } from './whatsapp-booking-maintenance.js';
 import { BOOKING_DEADLINES } from './whatsapp-booking-deadlines.js';
-import { fullBookingSelected, fullBookingReady, fullBookingCanProceed, fullBookingSpec, issueFullBookingGrant, stopFullBookingGrant, finishFullBookingOperation } from './whatsapp-full-booking.js';
+import { fullBookingSelected, fullBookingReady, fullBookingCanProceed, fullBookingSpec, issueFullBookingGrant, stopFullBookingGrant, fullBookingStopped, fullBookingBindingHash, finishFullBookingOperation } from './whatsapp-full-booking.js';
 import { voiceProfileEnvironment } from './whatsapp-booking-voice-profile.js';
 import { transcribeBookingAudio } from './whatsapp-booking-audio.js';
 import { continuationSelected, continuationCanProceed, finishContinuation, issueContinuationGrant } from './whatsapp-continuation.js';
@@ -712,7 +712,7 @@ const worker = {
     // A private rehearsal runtime exposes only the reviewed channel, tracking and Ops surfaces.
     if(rehearsalSelected(env)) {
       if(!rehearsalSpec(env) || (!booking && url.origin!==REHEARSAL_ORIGIN)) return json({error:'rehearsal_configuration'},503);
-      const allowed=booking || (req.method==='GET' && (['/ops','/rehearsal-ops','/api/ops/orders','/api/ops/notifications/failures','/api/ops/whatsapp/bookings','/api/ops/whatsapp/full/diagnostics'].includes(path)||/^\/t\/[a-f0-9]+$/.test(path)||/^\/api\/orders\/[a-f0-9]+$/.test(path)))
+      const allowed=booking || path.startsWith('/api/driver/v1/') || (req.method==='GET' && (['/ops','/rehearsal-ops','/api/ops/orders','/api/ops/notifications/failures','/api/ops/whatsapp/bookings','/api/ops/whatsapp/full/diagnostics','/api/ops/payment-rehearsal/stop-status'].includes(path)||/^\/t\/[a-f0-9]+$/.test(path)||/^\/api\/orders\/[a-f0-9]+$/.test(path)))
         || (req.method==='POST' && (['/api/ops/login','/api/ops/logout','/api/ops/payment-rehearsal/grant','/api/ops/payment-rehearsal/stop','/api/ops/whatsapp/full/grant','/api/ops/whatsapp/full/stop','/webhooks/shopify/rehearsal','/webhooks/twilio/booking','/webhooks/twilio/booking/status'].includes(path)
           || /^\/api\/ops\/orders\/\d+\/rehearsal\/close$/.test(path)||/^\/api\/ops\/whatsapp\/bookings\/[a-f0-9-]{36}\/(pause|close)$/.test(path)
           || /^\/api\/orders\/[a-f0-9]+\/(verify-otp|resend-otp)$/.test(path)));
@@ -2892,14 +2892,27 @@ const worker = {
       catch { return json({error:'grant_unconfirmed_no_retry'},503); }
     }
 
-    if (['/api/ops/payment-rehearsal/grant','/api/ops/payment-rehearsal/stop'].includes(path) && req.method==='POST') {
+    if ((['/api/ops/payment-rehearsal/grant','/api/ops/payment-rehearsal/stop'].includes(path) && req.method==='POST')
+      || (path==='/api/ops/payment-rehearsal/stop-status' && req.method==='GET')) {
       if(!await isOps(req,env))return json({error:'unauthorized'},401);
       if(!isTrustedOpsMutationOrigin(req,env))return json({error:'untrusted_origin'},403);
       try {
-        let ok;
-        if(path.endsWith('/stop')) {ok=await stopRehearsal(env); await stopFullBookingGrant(env);}
-        else ok=await issueRehearsalRun(env,await readJson(req));
-        return json({ok},ok?200:409);
+        if(path.endsWith('/grant')) {
+          const ok=await issueRehearsalRun(env,await readJson(req));return json({ok},ok?200:409);
+        }
+        const statusOnly=path.endsWith('/stop-status');
+        const input=statusOnly?Object.fromEntries(url.searchParams):await readJson(req);
+        const r=rehearsalSpec(env),full=fullBookingSpec(env);
+        const grantBinding=await fullBookingBindingHash(env);
+        const bound=Object.keys(input||{}).length>0;
+        if((statusOnly&&!bound)||!r||!full)return json({error:'stop_scope_mismatch'},409);
+        if(bound && (Object.keys(input).sort().join(',')!=='grant_binding_sha256,grant_id,run_id,source_sha256,version'
+          || Number(input.version)!==1||input.run_id!==r.run_id||input.grant_id!==full.grant_id||input.source_sha256!==full.source_sha256||input.grant_binding_sha256!==grantBinding))
+          return json({error:'stop_scope_mismatch'},409);
+        if(!statusOnly) {await stopRehearsal(env);await stopFullBookingGrant(env);}
+        const authorityStopped=await rehearsalStopped(env)&&await fullBookingStopped(env);
+        return json({ok:authorityStopped,authority_stopped:authorityStopped,
+          run_id:r.run_id,grant_id:full.grant_id,source_sha256:full.source_sha256,grant_binding_sha256:grantBinding},200);
       } catch {return json({error:'rehearsal_action_unconfirmed_no_retry'},503);}
     }
 

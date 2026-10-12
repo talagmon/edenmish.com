@@ -72,6 +72,11 @@ export async function stopRehearsal(env,now=Date.now()) {
   await env.DB.prepare('UPDATE payment_rehearsal_runs SET stopped_at=? WHERE id=? AND stopped_at IS NULL').bind(now,r.run_id).run();
   return true;
 }
+export async function rehearsalStopped(env) {
+  const r=rehearsalSpec(env);if(!r)return false;
+  const row=await env.DB.prepare('SELECT config_json,stopped_at FROM payment_rehearsal_runs WHERE id=?').bind(r.run_id).first();
+  return Number(row?.stopped_at)>0 && row.config_json===await storedSpec(env,r);
+}
 
 // Orders webhooks do not promise draft_order_id. Match the signed immutable
 // line references we placed on the dedicated draft instead; never infer by email.

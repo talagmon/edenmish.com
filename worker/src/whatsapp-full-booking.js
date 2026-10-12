@@ -142,3 +142,12 @@ export async function stopFullBookingGrant(env, reason='operator_stop', now=Date
     return changed(result);
   } catch { return false; }
 }
+export async function fullBookingStopped(env) {
+  const spec=fullBookingSpec(env);if(!spec||!env.DB)return false;
+  const hashes=await binding(spec);
+  const row=await env.DB.prepare('SELECT stopped_at,stopped_reason FROM whatsapp_full_booking_grants WHERE id=? AND binding_hash=?').bind(spec.grant_id,hashes.grant).first();
+  return Number(row?.stopped_at)>0 && typeof row.stopped_reason==='string';
+}
+export async function fullBookingBindingHash(env) {
+  const spec=fullBookingSpec(env);return spec?(await binding(spec)).grant:null;
+}
