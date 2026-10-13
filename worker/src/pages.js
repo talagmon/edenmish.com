@@ -163,6 +163,7 @@ setInterval(()=>{ if(!(document.activeElement&&document.activeElement.tagName===
 
 export function opsHtml(env) {
   return `<!doctype html><html lang="he" dir="rtl"><head>
+${env.PAYMENT_REHEARSAL_CONFIG ? '<style>[data-act="driveraccess"]{display:none!important}</style>' : ''}
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>EdenMish · ניהול שליחויות</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
@@ -354,7 +355,7 @@ async function logout(){try{await api('/api/ops/logout',{method:'POST'});}finall
 async function refresh(){const r=await api('/api/ops/orders');if(!r.ok){stopWatch();return loginHtml();}orders=(await r.json()).orders||[];var fails=[];try{var fr=await api('/api/ops/notifications/failures');if(fr.ok)fails=(await fr.json()).failures||[];}catch(e){}notifs=[];if(notifOrderId){try{var nr=await api('/api/ops/orders/'+notifOrderId+'/notifications');if(nr.ok)notifs=(await nr.json()).notifications||[];}catch(e){}}render(fails);}
 function render(fails){
   var byB={};QL.forEach(function(q){byB[q.bucket]=[];});
-  orders.forEach(function(o){var b=bucketOf(o.status);(byB[b]=byB[b]||[]).push(o);});
+  orders.forEach(function(o){if(o.rehearsal_closed_at)return;var b=bucketOf(o.status);(byB[b]=byB[b]||[]).push(o);});
   var sections='';
   QL.forEach(function(q){
     var all=(byB[q.bucket]||[]);if(all.length===0)return;
@@ -362,10 +363,12 @@ function render(fails){
     var toggle=q.bucket==='done'?'<button class="qhead-toggle" data-act="toggledone">'+(doneOpen?'▲ הצג פחות':'▼ הצג '+all.length)+'</button>':'<span class="qhead-hint">'+esc(q.hint||'')+'</span>';
     sections+='<div class="qbucket"><div class="qhead"><span class="qhead-label">'+esc(q.hebrewLabel)+'</span><span class="qhead-count">'+all.length+'</span>'+toggle+'</div><div class="qcards">'+showing.map(card).join('')+'</div></div>';
   });
+  var archivedTests=orders.filter(function(o){return !!o.rehearsal_closed_at;});
+  if(archivedTests.length)sections+='<details class="qbucket"><summary>בדיקות תשלום סגורות ('+archivedTests.length+')</summary>'+archivedTests.map(card).join('')+'</details>';
   if(!sections)sections='<div class="card"><div class="muted">אין הזמנות כרגע.</div></div>';
-  var active=orders.filter(function(o){return LIVE.indexOf(o.status)>=0;}).length;
-  var pending=orders.filter(function(o){return ['review','priced','received','payment_sent'].indexOf(o.status)>=0;}).length;
-  var done=orders.filter(function(o){return o.status==='delivered';}).length;
+  var active=orders.filter(function(o){return !o.rehearsal_run_id&&LIVE.indexOf(o.status)>=0;}).length;
+  var pending=orders.filter(function(o){return !o.rehearsal_run_id&&['review','priced','received','payment_sent'].indexOf(o.status)>=0;}).length;
+  var done=orders.filter(function(o){return !o.rehearsal_run_id&&o.status==='delivered';}).length;
   var toolbar='<div class="glass-card" style="border-radius:16px;padding:16px;margin:0 0 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px"><div><div style="display:flex;align-items:center;gap:8px"><span class="material-symbols-outlined" style="font-size:22px;color:#91d3c8">two_wheeler</span><strong style="color:#dfb7ff;font-size:1.1rem;font-family:Hanken Grotesk,sans-serif">EdenMish Ops</strong><span class="vstamp" title="גרסה">'+versionString()+'</span></div><div style="color:#cec3d2;font-size:.75rem;margin-top:2px">מרכז הבקרה: תל אביב וגוש דן</div></div><div style="display:flex;gap:8px"><div class="glass-card" style="padding:6px 14px;border-radius:12px;text-align:center"><div style="color:#91d3c8;font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700">פעילות</div><div style="color:#dae2fd;font-size:1.2rem;font-weight:700">'+active+'</div></div><div class="glass-card" style="padding:6px 14px;border-radius:12px;text-align:center"><div style="color:#dfb7ff;font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700">בתור</div><div style="color:#dae2fd;font-size:1.2rem;font-weight:700">'+pending+'</div></div><div class="glass-card" style="padding:6px 14px;border-radius:12px;text-align:center"><div style="color:#34D399;font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700">הושלם</div><div style="color:#dae2fd;font-size:1.2rem;font-weight:700">'+done+'</div></div></div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm alt" data-act="driveraccess" title="חיבור נהג"><span class="material-symbols-outlined" style="font-size:18px">qr_code_2</span> חיבור נהג</button><button class="btn sm alt" data-act="refresh" title="רענן"><span class="material-symbols-outlined" style="font-size:18px">refresh</span></button><button class="btn sm danger" data-act="logout" title="התנתק"><span class="material-symbols-outlined" style="font-size:18px">logout</span></button></div></div>';
   var fp=(fails&&fails.length)?'<div class="qbucket"><div class="qhead"><span class="qhead-label" style="color:#C0392B">בעיות בשליחת הודעות</span><span class="qhead-count">'+fails.length+'</span></div><div class="qcards">'+fails.map(function(f){return '<div class="ocard" style="border-color:rgba(192,57,43,.3)"><div class="ocard-top"><span class="badge" style="background:#C0392B">'+esc(f.channel||'email')+'</span><b>'+(f.order_id?'#'+f.order_id:'—')+'</b><span class="muted" style="margin-inline-start:auto;font-size:.72rem">'+fmt(f.created_at)+'</span></div><div class="muted">'+esc(f.template||'')+(f.recipient?' · '+esc(maskRecip(f.recipient)):'')+'</div><div class="stale" style="margin-top:4px">'+esc(f.error||'שגיאה לא ידועה')+'</div></div>';}).join('')+'</div></div>':'';
   document.getElementById('app').innerHTML=toolbar+sections+fp;
@@ -408,13 +411,14 @@ function card(o){
   h+='<div class="ocard-identity"><div class="ocard-kind'+(isLive?' is-live':'')+'"><span class="material-symbols-outlined">'+orderIcon(s)+'</span></div><div><div class="ocard-name">'+esc(o.name||'לקוח EdenMish')+'</div><div class="ocard-status-line">'+(isLive?'<span class="live-dot" aria-hidden="true"></span>':'<span class="material-symbols-outlined" style="font-size:15px">'+(isNew?'fiber_new':'schedule')+'</span>')+esc(HE[s]||s)+'</div></div><span class="material-symbols-outlined ocard-chevron">chevron_left</span></div>';
   h+='<div class="ocard-route"><span class="material-symbols-outlined" style="color:#dfb7ff">inventory_2</span><div><strong>איסוף</strong><br>'+esc(o.pickup||'—')+'</div><span class="material-symbols-outlined" style="color:#91d3c8">location_on</span><div><strong>מסירה</strong><br>'+esc(o.dropoff||'—')+'</div></div>';
   h+='<div class="ocard-meta-row"><div><div class="ocard-time-label">חלון שירות</div><div class="ocard-time">'+esc(orderWindow(o))+'</div></div><div class="ocard-meta">נוצרה '+fmtClock(o.created_at)+'</div></div><div>';
+  if(o.rehearsal_run_id)h+='<div role="note" class="chip">בדיקת תשלום — ללא משלוח · '+esc(o.rehearsal_run_id)+(o.rehearsal_closed_at?' · הבדיקה סגורה':' · שיבוץ לשליח חסום')+'</div>';
   if(o.package)h+='<span class="chip">'+esc(o.package)+'</span>';
   if(o.urgent)h+='<span class="chip chip-urg">דחוף</span>';
   if(o.payment_status&&o.payment_status!=='none')h+='<span class="chip chip-pay">'+esc(o.payment_status)+'</span>';
   h+='</div>';
   if(o.retained_by_driver)h+=retainedBanner(o);
   if(o.notes)h+='<div style="margin-top:6px;padding:6px 10px;background:rgba(251,191,36,.1);border-radius:8px;font-size:.78rem;color:#FBBF24"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">sticky_note_2</span> '+esc(o.notes)+'</div>';
-  h+=orderProgress(s)+actions(o);if(notifOrderId===id)h+=notifPanel();h+='</div>';
+  h+=(o.rehearsal_run_id?'':orderProgress(s))+actions(o);if(notifOrderId===id)h+=notifPanel();h+='</div>';
   return h;
 }
 // Handling-fee presets, in shekels. Ops adds one to the price with a single pick instead of
@@ -441,6 +445,12 @@ function feePresetHtml(id,suggested,zone){
 }
 function actions(o){
   var s=o.status,id=o.id,h='<div class="ocard-actions">';
+  if(o.rehearsal_run_id){
+    h+='<span class="muted">בדיקת תשלום בלבד. אין לבצע איסוף או מסירה.</span>';
+    if(!o.rehearsal_closed_at)h+='<button class="btn sm alt" data-act="close-rehearsal" data-id="'+id+'">סגירת הבדיקה ושמירת הרשומות</button>';
+    h+='<button class="btn sm alt" data-act="notifs" data-id="'+id+'">הודעות ורישום</button>';
+    return h+'</div>';
+  }
   if(LIVE.indexOf(s)>=0)h+=gpsControlHtml(id);
   if(s==='review'||s==='priced'||s==='received'){
     if(o.checkout_recovery_eligible){
@@ -488,6 +498,7 @@ async function approveInline(id){
 function copyPay(url){if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(url).catch(function(){});}else{var t=document.createElement('textarea');t.value=url;document.body.appendChild(t);t.select();try{document.execCommand('copy');}catch(e){}document.body.removeChild(t);}}
 async function setStatus(id,st){try{var r=await api('/api/ops/orders/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:st})});if(!r.ok)throw 0;if(st==='picked_up'||st==='delivered'||st==='failed'||st==='cancelled')stopWatch();refresh();}catch(e){alert('לא הצלחנו לעדכן את ההזמנה. נסו שוב.');}}
 async function advance(id,cur){if(NEXT[cur])await setStatus(id,NEXT[cur]);}
+async function closeRehearsal(id){if(!confirm('לסגור את הבדיקה? התשלום, הקבלה והרשומות יישמרו. לא יבוצע החזר.'))return;try{var r=await api('/api/ops/orders/'+id+'/rehearsal/close',{method:'POST'});if(!r.ok)throw 0;refresh();}catch(e){alert('לא ניתן לסגור כרגע. רעננו ובדקו את המצב.');}}
 async function markPaid(id){if(!confirm('לסמן כשולם ידנית?'))return;await setStatus(id,'paid');}
 async function recoverCheckout(id){if(!confirm('לבטל את ההזמנה התקועה ולשחרר קופון או הטבת משלוח ראשון? הפעולה אינה ניתנת לביטול.'))return;try{var r=await api('/api/ops/orders/'+id+'/recover-checkout',{method:'POST'});if(!r.ok)throw 0;alert('ההזמנה בוטלה וההטבות שוחררו ✓');refresh();}catch(e){alert('לא ניתן לבטל את ההזמנה. ייתכן שמצבה השתנה — רעננו ובדקו שוב.');}}
 async function releaseRedelivery(id){if(!confirm('התשלום אומת. לשחרר את הכתובת המתוקנת למסלול השליח?'))return;try{var r=await api('/api/ops/orders/'+id+'/release-redelivery',{method:'POST'});if(!r.ok)throw 0;refresh();}catch(e){alert('לא הצלחנו לשחרר את המשלוח החוזר. ודאו שהתשלום אומת ונסו שוב.');}}
@@ -606,6 +617,7 @@ document.getElementById('app').addEventListener('click',function(e){
   else if(act==='advance')advance(id,b.getAttribute('data-next'));
   else if(act==='fail'){if(confirm('לסמן את ההזמנה כנכשלת?'))setStatus(id,'failed');}
   else if(act==='markpaid')markPaid(id);
+  else if(act==='close-rehearsal')closeRehearsal(id);
   else if(act==='recover-checkout')recoverCheckout(id);
   else if(act==='release-redelivery')releaseRedelivery(id);
   else if(act==='pod')showPod(id);

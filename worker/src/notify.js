@@ -1,3 +1,5 @@
+import { rehearsalSelected, activeRehearsal } from './payment-rehearsal-capability.js';
+import { productionRehearsalEnvironment } from './production-rehearsal-context.js';
 // Notification layer (PR8). Wraps the existing sendEmail with a durable audit
 // trail (D1 `notifications` table) and is the future home for WhatsApp/SMS.
 //
@@ -17,9 +19,54 @@ const sanitizeError = (e) => {
   return s.slice(0, 200);
 };
 
+// The durable order marker outlives configuration and the admission window.
+// Never let a late callback fall back to ordinary recipient policies for a held order.
+async function notificationOrder(db, orderId) {
+  if (orderId == null) return { rehearsal_run_id: null };
+  return await db.prepare('SELECT rehearsal_run_id FROM orders WHERE id=?').bind(orderId).first();
+}
+
+// Internal, request-local proof issued only by the committed payment transition.
+// No caller-supplied marker or serialized object can stand in for this capability.
+const paymentNotificationScopes = new WeakMap();
+export function createPaymentNotificationScope(db, orderId, rehearsalRunId) {
+  const scope = Object.freeze({});
+  paymentNotificationScopes.set(scope, {
+    db, orderId, order: { rehearsal_run_id: rehearsalRunId },
+    templates: new Set(['customer_payment_confirmation', 'ops_payment_received']),
+  });
+  return scope;
+}
+
 // notifyEmail(env, db, { orderId, template, recipient, subject, html, text })
 // Returns { ok: boolean, skipped?: boolean, id?: number|null, error?: string }.
-export async function notifyEmail(env, db, { orderId, template, recipient, subject, html, text }) {
+export async function notifyEmail(env, db, { orderId, template, recipient, subject, html, text, paymentScope }) {
+  let order;
+  try {
+    if (paymentScope !== undefined) {
+      const proof = paymentNotificationScopes.get(paymentScope);
+      if (!proof || proof.db !== db || proof.orderId !== orderId || !proof.templates.delete(template)) {
+        return {ok:false,skipped:true,error:'notification_order_unconfirmed'};
+      }
+      order = proof.order;
+    } else {
+      order = await notificationOrder(db, orderId);
+    }
+  }
+  catch { return {ok:false,skipped:true,error:'notification_order_unconfirmed'}; }
+  if(order?.rehearsal_run_id || rehearsalSelected(env)) {
+    try {
+      env = rehearsalSelected(env) ? env : productionRehearsalEnvironment(env);
+      const r=env && await activeRehearsal(env);
+      if(!r || order?.rehearsal_run_id !== r.run_id || !env.SENDGRID_API_KEY || ![r.email,r.ops_email].includes(recipient)
+        || !['ops_new_order','customer_payment_confirmation','ops_payment_received','customer_otp'].includes(template))return {ok:false,skipped:true};
+      const claim=await db.prepare(`UPDATE payment_rehearsal_runs SET email_attempts=email_attempts+1 WHERE id=? AND stopped_at IS NULL AND expires_at>? AND email_attempts<4
+        AND EXISTS(SELECT 1 FROM orders WHERE id=? AND rehearsal_run_id=payment_rehearsal_runs.id AND rehearsal_closed_at IS NULL) RETURNING id`).bind(r.run_id,Date.now(),orderId).first();
+      if(!claim)return {ok:false,skipped:true};
+      subject='[בדיקת תשלום — ללא משלוח] '+subject;
+      html='<p dir="rtl">בדיקת תשלום אמיתי בלבד. אין לבצע איסוף או מסירה.</p>'+html;
+    } catch {return {ok:false,skipped:true};}
+  }
   const configuredSubject = emailSubjectForEnv(env, subject);
   // 1. Best-effort audit row (pending). Never blocks the send if D1 hiccups.
   let id = null;
@@ -65,6 +112,10 @@ export async function notifyEmail(env, db, { orderId, template, recipient, subje
 // Approved-template WhatsApp send. Recipient values are never retained in the
 // audit table, and the supported classes have no dynamic provider components.
 export async function notifyWhatsApp(env, db, { orderId, messageClass, recipient }) {
+  let order;
+  try { order = await notificationOrder(db, orderId); }
+  catch { return {ok:false,skipped:true,error:'notification_order_unconfirmed'}; }
+  if(order?.rehearsal_run_id || rehearsalSelected(env)) return {ok:false,skipped:true,error:'rehearsal_templates_disabled'};
   let id = null;
   try {
     id = await createNotificationAttempt(db, {

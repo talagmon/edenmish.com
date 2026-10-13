@@ -1,0 +1,89 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+import {CONTRACT,verifyApproval,runPreflight,supervisionDecision,supervise} from '../scripts/whatsapp-review-r3-runner.mjs';
+const proposal=JSON.parse(readFileSync(new URL('../../docs/reviews/whatsapp-release-readiness-20261010/provider-proposal.json',import.meta.url)));const NOW=1791788400000,hash='a'.repeat(64);
+const approval=()=>({id:CONTRACT.id,authorization:'release-smoke-022064-v3',approved:true,sourceSha256:hash,originalCapMicros:2000000,allocationMicros:220640,retainedMicros:1748884,priorUnusedAllocationMicros:249920,parkedUnusedMicros:29280,transferredUnusedMicros:220640,additionalUnallocatedMicros:0,failedPreflightReservedMicros:112640,worker:CONTRACT.worker,database:CONTRACT.database,sender:CONTRACT.sender,recipient:'+972500000001',approvedAt:NOW-1000,approvalExpiresAt:NOW+3600000,feesBounded:true,maxAdditionalMandatoryFeeMicros:780000,feeEvidence:'synthetic billing bound',startsAt:NOW,endsAt:NOW+900000});
+function envelope(){const fields=[['size','מעטפה קטנה'],['notes','מסמכים'],['pickup','מבני מושה 16 תל אביב'],['dropoff','לקרינצקי 111 רמת גן'],['schedule','מחר בבוקר'],['dropoff_detail','לנועה'],['name','יעל כהן'],['email','yael@example.com'],['pickup_detail','אצל השומר']];return {model:'gpt-6.1-sol',service_tier:'default',status:'completed',usage:{input_tokens:16384,output_tokens:1024,total_tokens:17408,input_tokens_details:{cached_tokens:0},output_tokens_details:{reasoning_tokens:100}},output:[{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:JSON.stringify({version:4,intent:'update',reply_language:'he',reply_style:'friendly',fields:fields.map(([field,quote])=>({field,quote})),topic:null,clarify_field:null})}]}]};}
+function harness(){let held=false,calls=0,record;const io={assertOff:async()=>{},reserve:async()=>{if(held)return false;held=true;return true;},finish:async r=>{record=r;return true;},fetch:async(url,init)=>{calls++;assert.equal(url,'https://api.openai.com/v1/responses');assert.equal(init.redirect,'manual');const p=JSON.parse(init.body);assert.equal(p.reasoning.effort,'low');assert.equal(p.max_output_tokens,1024);return Response.json(envelope());}};return {io,run:()=>runPreflight({approval:approval(),sourceHash:hash,proposal,key:'sk-synthetic-key-only',io,clock:()=>NOW}),counts:()=>({held,calls,record})};}
+test('preflight exact semantics, low reasoning and usage; duplicate cannot retry',async()=>{const h=harness(),r=await h.run();assert.equal(r.status,'matched');assert.equal(r.usage.reasoning,100);assert.equal(r.reservedMicros,56320);assert.equal(r.secretPersisted,false);await assert.rejects(h.run,/reservation_uncertain/);assert.equal(h.counts().calls,1);});
+for(const [name,mutate] of [['wrong-model',r=>r.model='other'],['premium-tier',r=>r.service_tier='priority'],['incomplete',r=>r.status='incomplete'],['missing-usage',r=>delete r.usage],['over-input',r=>r.usage.input_tokens++],['over-output',r=>r.usage.output_tokens++],['reasoning-over-output',r=>r.usage.output_tokens_details.reasoning_tokens=1025],['missing-field',r=>{const p=JSON.parse(r.output[0].content[0].text);p.fields.pop();r.output[0].content[0].text=JSON.stringify(p);}],['swap-roles',r=>{const p=JSON.parse(r.output[0].content[0].text);[p.fields[2].quote,p.fields[3].quote]=[p.fields[3].quote,p.fields[2].quote];r.output[0].content[0].text=JSON.stringify(p);}]] )test('preflight retains full hold: '+name,async()=>{const h=harness();let calls=0;h.io.fetch=async()=>{calls++;const r=envelope();mutate(r);return Response.json(r);};const r=await h.run();assert.equal(r.status,'failed');assert.equal(r.reservedMicros,56320);assert.equal(calls,1);await assert.rejects(h.run,/reservation_uncertain/);});
+for(const [name,fetch] of [['redirect',async()=>new Response('',{status:302})],['oversize',async()=>new Response('x'.repeat(32769))],['json',async()=>new Response('{')],['transport',async()=>{throw Error('secret provider text');}]])test('bounded preflight '+name,async()=>{const h=harness();h.io.fetch=fetch;const r=await h.run();assert.equal(r.status,'failed');assert.ok(!JSON.stringify(r).includes('secret provider'));});
+test('unknown settlement retains pending hold',async()=>{const h=harness();h.io.finish=async()=>{throw Error('DB unavailable');};assert.equal((await h.run()).status,'pending');await assert.rejects(h.run);assert.equal(h.counts().calls,1);});
+test('approval rejects scope/fees/source/window drift',()=>{for(const p of [{approved:false},{allocationMicros:306241},{retainedMicros:1078748},{feesBounded:false},{maxAdditionalMandatoryFeeMicros:780001},{sourceSha256:'b'.repeat(64)},{worker:'production'},{recipient:'+972534058498'},{endsAt:NOW+900001}])assert.throws(()=>verifyApproval({...approval(),...p},hash,NOW,{window:true}),JSON.stringify(p));});
+function snap(){return {sourceVerified:true,configVerified:true,historyVerified:true,grant:{id:CONTRACT.grantId,version:8,starts_at:NOW,expires_at:NOW+900000,historical_micros:1025204,historical_model_micros:820504,fee_cushion_micros:780000,spent_micros:0,model_micros:0,inbound:0,outbound:0,address:0,model:0,lock_id:null,stopped_reason:null},operations:[],replies:[],handoff:false};}
+function add(s,kind,status='settled',at=NOW){const cost={inbound:10300,outbound:11300,address:32000,model:56320}[kind],id=s.grant.id+':'+kind+':'+s.operations.length;s.operations.push({id,grant_id:s.grant.id,kind,status,reserved_micros:cost,created_at:at,finished_at:status==='pending'?null:at});s.grant[kind]++;s.grant.spent_micros+=cost;if(kind==='model')s.grant.model_micros+=cost;if(status==='pending')s.grant.lock_id=id;return s.operations.at(-1);}
+const decide=(s,n=NOW)=>supervisionDecision(s,n,approval());
+test('model/Maps exhaustion allows numbered replies',()=>{const s=snap();add(s,'model');assert.equal(decide(s).action,'continue');for(let i=0;i<5;i++)add(s,'outbound');assert.equal(decide(s).reason,'outbound_complete');});
+test('every numeric/identity boundary fails closed',()=>{for(const patch of [{inbound:9},{outbound:9},{address:3},{model:2},{spent_micros:164321},{model_micros:56321},{historical_micros:0},{fee_cushion_micros:280000},{expires_at:NOW+900001},{version:5},{model:1}]){const s=snap();Object.assign(s.grant,patch);assert.equal(decide(s).action,'stop');}for(const key of ['sourceVerified','configVerified','historyVerified']){const s=snap();s[key]=false;assert.equal(decide(s).action,'stop');}});
+test('final ack allowed only 10s; stop/expiry override',()=>{const s=snap();s.handoff=true;s.replies=[{kind:'handoff_ack',state:'pending',created_at:NOW}];assert.equal(decide(s,NOW+9999).action,'grace');assert.equal(decide(s,NOW+10000).action,'stop');s.grant.stopped_reason='operator_stop';assert.equal(decide(s).action,'stop');s.grant.stopped_reason=null;assert.equal(decide(s,NOW+900000).reason,'expired');for(const state of ['sent','failed','uncertain','cancelled']){s.replies[0].state=state;assert.equal(decide(s).reason,'handoff_finished');}});
+test('final ack cannot add sixth send or create absent reply',()=>{const s=snap();s.handoff=true;assert.equal(decide(s).reason,'handoff_without_reply');for(let i=0;i<5;i++)add(s,'outbound');s.replies=[{kind:'handoff_ack',state:'pending',created_at:NOW}];assert.equal(decide(s).reason,'handoff_quota');});
+test('notice 15s claim/15s send/30s overall; terminal and stop suppress',()=>{const s=snap(),m=add(s,'model','uncertain');s.grant.stopped_reason='model_uncertain';assert.equal(decide(s,NOW+14999).action,'grace');assert.equal(decide(s,NOW+15000).action,'stop');const n=add(s,'outbound','pending',NOW+14999);n.id=s.grant.id+':outbound:failure-notice';s.grant.lock_id=n.id;n.outcome='notice_sending:'+m.id.split(':model:')[1]+':0';assert.equal(decide(s,NOW+29997).action,'grace');assert.equal(decide(s,NOW+29999).action,'stop');n.status='settled';assert.equal(decide(s,NOW+15000).reason,'notice_finished');s.grant.stopped_reason='operator_stop';assert.equal(decide(s,NOW+15000).action,'stop');});
+test('read failure and independent deadline both clean up',async()=>{for(const watchdog of [false,true]){let time=NOW,clean=0,beats=0;const r=await supervise({approval:approval(),sourceHash:hash,clock:()=>time,sleep:async n=>{time+=n;},watchdog,io:{heartbeat:async()=>{beats++;},snapshot:async()=>{throw Error('read');},cleanup:async()=>{clean++;return {flagsOff:true,keyAbsent:true,callbackVerified:false};}}});assert.equal(clean,1);assert.ok(beats>0);assert.equal(r.callbackVerified,false);if(watchdog)assert.equal(time,NOW+900000);}});
+test('preflight refuses v3 downgrade without runtime reply style',async()=>{const h=harness();h.io.fetch=async()=>{const e=envelope(),r=JSON.parse(e.output[0].content[0].text);r.version=3;delete r.reply_style;e.output[0].content[0].text=JSON.stringify(r);return Response.json(e);};assert.equal((await h.run()).status,'failed');});
+test('unexplained uncertainty stops even without stopped_reason',()=>{const s=snap();add(s,'model','uncertain');assert.equal(decide(s).reason,'unexplained_uncertainty');});
+test('supervisor uses fresh time after slow snapshot',async()=>{let time=NOW,n=0;const s=snap();await supervise({approval:approval(),sourceHash:hash,clock:()=>time,sleep:async ms=>{time+=ms;},io:{heartbeat:async()=>{},snapshot:async()=>{if(n++===0){time+=100;add(s,'inbound','settled',time);return s;}throw Error('stop');},cleanup:async reason=>{assert.equal(reason,'read_or_heartbeat_uncertain');return {};}}});assert.equal(n,2);});
+test('provider at or beyond 10s is not accepted and retains hold',async()=>{let now=NOW;const h=harness();h.io.fetch=async()=>{now+=10000;return Response.json(envelope());};const r=await runPreflight({approval:approval(),sourceHash:hash,proposal,key:'sk-synthetic-only-key',io:h.io,clock:()=>now});assert.equal(r.status,'failed');assert.equal(r.reason,'timeout');});
+test('zero reasoning usage is valid with requested low effort, not proof of no reasoning',async()=>{const h=harness();h.io.fetch=async()=>{const r=envelope();r.usage.output_tokens_details.reasoning_tokens=0;return Response.json(r);};const r=await h.run();assert.equal(r.status,'matched');assert.equal(r.usage.reasoning,0);});
+test('notice with no remaining outbound slot is suppressed',()=>{const s=snap();for(let i=0;i<5;i++)add(s,'outbound');add(s,'model','uncertain');s.grant.stopped_reason='model_uncertain';assert.equal(decide(s).reason,'notice_unavailable');});
+
+test('old approval or undeclared allocation transfer cannot authorize r3',()=>{
+ for(const patch of [{authorization:'release-smoke-035-v1'},{transferredUnusedMicros:0},{additionalUnallocatedMicros:1},{failedPreflightReservedMicros:0},{retainedMicros:1636244},{allocationMicros:350000}])assert.throws(()=>verifyApproval({...approval(),...patch},hash,NOW));
+ assert.equal(1748884+220640,1969524);assert.ok(1969524<=2000000);
+});
+
+test('runner attaches only value-free mismatch fields after strict acceptance',async()=>{
+ const h=harness();h.io.fetch=async()=>{const e=envelope(),raw=JSON.parse(e.output[0].content[0].text);raw.fields.pop();e.output[0].content[0].text=JSON.stringify(raw);return Response.json(e);};
+ const r=await h.run();assert.equal(r.status,'failed');assert.equal(r.reason,'semantic_mismatch');assert.deepEqual(r.semantics.missingFields,['pickup_detail']);assert.equal(r.semantics.checks.exactEntries,false);
+ for(const [,value] of proposal.requests[0].expectedEntries)assert.ok(!JSON.stringify(r).includes(JSON.stringify(value)));
+ assert.equal(h.counts().record.status,'failed');await assert.rejects(h.run,/reservation_uncertain/);
+});
+test('runner reports version/style mismatch without exposing proposal or relaxing acceptance',async()=>{
+ const h=harness();h.io.fetch=async()=>{const e=envelope(),raw=JSON.parse(e.output[0].content[0].text);raw.version=3;delete raw.reply_style;e.output[0].content[0].text=JSON.stringify(raw);return Response.json(e);};
+ const r=await h.run();assert.equal(r.status,'failed');assert.equal(r.semantics.checks.versionV4,false);assert.equal(r.semantics.checks.replyStylePresent,false);assert.equal(r.semantics.checks.exactEntries,true);
+});
+test('no semantic report exists for strict evidence rejection',async()=>{
+ const h=harness();h.io.fetch=async()=>{const e=envelope(),raw=JSON.parse(e.output[0].content[0].text);raw.fields[2].quote='fabricated address';e.output[0].content[0].text=JSON.stringify(raw);return Response.json(e);};
+ const r=await h.run();assert.equal(r.status,'failed');assert.match(r.reason,/proposal_rejected:/);assert.equal(r.semantics,undefined);assert.ok(!JSON.stringify(r).includes('fabricated address'));
+});
+test('matched semantics cannot override uncertain durable settlement',async()=>{
+ const h=harness();h.io.finish=async()=>false;const r=await h.run();assert.equal(r.status,'pending');assert.equal(r.reason,'finish_unverified_no_retry');assert.equal(r.semantics.matched,true);await assert.rejects(h.run,/reservation_uncertain/);
+});
+
+test('runner accepts only pinned full source equivalence and reports the differing field names',async()=>{
+ const h=harness();h.io.fetch=async()=>{const e=envelope(),r=JSON.parse(e.output[0].content[0].text);r.fields.find(x=>x.field==='size').quote='מעטפה קטנה עם מסמכים';r.fields.find(x=>x.field==='notes').quote='מעטפה קטנה עם מסמכים';r.fields.find(x=>x.field==='pickup_detail').quote='באיסוף אצל השומר.';r.fields.find(x=>x.field==='dropoff_detail').quote='לנועה.';e.output[0].content[0].text=JSON.stringify(r);return Response.json(e);};
+ const r=await h.run();assert.equal(r.status,'matched');assert.equal(r.semantics.checks.exactEntries,false);assert.equal(r.semantics.equivalentEntries,true);assert.deepEqual(r.semantics.equivalentFields,['dropoff_detail','notes','pickup_detail']);assert.equal(h.counts().record.status,'matched');await assert.rejects(h.run,/reservation_uncertain/);
+});
+test('runner does not treat omitted morning instruction as equivalent',async()=>{
+ const h=harness();h.io.fetch=async()=>{const e=envelope(),r=JSON.parse(e.output[0].content[0].text);r.fields.find(x=>x.field==='schedule').quote='מחר';e.output[0].content[0].text=JSON.stringify(r);return Response.json(e);};
+ const r=await h.run();assert.equal(r.status,'failed');assert.equal(r.reason,'semantic_mismatch');assert.deepEqual(r.semantics.valueMismatchFields,['schedule']);assert.equal(r.semantics.equivalentEntries,false);
+});
+
+test('r3 records only bounded response status and separates pre-request checks from transport',async()=>{
+ let time=NOW,calls=0;const h=harness();h.io.assertOff=async()=>{if(++calls===2)time+=700;};
+ h.io.fetch=async()=>{time+=1000;const r=envelope();r.status='incomplete';r.incomplete_details={reason:'max_output_tokens',privateText:'not retained'};return Response.json(r);};
+ const r=await runPreflight({approval:approval(),sourceHash:hash,proposal,key:'sk-synthetic-only-key',io:h.io,clock:()=>time});
+ assert.equal(r.reason,'response_envelope');assert.equal(r.providerLatencyMs,1700);assert.equal(r.transportLatencyMs,1000);
+ assert.deepEqual(r.responseDiagnostic,{status:'incomplete',incompleteReason:'max_output_tokens',errorPresent:false});
+ assert.ok(!JSON.stringify(r).includes('not retained'));await assert.rejects(h.run,/reservation_uncertain/);
+});
+test('r3 diagnostic bounds unexpected provider status/reason and never retains error text',async()=>{
+ const h=harness();h.io.fetch=async()=>{const r=envelope();r.status='private status';r.error={message:'private error'};r.incomplete_details={reason:'private reason'};return Response.json(r);};
+ const r=await h.run();assert.deepEqual(r.responseDiagnostic,{status:'other',incompleteReason:'other',errorPresent:true});assert.ok(!JSON.stringify(r).includes('private '));
+});
+test('r3 transfer cannot consume parked allowance or unallocated margin',()=>{
+ for(const patch of [{priorUnusedAllocationMicros:249921},{parkedUnusedMicros:29279},{additionalUnallocatedMicros:1196},{failedPreflightReservedMicros:56320},{allocationMicros:249920}])assert.throws(()=>verifyApproval({...approval(),...patch},hash,NOW));
+ assert.equal(approval().retainedMicros+approval().allocationMicros+approval().parkedUnusedMicros+1196,approval().originalCapMicros);
+});
+test('zero-Maps scope stops any address operation instead of charging a spare allowance',()=>{const s=snap();add(s,'address');assert.equal(decide(s).reason,'budget_invalid');});
+
+for(const valid of [true,false])test('late response retains only verified usage; failed hold and no semantic revival '+valid,async()=>{
+ let now=NOW,checks=0;const h=harness();h.io.assertOff=async()=>{if(++checks===2)now+=4343;};h.io.fetch=async()=>{now+=6001;const e=envelope();if(!valid)e.usage.total_tokens++;e.usage.private='never retained';return Response.json(e);};
+ const r=await runPreflight({approval:approval(),sourceHash:hash,proposal,key:'sk-synthetic-only-key',io:h.io,clock:()=>now,timingClock:()=>now});
+ assert.equal(r.status,'failed');assert.equal(r.reason,'timeout');assert.equal(r.reservedMicros,56320);assert.equal(r.semantics,undefined);
+ assert.equal(r.usage?.input??null,valid?16384:null);assert.equal(h.counts().record.status,'failed');
+ assert.equal(r.stageTimings.presend_off.totalMs,4343);assert.equal(r.stageTimings.transport.totalMs,6001);assert.equal(r.stageTimings.semantics,undefined);
+ assert.ok(!JSON.stringify(r).includes('never retained'));await assert.rejects(h.run,/reservation_uncertain/);
+});
+test('final verification crossing approval expiry cannot report matched',async()=>{
+ let now=NOW,checks=0;const h=harness();h.io.assertOff=async()=>{if(++checks===3)now=NOW+3600000;};
+ const r=await runPreflight({approval:approval(),sourceHash:hash,proposal,key:'sk-synthetic-only-key',io:h.io,clock:()=>now});assert.equal(r.status,'failed');assert.equal(r.reason,'expired');assert.equal(r.reservedMicros,56320);
+});

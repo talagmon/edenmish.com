@@ -1,8 +1,8 @@
 // D1 data access helpers
 
-export async function createOrder(DB, o) {
+export async function createOrder(DB, o, { token: reservedToken = null, source = 'website' } = {}) {
   const now = Date.now();
-  const token = crypto.randomUUID().replace(/-/g, '').slice(0, 22);
+  const token = reservedToken || crypto.randomUUID().replace(/-/g, '').slice(0, 22);
   const r = await DB.prepare(
     `INSERT INTO orders (
        token, status, name, phone, customer_type,
@@ -12,8 +12,8 @@ export async function createOrder(DB, o) {
        price, currency, review_flag, review_reason, payment_url, payment_status, created_at,
        subtotal_price, discount_code, discount_amount, discount_title,
        business_account_id, business_external_id, wallet_reservation_id, payment_method,
-       phone_delivery_link_opt_in, phone_delivery_link_opt_in_at
-     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       phone_delivery_link_opt_in, phone_delivery_link_opt_in_at, source_channel
+     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
      RETURNING id, token`
   ).bind(
     token, o.status ?? 'received', o.name ?? null, o.phone ?? null, o.customer_type ?? null,
@@ -25,7 +25,7 @@ export async function createOrder(DB, o) {
     // Coupon snapshot (migration 008): NULL/0 when no coupon — identical to the old row shape.
     o.subtotal_price ?? null, o.discount_code ?? null, o.discount_amount ?? 0, o.discount_title ?? null,
     o.business_account_id ?? null, o.business_external_id ?? null, o.wallet_reservation_id ?? null, o.payment_method ?? null,
-    o.phone_delivery_link_opt_in ? 1 : 0, o.phone_delivery_link_opt_in_at ?? null
+    o.phone_delivery_link_opt_in ? 1 : 0, o.phone_delivery_link_opt_in_at ?? null, source
   ).first();
   await addStatus(DB, r.id, o.status || 'received');
   return r; // { id, token }

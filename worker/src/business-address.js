@@ -250,6 +250,27 @@ export function resolveBusinessAddress(street, houseNumber, city, places) {
   };
 }
 
+// Optional booking choices: weaker street matches are never auto-corrected.
+// Every suggestion must still have the stated house number/city, an Israeli
+// country component, and coordinates. The customer must explicitly choose it.
+export function businessAddressSuggestions(houseNumber, city, places) {
+  const seen = new Set(), choices = [];
+  for (const place of places || []) {
+    const route = component(place, 'route'), number = component(place, 'street_number'), locality = resolvedCity(place);
+    const lat = Number(place?.location?.latitude), lng = Number(place?.location?.longitude);
+    if (!route || !locality || normalizeHouseNumber(number) !== normalizeHouseNumber(houseNumber)
+      || normalizeCity(locality) !== normalizeCity(city)
+      || !['ישראל', 'israel', 'il'].includes(normalizeAddressText(component(place, 'country')))
+      || !Number.isFinite(lat) || lat < SERVICE_AREA_RECTANGLE.low.latitude || lat > SERVICE_AREA_RECTANGLE.high.latitude
+      || !Number.isFinite(lng) || lng < SERVICE_AREA_RECTANGLE.low.longitude || lng > SERVICE_AREA_RECTANGLE.high.longitude) continue;
+    const address = `${route} ${number}, ${locality}`;
+    if (seen.has(address)) continue;
+    seen.add(address); choices.push({ address, city: locality, lat, lng });
+    if (choices.length === 3) break;
+  }
+  return choices;
+}
+
 async function searchPlaces(street, houseNumber, city, apiKey, fetchImpl) {
   const signal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
     ? AbortSignal.timeout(5000)
@@ -382,6 +403,12 @@ export async function validateBusinessBatchAddresses(rows, options = {}) {
             places,
           );
           if (!textResolution.error) return textResolution;
+          // A booking can ask the user to select already map-backed candidates;
+          // avoid spending on autocomplete/details before that explicit choice.
+          if (options.offerSuggestions) {
+            const candidates = businessAddressSuggestions(row.delivery_house_number, row.delivery_city, places);
+            if (candidates.length) return { ...textResolution, candidates };
+          }
           const predictions = await autocompletePlaces(
             row.delivery_street,
             row.delivery_house_number,
@@ -389,18 +416,22 @@ export async function validateBusinessBatchAddresses(rows, options = {}) {
             apiKey,
             fetchImpl,
           ).catch(() => []);
-          return resolveBusinessAddress(
+          const allPlaces = [...places, ...predictions];
+          const resolution = resolveBusinessAddress(
             row.delivery_street,
             row.delivery_house_number,
             row.delivery_city,
-            [...places, ...predictions],
+            allPlaces,
           );
+          if (resolution.error && options.offerSuggestions) resolution.candidates = businessAddressSuggestions(row.delivery_house_number, row.delivery_city, allPlaces);
+          return resolution;
         })();
         cache.set(key, resolutionPromise);
       }
       const resolution = await resolutionPromise;
       if (resolution.error) {
         row.errors = [...new Set([...row.errors, resolution.error])];
+        if (options.offerSuggestions && resolution.candidates?.length) row.address_candidates = resolution.candidates;
         return;
       }
       row.delivery_street = resolution.street;

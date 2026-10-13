@@ -1124,3 +1124,497 @@ the full design.
 - Backfill + read/write-path migration will follow in separate PRs (PR13–PR15 per the plan).
 
 Do not run these until they exist and have been validated on a dev DB.
+
+## 039 — WhatsApp booking drafts and channel source
+
+Adds `orders.source_channel` (defaults to `website`) and isolated conversation,
+event-deduplication, reply-outbox and sanitized delivery-receipt tables, plus a
+durable checkout-attempt safety timestamp. Contains no seed PII or credentials.
+Apply **after merge and before deploying the Worker**, even if booking stays off.
+Migration 039 must be applied once; check the column before rerunning an interrupted
+migration. Coordinate separately developed 035/036 changes without renumbering them.
+
+```bash
+cd worker
+wrangler d1 execute edenmish --remote --file=./migrations/039_whatsapp_booking.sql
+```
+
+Verification (read only):
+
+```sql
+PRAGMA table_info(orders);
+SELECT name FROM sqlite_master WHERE type='table'
+AND name IN ('whatsapp_booking_conversations','whatsapp_booking_events','whatsapp_booking_replies','whatsapp_booking_receipts');
+PRAGMA table_info(whatsapp_booking_conversations);
+SELECT source_channel, COUNT(*) FROM orders GROUP BY source_channel;
+```
+
+Confirm `source_channel` defaults to `website`, all four tables and `checkout_started_at` exist, and enable
+`WHATSAPP_BOOKING_STORAGE_READY=on` for retention. Keep booking/intake/send flags off
+until the new privacy and dedicated-Twilio-number activation gates in
+`../docs/WHATSAPP_BOOKING.md` are approved. This task did not run remote migrations.
+
+The deployment preflight `node scripts/validate-booking-schema.mjs --database
+edenmish --config wrangler.toml` checks schema metadata only, including full table
+and index definitions. Production never applies migrations automatically.
+Staging uses `--database edenmish-staging --config wrangler.staging.generated.toml
+--apply-staging`: it applies 039 only when wholly absent and checks again afterward.
+Any partial, malformed or structurally different schema blocks deployment instead
+of retrying the one-time ALTER. Equivalent but differently written definitions
+also require operator review; this conservative check is intentional.
+
+## 040 — Bounded Luna staging-pilot ledger
+
+Adds `whatsapp_pilot_budgets` and `whatsapp_pilot_model_attempts` plus their lookup
+index. Stores immutable pilot bindings/window, serialized request reservations,
+conservative spend, safe outcomes and token counts. No chat bodies, phone numbers
+or credentials are stored. Rows survive retention cleanup and migration replay;
+never reset them to obtain more allowance.
+
+Required before enabling `luna-v1` readiness/live mode. Ordinary deployments with
+that profile absent do not use these tables. Apply only to the approved environment.
+Production command after merge, before a future dependent feature deploy:
+
+```bash
+cd worker
+wrangler d1 execute edenmish --remote --file=./migrations/040_whatsapp_luna_pilot_budget.sql
+```
+
+For the separately authorized staging pilot:
+
+```bash
+cd worker
+wrangler d1 execute edenmish-staging --remote --config <staging-config> --file=./migrations/040_whatsapp_luna_pilot_budget.sql
+node scripts/validate-luna-pilot-schema.mjs --config <staging-config>
+```
+
+Read-only verification query:
+
+```sql
+SELECT name,sql FROM sqlite_master WHERE name IN
+('whatsapp_pilot_budgets','whatsapp_pilot_model_attempts','whatsapp_pilot_model_attempts_pilot');
+SELECT COUNT(*) FROM whatsapp_pilot_budgets;
+SELECT COUNT(*) FROM whatsapp_pilot_model_attempts;
+```
+
+The validator checks exact full table/index definitions, including budget limits;
+missing/partial/weakened definitions block readiness. It never applies migrations.
+Only set `WHATSAPP_BOOKING_PILOT_BUDGET_READY=on` after verification. No remote 040
+migration, deployment or activation was performed as part of this implementation.
+
+## 041 — Versioned WhatsApp continuation grant
+
+Adds `whatsapp_continuation_grants`, `whatsapp_continuation_operations` and its
+lookup index. Requires 040. No edits to original hashes, stops, rows or holds.
+One grant per original run, ≤30-minute immutable window, retained reservations,
+$0.50 fee cushion, $0.50 cumulative model sub-cap and $2 same-run constraint.
+No PII/secrets; no retention reset. Disabled deployments do not use these tables.
+Exact future production prerequisite after merge if this feature is adopted:
+
+```bash
+cd worker
+wrangler d1 execute edenmish --remote --file=./migrations/041_whatsapp_continuation_grant.sql
+```
+
+For the separately approved staging rehearsal only:
+
+```bash
+cd worker
+wrangler d1 execute edenmish-staging --remote --config <staging-config> --file=./migrations/041_whatsapp_continuation_grant.sql
+node scripts/validate-continuation-schema.mjs --config <staging-config>
+```
+
+Read-only verification:
+
+```sql
+SELECT name,sql FROM sqlite_master WHERE name IN
+('whatsapp_continuation_grants','whatsapp_continuation_operations','whatsapp_continuation_operations_grant');
+SELECT id,pilot_id,version,starts_at,expires_at,historical_micros,fee_cushion_micros,
+spent_micros,model_micros,inbound,outbound,address,model,lock_id,stopped_reason
+FROM whatsapp_continuation_grants;
+```
+
+Only after exact schema verification set `WHATSAPP_BOOKING_CONTINUATION_SCHEMA_READY=on`.
+The validator rejects missing/partial/weakened definitions and never repairs them.
+Migration replay cannot reset a grant. No remote migration, issuance or activation
+was performed. See `docs/WHATSAPP_CONTINUATION_GRANT.md`.
+
+## 042 — One approved follow-on after an unused expired continuation
+
+Adds separate v2 grant/operation tables and four guards. Requires 040 and 041.
+The original grant and operations remain untouched. Issuance requires the v1
+window to have expired with zero spend, zero counters, no operations and no
+uncertainty/lock. Once linked, database triggers freeze that predecessor.
+This deliberately does not support migrating spent grants or arbitrary renewals.
+Original $0.30 historical holds and the same $0.50 cushion are carried once;
+the $2 original-run cap and $0.50 original model pool remain enforced.
+
+Exact future production prerequisite, only after merge and separate authorization:
+
+```bash
+cd worker
+wrangler d1 execute edenmish --remote --file=./migrations/042_whatsapp_continuation_followon.sql
+```
+
+For the approved staging test preparation:
+
+```bash
+cd worker
+wrangler d1 execute edenmish-staging --remote --config <staging-config> --file=./migrations/042_whatsapp_continuation_followon.sql
+node scripts/validate-continuation-followon-schema.mjs --config <staging-config>
+```
+
+Read-only verification (the validator checks exact definitions including triggers):
+
+```sql
+SELECT name,sql FROM sqlite_master WHERE name LIKE 'whatsapp_continuation_followon_%' OR name LIKE 'whatsapp_followon_%';
+SELECT id,pilot_id,version,starts_at,expires_at,historical_micros,fee_cushion_micros,
+spent_micros,model_micros,inbound,outbound,address,model,lock_id,stopped_reason
+FROM whatsapp_continuation_followon_grants;
+```
+
+Set `WHATSAPP_BOOKING_CONTINUATION_FOLLOWON_SCHEMA_READY=on` only after validation.
+Use version `2` and the SAME original pilot ID with suffix `:quote-v2-handset-2`.
+Do not alter/reissue the old window, change the pilot ID, or release old holds.
+
+### 043 — one separately approved retry after the stopped v2 rehearsal
+
+Adds `whatsapp_continuation_retry_grants` and operations plus exact-predecessor
+and freeze triggers. Version 3 carries $0.4051 prior operation holds and $0.50
+cushion once; separately carries $0.33 model holds and permits at most five new
+$0.03 interpretations. Original $2 aggregate/$0.50 model caps remain. Only the
+exact expired, stopped v2 ledger (4 inbound/3 outbound/1 uncertain model, $0.1051)
+is eligible. Previous rows and operations become immutable after issuance.
+Migration alone creates no grant, enables no flag and performs no provider IO.
+
+Staging preparation, only after explicit approval:
+
+```sh
+wrangler d1 execute edenmish-staging --remote --config <staging-config> --file=./migrations/043_whatsapp_continuation_retry.sql
+node scripts/validate-continuation-retry-schema.mjs --config <staging-config>
+```
+
+Production operator command for the PR deployment checklist; **not authorized now**:
+
+```sh
+wrangler d1 execute edenmish --remote --file=./migrations/043_whatsapp_continuation_retry.sql
+```
+
+Verify exact schema definitions with the validator and verify zero new rows before
+issuance:
+
+```sql
+SELECT name,sql FROM sqlite_master WHERE name LIKE 'whatsapp_continuation_retry_%' OR name LIKE 'whatsapp_retry_%';
+SELECT COUNT(*) FROM whatsapp_continuation_retry_grants;
+SELECT COUNT(*) FROM whatsapp_continuation_retry_operations;
+```
+
+Version `3`, the SAME pilot ID with suffix `:quote-v2-handset-3`, schema readiness
+`WHATSAPP_BOOKING_CONTINUATION_RETRY_SCHEMA_READY=on`, and explicitly approved
+`WHATSAPP_BOOKING_FAILURE_NOTICE_POLICY=one-shot-v1` are required. OFF-only Ops
+issuance remains separate from activation. Fresh approval is required for the
+fixed failure notice and at most 30 seconds of shutdown grace within the hard
+cutoff. No transcript/retention policy change is included. Do not replay/reset
+old grants, replace pilot IDs, refund reservations or generalize this to recurring
+windows. After merge, the operator must run required migrations before any
+separately approved deployment.
+
+### 044 — bounded Sol-low continuation (staging only)
+
+Adds immutable fourth-session identity, exact stopped-predecessor checks and
+predecessor retention triggers. Carries $0.735124 historical reservations plus
+the existing $0.50 fee cushion. New quotas: 15 minutes, 12 inbound, 12 outbound,
+3 address lookups, 4 Sol-low calls; maximum new reservations $0.580480.
+
+Authorized staging application:
+`npx wrangler d1 execute edenmish-staging --remote --config ../outputs/wrangler.sol.prepared.toml --file migrations/044_whatsapp_continuation_sol.sql`
+
+Verify with `node scripts/validate-continuation-sol-schema.mjs --config ../outputs/wrangler.sol.prepared.toml` and
+`SELECT id,version,starts_at,expires_at,spent_micros,stopped_reason FROM whatsapp_continuation_sol_grants;`.
+No production migration is part of this staging task.
+For a separately authorized future production deployment after merge, from `worker`:
+`npx wrangler d1 execute edenmish --remote --file=./migrations/044_whatsapp_continuation_sol.sql`
+Verify the schema definitions and preserve all existing grant history before deploying.
+
+### 045 — voice-note allowance (local only; not applied remotely)
+
+Adds `whatsapp_voice_grants`, `whatsapp_voice_attempts` and atomic reservation /
+retention triggers. Each approved grant is bound to one sender, recipient and
+session, up to 6 files / 60 seconds each / $0.03 / 15 minutes. No customer request
+issues a grant. No reset/refund of failed or duplicate operations is allowed.
+
+After review and explicit staging deployment approval, from `worker`:
+
+```sh
+npx wrangler d1 execute edenmish-staging --remote --config <reviewed-staging-config> --file=./migrations/045_whatsapp_voice_budget.sql
+```
+
+Verification (expect zero grants/attempts before separate authorized issuance):
+
+```sql
+SELECT name,sql FROM sqlite_master WHERE name LIKE 'whatsapp_voice_%';
+SELECT COUNT(*) FROM whatsapp_voice_grants;
+SELECT COUNT(*) FROM whatsapp_voice_attempts;
+```
+
+After merge, before any separately authorized production deployment that requires
+this schema, the operator must run the migration. Exact future production command
+(required in the eventual PR description; **not authorized/executed here**):
+
+```sh
+npx wrangler d1 execute edenmish --remote --file=./migrations/045_whatsapp_voice_budget.sql
+```
+
+The voice feature itself remains staging/conversation-only. Keep all voice gates
+OFF until a fresh reviewed continuation profile, audio grant and supervision are
+prepared; existing version-4 quotas do not cover the proposed expanded pilot.
+
+### Authorized 15-minute voice test (10 October 2026)
+
+Apply migrations 045 and 046 to staging before the bounded voice test:
+```sh
+npx wrangler d1 execute edenmish-staging --remote --config wrangler.staging.toml --file migrations/045_whatsapp_voice_budget.sql
+npx wrangler d1 execute edenmish-staging --remote --config wrangler.staging.toml --file migrations/046_whatsapp_voice_session.sql
+```
+Verify `SELECT COUNT(*) FROM whatsapp_continuation_voice_grants;` and
+`SELECT COUNT(*) FROM whatsapp_voice_grants;` before separate operator issuance.
+Migration 046 retains the expired unused v4 predecessor and enforces a fresh
+$1.65 ceiling: 24 inbound/outbound, 12 Sol calls, 4 address lookups, with $0.03
+reserved for six audio calls and $0.25 contingency. Window maximum 900 seconds.
+Production is not authorized. If promoted later, the corresponding command is
+`npx wrangler d1 execute edenmish --remote --file migrations/046_whatsapp_voice_session.sql`
+after prerequisite 045 and before deploying. Do not execute it for this test.
+
+### 047 — immutable v6 text-only review session (local package; not applied)
+
+Adds a one-attempt synthetic preflight ledger and fresh v6 grant/operations.
+Keeps all historical reservations: $0.912564 operational/model history after
+preflight, $0.78 cushions, and at most $0.293120 handset reservations. Maximum
+15 minutes, eight inbound/eight outbound, one model, two Maps HTTP attempts,
+no audio. No migration creates a grant or enables traffic. Proof must be matched
+and cover the whole immutable window; old grants cannot be reset.
+
+This is a **dedicated staging, single-history migration**, not a general
+production grant system. Once v6 exists, prior voice/audio tables are frozen in
+full, matching the one-ledger historical fingerprint. Do not apply it to an
+unrelated/multi-tenant database or promote that freeze policy to production.
+
+After explicit scoped approval, from `worker`:
+```sh
+npx wrangler d1 execute edenmish-staging --remote --config <private-reviewed-off-config.json> --file migrations/047_whatsapp_review_session.sql
+```
+Verify before any proof or grant:
+```sql
+SELECT COUNT(*) FROM whatsapp_review_preflight;
+SELECT COUNT(*) FROM whatsapp_continuation_review_grants;
+SELECT COUNT(*) FROM whatsapp_continuation_review_operations;
+```
+All three start at zero; a migration replay must preserve existing rows. After
+issuance inspect numeric quota/history/window fields and previous table hashes.
+The runnable operator sequence is in
+`docs/reviews/whatsapp-release-readiness-20261010/V6_RUNBOOK.md`.
+
+Repository-required future production command (documentation only; **not
+approved or appropriate for the current staging-specific freeze policy**):
+```sh
+npx wrangler d1 execute edenmish --remote --file migrations/047_whatsapp_review_session.sql
+```
+Before any future production adoption, independently redesign/review the
+single-history freeze and have the operator apply the approved migration after
+merge and before deployment. No production migration is part of this task.
+
+### 048 — fresh r2/v7 six-exchange review (prepared locally; not applied)
+
+Adds separate immutable `whatsapp_review_r2_preflight`,
+`whatsapp_continuation_review_r2_grants` and operations tables. The first proof
+reservation requires the pinned failed r1 ($0.056320 retained) and zero v6
+grants/operations. Reservation immediately freezes r1/v6 and earlier history,
+including if r2 later fails. No row is reset, no grant is issued by migration.
+The matched proof must cover the entire fixed 15-minute window.
+
+V7 allows six inbound, six outbound segments, one Sol-low call and two Maps
+attempts, no audio. New preflight plus handset reservations total $0.306240;
+all historical holds/cushions bring the total to $1.998804 of the original $2.
+Approval must explicitly transfer the unused $0.293680 v6 allocation and add
+$0.012560 unallocated margin. See the reviewed [v7 runbook](../docs/reviews/whatsapp-review-r2-20261011/V7_RUNBOOK.md).
+
+Only after combined approval, from `worker`:
+```sh
+npx wrangler d1 execute edenmish-staging --remote --config <private-reviewed-off-config.json> --file migrations/048_whatsapp_review_r2_session.sql
+```
+Verify before reservation:
+```sql
+SELECT id,status,reserved_micros FROM whatsapp_review_preflight;
+SELECT COUNT(*) FROM whatsapp_continuation_review_grants;
+SELECT COUNT(*) FROM whatsapp_continuation_review_operations;
+SELECT COUNT(*) FROM whatsapp_review_r2_preflight;
+SELECT COUNT(*) FROM whatsapp_continuation_review_r2_grants;
+SELECT COUNT(*) FROM whatsapp_continuation_review_r2_operations;
+```
+Require the pinned failed r1 row; all five new/unused table counts must be zero.
+Replay must preserve existing rows and history fingerprints. Never replay a
+proof/provider attempt whose outcome is uncertain.
+
+This migration is for this dedicated staging history, not production. The
+repository-required future production command is documented only:
+```sh
+npx wrangler d1 execute edenmish --remote --file migrations/048_whatsapp_review_r2_session.sql
+```
+It is **not authorized or appropriate with this single-history freeze policy**.
+Any future production adoption requires a separately reviewed redesign. The
+operator must apply that approved migration after merge and before deployment.
+No production migration or deployment belongs to this test.
+
+### 049 — fresh r3 proof and v8 text-only continuation (approval pending)
+
+Add immutable `whatsapp_review_r3_preflight`, v8 grant/operation tables and
+history-freeze triggers. Retain both failed proof reservations and require zero
+v6/v7 activity; no grant is created. New scope5in/5out/1model/0Maps,15min.
+Current preparation is local only. Never alter047/048 or reopen an old proof.
+
+After explicit combined approval only, target **edenmish-staging** with the
+reviewed r3 operator CLI `migrate` action (pinned private staging configuration).
+It executes049 once without assuming a JSON response for a file migration, then
+compares every r3 table/index/trigger SQL definition with the local schema,
+checks new ledgers empty and verifies the unchanged prior-history hash. Any
+uncertain result requires read-only diagnosis, never an automatic replay.
+
+Verification query:
+```sql
+SELECT name,type,sql FROM sqlite_master WHERE name LIKE '%review_r3%' AND sql IS NOT NULL ORDER BY name;
+SELECT (SELECT COUNT(*) FROM whatsapp_review_r3_preflight) AS proofs,
+       (SELECT COUNT(*) FROM whatsapp_continuation_review_r3_grants) AS grants,
+       (SELECT COUNT(*) FROM whatsapp_continuation_review_r3_operations) AS operations;
+```
+
+Repository-required production command reference (NOT authorized; this migration
+is specific to the retained staging test history and must not be applied to
+production as part of this task):
+`npx wrangler d1 execute edenmish --remote --file=./migrations/049_whatsapp_review_r3_session.sql`.
+After any separately approved future merge/deployment, operator must evaluate
+migration applicability and apply applicable migrations before deploying runtime.
+
+
+## 050 — Independent full WhatsApp booking authority
+
+`050_whatsapp_full_booking.sql` creates the disabled-by-default full-booking budget
+root, immutable grants, retained operation holds, and transient conversation
+fence/ingress tables. It issues no grant and changes no activation flags. Fresh
+`schema.sql` includes the same definitions; existing databases need migration 050
+before code relies on `WHATSAPP_BOOKING_FULL_SCHEMA_READY=on`. Follow the migration
+order above and verify the target environment. Do not apply the fresh schema to
+an existing database.
+
+After a separately approved merge/deployment, the production operator command
+from `worker/` is:
+
+```bash
+wrangler d1 execute edenmish --remote --file=./migrations/050_whatsapp_full_booking.sql
+```
+
+This is documentation only; the local implementation task authorizes no remote
+migration or deployment. Staging requires its explicitly approved database/config
+selection. Before activation, verify:
+
+```sql
+SELECT name FROM sqlite_master WHERE type='table' AND name IN (
+ 'whatsapp_full_booking_budgets','whatsapp_full_booking_grants',
+ 'whatsapp_full_booking_operations','whatsapp_booking_full_fences',
+ 'whatsapp_booking_full_ingress'
+) ORDER BY name;
+SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'whatsapp_full_%' ORDER BY name;
+SELECT COUNT(*) AS issued_grants FROM whatsapp_full_booking_grants;
+```
+
+All five tables and budget/grant/hold/fence protection triggers must exist; a
+fresh migration leaves `issued_grants=0`. Stop/expiry never refund root allocations
+or operation holds. Root/grant/operation tables deliberately prohibit deletion;
+conversation retention may remove only the transient fence/ingress rows. No
+customer message bodies, keys or provider raw output belong in this ledger.
+
+
+Migration050's transient ingress rows also carry `deadline_at`, a positive epoch
+millisecond deadline no later than first receipt (`created_at`) plus 30000ms.
+The existing immutable-ingress trigger preserves it across retries. An already
+elapsed grant/session deadline is allowed to be persisted so runtime fails
+closed. This field is included in the unactivated local migration and fresh
+schema; no deployed legacy grant or history row is rewritten by this change.
+
+## 051 — Durable WhatsApp admission and recoverable execution
+
+`051_whatsapp_durable_booking.sql` adds an encrypted, bounded transient inbox and
+its immutable identity/deadline guard. Apply after050 and before enabling the
+new `execution: durable-v1` profile. It provisions no queue, schedule, key or grant.
+Fresh `schema.sql` already includes it. Do not reapply schema.sql to an existing DB.
+
+Exact production command reference, NOT executed or authorized by local work:
+
+```bash
+wrangler d1 execute edenmish --remote --file=./migrations/051_whatsapp_durable_booking.sql
+```
+
+Run only after a separately approved merge and before an authorized deployment.
+For staging, use its explicitly approved config and verified staging database UUID;
+never substitute production. Verify without selecting ciphertext or customer rows:
+
+```sql
+SELECT name FROM sqlite_master WHERE name IN (
+ 'whatsapp_booking_jobs','whatsapp_booking_job_immutable',
+ 'whatsapp_booking_jobs_pending','whatsapp_booking_jobs_conversation'
+) ORDER BY name;
+PRAGMA table_info(whatsapp_booking_jobs);
+SELECT state, COUNT(*) AS jobs FROM whatsapp_booking_jobs GROUP BY state;
+```
+
+Ciphertext is purged on terminal transitions and by recovery cleanup, including
+when runtime flags/config/key have been removed. A periodic recovery/cleanup
+schedule must be verified before readiness; D1 does not autonomously expire rows.
+No raw payload is placed on the external queue or returned in diagnostics. Review
+`docs/reviews/whatsapp-full-sol-booking-20261011/durable-execution.md` for privacy,
+crash recovery, bounded wake-ups and provisioning requirements.
+
+### 052_payment_rehearsal_hold.sql
+
+**Purpose:** Adds an immutable payment-rehearsal run marker and closure timestamp.
+Marked canonical orders stay visible and retain real payment records, while DB
+triggers and dispatch filtering block assignment, physical status/proof/GPS writes
+and order deletion. No public rehearsal registration or price override is enabled.
+
+**Future production command — only after explicit release approval and merge,
+before deploying code that reads these columns:**
+```bash
+wrangler d1 execute edenmish --remote --file=./migrations/052_payment_rehearsal_hold.sql
+```
+This command has NOT been run. Use the separately reviewed dedicated staging
+configuration for any approved staging migration; do not infer account/DB IDs.
+Run once; ALTER ADD COLUMN is not idempotent. Fresh DBs use schema.sql only.
+
+**Read-only verification:**
+```sql
+PRAGMA table_info(orders);
+SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'rehearsal_%';
+SELECT id, rehearsal_run_id, rehearsal_created_at, rehearsal_closed_at,
+       payment_status, shopify_order_id
+FROM orders WHERE rehearsal_run_id IS NOT NULL;
+```
+
+## 053 — payment rehearsal single-use capability (local preparation)
+
+Apply after052. Adds immutable authenticated run authority, one-way order/charge
+claims, four-attempt email ceiling and atomic canonical-insert dispatch hold.
+No grant is seeded. The endpoint issues only the frozen configured run with all
+live flags OFF; no customer request can mint it.
+
+Dedicated staging command after explicit deployment approval (not executed):
+`wrangler d1 execute edenmish-staging --remote --file=./migrations/053_payment_rehearsal_capability.sql --config=<reviewed-dedicated-account-config>`.
+A future production migration, if separately approved after merge, is:
+`wrangler d1 execute edenmish --remote --file=./migrations/053_payment_rehearsal_capability.sql`.
+Never use the production command for this rehearsal. Verify:
+`SELECT name FROM sqlite_master WHERE name IN ('payment_rehearsal_runs','rehearsal_claimed_order_hold','rehearsal_run_immutable');`
+and `SELECT COUNT(*) FROM payment_rehearsal_runs;` (zero before approved issuance).
+
+The dedicated database's setup budget blocker remains intact. The separate
+`provisioning/payment-rehearsal-release.sql.template` is an UNAPPROVED proposal for
+$1.25 additional provider allowance. It preserves the original $1.805204 holds and
+setup history. Placeholder CHECK constraints prevent executing it as supplied.
+It is not a production migration or approval to increase a budget.

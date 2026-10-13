@@ -102,7 +102,7 @@ Database name: `edenmish`. Binding: `DB`.
 ### Schema and migrations
 
 `schema.sql` is the **fresh-DB source of truth** — it defines every current table.
-The numbered migrations (`003`–`038`) add tables/columns that were introduced after the
+The numbered migrations (`003`–`040`) add tables/columns that were introduced after the
 initial schema. Tables are idempotent (`CREATE TABLE IF NOT EXISTS`); `ALTER TABLE …
 ADD COLUMN` migrations (`006`–`010`, `015`, `016`, `024`–`026`, and `033`) must run only on
 DBs that predate their columns.
@@ -351,3 +351,314 @@ wrangler deploy
 - [ ] Confirm per-order notification history appears in ops.
 - [ ] If WhatsApp Cloud API is enabled, complete the consent and controlled
       delivery matrix in `../docs/WHATSAPP_OPERATIONS.md`.
+
+### WhatsApp booking release deployment prerequisite
+
+Before deploying the WhatsApp booking Worker, apply migration
+`039_whatsapp_booking.sql` after merge (see `MIGRATIONS.md` for the exact command
+and schema verification). Its `source_channel` default is also used by website
+orders, so migration is required even while booking is disabled.
+
+Set `WHATSAPP_BOOKING_STORAGE_READY=on` only after migration; leave it on during
+channel shutdown so retention continues. Intake additionally needs explicit
+booking, privacy and provider configuration; sends have a separate switch.
+The selected launch uses a **separate dedicated Twilio WhatsApp number** and does
+not change Eden's existing public number/app. Account setup, credentials, migration,
+deployment and live sends remain separate operator approvals. See
+[`WHATSAPP_BOOKING.md`](../docs/WHATSAPP_BOOKING.md) for the full activation,
+controlled-test, human-takeover and recovery procedure.
+
+Optional model-assisted booking is documented in `../docs/WHATSAPP_BOOKING_MODEL.md`.
+For a conversation-only staging pilot without payment credentials, see
+`../docs/WHATSAPP_BOOKING.md#conversation-only-staging-pilot`. The mode blocks
+checkout, requires a single recipient and expiry, and durably caps outbound and
+Google Places attempts. Staging defaults to this mode with all activation flags off.
+A GPT-6 Luna Responses adapter is implemented and mock-tested behind separate
+model, privacy, evaluation and spend gates, all off/absent. It requires the scoped
+`WHATSAPP_BOOKING_OPENAI_API_KEY` Worker secret and never falls back to generic
+`OPENAI_API_KEY`. Approved installation of the existing dedicated EdenMish key,
+live readiness evaluation and deployment/activation remain outstanding.
+
+Release preflight: production runs `node scripts/validate-booking-schema.mjs
+--database edenmish --config wrangler.toml` read-only before deployment. Staging
+applies 039 only when wholly absent, validates it afterward, and refuses dispatch
+or booking/send/model activation in its standard rendered config. The synthetic
+model runner defaults to dry-run; approved spend requires explicit arguments and
+the durable budget ledger documented in `../docs/WHATSAPP_BOOKING_MODEL.md`.
+
+The explicit `luna-v1` conversation-only profile additionally requires migration
+`040_whatsapp_luna_pilot_budget.sql` before enabling its readiness probes or live
+pilot. It is staging-only; normal disabled deployments do not read its tables.
+After merge, apply the production migration before any future feature depending
+on these tables (exact command in `MIGRATIONS.md`). Never enable the staging pilot
+in production. The standard staging workflow neither applies 040 nor enables this
+profile. See [`WHATSAPP_LUNA_PILOT.md`](../docs/WHATSAPP_LUNA_PILOT.md) for the fixed
+quotas, shared readiness/live budget, schema verification and activation sequence.
+
+The separately approved quote-v2 continuation requires migration
+`041_whatsapp_continuation_grant.sql` and read-only
+`node scripts/validate-continuation-schema.mjs --config <staging-config>`.
+Apply only missing migrations after approval, before its versioned flags are set
+(see `MIGRATIONS.md` for exact commands). Default configs do not enable/issue it.
+Original stopped records/holds remain unchanged; OFF-state Ops issuance and
+activation are separate actions. See `../docs/WHATSAPP_CONTINUATION_GRANT.md`.
+
+
+The separately approved second conversation-only window additionally requires
+`042_whatsapp_continuation_followon.sql` before deploying a configuration selecting
+version 2. Verify with `node scripts/validate-continuation-followon-schema.mjs
+--config <staging-config>`. See `MIGRATIONS.md` for the exact commands and guards.
+After merge, apply missing migrations before any separately authorized production
+deployment; this change does not authorize production deployment or activation.
+
+An explicitly approved version-3 conversation retry additionally requires migration
+`043_whatsapp_continuation_retry.sql` and the exact-definition validator
+`node scripts/validate-continuation-retry-schema.mjs --config <staging-config>`.
+It preserves both previous grants, $0.9051 aggregate reservations/cushion, and the
+original $2 cap. Five interpretations remain allowed in the original model pool.
+Review the fixed failure notice and bounded supervisor policy before deployment;
+all live gates remain separate. Migration 043 must be included in the operator's
+after-merge/before-deploy checklist; no production deployment is authorized.
+
+The authorized October 10 Sol-low staging rehearsal uses migration 044 and the
+frozen `outputs/wrangler.sol.*.toml` configurations. Deploy OFF, verify schema,
+install the temporary staging key, issue the immutable grant OFF, arm both
+shutdown processes, then connect the callback and activate. Production remains
+unchanged. Grant, quota, model and expiry checks run before provider IO; the
+controller removes the temporary key and deploys the frozen OFF bundle at stop.
+
+### Voice and five-language booking (local preparation only)
+
+See [voice/multilingual implementation and proposed $1.65 test allowance](../docs/WHATSAPP_VOICE_MULTILINGUAL.md).
+No default runtime config enables this work. Local tests mock OpenAI, Twilio and
+Maps; real speech quality is pending. OGG/Opus, PCM WAV and MP3 input is capped at
+2 MiB / 60 seconds. A voice note enters the existing draft only after disclosed
+consent, a separately approved audio allowance and successful bounded transcription.
+Spoken final confirmation asks for the displayed number by text.
+
+After merge, include migration 045 in the operator's before-deploy checklist.
+Exact staging/future production commands and verification are in `MIGRATIONS.md`.
+No remote migration, deployment, paid test or expanded grant is authorized by this
+local implementation. Prior grants and model caps remain unchanged.
+
+### Authorized 15-minute voice test (10 October 2026)
+
+Apply migrations 045 and 046 to staging before the bounded voice test:
+```sh
+npx wrangler d1 execute edenmish-staging --remote --config wrangler.staging.toml --file migrations/045_whatsapp_voice_budget.sql
+npx wrangler d1 execute edenmish-staging --remote --config wrangler.staging.toml --file migrations/046_whatsapp_voice_session.sql
+```
+Verify `SELECT COUNT(*) FROM whatsapp_continuation_voice_grants;` and
+`SELECT COUNT(*) FROM whatsapp_voice_grants;` before separate operator issuance.
+Migration 046 retains the expired unused v4 predecessor and enforces a fresh
+$1.65 ceiling: 24 inbound/outbound, 12 Sol calls, 4 address lookups, with $0.03
+reserved for six audio calls and $0.25 contingency. Window maximum 900 seconds.
+Production is not authorized. If promoted later, the corresponding command is
+`npx wrangler d1 execute edenmish --remote --file migrations/046_whatsapp_voice_session.sql`
+after prerequisite 045 and before deploying. Do not execute it for this test.
+
+### Prepared v6 text-only review session — local only
+
+Migration047 and the `scripts/whatsapp-review-*` package provide an immutable
+preflight/grant, budget enforcement, primary supervisor, independent deadline
+watchdog and idempotent cleanup. All external operations are behind a private
+explicit approval envelope; preparation writes OFF/unapproved artifacts only.
+The fixed model is Sol low, with one synthetic call and one handset call, no
+retries/counting/audio, and all previous reservations retained within the
+original $2 allocation. The preflight reuses strict runtime evidence validation.
+
+See `../docs/reviews/whatsapp-release-readiness-20261010/V6_RUNBOOK.md` for exact
+commands and prerequisites. Migration047 must precede a separately approved
+staging deployment. Its historical voice freezes are staging-specific; it is
+not a general production rollout migration. The exact future production command
+and required operator-after-merge reminder are in `MIGRATIONS.md`; do not run it
+for this test. No publication, remote migration, deployment, key operation or
+paid test has occurred as part of this preparation.
+
+### Prepared r2/v7 six-exchange review — local only
+
+The failed r1 preflight remains immutable and its full reservation remains held.
+Migration048 and the separate `scripts/whatsapp-review-r2-*` package prepare one
+fresh preflight and a conditional six-exchange, text-only staging test. V6 cannot
+be reopened or consume its transferred allocation after r2 reservation.
+
+Before any remote work, obtain one combined approval covering publication to
+the existing draft PR, staging-only migration/OFF deployment, the $0.306240
+allocation transfer and the bounded conditional test. Then follow the exact
+[v7 operator runbook](../docs/reviews/whatsapp-review-r2-20261011/V7_RUNBOOK.md):
+verify source/history pins, apply048, stage OFF, pass one strict synthetic
+preflight, arm two shutdown owners, coordinate one fresh grant and callback,
+and activate only within the announced window. Temporary-key cleanup and
+browser-verified callback removal are mandatory completion steps.
+
+Migration048 must precede the approved staging deployment. Production remains
+excluded; the required future migration command and after-merge reminder are
+documented in `MIGRATIONS.md`, subject to redesign of its staging-only freeze.
+Partial text and mocked audio transcripts have offline coverage. This one-model
+text test does not validate general multi-turn understanding or actual audio.
+
+The r3/v8 WhatsApp review adds migration049 (see `MIGRATIONS.md`) and guarded
+`whatsapp-review-r3-*` operator scripts. Local preparation does not authorize
+publication, migration, deployment, key entry or paid calls. Use the combined
+[approval proposal](../docs/reviews/whatsapp-semantic-diagnostics-20261011/NEXT_EXECUTION_PROPOSAL.md).
+The production checklist must not blindly apply this staging-history-specific
+migration; any separately approved applicable migration runs after merge and
+before runtime deployment. Production remains outside this review scope.
+
+
+### Independent Sol full-booking profile (local implementation, disabled)
+
+Migration050 is required before deploying code that uses the independent full
+booking profile; see `MIGRATIONS.md` for the exact operator command and verification.
+Do not enable `WHATSAPP_BOOKING_FULL_SCHEMA_READY` until it is verified. No remote
+migration, key operation, provider request or deployment is authorized by this
+local implementation. The profile is selected only by the presence of
+`WHATSAPP_BOOKING_FULL_CONFIG`; malformed selected configuration fails closed.
+It must never fall back to a legacy pilot or to a generic runtime API key.
+
+`worker/src/whatsapp-full-booking.js` parses an exact JSON contract (unknown keys
+are rejected): `version:1`, `environment` (`staging` or `production`), `budget_id`,
+`grant_id`, `source_sha256` (64 lowercase hex), `starts_at`/`expires_at` (epoch
+milliseconds, at most 24 hours apart), `budget_micros`, `retained_micros`,
+`allocation_micros`, `limits:{inbound,outbound,address,model}`, `account_sid`,
+`sender` (`whatsapp:+...`), `recipients` (1–10 unique Israeli E.164 allowlisted
+numbers), `booking_url`, `webhook_url`, and the exact model/cost fields below.
+
+- `model:gpt-6.1-sol`, `reasoning_effort:low`, `service_tier:default`;
+  `max_output_tokens:1024`, `input_tokens:16384`, `request_bytes:8192`,
+  `soft_timeout_ms:10000`, `transport_timeout_ms:20000`, `timeout_ms:30000`.
+- `costs:{inbound:10300,outbound:11300,address:32000,model:56320}` in USD
+  microdollars. These are fixed conservative reservations, not refunds based on
+  a provider's observed bill. Count ceilings are configurable only downward
+  within 1000 inbound/outbound and 100 address/model operations; allocation may
+  impose a tighter limit.
+- Staging origins are `https://staging.edenmish.com` and
+  `https://ops-staging.edenmish.com/webhooks/twilio/booking`; production uses
+  `https://edenmish.com` and `https://find.edenmish.com/webhooks/twilio/booking`.
+  Exact account, sender, webhook, booking origin and recipient list must match
+  the deployed non-secret configuration.
+
+Issuance requires an authenticated Ops caller passing exactly
+`{version:1,grant_id,budget_id,source_sha256,approve:true}` matching the configured
+specification, with booking/send/model switches all `off`. The module itself is
+an internal authority helper, not an HTTP authentication boundary. It permits
+issuance without a key and never enables a switch. It requires `FULL_APPROVED`,
+`FULL_SCHEMA_READY`, `STORAGE_READY`, `PRIVACY_APPROVED` (all prefixed
+`WHATSAPP_BOOKING_`) and `WHATSAPP_BOOKING_MULTILINGUAL_ENABLED=on`, with mode
+`full` and the pinned model/effort. Live readiness additionally requires all
+booking/send/model switches `on`, all model privacy/evaluation/spend approvals,
+Twilio/session secrets, and **only** `WHATSAPP_BOOKING_FULL_OPENAI_API_KEY` as the
+scoped model key. Pilot, continuation, readiness and voice configurations conflict
+with this profile. Full mode is text-only; multilingual consent discloses the
+model processing without claiming that voice processing is enabled.
+
+The first issuance creates an immutable root per environment. It permanently
+reserves each grant's entire allocation against the original cap and retained
+allowance; unused allocations remain held after expiry or stop. Each operation
+also reserves its fixed cost atomically against the grant and records a unique
+idempotency key. A duplicate returns false in pending, successful and uncertain
+states; it never grants permission for repeated external IO. Changing grant IDs,
+budget IDs, caps, retained allowance or source configuration cannot reset the
+original root. Exact-cap operations already reserved may finish; `canProceed`
+does not confuse an exhausted remaining balance with revocation of that hold.
+
+Async APIs accept a clock function (default `Date.now`) for fresh post-await time
+checks; numeric timestamps are supported for deterministic local tests. Runtime
+callers should pass the clock function, not a previously sampled number. Every
+external IO boundary must still check the current grant and conversation fence.
+Diagnostics retain fixed outcome/rejection enums, bounded usage/duration numbers
+and whitelisted stage aggregates only. No raw messages, proposals, errors, keys
+or arbitrary provider fields are stored. Local coverage is in
+`tests/whatsapp-full-booking.test.js`; synthetic grants there are not approvals
+for any real spending. No deployment allocation is supplied by this module.
+
+
+#### Customer and operator deadlines (local full profile only)
+
+The full profile's three timing fields participate in its immutable grant hash.
+The 10-second threshold is a diagnostic warning, not permission to retry or stop
+an otherwise valid response. Model transport has at most 20 seconds, clipped to
+the remaining 30-second customer turn. The customer deadline starts at first
+webhook receipt and is stored as `whatsapp_booking_full_ingress.deadline_at`,
+clipped to grant expiry and the 24-hour messaging window; retries reuse it.
+`softLatencyWarning` is boolean; `modelLatencyMs` and `turnLatencyMs` are bounded
+integers from 0 through 60000 in the sanitized diagnostic sink.
+
+`whatsapp-booking-deadlines.js` exports the frozen `BOOKING_DEADLINES` policy and
+`withBookingDeadline(operation,{timeoutMs,clock,signal})`. Operations receive a
+linked abort signal, absolute `deadlineAt` and fresh `remainingMs()`. A timer
+bounds hung work; a post-return clock check rejects late results even before the
+timer callback runs. Nested helper calls inherit the earlier deadline from the
+parent helper's signal. Callers must pass the signal into cancellable IO and
+check authority before irreversible effects; JavaScript cannot undo effects an
+operation completed before cancellation.
+
+The separate local `runBookingPreflight({prepare,run,settle},{clock,signal})`
+helper gives operators 60 seconds total, including preparation and settlement.
+Its single run uses the customer 30-second limit clipped to the remaining outer
+time. It never retries or restarts a timer. A run timeout can be settled within
+the remaining outer budget; once the overall deadline expires it starts no late
+cleanup. Durable unconfirmed holds remain reserved. The helper performs no IO
+itself and is not wired to paid calls or CLI activation by this change.
+
+Existing closed pilot/continuation grants retain their original deadlines.
+Old full-profile configuration does not silently acquire the longer deadline:
+changed timing fields require a separately approved configuration/grant binding.
+Live activation, actual key use and any paid verification remain separate future
+approval gates; the tests here use synthetic operations only.
+
+### Durable admission prerequisite for the full profile
+
+The new full profile requires migration051 after050, `execution: durable-v1`,
+`WHATSAPP_BOOKING_DURABLE_READY=on` and a `WHATSAPP_BOOKING_QUEUE` producer binding.
+Missing readiness or binding fails closed. There is no synchronous full-profile
+fallback. No queue/binding/schedule is provisioned by this repository change.
+
+The signed Twilio resource is verified, then D1 atomically commits the encrypted
+job, inbound hold and conversation fence. The webhook acknowledges after durable
+admission/publication rather than waiting for model/address/checkout/send work.
+Queue messages carry only version and opaque job ID. The consumer uses the same
+canonical services and original30s turn deadline. Duplicate/queue retries cannot
+repeat a billable operation. Ambiguous provider acceptance pauses automation and
+retains holds; completed draft/outbox work can resume only never-attempted sends.
+
+Before separately authorized production deployment, run after merge:
+`wrangler d1 execute edenmish --remote --file=./migrations/051_whatsapp_durable_booking.sql`
+from worker/, following050 and target verification. Verify051 tables/guards and a
+periodic recovery/cleanup schedule before readiness. Review queue settings,
+additional infrastructure costs, ciphertext retention and independent shutdown
+in `docs/reviews/whatsapp-full-sol-booking-20261011/durable-execution.md`.
+
+### Payment rehearsal marker and dispatch hold (local preparation)
+
+Migration052 must run after an approved merge and before deploying this code.
+Future production command: `wrangler d1 execute edenmish --remote --file=./migrations/052_payment_rehearsal_hold.sql`.
+No remote migration or production deployment is authorized by this note.
+
+The internal `markPaymentRehearsal` helper marks an unpaid canonical1ILS order
+before Draft Order creation. It has no public/API registration endpoint. Existing
+customer input cannot enable it. A marked order receives normal signed payment
+reconciliation and remains in Ops with a Hebrew test/no-delivery badge. Automatic
+routing and all physical operations remain held, including direct DB guards.
+Authenticated Ops closure archives only the rehearsal presentation; paid state,
+Shopify references and accounting remain. The Ops board excludes tests from its
+delivery counters and keeps a closed-test audit section.
+
+This is not yet an enabled real-payment rehearsal: dedicated Shopify product and
+exact gross calculation, an authenticated bounded creation capability, verified
+notification recipients, provider/fee allowance and driver identity/device are
+separate prerequisites. There is no dispatch-hold release in this release. Driver
+handset preview/push and any simulated execution need their own reviewed path;
+never generate physical-delivery timestamps for a payment-only rehearsal.
+
+### Protected ₪1 rehearsal — locally prepared, no deployment authorization
+
+See `docs/PAYMENT_REHEARSAL.md` from the repository root. Requires migrations052
+and053 after merge and before separately approved runtime deployment. Public
+production behavior is unchanged when PAYMENT_REHEARSAL_CONFIG is absent.
+A selected rehearsal configuration admits only the dedicated private host and
+reviewed channel/Ops/tracking endpoints; removing it is not a supported activation
+strategy. Shopify webhook auto-registration is OFF; the separately approved
+callback is `/webhooks/shopify/rehearsal`.
+No driver credentials, push credentials, generic notification templates, wallets,
+manual-paid actions, production routes or physical statuses are needed for this run.

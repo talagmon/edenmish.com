@@ -1,5 +1,5 @@
 import { getOrderById } from './db.js';
-import { notifyEmail, notifyWhatsApp } from './notify.js';
+import { notifyEmail, notifyWhatsApp, createPaymentNotificationScope } from './notify.js';
 import { WHATSAPP_MESSAGE_CLASSES } from './whatsapp.js';
 
 const DELIVERED_TEMPLATE = 'customer_delivery_summary';
@@ -127,6 +127,7 @@ export async function enqueueOpsPaymentWhatsAppJob(DB, orderId, {
 
 export async function persistPaidOrderAndOpsWhatsAppJob(DB, orderId, {
   amountAgorot,
+  notificationMarker,
   paymentRef = null,
   shopifyOrderId = null,
   analyticsSettlement = false,
@@ -208,10 +209,27 @@ export async function persistPaidOrderAndOpsWhatsAppJob(DB, orderId, {
       .bind(now, orderId, now, orderId, orderId));
   }
 
-  const results = await DB.batch(statements);
+  // This read/assertion shares the payment transaction: unavailable/mismatched
+  // classification cannot commit a paid state that webhook replay would skip.
+  // json() intentionally raises on the mismatch branch, rolling back the batch.
+  const guarded = notificationMarker !== undefined;
+  if (guarded) statements.unshift(DB.prepare(`SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM orders WHERE id = ? AND rehearsal_run_id IS ?
+  ) THEN 1 ELSE json('notification_order_unconfirmed') END AS notification_marker_confirmed`)
+    .bind(orderId, notificationMarker));
+  let results;
+  try { results = await DB.batch(statements); }
+  catch (error) {
+    if (!guarded) throw error;
+    throw new Error('payment_transition_unavailable');
+  }
+  const transitioned = !!results[guarded ? 1 : 0]?.meta?.changes;
   return {
     eventId,
-    transitioned: !!results[0]?.meta?.changes,
+    transitioned,
+    ...(guarded && transitioned ? {
+      paymentScope: createPaymentNotificationScope(DB, orderId, notificationMarker),
+    } : {}),
   };
 }
 

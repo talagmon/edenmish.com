@@ -888,21 +888,22 @@ describe('manual paid confirmation', () => {
     };
     const db = apiDb({ orderRow });
     let batchCalls = 0;
+    let attemptedStatements;
     db.batch = async (statements) => {
       batchCalls += 1;
-      assert.equal(statements.length, 4);
-      assert.match(statements[0].sql || '', /delivery_notification_outbox/);
+      attemptedStatements = statements;
       throw new Error('simulated_atomic_write_failure');
     };
 
-    await assert.rejects(
-      worker.fetch(
-        await opsPost('/api/ops/orders/13/status', { status: 'paid' }),
-        envFor(db),
-      ),
-      /simulated_atomic_write_failure/,
+    const response = await worker.fetch(
+      await opsPost('/api/ops/orders/13/status', { status: 'paid' }), envFor(db),
     );
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: 'payment_transition_unavailable' });
     assert.equal(batchCalls, 1);
+    assert.equal(attemptedStatements.length, 5);
+    assert.match(attemptedStatements[0].sql || '', /notification_marker_confirmed/);
+    assert.match(attemptedStatements[1].sql || '', /delivery_notification_outbox/);
     assert.equal(orderRow.status, 'payment_sent');
     assert.equal(orderRow.payment_status, 'link_sent');
     assert.equal(db.state.outboxKeys.size, 0);

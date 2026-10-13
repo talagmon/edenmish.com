@@ -1,3 +1,27 @@
+import { PRODUCT_READ_PATH, productReadEnabled, productReadPage, readProtectedProduct } from './rehearsal-product-read.js';
+import { productionRehearsal, productionRehearsalEnvironment, productionRehearsalPath, PRODUCTION_REHEARSAL_ORIGIN } from './production-rehearsal-context.js';
+import { rehearsalOpsHtml } from './payment-rehearsal-ops.js';
+import { rehearsalSelected, rehearsalSpec, rehearsalPaymentReferenceMatches, activeRehearsal, claimRehearsalOrder, issueRehearsalRun, stopRehearsal, rehearsalStopped, rehearsalOrigin } from './payment-rehearsal-capability.js';
+import { closePaymentRehearsal } from './payment-rehearsal.js';
+import { acceptDurableBookingEvent, consumeBookingQueue, recoverBookingJobs } from './whatsapp-booking-jobs.js';
+import { BOOKING_MAINTENANCE_CRON, cleanupDurableBookings } from './whatsapp-booking-maintenance.js';
+import { BOOKING_DEADLINES } from './whatsapp-booking-deadlines.js';
+import { fullBookingSelected, fullBookingReady, fullBookingCanProceed, fullBookingSpec, issueFullBookingGrant, stopFullBookingGrant, fullBookingStopped, fullBookingBindingHash, finishFullBookingOperation } from './whatsapp-full-booking.js';
+import { voiceProfileEnvironment } from './whatsapp-booking-voice-profile.js';
+import { transcribeBookingAudio } from './whatsapp-booking-audio.js';
+import { continuationSelected, continuationCanProceed, finishContinuation, issueContinuationGrant } from './whatsapp-continuation.js';
+import { runLunaPilotReadiness, validReadinessRequest } from './whatsapp-pilot-readiness.js';
+import { lunaPilot } from './whatsapp-pilot-budget.js';
+import { readTwilioBookingEvent, applyTwilioBookingStatus } from './whatsapp-booking-twilio.js';
+import { bookingEnabled, resolveBookingAddress, QUOTE_TTL } from './whatsapp-booking.js';
+import { bookingScheduleError } from './whatsapp-booking-schedule.js';
+import { conversationOnlyPilot, reservePilotOperation } from './whatsapp-booking-pilot.js';
+import { bookingPilotOpsPage } from './whatsapp-booking-ops.js';
+import { createOpenAIBookingModel } from './whatsapp-booking-openai.js';
+import { extractBookingEvents, processBookingEvent, sendBookingReplies, pauseBooking, closeBooking, cleanupBookings } from './whatsapp-booking-store.js';
+
+// Object-identity capability: no public header/body can enable channel privileges.
+const bookingRequests = new WeakMap();
 import {
   createOrder,
   getOrderByToken,
@@ -259,7 +283,7 @@ const canTransition = (from, to) => {
 // in prod — one var change, no code edit. BOOKING_URL kept as a legacy fallback.
 const storefrontBase = (env) => (env.STOREFRONT_BASE || env.BOOKING_URL || 'https://edenmish.com').replace(/\/+$/, '');
 const storefrontUrl = (env, path) => storefrontBase(env) + (path || '');
-const trackingUrl = (env, token) => storefrontUrl(env, `/track.html?t=${token}`);
+const trackingUrl = (env, token) => rehearsalSelected(env) ? `${rehearsalOrigin(env)}/t/${token}` : storefrontUrl(env, `/track.html?t=${token}`);
 // Business contact line for customer emails — the EdenMish business number only,
 // never a private number. Single definition so the templates can't drift apart.
 const SUPPORT_LINE = '<p style="color:#4b5563;font-size:13px;margin-top:14px">לשאלות: eden@edenmish.com · 053-405-8498<br>כתובת העסק למשלוח הודעות: קריניצי 111, רמת גן, ישראל</p>';
@@ -334,6 +358,7 @@ async function redeliveryPublicState(DB, order) {
 // validation before entering this helper. payment_status is the idempotency guard.
 async function confirmPaidOrder(env, order, opts = {}) {
   if (!order) return { order: null, unchanged: true };
+  if (order.rehearsal_run_id && !rehearsalSelected(env)) env = productionRehearsalEnvironment(env) || env;
   if (order.payment_method === 'wallet') return { order, unchanged: true };
   if (order.payment_status === 'paid') return { order, unchanged: true };
 
@@ -343,13 +368,15 @@ async function confirmPaidOrder(env, order, opts = {}) {
 
   const customerEmail = order.email || opts.customerEmail || null;
   const orderFields = { ...(opts.orderFields || {}), payment_status: 'paid' };
-  const transition = await persistPaidOrderAndOpsWhatsAppJob(env.DB, order.id, {
+  let transition;
+  try { transition = await persistPaidOrderAndOpsWhatsAppJob(env.DB, order.id, {
+    notificationMarker: order.rehearsal_run_id ?? null,
     amountAgorot: Math.round(paidAmount * 100),
     paymentRef: opts.paymentRef == null ? null : String(opts.paymentRef),
     shopifyOrderId: opts.orderFields?.shopify_order_id ?? null,
     analyticsSettlement: opts.analyticsSettlement === true,
     now: paidAt,
-  });
+  }); } catch { return { retryable: true }; }
   if (!transition.transitioned) {
     return {
       order: (await getOrderById(env.DB, order.id)) || order,
@@ -364,6 +391,7 @@ async function confirmPaidOrder(env, order, opts = {}) {
     await notifyEmail(env, env.DB, {
       orderId: order.id,
       template: 'customer_payment_confirmation',
+      paymentScope: transition.paymentScope,
       recipient: customerEmail,
       subject: 'התשלום התקבל ✓ — קוד אימות וקישור למעקב',
       html: paymentConfirmedHtml(env, paidOrder, trackingUrl(env, order.token), otp),
@@ -373,6 +401,7 @@ async function confirmPaidOrder(env, order, opts = {}) {
   await notifyEmail(env, env.DB, {
     orderId: order.id,
     template: 'ops_payment_received',
+    paymentScope: transition.paymentScope,
     recipient: env.OPS_EMAIL,
     subject: `תשלום התקבל #${order.id} — ₪${order.price}`,
     html: `${escHtml(order.name)} · ${escHtml(order.pickup)} → ${escHtml(order.dropoff)}<br>המתינו לאישור ויציאה לדרך ב- ops.edenmish.com`,
@@ -588,6 +617,10 @@ function isTrustedOpsMutationOrigin(req, env) {
   const origin = req.headers.get('Origin');
   if (!origin) return false;
   if (origin === new URL(req.url).origin) return true;
+  // A scoped Ops request retains its original browser Origin after the internal
+  // canonical URL rewrite. Only the existing production Ops origin is trusted.
+  if (env[productionRehearsal] && origin === 'https://ops.edenmish.com'
+      && new URL(req.url).origin === PRODUCTION_REHEARSAL_ORIGIN) return true;
   try {
     return origin === new URL(storefrontBase(env)).origin;
   } catch {
@@ -595,8 +628,101 @@ function isTrustedOpsMutationOrigin(req, env) {
   }
 }
 
-export default {
+function bookingServices(env, ctx, scope = null) {
+  let addressOrdinal = 0;
+  const active = async () => (!rehearsalSelected(env) || !!await activeRehearsal(env)) && (!fullBookingSelected(env) || !!scope && await fullBookingCanProceed(env) && await scope.canProceed() && fullBookingReady(env));
+  return {
+    forEvent: (eventId, fence) => bookingServices(env,ctx,{...fence,eventId}),
+    multilingual: env.WHATSAPP_BOOKING_MULTILINGUAL_ENABLED === 'on',
+    transcribeAudio: (event,eventKey) => transcribeBookingAudio(env,event,eventKey),
+    conversationModelForEvent: eventId => bookingEnabled(env) && (!conversationOnlyPilot(env) || lunaPilot(env)) ? createOpenAIBookingModel(env,{eventId}) : undefined,
+    conversationModel: bookingEnabled(env) && (!conversationOnlyPilot(env) || lunaPilot(env)) ? createOpenAIBookingModel(env,scope ? {eventId:scope.eventId,eventCanProceed:active,turnStartedAt:scope.turnStartedAt,deadlineAt:scope.deadlineAt} : {}) : undefined,
+    resolveAddress: (text) => resolveBookingAddress(text, env, { fetchImpl: async (...args) => {
+      const operationKey=fullBookingSelected(env) ? `${scope?.eventId}:address:${addressOrdinal++}` : crypto.randomUUID();
+      if (!await active()) throw new Error('booking_stopped');
+      if (!await reservePilotOperation(env, 'address',Date.now(),operationKey)) throw new Error('pilot_address_limit');
+      if (conversationOnlyPilot(env) && !bookingEnabled(env)) throw new Error('pilot_expired');
+      if (fullBookingSelected(env)) {
+        try {
+          if (!await active()) throw new Error('booking_stopped');
+          const remaining=scope.deadlineAt-Date.now();
+          if(remaining<=0)throw new Error('booking_stopped');
+          const [url,options={}] = args;
+          const deadlineSignal=AbortSignal.timeout(Math.min(BOOKING_DEADLINES.customerMs,remaining));
+          const response=await fetch(url,{...options,signal:options.signal?AbortSignal.any([options.signal,deadlineSignal]):deadlineSignal});
+          const settled=await finishFullBookingOperation(env,'address',operationKey,response.ok);
+          if (!settled) { await response.body?.cancel(); throw new Error('booking_settlement_unconfirmed'); }
+          if (!response.ok || !await active()) { await response.body?.cancel(); throw new Error('booking_stopped'); }
+          return response;
+        } catch {
+          await finishFullBookingOperation(env,'address',operationKey,false);
+          throw new Error('booking_address_failed');
+        }
+      }
+      if (!continuationSelected(env)) return fetch(...args);
+      try {
+        if (!await continuationCanProceed(env)) throw new Error('continuation_stopped');
+        const response=await fetch(...args);
+        await finishContinuation(env,'address',operationKey,{ok:response.ok});
+        if (!response.ok || !await continuationCanProceed(env)) throw new Error('continuation_address_failed');
+        return response;
+      } catch {
+        await finishContinuation(env,'address',operationKey,{ok:false});
+        throw new Error('continuation_address_failed');
+      }
+    } }),
+    order: (token) => getOrderByToken(env.DB, token),
+    quote: async (input) => {
+      if (!await active()) throw new Error('booking_stopped');
+      const quote = await authoritativeQuote(env, input);
+      if (quote.review) return quote;
+      if (rehearsalSelected(env)) {
+        const run=await activeRehearsal(env,input);
+        if(!run) throw new Error('rehearsal_unavailable');
+        return {...quote, price:1, currency:'ILS', rehearsal_run_id:run.run_id, discount_amount:0, discount_code:null};
+      }
+      const automatic = await findAutomaticCoupon(env.DB, quote.price, couponIdentity(input, null));
+      return {
+        ...quote, price: automatic.valid ? automatic.price : quote.price,
+        discount_amount: automatic.valid ? automatic.discountAmount : 0,
+        discount_code: automatic.valid ? automatic.code : null, currency: 'ILS',
+      };
+    },
+    create: async ({ input, expectedPrice, quoteAt }, identity) => {
+      if (conversationOnlyPilot(env)) return { error: 'conversation_only_pilot' };
+      if (!await active()) return { error: 'whatsapp_stopped' };
+      const request = new Request('https://find.edenmish.com/api/orders', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+      });
+      bookingRequests.set(request, { ...identity, expectedPrice, quoteAt, ...(fullBookingSelected(env)?{canProceed:active}:{}) });
+      return (await worker.fetch(request, env, ctx)).json();
+    },
+  };
+}
+
+const worker = {
   async fetch(req, env, ctx) {
+    // The explicit production rehearsal config never selects a Worker-wide mode.
+    // Only these dedicated routes receive an internal environment capability.
+    const incoming = new URL(req.url);
+    if (!env[productionRehearsal] && productionRehearsalPath(incoming.pathname)
+        && ['find.edenmish.com','ops.edenmish.com'].includes(incoming.hostname)) {
+      const scoped = productionRehearsalEnvironment(env);
+      if (!scoped) return new Response('Rehearsal disabled', {status:503});
+      if (incoming.pathname.startsWith('/api/rehearsal/driver/v1/')) {
+        incoming.pathname = incoming.pathname.replace('/api/rehearsal/driver/v1/', '/api/driver/v1/');
+        req = new Request(incoming, req);
+      }
+      // Ops cookies remain validated normally; only the internal URL's origin
+      // changes for the existing private handler's canonical origin checks.
+      if (incoming.origin !== PRODUCTION_REHEARSAL_ORIGIN) {
+        incoming.hostname = 'find.edenmish.com'; req = new Request(incoming, req);
+      }
+      env = scoped;
+    }
+    env = voiceProfileEnvironment(env);
+    const booking = bookingRequests.get(req);
+    bookingRequests.delete(req);
     const url = new URL(req.url);
     // Wrangler's local HTTPS certificate is self-signed. TEST_MODE may use
     // loopback HTTP for browser QA; every non-test environment stays HTTPS-only.
@@ -612,7 +738,41 @@ export default {
     // Shadow json() to always include CORS headers (enables cross-origin ops dashboard)
     const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...cors, ...extra } });
 
+    // Handle bounded metadata lookup before any webhook registrar or order route.
+    if(path===PRODUCT_READ_PATH) {
+      if(url.origin!=='https://ops.edenmish.com')return json({error:'wrong_host'},403);
+      if(!await isOps(req,env))return json({error:'unauthorized'},401);
+      if(!productReadEnabled(env))return json({error:'product_read_disabled'},503);
+      if(req.method==='GET')return html(productReadPage);
+      if(req.method!=='POST')return json({error:'method_not_allowed'},405);
+      if(!isTrustedOpsMutationOrigin(req,env))return json({error:'untrusted_origin'},403);
+      let input;try {const body=await req.text();if(body.length>128)throw new Error();input=JSON.parse(body);}catch{return json({error:'invalid_request'},400);}
+      if(Object.keys(input||{}).join(',')!=='product_id'||input.product_id!=='15422576689469')return json({error:'invalid_request'},400);
+      const result=await readProtectedProduct(env);return json(result.body,result.status);
+    }
+
+    // A private rehearsal runtime exposes only the reviewed channel, tracking and Ops surfaces.
+    if(rehearsalSelected(env)) {
+      if(!rehearsalSpec(env) || (!booking && url.origin!==rehearsalOrigin(env))) return json({error:'rehearsal_configuration'},503);
+      const allowed=booking || path.startsWith('/api/driver/v1/') || (req.method==='GET' && (['/ops','/rehearsal-ops','/api/ops/orders','/api/ops/notifications/failures','/api/ops/whatsapp/bookings','/api/ops/whatsapp/full/diagnostics','/api/ops/payment-rehearsal/stop-status'].includes(path)||/^\/t\/[a-f0-9]+$/.test(path)||/^\/api\/orders\/[a-f0-9]+$/.test(path)))
+        || (req.method==='POST' && (['/api/ops/login','/api/ops/logout','/api/ops/payment-rehearsal/grant','/api/ops/payment-rehearsal/stop','/api/ops/whatsapp/full/grant','/api/ops/whatsapp/full/stop','/webhooks/shopify/rehearsal','/webhooks/twilio/booking','/webhooks/twilio/booking/status'].includes(path)
+          || /^\/api\/ops\/orders\/\d+\/rehearsal\/close$/.test(path)||/^\/api\/ops\/whatsapp\/bookings\/[a-f0-9-]{36}\/(pause|close)$/.test(path)
+          || /^\/api\/orders\/[a-f0-9]+\/(verify-otp|resend-otp)$/.test(path)));
+      if(!allowed) return json({error:'rehearsal_route_disabled'},403);
+      if(path==='/ops' && req.method==='GET') return html(opsHtml(env));
+      if(path==='/rehearsal-ops' && req.method==='GET') {
+        if(!await isOps(req,env))return json({error:'unauthorized'},401);
+        const run=rehearsalSpec(env),full=fullBookingSpec(env);if(!full)return json({error:'rehearsal_configuration'},503);
+        const runRow=await env.DB.prepare('SELECT id FROM payment_rehearsal_runs WHERE id=?').bind(run.run_id).first();
+        const grantRow=await env.DB.prepare('SELECT id FROM whatsapp_full_booking_grants WHERE id=?').bind(full.grant_id).first();
+        const off=['PAYMENT_REHEARSAL_ENABLED','WHATSAPP_BOOKING_ENABLED','WHATSAPP_BOOKING_SEND_ENABLED','WHATSAPP_BOOKING_MODEL_ENABLED'].every(key=>env[key]==='off');
+        return html(rehearsalOpsHtml(run,full,{runIssued:!!runRow,grantIssued:!!grantRow,off}));
+      }
+    }
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
+
+    const pilotOps = bookingPilotOpsPage(req, env);
+    if (pilotOps) return pilotOps;
 
     if (path === '/health' && req.method === 'GET') {
       return json({ ok: true, service: 'edenmish-worker' });
@@ -1073,7 +1233,7 @@ export default {
     // Verify Shopify payment/refund subscriptions. Failures are sanitized, logged,
     // exposed to authenticated ops, and retried after a cooldown.
     try {
-      await shopifyWebhookRegistrar.ensure(env);
+      if(!rehearsalSelected(env)) await shopifyWebhookRegistrar.ensure(env);
     } catch {
       // Registration diagnostics must never block booking, tracking, or ops.
       console.error('shopify_webhook_registration_unexpected');
@@ -1271,6 +1431,12 @@ export default {
     }
 
     if (path === '/api/orders' && req.method === 'POST') {
+      if (rehearsalSelected(env) && !booking) return json({error:'rehearsal_channel_only'},403);
+      if (booking) {
+        if (booking.canProceed && !await booking.canProceed()) return json({error:'whatsapp_stopped'},409);
+        const existing = await getOrderByToken(env.DB, booking.token);
+        if (existing) return json({ order_id: existing.id, payment_url: existing.payment_url, price: existing.price, idempotent: true });
+      }
       // Business batches can legitimately create up to 100 delivery orders. A
       // validated account session gets an account-scoped ceiling while public
       // requests retain the much tighter anti-abuse limits.
@@ -1279,7 +1445,7 @@ export default {
         const isBusiness = !!preAuthenticatedBusinessSession;
         const k = isBusiness
           ? `business:${preAuthenticatedBusinessSession.account_id}`
-          : await anonKey(env, clientIp(req));
+          : booking ? `whatsapp:${booking.token}` : await anonKey(env, clientIp(req));
         const r10 = await incrRateLimit(env.DB, (isBusiness ? 'ordbiz:' : 'ord:') + k, 10 * 60 * 1000);
         if (r10.count > (isBusiness ? 200 : 5)) { console.log('order_rate_limited', { window: '10m', business: isBusiness }); return json({ error: 'rate_limited' }, 429, { ...cors, 'Retry-After': '600' }); }
         const rd = await incrRateLimit(env.DB, (isBusiness ? 'ordbizd:' : 'ordd:') + k, 24 * 60 * 60 * 1000);
@@ -1325,6 +1491,8 @@ export default {
         phone_delivery_link_opt_in_at: phoneDeliveryLinkOptIn ? Date.now() : null,
       };
 
+      const rehearsal = rehearsalSelected(env) ? await activeRehearsal(env,b) : null;
+      if (rehearsalSelected(env) && !rehearsal) return json({error:'rehearsal_unavailable'},409);
       let batchRowApproval = null;
       let batchPickupApproval = null;
       if (b.batch_row_token || b.batch_pickup_token) {
@@ -1451,7 +1619,7 @@ export default {
         const v = await validateCoupon(env.DB, b.coupon_code, pr.price, couponIdentity(b, businessSession));
         if (!v.valid) return json({ valid: false, error: 'invalid_coupon', reason: v.reason, message: couponMessage(v.reason) }, 400, cors);
         coupon = v;
-      } else {
+      } else if (!rehearsal) {
         const automatic = await findAutomaticCoupon(
           env.DB,
           pr.price,
@@ -1469,6 +1637,17 @@ export default {
         }, 409, cors);
       }
 
+      // Quote/coupon lookups may cross a scheduling boundary after the chat
+      // confirmation. Reject before reserving promotions, inserting an order or
+      // creating checkout; this scoped gate leaves existing website policy alone.
+      if (booking?.canProceed && !await booking.canProceed()) return json({error:'whatsapp_stopped'},409);
+      if (booking && bookingScheduleError(b.when_date, hour, Date.now())) {
+        return json({ error: 'whatsapp_schedule_changed' }, 409, cors);
+      }
+      if (booking && (isReview || Date.now() - booking.quoteAt >= QUOTE_TTL
+        || Number(rehearsal ? 1 : coupon ? coupon.price : pr.price) !== booking.expectedPrice)) {
+        return json({ error: 'whatsapp_quote_changed' }, 409, cors);
+      }
       let promotionClaim = null;
       let promotionClaimCreated = false;
       if (coupon && coupon.eligibilityRule === 'first_delivery') {
@@ -1496,7 +1675,7 @@ export default {
       }
       // `price` on the order row is always the amount the customer pays; when a coupon
       // applied, subtotal_price/discount_* record how we got there (migration 008).
-      const finalPrice = coupon ? coupon.price : pr.price;
+      const finalPrice = rehearsal ? 1 : coupon ? coupon.price : pr.price;
       // The reviewed batch quote is a customer-approved ceiling. Fail closed if
       // the authoritative charge increased, but allow a newly applicable
       // automatic discount to lower the actual wallet reservation.
@@ -1609,9 +1788,29 @@ export default {
         }
       }
 
+      // Promotion reservation is another awaited boundary. Recheck immediately
+      // before the first order effect, and release only this attempt's new claim.
+      // A failed/uncertain cleanup must keep the conversation's checkout tombstone
+      // and hand off instead of advertising that retrying is safe.
+      const bookingStopped = booking?.canProceed && !await booking.canProceed();
+      if (booking && (bookingStopped || bookingScheduleError(b.when_date, hour, Date.now()))) {
+        if (promotionClaimCreated) {
+          try {
+            if (!promotionClaim?.id) throw new Error('missing_claim');
+            await releaseFirstDeliveryClaim(env.DB, promotionClaim.id);
+            const remaining = await env.DB.prepare('SELECT id FROM first_delivery_promotion_claims WHERE id = ?').bind(promotionClaim.id).first();
+            if (remaining) throw new Error('claim_not_released');
+          } catch {
+            return json({ error: 'whatsapp_schedule_cleanup_ambiguous' }, 503, cors);
+          }
+        }
+        return json({ error: bookingStopped ? 'whatsapp_stopped' : 'whatsapp_schedule_changed' }, 409, cors);
+      }
+
       // 1. Create the D1 order. For exact-price orders a Shopify Draft Order is created
       //    below (PR4); the customer pays its invoice URL through Shopify + PayPlus. The
       //    Shopify webhook links the order back via _tracking_token (line property) / note.
+      if(rehearsal && !await claimRehearsalOrder(env,b,booking.token)) return json({error:'rehearsal_already_claimed'},409);
       let created;
       try {
         created = await createOrder(env.DB, {
@@ -1628,7 +1827,7 @@ export default {
           payment_method: businessSession ? 'wallet' : null,
           email_verified: businessSession ? 1 : 0,
           ...discountFields
-        });
+        }, booking ? { token: booking.token, source: 'whatsapp' } : {});
       } catch (error) {
         if (walletReservation) {
           // The unique wallet_reservation_id index serializes concurrent retries.
@@ -1723,7 +1922,7 @@ export default {
         }
       }
 
-      const testMode = (env.TEST_MODE === '1' || env.TEST_MODE === 'true')
+      const testMode = !booking && (env.TEST_MODE === '1' || env.TEST_MODE === 'true')
         && url.searchParams.get('test') === '1';
       let analyticsClaimRegistered = false;
 
@@ -1822,7 +2021,8 @@ export default {
           // Discount breakdown (discount_code, etc.) is shown on the Shopify
           // checkout via applied_discount and in D1 for the booking/success/tracking
           // pages and emails.
-          const charge = await createCharge(env, { ...b, id: created.id, token, price: finalPrice, ...discountFields }, finalPrice);
+          if (booking?.canProceed && !await booking.canProceed()) return json({error:'whatsapp_stopped',order_id:created.id},409);
+          const charge = await createCharge(env, { ...b, id: created.id, token, price: finalPrice, ...discountFields, ...(rehearsal?{rehearsal_run_id:rehearsal.run_id}:{}) }, finalPrice, {canProceed:booking?.canProceed});
           if (charge && charge.checkoutUrl) {
             paymentUrl = charge.checkoutUrl;
             await setOrderStatus(env.DB, created.id, 'payment_sent', {
@@ -1844,6 +2044,7 @@ export default {
         }
       }
 
+      if(rehearsal && !paymentUrl) return json({error:'rehearsal_checkout_unconfirmed_no_retry',order_id:created.id},503);
       const checkoutConfigured = !!(env.SHOPIFY_SHOP && env.SHOPIFY_ADMIN_TOKEN);
       if (!isReview && !paymentUrl && coupon && checkoutConfigured) {
         try {
@@ -2218,7 +2419,7 @@ export default {
     }
 
     // ---- customer tracking page (find.) ----
-    if (onFind && path.startsWith('/t/')) {
+    if ((onFind || rehearsalSelected(env)) && path.startsWith('/t/')) {
       const token = path.split('/')[2];
       return html(trackingHtml(env, token));
     }
@@ -2322,6 +2523,21 @@ export default {
       return json({ ok: true, ...result });
     }
 
+    // A rehearsal remains a real canonical paid order, but has no physical
+    // execution capability. All existing Ops mutations fail closed for it.
+    const rehearsalAction = path.match(/^\/api\/ops\/orders\/(\d+)\/(.+)$/);
+    if (onOps && rehearsalAction && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      const orderId = Number(rehearsalAction[1]);
+      if (rehearsalAction[2] === 'rehearsal/close' && req.method === 'POST') {
+        if (!isTrustedOpsMutationOrigin(req, env)) return json({ error: 'untrusted_origin' }, 403);
+        const result = await closePaymentRehearsal(env.DB, orderId);
+        return json(result, result.error ? 409 : 200);
+      }
+      const order = await getOrderById(env.DB, orderId);
+      if (order?.rehearsal_run_id) return json({ error: 'payment_rehearsal_dispatch_hold' }, 409);
+    }
+
     if (onOps && path === '/api/ops/orders' && req.method === 'GET') {
       if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
       const [r, redeliveryRows] = await Promise.all([
@@ -2371,7 +2587,7 @@ export default {
       });
       return json({
         orders,
-        integrations: { shopify_webhooks: shopifyWebhookRegistrar.status() },
+        integrations: { shopify_webhooks: shopifyWebhookRegistrar.status(), whatsapp_booking: bookingEnabled(env), whatsapp_booking_storage: env.WHATSAPP_BOOKING_STORAGE_READY === 'on' },
       });
     }
 
@@ -2410,6 +2626,7 @@ export default {
       if (b.status === 'paid') {
         if (before.payment_method === 'wallet') return json({ ok: true, unchanged: true });
         const paid = await confirmPaidOrder(env, before);
+        if (paid.retryable) return json({ error: 'payment_transition_unavailable' }, 503);
         if (!paid.unchanged) scheduleDriverRouteRefresh(env, ctx);
         return paid.unchanged ? json({ ok: true, unchanged: true }) : json({ ok: true, order: paid.order });
       }
@@ -2693,6 +2910,125 @@ export default {
       return json({ ok: true, coupon: c });
     }
 
+    // Fixed synthetic readiness only, while booking/send/model remain OFF.
+    // Explicit readiness authorization and its own short deadline are required.
+    if (path === '/api/ops/whatsapp/pilot/readiness' && req.method === 'POST') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      if (!isTrustedOpsMutationOrigin(req, env)) return json({ error: 'untrusted_origin' }, 403);
+      let input;
+      try { input = await req.json(); } catch { return json({ error: 'invalid_request' }, 400); }
+      if (!validReadinessRequest(env, input)) return json({ error: 'invalid_request' }, 400);
+      try {
+        const result = await runLunaPilotReadiness(env, input.case_id);
+        return json(result.report, result.status);
+      } catch { return json({ error: 'readiness_unconfirmed_no_retry' }, 503); }
+    }
+
+    // Explicit OFF-state issuance. Never creates a grant from customer traffic.
+    if (path === '/api/ops/whatsapp/pilot/continuation/grant' && req.method === 'POST') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      if (!isTrustedOpsMutationOrigin(req, env)) return json({ error: 'untrusted_origin' }, 403);
+      let input;
+      try { input=await req.json(); } catch { return json({error:'invalid_request'},400); }
+      if (!input || Object.keys(input).sort().join(',')!=='grant_id,version' || ![1,2,3,4,5,6,7,8].includes(input.version) || input.version!==Number(env.WHATSAPP_BOOKING_CONTINUATION_VERSION)
+        || input.grant_id!==env.WHATSAPP_BOOKING_CONTINUATION_ID) return json({error:'invalid_request'},400);
+      try { const issued=await issueContinuationGrant(env); return json({issued},issued?201:409); }
+      catch { return json({error:'grant_unconfirmed_no_retry'},503); }
+    }
+
+    if ((['/api/ops/payment-rehearsal/grant','/api/ops/payment-rehearsal/stop'].includes(path) && req.method==='POST')
+      || (path==='/api/ops/payment-rehearsal/stop-status' && req.method==='GET')) {
+      if(!await isOps(req,env))return json({error:'unauthorized'},401);
+      if(!isTrustedOpsMutationOrigin(req,env))return json({error:'untrusted_origin'},403);
+      try {
+        if(path.endsWith('/grant')) {
+          const ok=await issueRehearsalRun(env,await readJson(req));return json({ok},ok?200:409);
+        }
+        const statusOnly=path.endsWith('/stop-status');
+        const input=statusOnly?Object.fromEntries(url.searchParams):await readJson(req);
+        const r=rehearsalSpec(env),full=fullBookingSpec(env);
+        const grantBinding=await fullBookingBindingHash(env);
+        const bound=Object.keys(input||{}).length>0;
+        if((statusOnly&&!bound)||!r||!full)return json({error:'stop_scope_mismatch'},409);
+        if(bound && (Object.keys(input).sort().join(',')!=='grant_binding_sha256,grant_id,run_id,source_sha256,version'
+          || Number(input.version)!==1||input.run_id!==r.run_id||input.grant_id!==full.grant_id||input.source_sha256!==full.source_sha256||input.grant_binding_sha256!==grantBinding))
+          return json({error:'stop_scope_mismatch'},409);
+        if(!statusOnly) {await stopRehearsal(env);await stopFullBookingGrant(env);}
+        const authorityStopped=await rehearsalStopped(env)&&await fullBookingStopped(env);
+        return json({ok:authorityStopped,authority_stopped:authorityStopped,
+          run_id:r.run_id,grant_id:full.grant_id,source_sha256:full.source_sha256,grant_binding_sha256:grantBinding},200);
+      } catch {return json({error:'rehearsal_action_unconfirmed_no_retry'},503);}
+    }
+
+    // Full booking grants are a separate, explicit OFF-state operator action.
+    if (path === '/api/ops/whatsapp/full/grant' && req.method === 'POST') {
+      if (!(await isOps(req, env))) return json({error:'unauthorized'},401);
+      if (!isTrustedOpsMutationOrigin(req, env)) return json({error:'untrusted_origin'},403);
+      let input; try { input=await readJson(req); } catch { return json({error:'invalid_request'},400); }
+      try { const issued=await issueFullBookingGrant(env,input); return json({issued},issued?201:409); }
+      catch { return json({error:'grant_unconfirmed_no_retry'},503); }
+    }
+    if (path === '/api/ops/whatsapp/full/stop' && req.method === 'POST') {
+      if (!(await isOps(req, env))) return json({error:'unauthorized'},401);
+      if (!isTrustedOpsMutationOrigin(req, env)) return json({error:'untrusted_origin'},403);
+      try { const stopped=await stopFullBookingGrant(env); return json({stopped},stopped?200:409); }
+      catch { return json({error:'stop_unconfirmed'},503); }
+    }
+    if (path === '/api/ops/whatsapp/full/diagnostics' && req.method === 'GET') {
+      if (!(await isOps(req, env))) return json({error:'unauthorized'},401);
+      const spec=fullBookingSpec(env);
+      if (!spec || env.WHATSAPP_BOOKING_FULL_SCHEMA_READY!=='on') return json({disabled:true,operations:[]});
+      const rows=await env.DB.prepare(`SELECT kind,status,reserved_micros,diagnostics_json,created_at,finished_at FROM whatsapp_full_booking_operations WHERE grant_id=? ORDER BY created_at DESC LIMIT 100`).bind(spec.grant_id).all();
+      return json({disabled:!await fullBookingCanProceed(env),grant_id:spec.grant_id,operations:rows.results||[]});
+    }
+
+    // Authenticated operator queue. No phone lookup grants business/wallet access.
+    if (path === '/api/ops/whatsapp/bookings' && req.method === 'GET') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      if (env.WHATSAPP_BOOKING_STORAGE_READY !== 'on') return json({ disabled: true, bookings: [] });
+      // Shutdown must not hide handoffs or prevent authenticated reconciliation.
+      // Reading drafts never enables intake, sends, models or checkout.
+      const disabled = !bookingEnabled(env) || (fullBookingSelected(env) && !await fullBookingCanProceed(env)) || (continuationSelected(env) && !await continuationCanProceed(env));
+      const rows = await env.DB.prepare(`SELECT c.id, c.phase, COALESCE(c.order_id, o.id) AS order_id, c.recipient,
+        c.state_json, c.created_at, c.updated_at, c.consent_at, c.confirmed_at, c.confirmed_revision, c.confirmed_price
+        FROM whatsapp_booking_conversations c LEFT JOIN orders o ON o.token = c.order_token
+        ORDER BY CASE WHEN c.phase = 'handoff' THEN 0 ELSE 1 END, c.updated_at DESC LIMIT 100`).all();
+      return json({ disabled, bookings: rows.results || [] });
+    }
+    const bookingPause = /^\/api\/ops\/whatsapp\/bookings\/([a-f0-9-]{36})\/(pause|close)$/.exec(path);
+    if (bookingPause && req.method === 'POST') {
+      if (!(await isOps(req, env))) return json({ error: 'unauthorized' }, 401);
+      if (!isTrustedOpsMutationOrigin(req, env)) return json({ error: 'untrusted_origin' }, 403);
+      if (env.WHATSAPP_BOOKING_STORAGE_READY !== 'on') return json({ error: 'disabled' }, 404);
+      const result = await (bookingPause[2] === 'close' ? closeBooking : pauseBooking)(env.DB, bookingPause[1], Date.now(), env);
+      return json({ ok: result.status === 200, ...(result.status === 409 ? { error: 'in_flight_or_checkout_requires_review' } : {}) }, result.status);
+    }
+
+    if (path === '/webhooks/twilio/booking/status' && req.method === 'POST') {
+      if (env.WHATSAPP_BOOKING_STORAGE_READY !== 'on') return json({ error: 'disabled' }, 503);
+      const status = await applyTwilioBookingStatus(req, env);
+      return json({ received: status === 200 }, status);
+    }
+
+    // Separate dedicated Twilio booking number; never shares inbound marketing routes.
+    if (path === '/webhooks/twilio/booking' && req.method === 'POST') {
+      const turnStartedAt=Date.now();
+      if (!bookingEnabled(env) || env.WHATSAPP_BOOKING_PROVIDER !== 'twilio') return json({ error: 'disabled' }, 503);
+      if (fullBookingSelected(env) && !await fullBookingCanProceed(env)) return json({disabled:true},200);
+      if (continuationSelected(env) && !await continuationCanProceed(env)) return json({disabled:true},200);
+      const parsed = await readTwilioBookingEvent(req, env);
+      if (parsed.status !== 200) return json({ error: 'booking_webhook_rejected' }, parsed.status);
+      if (parsed.event && fullBookingSelected(env)) {
+        const admitted=await acceptDurableBookingEvent(env,parsed.event,turnStartedAt);
+        if(admitted.status!==200)return json({error:'booking_admission_unavailable'},admitted.status);
+      } else if (parsed.event) {
+        const result = await processBookingEvent(env, parsed.event, bookingServices(env, ctx), turnStartedAt);
+        if (result.busy) return json({ error: 'booking_busy' }, 503);
+        await sendBookingReplies(env);
+      }
+      return new Response('<Response/>', { headers: { 'Content-Type': 'text/xml', 'Cache-Control': 'no-store' } });
+    }
+
     // ---- WhatsApp Cloud API verification and delivery receipts ----
     if (path === '/webhooks/whatsapp' && req.method === 'GET') {
       const challenge = verifyWhatsAppWebhookChallenge(env, url);
@@ -2735,17 +3071,35 @@ export default {
         if (result.matched) matched += 1;
         if (result.updated) updated += 1;
       }
+      if (bookingEnabled(env) && env.WHATSAPP_BOOKING_PROVIDER === 'meta') {
+        for (const event of extractBookingEvents(payload, env.WHATSAPP_PHONE_ID)) {
+          const result = await processBookingEvent(env, event, bookingServices(env, ctx));
+          if (result.busy) return json({ error: 'booking_busy' }, 503);
+        }
+        // Await durable processing before acknowledging. Sending has a separate gate.
+        await sendBookingReplies(env);
+      }
       return json({ received: true, matched, updated });
     }
 
     // ---- Shopify webhooks (PayPlus remains behind Shopify) ----
     // orders/paid reconciles capture; refunds/create starts refund reconciliation;
     // orders/updated finalizes refunded / partially_refunded financial states.
-    if (path === '/webhooks/shopify' && req.method === 'POST') {
+    if (['/webhooks/shopify','/webhooks/shopify/rehearsal'].includes(path) && req.method === 'POST') {
+      const isolated=path.endsWith('/rehearsal');
+      if (rehearsalSelected(env)!==isolated) return json({error:'webhook_route_disabled'},404);
       const rawBody = await req.text();
       const hmac = req.headers.get('X-Shopify-Hmac-SHA256') || '';
       if (!(await verifyShopifyWebhook(env, rawBody, hmac))) return json({ error: 'invalid signature' }, 401);
       let b; try { b = JSON.parse(rawBody); } catch { return json({ error: 'bad json' }, 400); }
+      if(isolated) {
+        const spec=rehearsalSpec(env);
+        if(!spec || req.headers.get('X-Shopify-Shop-Domain')!==spec.shop) return json({error:'wrong_shop'},403);
+        const candidate=parseShopifyOrderWebhook(b);
+        const eventOrderId=req.headers.get('X-Shopify-Topic')==='refunds/create'?b.order_id:candidate.shopifyOrderId;
+        const record=candidate.token?await getOrderByToken(env.DB,candidate.token):eventOrderId?await getOrderByShopifyOrderId(env.DB,eventOrderId):null;
+        if(!record?.rehearsal_run_id) return json({received:true,reconciled:false});
+      }
       const topic = String(req.headers.get('X-Shopify-Topic') || 'orders/paid').toLowerCase();
       if (!['orders/paid', 'orders/updated', 'refunds/create'].includes(topic)) {
         return json({ received: true, reconciled: false });
@@ -2928,12 +3282,14 @@ export default {
           ? await getOrderByToken(env.DB, parsed.token)
           : await getOrderByShopifyOrderId(env.DB, parsed.shopifyOrderId);
         if (o) {
+          if (o.rehearsal_run_id && (!['orders/paid','orders/updated'].includes(req.headers.get('X-Shopify-Topic')) || !['edenmish.myshopify.com','r013gt-fc.myshopify.com'].includes(req.headers.get('X-Shopify-Shop-Domain')))) return json({error:'rehearsal_webhook_identity'},403);
           const financialStatus = String(parsed.financial_status || '').toLowerCase();
           if (financialStatus === 'refunded' || financialStatus === 'partially_refunded') {
             const result = await reconcileShopifyRefund(env, o, { financialStatus, currency: parsed.currency });
             return json({ received: true, reconciled: !!result.reconciled });
           }
           if (REFUND_PAYMENT_STATES.has(o.payment_status)) return json({ received: true });
+          if(o.rehearsal_run_id && o.payment_status==='paid')return json({received:true});
           if (parsed.paid) {
             // Idempotency: Shopify retries webhook deliveries. Re-processing would insert a
             // duplicate payment row, invalidate the customer's OTP, and re-send both emails.
@@ -2943,7 +3299,9 @@ export default {
             const expectedAmount = Number(o.price);
             const amountMatches = Number.isFinite(paidAmount) && Number.isFinite(expectedAmount) && Math.abs(paidAmount - expectedAmount) < 0.005;
             const currencyMatches = String(parsed.currency || '').toUpperCase() === String(o.currency || 'ILS').toUpperCase();
-            const draftMatches = !o.shopify_draft_order_id || !parsed.draftOrderId || String(o.shopify_draft_order_id) === String(parsed.draftOrderId);
+            const draftMatches = o.rehearsal_run_id
+              ? ['edenmish.myshopify.com','r013gt-fc.myshopify.com'].includes(req.headers.get('X-Shopify-Shop-Domain')) && await rehearsalPaymentReferenceMatches(env.DB,o,parsed)
+              : !o.shopify_draft_order_id || !parsed.draftOrderId || String(o.shopify_draft_order_id) === String(parsed.draftOrderId);
             if (!amountMatches || !currencyMatches || !draftMatches) {
               console.error('shopify_payment_mismatch', { order: o.id, amountMatches, currencyMatches, draftMatches });
               await env.DB.prepare('UPDATE orders SET payment_status=?, shopify_order_id=?, review_flag=1, review_reason=? WHERE id=?')
@@ -2952,14 +3310,15 @@ export default {
             }
             // o.price is the FINAL amount (post-coupon when one applied) — the Draft
             // Order's applied_discount guarantees Shopify captured exactly this total.
-            await confirmPaidOrder(env, o, {
+            const paid = await confirmPaidOrder(env, o, {
               amountNis: paidAmount,
               customerEmail: parsed.email,
               paymentRef: parsed.shopifyOrderId,
               orderFields: { shopify_order_id: parsed.shopifyOrderId },
-              analyticsSettlement: true,
+              analyticsSettlement: !o.rehearsal_run_id,
             });
-            scheduleDriverRouteRefresh(env, ctx);
+            if (paid.retryable) return json({ error: 'payment_transition_unavailable' }, 503);
+            if (!o.rehearsal_run_id) scheduleDriverRouteRefresh(env, ctx);
           } else {
             // authorized but not yet captured (future Mesh/preauth mode)
             await env.DB.prepare('UPDATE orders SET shopify_order_id=?, payment_status=? WHERE id=?')
@@ -2972,7 +3331,25 @@ export default {
 
     return new Response('Not found', { status: 404 });
   },
+  async queue(batch, env, ctx) {
+    if (Object.hasOwn(env, 'PRODUCTION_REHEARSAL_SETTINGS')) {
+      if (!env.PRODUCTION_REHEARSAL_QUEUE_NAME || batch.queue !== env.PRODUCTION_REHEARSAL_QUEUE_NAME) throw new Error('unapproved_rehearsal_queue');
+      env = productionRehearsalEnvironment(env);
+      if (!env) throw new Error('rehearsal_configuration');
+    }
+    await consumeBookingQueue(batch,env,bookingServices(env,ctx));
+  },
   async scheduled(event, env, ctx) {
+    if(event.cron===BOOKING_MAINTENANCE_CRON || rehearsalSelected(env)){
+      const scoped = Object.hasOwn(env, productionRehearsal) ? env
+        : Object.hasOwn(env, 'PRODUCTION_REHEARSAL_SETTINGS') ? productionRehearsalEnvironment(env) : null;
+      if (scoped) ctx.waitUntil(recoverBookingJobs(scoped).catch(()=>{console.error('rehearsal_booking_recovery_failed');}));
+      ctx.waitUntil(cleanupDurableBookings({DB:env.DB}).then(result=>{
+        console.info('booking_maintenance_complete',result.expiredJobs);
+      }).catch(()=>{console.error('booking_maintenance_failed');}));
+      return;
+    }
+    env = voiceProfileEnvironment(env);
     // Runs on every scheduled tick, not only the daily one, so a hold reverts to a return
     // close to its 24h boundary rather than up to a day late.
     // Reconcile the route after the held-package transition completes so that the same
@@ -2980,9 +3357,12 @@ export default {
     const heldPackageAndRouteTask = runHeldPackageAutoReturn(env.DB)
       .then(() => refreshActiveDriverRoute(env, event.scheduledTime || Date.now()));
     const tasks = [
+      cleanupBookings(env).then(async () => { await recoverBookingJobs(env); if(!fullBookingSelected(env))await sendBookingReplies(env); }),
       processDeliveryNotificationOutbox(env),
       heldPackageAndRouteTask,
     ];
+    const scopedRehearsal = Object.hasOwn(env, 'PRODUCTION_REHEARSAL_SETTINGS') ? productionRehearsalEnvironment(env) : null;
+    if (scopedRehearsal) tasks.push(recoverBookingJobs(scopedRehearsal));
     if (event.cron === '17 2 * * *') {
       tasks.push(
         runRetentionCleanup(env.DB),
@@ -2996,3 +3376,5 @@ export default {
     }));
   }
 };
+
+export default worker;

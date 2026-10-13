@@ -1,0 +1,79 @@
+{
+  "name": "edenmish-ops-staging",
+  "main": "src/index.js",
+  "compatibility_date": "2024-11-01",
+  "routes": [
+    {
+      "pattern": "find-staging.edenmish.com",
+      "custom_domain": true
+    },
+    {
+      "pattern": "ops-staging.edenmish.com",
+      "custom_domain": true
+    }
+  ],
+  "triggers": {
+    "crons": []
+  },
+  "vars": {
+    "BRAND": "synthetic",
+    "BOOKING_URL": "https://staging.edenmish.com",
+    "STOREFRONT_BASE": "synthetic",
+    "WHATSAPP_NUMBER": "synthetic",
+    "OPS_EMAIL": "synthetic",
+    "EMAIL_FROM_ADDRESS": "synthetic",
+    "EMAIL_FROM_NAME": "synthetic",
+    "EMAIL_SUBJECT_PREFIX": "synthetic",
+    "EMAIL_RECIPIENT_POLICY": "allowlist",
+    "EMAIL_RECIPIENT_ALLOWLIST": "",
+    "AUTO_DRIVER_DISPATCH": "off",
+    "APNS_ALLOWED_TOPICS": "synthetic",
+    "ROUTE_OPTIMIZATION_PROVIDER": "off",
+    "GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID": "synthetic",
+    "BUSINESS_BATCH_AI_MODEL": "synthetic",
+    "ALLOWED_ORIGINS": "synthetic",
+    "TWILIO_ACCOUNT_SID": "AC11111111111111111111111111111111",
+    "TWILIO_BOOKING_FROM": "whatsapp:+97233826779",
+    "TWILIO_RECIPIENT_POLICY": "allowlist",
+    "TWILIO_RECIPIENT_ALLOWLIST": "",
+    "TWILIO_BOOKING_WEBHOOK_URL": "synthetic",
+    "WHATSAPP_BOOKING_ENABLED": "off",
+    "WHATSAPP_BOOKING_SEND_ENABLED": "off",
+    "WHATSAPP_BOOKING_MODEL_ENABLED": "off",
+    "WHATSAPP_BOOKING_STORAGE_READY": "on",
+    "WHATSAPP_BOOKING_MODE": "conversation_only",
+    "WHATSAPP_BOOKING_VOICE_ENABLED": "off",
+    "WHATSAPP_BOOKING_VOICE_APPROVED": "off",
+    "WHATSAPP_BOOKING_VOICE_PROFILE": "off",
+    "WHATSAPP_BOOKING_CONTINUATION_APPROVED": "off",
+    "WHATSAPP_BOOKING_MODEL_EVAL_APPROVED": "off",
+    "WHATSAPP_BOOKING_READINESS_APPROVED": "off",
+    "WHATSAPP_BOOKING_READINESS_ADDITIONAL_APPROVED": "off",
+    "WHATSAPP_BOOKING_READINESS_QUOTE_V2_APPROVED": "off",
+    "WHATSAPP_CUSTOMER_DELIVERED_TEMPLATE": "",
+    "WHATSAPP_OPS_PAYMENT_TEMPLATE": ""
+  },
+  "ai": {
+    "binding": "AI"
+  },
+  "secrets": {
+    "required": [
+      "OPS_PIN",
+      "SESSION_SECRET",
+      "DRIVER_ONE_TIME_CODE",
+      "GOOGLE_PLACES_SERVER_KEY",
+      "GOOGLE_ROUTE_OPTIMIZATION_SERVICE_ACCOUNT_JSON",
+      "SENDGRID_API_KEY",
+      "APNS_TEAM_ID",
+      "APNS_KEY_ID",
+      "APNS_PRIVATE_KEY_P8"
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "edenmish-staging",
+      "database_id": "e1fcce7f-a232-4258-b181-f1ab17b25639"
+    }
+  ]
+}

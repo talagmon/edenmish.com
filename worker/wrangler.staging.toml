@@ -12,6 +12,11 @@ crons = ["*/5 * * * *", "17 2 * * *"]
 
 [vars]
 BRAND = "EdenMish Staging"
+SHOPIFY_WEBHOOK_ENVIRONMENT = "staging"
+SHOPIFY_WEBHOOK_CALLBACK_URL = "https://ops-staging.edenmish.com/webhooks/shopify"
+SHOPIFY_WEBHOOK_REGISTRATION = "verify"
+# SHOPIFY_SHOP and SHOPIFY_WEBHOOK_EXPECTED_SHOP require an approved isolated shop.
+# Credentials alone cannot register callbacks. No sandbox shop is configured.
 BOOKING_URL = "https://staging.edenmish.com"
 STOREFRONT_BASE = "https://staging.edenmish.com"
 WHATSAPP_NUMBER = "972534058498"
@@ -21,7 +26,13 @@ EMAIL_FROM_NAME = "EdenMish Staging"
 EMAIL_SUBJECT_PREFIX = "[STAGING]"
 EMAIL_RECIPIENT_POLICY = "allowlist"
 EMAIL_RECIPIENT_ALLOWLIST = "qa-staging@edenmish.com"
-AUTO_DRIVER_DISPATCH = "on"
+AUTO_DRIVER_DISPATCH = "off"
+# Standard staging releases cannot activate booking, sends or model spending.
+WHATSAPP_BOOKING_ENABLED = "off"
+WHATSAPP_BOOKING_SEND_ENABLED = "off"
+WHATSAPP_BOOKING_MODEL_ENABLED = "off"
+WHATSAPP_BOOKING_MODE = "conversation_only" # requires an approved single-recipient, expiring pilot
+WHATSAPP_BOOKING_STORAGE_READY = "on" # deploy workflow verifies 039 first
 APNS_ALLOWED_TOPICS = "com.edenmish.edendriver.nativebeta"
 ROUTE_OPTIMIZATION_PROVIDER = "google"
 GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID = "gen-lang-client-0008834106"
